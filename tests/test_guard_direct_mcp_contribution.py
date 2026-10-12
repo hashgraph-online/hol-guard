@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_catalog import _values_for_payload
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
@@ -134,7 +134,7 @@ def matched(candidate) -> bool:
     ``action_run`` carries the review default, so a match strengthens an allow to
     review while a non-match decides nothing.
     """
-    decision = mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), candidate, "allow")
+    decision = extension_driver.apply_contributed_mcp_decision(enabled_store(), candidate, "allow")
     if decision is None:
         return False
     assert decision[0:2] == ("review", "catalog-mcp-extension")
@@ -201,20 +201,20 @@ def test_direct_defaults_require_local_enable_and_preserve_stronger_floors():
         (ControlLayerKind.LOCAL_ADMIN, ControlState.DISABLED),
     ]:
         store = enabled_store(state, kind)
-        assert mcp_server_grants.apply_contributed_mcp_decision(store, tool, "allow") is None
-    assert mcp_server_grants.apply_contributed_mcp_decision(_AuthorityStore(), tool, "allow") is None
+        assert extension_driver.apply_contributed_mcp_decision(store, tool, "allow") is None
+    assert extension_driver.apply_contributed_mcp_decision(_AuthorityStore(), tool, "allow") is None
     store = enabled_store()
-    assert mcp_server_grants.apply_contributed_mcp_decision(store, tool, "allow")[0] == "review"
-    assert mcp_server_grants.apply_contributed_mcp_decision(store, tool, "block") is None
-    assert mcp_server_grants.apply_contributed_mcp_decision(store, tool, "require-reapproval") is None
+    assert extension_driver.apply_contributed_mcp_decision(store, tool, "allow")[0] == "review"
+    assert extension_driver.apply_contributed_mcp_decision(store, tool, "block") is None
+    assert extension_driver.apply_contributed_mcp_decision(store, tool, "require-reapproval") is None
 
 
 @pytest.mark.parametrize("state,expected", [("allow", "allow"), ("block", "block"), ("review", "review")])
 def test_this_device_grant_precedes_direct_catalog_default(monkeypatch, tmp_path, state, expected):
-    from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision
     from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
     from codex_plugin_scanner.guard.store import GuardStore
 
+    from .mcp_extension_driver import apply_local_mcp_extension_decision
     from .test_guard_local_mcp_grants import _enroll
 
     tool = artifact("fixture-mcp", tool="write_file")
@@ -227,10 +227,6 @@ def test_this_device_grant_precedes_direct_catalog_default(monkeypatch, tmp_path
         commands=(LocalCliCommand("write_file", "Write", "write_file", "Write"),),
     )
 
-    def unexpected_contributed_decision(**_kwargs):
-        pytest.fail("A matched device grant must take precedence over catalog defaults")
-
-    monkeypatch.setattr(mcp_server_grants, "native_contributed_mcp_decision", unexpected_contributed_decision)
     decision = apply_local_mcp_extension_decision(store, tool, "review")
     assert decision[0] == expected
     assert decision[1] == "local-mcp-extension"

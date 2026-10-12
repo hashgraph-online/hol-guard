@@ -383,30 +383,9 @@ def source_path_is_allowed(
     )
 
 
-def absolute_source_target_is_source_like(target_path: Path) -> bool:
-    """Classify an already-absolute path as source-like without resolution.
-
-    This mirrors the original ``_codex_absolute_search_target_is_source_like``
-    semantics: check parts and suffix only, no filesystem resolution.
-    """
-    parts = [part for part in target_path.parts if part not in {"", "/", "."}]
-    if not parts:
-        return False
-    lowered_parts = [part.lower() for part in parts]
-    if any(part in _SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
-        return False
-    if not _hidden_parts_are_allowed_source(lowered_parts):
-        return False
-    normalized = "/".join(parts)
-    if any(f"/{prefix}" in f"/{normalized}" for prefix in _SOURCE_SEARCH_PREFIXES):
-        return True
-    return target_path.suffix.lower() in _SOURCE_SEARCH_EXTENSIONS
-
-
 __all__ = [
     "SOURCE_CLASSIFIER_VERSION",
     "SourcePathDecision",
-    "absolute_source_target_is_source_like",
     "path_contains_symlink",
     "resolve_source_candidate_path",
     "source_path_is_allowed",

@@ -113,17 +113,24 @@ pub(super) fn cloud_fail_closed_evaluation_full(
         .map(|target| heuristic_package_result(target, decision, code, message, severity))
         .collect();
     if packages.is_empty() {
-        packages = fallback_package_results(deps, targets, artifact, workspace_dir, false, false)
-            .into_iter()
-            .map(|mut package| {
-                package.insert("decision".to_string(), Value::String(decision.to_string()));
-                package.insert(
-                    "reasons".to_string(),
-                    Value::Array(vec![Value::Object(reason.clone())]),
-                );
-                package
-            })
-            .collect();
+        packages = fallback_package_results(
+            deps,
+            targets,
+            artifact,
+            workspace_dir,
+            fail_closed_decision == "block",
+            false,
+        )
+        .into_iter()
+        .map(|mut package| {
+            package.insert("decision".to_string(), Value::String(decision.to_string()));
+            package.insert(
+                "reasons".to_string(),
+                Value::Array(vec![Value::Object(reason.clone())]),
+            );
+            package
+        })
+        .collect();
     }
     let policy_version = bundle_meta
         .and_then(|m| m.get("policy_hash").cloned())

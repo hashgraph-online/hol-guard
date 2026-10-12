@@ -14,7 +14,6 @@ import tempfile
 import time
 import urllib.parse
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import cast
@@ -35,19 +34,14 @@ from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # n
 from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
 from scripts.native_slo_contract import clear_proof_environment, proof_environment_violations  # noqa: E402
 from scripts.stress_guard_daemon_runtime import StressExecution as _StressExecution  # noqa: E402
-from scripts.stress_guard_daemon_runtime import collect_batch as _collect_batch  # noqa: E402
 from scripts.stress_guard_daemon_runtime import finalize_stress_runtime as _finalize_stress_runtime  # noqa: E402
-from scripts.stress_guard_daemon_runtime import healthz_details as _healthz_details  # noqa: E402
 from scripts.stress_guard_daemon_runtime import pid_is_running as _pid_is_running  # noqa: E402
 from scripts.stress_guard_daemon_runtime import run_stress_batches as _run_stress_batches  # noqa: E402
 from scripts.stress_guard_daemon_runtime import sample_stress_runtime as _sample_stress_runtime  # noqa: E402
 from scripts.stress_guard_daemon_runtime import settle_stress_runtime as _settle_stress_runtime  # noqa: E402
 from scripts.stress_guard_daemon_runtime import stabilized_process_resources as _stabilized_resources  # noqa: E402
-from scripts.stress_guard_daemon_runtime import stress_request as _stress_request  # noqa: E402
 from scripts.stress_guard_daemon_runtime import stress_warmup as _stress_warmup  # noqa: E402
-from scripts.stress_guard_daemon_runtime import update_pid_stability as _update_pid_stability  # noqa: E402
 from scripts.stress_guard_daemon_runtime import wait_until_health_ready as _wait_until_health_ready  # noqa: E402
-from scripts.stress_guard_daemon_runtime import worker_capacity as _worker_capacity  # noqa: E402
 
 _SOAK_MIN_REQUESTS = 100_000
 _SOAK_MIN_RECEIPTS = 250_000
@@ -62,10 +56,7 @@ _SOAK_HEALTH_FAILURE_RATE_MIN_CHECKS = 1_000
 _SOAK_MAX_HEALTH_FAILURE_RATE = 0.005
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _WARMUP_CONCURRENCY = 64
-_WARMUP_HEALTH_RESERVE = 1
-_CAPACITY_STABILIZATION_TIMEOUT_SECONDS = 45.0
 _DAEMON_READY_TIMEOUT_SECONDS = 90.0
-_DEFERRED_STARTUP_FLOOR_TARGET = 1
 _DAEMON_SHUTDOWN_TIMEOUT_SECONDS = 20.0
 
 
@@ -253,67 +244,6 @@ def _wait_until_daemon_lifecycle_ready(
     raise RuntimeError("Stress daemon did not record ready before warmup.")
 
 
-def _worker_capacity_is_past_deferred_startup_floor(
-    *,
-    configured: int,
-    target: int,
-    workers: int,
-    ready: int,
-    busy: int,
-) -> bool:
-    """Ignore listen-ready's one-worker floor when measuring soak RSS."""
-
-    if workers != target or ready != target or busy != 0:
-        return False
-    if target == configured:
-        return True
-    return configured > _DEFERRED_STARTUP_FLOOR_TARGET and target > _DEFERRED_STARTUP_FLOOR_TARGET
-
-
-def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
-    """Fill the bounded daemon worker pool before taking the RSS baseline."""
-
-    initial_capacity = _worker_capacity(_healthz_details(execution))
-    if initial_capacity is None:
-        raise RuntimeError("Stress daemon did not publish authenticated worker capacity.")
-    configured, initial_target, _workers, _ready, _busy = initial_capacity
-    if not 1 <= configured <= _WARMUP_CONCURRENCY:
-        raise RuntimeError("Stress daemon published an invalid worker capacity.")
-    if not 0 <= initial_target <= configured:
-        raise RuntimeError("Stress daemon published an invalid worker target.")
-    deadline = time.monotonic() + _CAPACITY_STABILIZATION_TIMEOUT_SECONDS
-    warmup_concurrency = max(1, _WARMUP_CONCURRENCY - _WARMUP_HEALTH_RESERVE)
-    with ThreadPoolExecutor(max_workers=warmup_concurrency) as executor:
-        while time.monotonic() < deadline:
-            current = _worker_capacity(_healthz_details(execution))
-            if current is not None:
-                current_configured, target, workers, ready, busy = current
-                if current_configured == configured and _worker_capacity_is_past_deferred_startup_floor(
-                    configured=current_configured,
-                    target=target,
-                    workers=workers,
-                    ready=ready,
-                    busy=busy,
-                ):
-                    return
-            futures = [
-                executor.submit(_stress_request, execution.endpoint, execution.auth_token)
-                for _ in range(warmup_concurrency)
-            ]
-            while not all(future.done() for future in futures):
-                # Keep one outer HTTP admission slot available for the
-                # readiness probe while the remaining wave fills the bounded
-                # worker pool. PID continuity and readiness remain observable
-                # during warmup; resource baselining starts after the wave,
-                # and measured batches retain the same health probes.
-                _sample_stress_runtime(execution)
-                _update_pid_stability(execution, execution.guard_home)
-                time.sleep(0.05)
-            _collect_batch(execution, futures, retain_latencies=False)
-            execution.errors.clear()
-    raise RuntimeError("Stress daemon did not reach full worker capacity before the bounded deadline.")
-
-
 def _initialize_stress_resources(execution: _StressExecution) -> None:
     resources = _stabilized_resources(execution.initial_pid)
     if resources is None:
@@ -415,8 +345,6 @@ def run_stress(
             _wait_until_daemon_lifecycle_ready(guard_home)
             warmup_count = min(_WARMUP_CONCURRENCY, max(4, request_count))
             _stress_warmup(execution.endpoint, execution.auth_token, warmup_count)
-            if request_count >= _SOAK_MIN_REQUESTS:
-                _stabilize_full_worker_capacity(execution)
             _initialize_stress_resources(execution)
             _run_stress_batches(execution, request_count)
             _settle_stress_runtime(execution, guard_home, settle_seconds)

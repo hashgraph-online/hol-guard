@@ -342,6 +342,37 @@ def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
     assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
 
 
+def test_read_selector_resolution_requires_actual_host_result_metadata():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "README.md:1-15"}, {"path": "{{workspace}}/README.md"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
+    assert not post_input_matches("read", {"path": "README.md:15-1"}, post, result)
+    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
+
+
+def test_raw_read_selector_requires_whole_file_host_result_metadata():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "{{workspace}}/src/one.ts:raw"}, {"path": "{{workspace}}/src/one.ts"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
+    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
+    late = {"details": {**result["details"], "displayContent": {"startLine": 2}}}
+    assert not post_input_matches("read", pre, post, late)
+    for selector in ("img", "RAW", "1-5:raw", "conflicts"):
+        assert not post_input_matches("read", {"path": f"src/one.ts:{selector}"}, post, result)
+
+
 def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
     from ci.gauntlet.input_evidence import post_input_matches
 

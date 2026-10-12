@@ -12,6 +12,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::mcp_sensitive_read::{
+    McpSensitiveReadContextQueryV1, McpSensitiveReadHintQueryV1, McpSensitiveReadReuseQueryV1,
+};
+
 pub const MCP_PROXY_DECISION_REQUEST_SCHEMA: &str = "guard-mcp-proxy-decision-request.v1";
 pub const MCP_PROXY_DECISION_RESULT_SCHEMA: &str = "guard-mcp-proxy-decision-result.v1";
 pub const MCP_PROXY_DECISION_FEATURE: &str = "mcp-proxy-decision-v1";
@@ -219,6 +223,25 @@ pub struct McpEvidenceItemQueryV1 {
     pub kind: McpEvidenceItemKindV1,
 }
 
+/// Rebind a `tools/call` to the verified local copies of its external archives.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpExternalArchiveBindQueryV1 {
+    /// The request `params` exactly as received.
+    pub params: Value,
+    /// `(source url, verified local path)` pairs, in the order they apply.
+    pub replacements: Vec<(String, String)>,
+    /// Whether the package evaluation demands a binding at all.
+    pub requires_binding: bool,
+}
+
+/// Project the reasons of a package evaluation into risk signals.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpPackageReasonSignalsQueryV1 {
+    pub reasons: Vec<Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "check", rename_all = "snake_case")]
 pub enum McpProxyQueryV1 {
@@ -232,6 +255,11 @@ pub enum McpProxyQueryV1 {
     RouteToolCall(McpRouteToolCallQueryV1),
     ObserveToolForward(McpObserveToolForwardQueryV1),
     EvidenceItem(McpEvidenceItemQueryV1),
+    SensitiveReadContext(McpSensitiveReadContextQueryV1),
+    SensitiveReadReuse(McpSensitiveReadReuseQueryV1),
+    SensitiveReadHint(McpSensitiveReadHintQueryV1),
+    ExternalArchiveBind(McpExternalArchiveBindQueryV1),
+    PackageReasonSignals(McpPackageReasonSignalsQueryV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

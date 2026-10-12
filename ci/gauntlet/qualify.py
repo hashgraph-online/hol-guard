@@ -47,8 +47,15 @@ def progress(message: str) -> None:
 
 
 def retryable(failed: list[dict[str, Any]], attempt: int, attempts: int) -> bool:
-    """Retry only recoverable categories; product outcomes never earn another run."""
-    return bool(failed) and attempt < attempts and all(entry["outcome"] in RETRYABLE_OUTCOMES for entry in failed)
+    """Retry only recoverable categories; product outcomes and interruptions never earn another run.
+
+    A case that interrupted ordinary work stays failed: an intermittent warning cannot be retried away.
+    """
+    return (
+        bool(failed)
+        and attempt < attempts
+        and all(entry["outcome"] in RETRYABLE_OUTCOMES and not entry.get("interrupted") for entry in failed)
+    )
 
 
 def attempt_argv(
@@ -118,6 +125,12 @@ def attempt_work_root(parent: Path) -> Path:
     return create_numbered_dir(qualify_setup.private_dir(parent, tighten=qualify_setup.driver_owned(parent)))
 
 
+def _interrupted(case: dict[str, Any]) -> bool:
+    """Ordinary work that raised any interruption event; protection denies are expected and do not count."""
+    record = case.get("interruptions")
+    return isinstance(record, dict) and record.get("benign") is True and bool(record.get("events"))
+
+
 def summarize_attempt(
     attempt: int, evidence: Path, exit_code: int, elapsed: float, summary: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -135,14 +148,29 @@ def summarize_attempt(
         record["error"] = "runner did not write summary.json"
         return record
     cases = summary.get("cases", [])
+    interruptions = summary.get("interruptions") if isinstance(summary.get("interruptions"), dict) else None
+    gaps = {g.get("id") for g in summary.get("known_gaps", []) if isinstance(g, dict)}
     record.update(
         {
-            "pass": summary.get("pass") is True,
+            # A summary that omits the interruption metrics cannot prove a silent run.
+            "pass": summary.get("pass") is True
+            and interruptions is not None
+            and interruptions.get("benign_interruptions") == 0
+            and isinstance(interruptions.get("benign_cases"), int)
+            and interruptions["benign_cases"] > 0,
+            "interruptions": interruptions,
+            "known_gaps": summary.get("known_gaps", []),
             "merge_qualified": summary.get("merge_qualified") is True,
             "stopped_early": summary.get("stopped_early") is True,
             "outcomes": dict(Counter(case.get("outcome") for case in cases)),
             "failed": [
-                {"id": case.get("id"), "outcome": case.get("outcome"), "reason": case.get("reason")}
+                {
+                    "id": case.get("id"),
+                    "outcome": case.get("outcome"),
+                    "reason": case.get("reason"),
+                    "known_gap": case.get("id") in gaps,
+                    "interrupted": _interrupted(case),
+                }
                 for case in cases
                 if case.get("outcome") != "pass"
             ],
@@ -313,8 +341,10 @@ def main(args: Any) -> int:
             else:
                 sdk_info = qualify_setup.ensure_sdk(args.cache_root, REPO, sha, run_root / "logs" / "setup.log")
             progress(f"sdk {sdk_info['omp_version']} {sdk_info['lock_sha256'][:12]}")
-            wheel_info = qualify_setup.ensure_wheel(args.cache_root, REPO, sha, run_root, wheel=args.wheel)
-            progress(f"wheel {wheel_info['sha256'][:12]} cached={wheel_info['cached']}")
+            wheel_info = qualify_setup.ensure_wheel(
+                args.cache_root, REPO, sha, run_root, wheel=args.wheel, release_profile=args.release_profile_wheel
+            )
+            progress(f"wheel {wheel_info['sha256'][:12]} cached={wheel_info['cached']} profile={wheel_info['profile']}")
             candidate = run_root / "candidate"
             candidate = prepare_candidate(REPO, sha, run_root, Path(wheel_info["path"]))
             progress("candidate installed")
@@ -404,6 +434,12 @@ def main(args: Any) -> int:
             "max_load": args.max_load,
             "max_load_wait": args.max_load_wait,
             "attempts": attempts,
+            # Verified counts only; a failed or missing verify publishes null here and the
+            # last attempt's runner counts under unverified_* so failing runs still show them.
+            "interruptions": verify_result.get("interruptions") if verify_result else None,
+            "known_gaps": verify_result.get("known_gaps") if verify_result else None,
+            "unverified_interruptions": None if verify_result or not attempts else attempts[-1].get("interruptions"),
+            "unverified_known_gaps": None if verify_result or not attempts else attempts[-1].get("known_gaps"),
             "verify": verify_result,
             "elapsed_seconds": round(time.monotonic() - started, 3),
             "cleanup": cleanup,

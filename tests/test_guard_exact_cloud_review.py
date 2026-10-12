@@ -135,7 +135,7 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     assert authority["source"] == "approval-gate-once"
     assert authority["authority_kind"] == "exact-cloud"
     assert isinstance(authority["approval_id"], str)
-    assert store.claim_local_once_approval(authority["approval_id"], claimed_at=resolved_at) is False
+    assert store.claim_approval_reuse_decision(authority, now=resolved_at, consume_local_once=True) is False
     assert (
         store.peek_local_once_approval(
             harness=target.harness,

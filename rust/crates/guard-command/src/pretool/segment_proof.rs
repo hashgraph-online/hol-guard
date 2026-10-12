@@ -42,6 +42,7 @@ pub(super) fn verified_cwd_compound_context(
 
 pub(super) fn exact_safe_cwd_compound(
     model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
     context: super::PathContext<'_>,
 ) -> bool {
     let Some(cwd) = verified_cwd_compound_context(model, context) else {
@@ -64,6 +65,7 @@ pub(super) fn exact_safe_cwd_compound(
             crate::pretool::PathContext {
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
+                rustup_override_absent: context.rustup_override_absent,
                 cwd: Some(&cwd),
             },
         );
@@ -85,6 +87,7 @@ pub(super) fn exact_safe_cwd_compound(
                     | "pgrep"
                     | "ls"
                     | "cat"
+                    | "base64"
                     | "stat"
                     | "test"
                     | "find"
@@ -101,14 +104,18 @@ pub(super) fn exact_safe_cwd_compound(
                     | "sort"
                     | "uniq"
                     | "cut"
+                    | "du"
+                    | "df"
+                    | "diff"
             )
         ) && exact_safe_segment_with_context(
             model,
             segment,
-            false,
+            allow_git_helper_context,
             crate::pretool::PathContext {
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
+                rustup_override_absent: context.rustup_override_absent,
                 cwd: Some(&cwd),
             },
         )
@@ -137,6 +144,7 @@ pub(crate) fn benign_command_segments(
     let proof_context = crate::pretool::PathContext {
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
+        rustup_override_absent: context.rustup_override_absent,
         cwd: cwd.as_deref().or(context.cwd),
     };
     let segment_benign: Vec<bool> = model
@@ -153,7 +161,11 @@ pub(crate) fn benign_command_segments(
         .segments
         .iter()
         .enumerate()
-        .filter_map(|(index, segment)| {
+        .filter_map(|(index, original)| {
+            // Coverage checks must see the same arguments the proof does. A
+            // trailing `2>&1` is not an ls target.
+            let stripped = without_stderr_merge(original);
+            let segment = stripped.as_ref().unwrap_or(original);
             let benign = segment_benign[index];
             let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
             let stdin_filter = segment.pipeline_index > 0
@@ -194,6 +206,7 @@ pub(crate) fn benign_command_segments(
                 && matches!(
                     basename,
                     "ls" | "cat"
+                        | "base64"
                         | "cp"
                         | "mkdir"
                         | "touch"
@@ -208,6 +221,8 @@ pub(crate) fn benign_command_segments(
                         | "stat"
                         | "test"
                         | "find"
+                        | "du"
+                        | "diff"
                 );
             let ls_has_explicit_target = basename != "ls" || {
                 let mut skip_next = false;
@@ -266,14 +281,18 @@ pub(super) fn exact_safe_segment_with_context(
     allow_git_helper_context: bool,
     context: super::PathContext<'_>,
 ) -> bool {
+    let stripped = without_stderr_merge(segment);
+    let segment = stripped.as_ref().unwrap_or(segment);
     let Some(executable) = segment.executable.as_deref() else {
         return false;
     };
     let basename = executable_basename(executable);
-    let inert_search = matches!(basename, "rg" | "grep")
+    let inert_search = matches!(basename, "rg" | "grep" | "fd")
         && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
-    if (!inert_search && sensitive_command(&segment.text))
-        || (!matches!(basename, "rg" | "grep")
+    if (!inert_search
+        && !super::source_file_read_segment(segment)
+        && sensitive_command(&segment.text))
+        || (!matches!(basename, "rg" | "grep" | "fd")
             && segment
                 .arguments
                 .iter()
@@ -283,6 +302,9 @@ pub(super) fn exact_safe_segment_with_context(
     {
         return false;
     }
+    if super::version_probes::safe_version_probe(basename, &segment.arguments) {
+        return true;
+    }
     match basename {
         "cd" => {
             model.segments.len() == 1
@@ -290,26 +312,37 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::directory_targets::drive_targets_quoted(segment)
         }
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => true,
+        "cargo" | "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
         "uptime" => segment.arguments.is_empty(),
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
-        "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
+        "ls" => {
+            super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
+        }
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
-        "find" => safe_reads::safe_find_listing_arguments(&segment.arguments, context),
+        "find" => super::find_reads::safe_find_listing_arguments(&segment.arguments, context),
         // Operand-free `cat` after a pipe only copies the proven producer's output.
         "cat" => {
             (segment.pipeline_index > 0 && segment.arguments.is_empty())
                 || safe_reads::safe_plain_file_arguments(&segment.arguments, context)
         }
+        "base64" => super::base64_reads::safe_base64_arguments(&segment.arguments, context),
+        "du" => super::metadata_reads::safe_du_arguments(&segment.arguments, context),
+        "df" => super::metadata_reads::safe_df_arguments(&segment.arguments),
+        "diff" => super::metadata_reads::safe_diff_arguments(&segment.arguments, context),
         "stat" => matches!(segment.arguments.as_slice(), [target]
             if !target.starts_with('-')
                 && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
         "cp" => {
             model.segments.len() == 1
-                && safe_reads::safe_copy_arguments(&segment.arguments, context)
+                && (safe_reads::safe_copy_arguments(&segment.arguments, context)
+                    || super::recursive_copy::safe_recursive_copy_arguments(
+                        &segment.arguments,
+                        context,
+                    ))
         }
-        "mkdir" | "touch" | "mv" => {
+        "mktemp" | "mkdir" | "touch" | "mv" => {
             model.segments.len() == 1
                 && safe_reads::safe_file_mutation_arguments(basename, &segment.arguments, context)
         }
@@ -322,9 +355,15 @@ pub(super) fn exact_safe_segment_with_context(
         "git" => {
             safe_git_arguments(&segment.arguments, allow_git_helper_context, context)
                 && super::directory_targets::drive_targets_quoted(segment)
+                && super::directory_targets::home_targets_unquoted(segment)
         }
-        "gh" => safe_gh_arguments(&segment.arguments),
+        "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
+        "hol-guard" => super::guard_diagnostics::safe_hol_guard_segment(
+            &segment.arguments,
+            context.cwd,
+            segment.pipeline_index,
+        ),
         "jq" => {
             segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)
         }
@@ -342,8 +381,13 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments)
         }
-        "rg" | "grep" => {
+        "rg" | "grep" | "fd" => {
             search::safe_search_arguments_with_context(basename, &segment.arguments, context)
+                && super::directory_targets::search_home_targets_safe(
+                    segment,
+                    context.cwd,
+                    context.home_dir,
+                )
         }
         "sed" => {
             safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context)
@@ -354,4 +398,34 @@ pub(super) fn exact_safe_segment_with_context(
         }
         _ => false,
     }
+}
+
+/// Trailing `2>&1` redirects only join stderr to the segment's own stdout, so
+/// the proof applies to the command without them. Every eligible redirect is
+/// removed in one copy. The parser admits that redirect only at a token
+/// boundary; a quoted or escaped `2>&1` operand is still the last argument but
+/// leaves a quote or backslash in the text, so it stays.
+fn stderr_merge_tail(segment: &crate::CommandSegmentV1) -> bool {
+    segment.arguments.last().map(String::as_str) == Some("2>&1")
+        && segment.tokens.last().map(String::as_str) == Some("2>&1")
+}
+
+fn without_stderr_merge(segment: &crate::CommandSegmentV1) -> Option<crate::CommandSegmentV1> {
+    if !stderr_merge_tail(segment) {
+        return None;
+    }
+    let mut merged = segment.clone();
+    while stderr_merge_tail(&merged) {
+        let Some(text) = merged.text.strip_suffix("2>&1") else {
+            break;
+        };
+        let command = text.trim_end();
+        if command.len() == text.len() || command.ends_with('\\') {
+            break;
+        }
+        merged.arguments.pop();
+        merged.tokens.pop();
+        merged.text = command.to_owned();
+    }
+    Some(merged)
 }

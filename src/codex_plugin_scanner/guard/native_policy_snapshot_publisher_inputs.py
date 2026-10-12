@@ -11,17 +11,15 @@ from typing import TYPE_CHECKING, cast
 from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
+from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
+from .native_policy_effective import compose_effective_native_policies
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
     NATIVE_RUNTIME_STATE_DIRECTORY,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_policy import (
-    _merge_effective_native_policies,
-    _stricter_action,
-    effective_native_policy_v3,
-)
+from .native_policy_snapshot_policy import _stricter_action
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
@@ -198,22 +196,17 @@ class NativePolicySnapshotPublisherInputs:
         # resident is definitively stale.
         return not generations or max(generations) == resident_generation
 
+    @staticmethod
+    def _overlay_paths(workspaces: tuple[Path, ...]) -> tuple[Path, ...]:
+        return tuple(workspace / name for workspace in workspaces for name in WORKSPACE_CONFIG_FILENAMES)
+
     def _workspace_policy_paths(self) -> tuple[Path, ...]:
         with self._condition:
-            workspaces = tuple(self._workspace_paths)
-        paths: list[Path] = []
-        for workspace in workspaces:
-            paths.extend(workspace / filename for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
-        return tuple(paths)
+            return self._overlay_paths(tuple(self._workspace_paths))
 
     def _pending_workspace_policy_paths(self) -> set[str]:
         with self._condition:
-            pending = tuple(self._pending_workspace_paths)
-        return {
-            str(workspace / filename)
-            for workspace in pending
-            for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
-        }
+            return {str(path) for path in self._overlay_paths(tuple(self._pending_workspace_paths))}
 
     def _compiled_effective_policy(
         self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None
@@ -235,9 +228,7 @@ class NativePolicySnapshotPublisherInputs:
             selected_workspaces = tuple(sorted(selected, key=str))
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
-        policy = _merge_effective_native_policies(
-            tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
-        )
+        policy = compose_effective_native_policies(tuple(configs))
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
         except sqlite3.Error as error:
@@ -354,13 +345,19 @@ class NativePolicySnapshotPublisherInputs:
             # and continuously revoke the ACKed snapshot.
             policy_for_digest = dict(effective_policy)
             policy_for_digest.pop("mode", None)
+            # Per-harness postures ride the ACK side channel, not the digest.
+            policy_for_digest.pop("harness_postures", None)
             source = self._compiled_business_source()
             current_fingerprint = (
                 cast(str, _digest_v3(policy_for_digest)),
                 cast(str, effective_policy["mode"]),
                 self._source_control_fingerprint(self._compiled_command_extensions(), source),
             )
-        except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
+        except NativePolicySnapshotError:
+            # A missing composer cannot prove the database write left the
+            # effective policy unchanged. Record unavailable and withdraw.
+            current_fingerprint = ("unavailable", "", "")
+        except (OSError, TypeError, ValueError, RuntimeError):
             current_fingerprint = ("unavailable", "", "")
         # Observation is independent of acknowledgment: unchanged inputs must
         # not reset a failed publication's retry backoff on every database write.

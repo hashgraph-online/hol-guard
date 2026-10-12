@@ -19,7 +19,6 @@ from .mcp_servers import (
     GUARD_MCP_COMPANION_PREFIX,
     ManagedMcpServer,
     is_guard_proxy_command,
-    is_verified_guard_mcp_companion,
     managed_stdio_servers,
     proxy_cli_args,
     proxy_process_env,
@@ -521,28 +520,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         return server.source_scope == "project"
 
     _should_skip_workspace_override = staticmethod(should_skip_workspace_override)
-
-    def _workspace_server_names(self, context: HarnessContext) -> set[str]:
-        if context.workspace_dir is None:
-            return set()
-        workspace_server_names: set[str] = set()
-        for config_path in config_paths(context):
-            if not config_path.is_relative_to(context.workspace_dir):
-                continue
-            payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
-            if parse_error or not isinstance(payload, dict):
-                continue
-            mcp = payload.get("mcp")
-            if not isinstance(mcp, dict):
-                continue
-            for name, value in mcp.items():
-                if not isinstance(name, str) or not isinstance(value, dict):
-                    continue
-                command, args = _command_parts(value)
-                if is_verified_guard_mcp_companion(name, command, args):
-                    continue
-                workspace_server_names.add(name)
-        return workspace_server_names
 
     @staticmethod
     def _target_config_path(context: HarnessContext) -> Path:

@@ -123,42 +123,6 @@ def build_access_graph_snapshot_event(
     )
 
 
-def build_agent_handshake_event(
-    *,
-    handshake_id: str,
-    occurred_at: str,
-    payload: dict[str, object],
-    device_id: str | None = None,
-    workspace_id: str | None = None,
-) -> GuardEventV1:
-    return _build_edge_event(
-        event_type="agent.handshake",
-        subject_id=handshake_id,
-        occurred_at=occurred_at,
-        payload=payload,
-        device_id=device_id,
-        workspace_id=workspace_id,
-    )
-
-
-def build_notification_delivery_event(
-    *,
-    delivery_id: str,
-    occurred_at: str,
-    payload: dict[str, object],
-    device_id: str | None = None,
-    workspace_id: str | None = None,
-) -> GuardEventV1:
-    return _build_edge_event(
-        event_type="notification.delivery",
-        subject_id=delivery_id,
-        occurred_at=occurred_at,
-        payload=payload,
-        device_id=device_id,
-        workspace_id=workspace_id,
-    )
-
-
 def build_harness_usage_event(
     *,
     event_type: GuardEventType,

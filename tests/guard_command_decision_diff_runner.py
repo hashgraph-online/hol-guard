@@ -72,7 +72,7 @@ from tests.guard_command_corpus_runner import EVALUATION_SHARD_COUNT, peak_rss_m
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
 # Bound the aggregate memory of Python workers and their native residents.
-MAX_CONCURRENT_WORKERS = 2
+MAX_CONCURRENT_WORKERS = EVALUATION_SHARD_COUNT
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -22,7 +20,6 @@ from .effect_contract import (
     UncertaintyKind,
     maximum_action_floor,
 )
-from .extension_evidence import ExtensionEvidenceBatch
 
 EFFECT_DECISION_SCHEMA_VERSION: Final = "1.1.0"
 _REASON_CODE: Final = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
@@ -251,30 +248,6 @@ def evaluate_effect_decision(request: EffectDecisionRequest) -> EffectDecision:
     )
 
 
-def factors_from_extension_evidence(batch: ExtensionEvidenceBatch) -> tuple[DecisionFactor, ...]:
-    """Translate immutable extension observations without granting interaction."""
-
-    if not isinstance(cast(object, batch), ExtensionEvidenceBatch):
-        raise ValueError("batch must be an ExtensionEvidenceBatch")
-    factors: list[DecisionFactor] = []
-    for evidence in batch.evidence:
-        floor = evidence.effective_floor
-        if floor is None:
-            continue
-        factors.append(
-            DecisionFactor(
-                source=DecisionFactorSource.MATCH,
-                reason_code=evidence.base_fact,
-                basis=DecisionBasis(floor, None),
-                segment_ref=evidence.segment_ref,
-                operation_ref=evidence.operation_ref,
-                producer_ref=(f"extension:{evidence.identity.extension_id}/{evidence.identity.rule_id}"),
-                evidence_digest=_extension_evidence_digest(evidence.semantic_key),
-            )
-        )
-    return tuple(sorted(factors, key=lambda item: item.semantic_key))
-
-
 def _reason_key(reason: DecisionReason) -> tuple[str, str, str, str, int]:
     return (
         reason.segment_ref or "",
@@ -324,16 +297,6 @@ def _proof_key(proof: PositiveProof | None) -> tuple[str, ...]:
         ",".join(sorted(item.value for item in proof.satisfied_requirements)),
         "enforced" if proof.enforced else "not-enforced",
     )
-
-
-def _extension_evidence_digest(semantic_key: object) -> str:
-    payload = json.dumps(
-        {"schema": "guard-extension-evidence-factor-v1", "semantic_key": semantic_key},
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("ascii")
-    return hashlib.sha256(b"guard-extension-evidence-factor-v1\x00" + payload).hexdigest()
 
 
 def _require_factor_tuple(value: object) -> tuple[DecisionFactor, ...]:

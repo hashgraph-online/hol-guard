@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
 _FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+_TRAILING_MANAGED_MARKERS = frozenset({"HOL_GUARD_MANAGED_ZCODE"})
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
 _BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
@@ -283,56 +284,6 @@ def _emit_failure(
     return returncode
 
 
-def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
-    from .bounded_cli_hook_daemon import _daemon_hook_endpoint as implementation
-
-    return implementation(guard_home, harness)
-
-
-def _read_daemon_auth_token(guard_home: Path) -> str | None:
-    from .bounded_cli_hook_daemon import _read_daemon_auth_token as implementation
-
-    return implementation(guard_home)
-
-
-def _build_loopback_opener():  # type: ignore[no-untyped-def]
-    from .bounded_cli_hook_daemon import _build_loopback_opener as implementation
-
-    return implementation()
-
-
-def _try_daemon_hook(
-    *,
-    guard_home: Path,
-    harness: str,
-    input_text: str,
-    timeout_seconds: float,
-) -> tuple[str, str, int] | None:
-    """Retain legacy private patch points for established direct callers."""
-    from . import bounded_cli_hook_daemon as daemon
-
-    return daemon.try_daemon_hook(
-        guard_home=guard_home,
-        harness=harness,
-        input_text=input_text,
-        timeout_seconds=timeout_seconds,
-        _endpoint_loader=_daemon_hook_endpoint,
-        _token_loader=_read_daemon_auth_token,
-        _opener_builder=_build_loopback_opener,
-    )
-
-
-def _daemon_response_to_native(
-    daemon_response: dict[str, object],
-    *,
-    harness: str,
-    event_name: str,
-) -> tuple[str, str, int]:
-    from .bounded_cli_hook_daemon import _daemon_response_to_native as implementation
-
-    return implementation(daemon_response, harness=harness, event_name=event_name)
-
-
 def run_bounded_cli_hook(
     config: Mapping[str, object],
     *,
@@ -467,11 +418,17 @@ def run_bounded_cli_hook(
     return result.returncode
 
 
+def _is_config_argv(argv: Sequence[str]) -> bool:
+    # ZCode hook commands end with "# <marker>". POSIX shells drop that comment,
+    # but cmd.exe has no comment syntax and passes both words as arguments.
+    return len(argv) == 1 or (len(argv) == 3 and argv[1] == "#" and argv[2] in _TRAILING_MANAGED_MARKERS)
+
+
 def main_from_argv(argv: Sequence[str]) -> int:
     """Parse the authenticated install-time hook config and run it."""
 
     started_monotonic = time.monotonic()
-    config = _json_object(argv[0]) if len(argv) == 1 else None
+    config = _json_object(argv[0]) if _is_config_argv(argv) else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
     timeout = config.get("timeout_seconds") if config is not None else None

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const CONFIG_LIMIT: u64 = 65_536;
 const WORKTREE_PROBE_LIMIT: u64 = 8 * 1024;
@@ -17,7 +17,7 @@ pub(super) fn worktree_add_execution_free(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<bool> {
-    let probe_deadline = Instant::now() + Duration::from_secs(2);
+    let probe_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
     let deadline = deadline.unwrap_or(probe_deadline).min(probe_deadline);
     if Instant::now() >= deadline || !destination.is_absolute() {
         return None;
@@ -121,7 +121,7 @@ pub(super) fn trusted_pipeline_command(
         || !cwd.is_dir()
         || !environment.git_config_no_system
         || environment.xdg_config_home.is_some()
-        || !super::git_config::clean_environment(Some(environment))
+        || !super::git_config::clean_environment(Some(environment), &home, &cwd)
         || environment
             .home
             .as_deref()
@@ -150,7 +150,7 @@ fn prepared_git_command(
         || environment.xdg_config_home.is_some()
         || !home.is_dir()
         || !cwd.is_dir()
-        || !super::git_config::clean_environment(Some(environment))
+        || !super::git_config::clean_environment(Some(environment), &home, &cwd)
     {
         return None;
     }

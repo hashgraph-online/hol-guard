@@ -8,8 +8,11 @@ import stat
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from itertools import pairwise
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
+from .restricted_inline_eval import _test_script
 from .restricted_node_capabilities import linux_node_environment
 from .restricted_node_test import _node_runtime_args, nearest_project_root, prepare_restricted_node_test
 from .restricted_pytest_model import (
@@ -21,6 +24,17 @@ from .restricted_pytest_model import (
 )
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
 from .restricted_pytest_validation import _normalized_command, _path_is_within
+
+
+def _tsx_package_dir(command: Sequence[str]) -> Path | None:
+    """Directory of the tsx package named by a contained `--import` loader."""
+    for flag, value in pairwise(command):
+        if flag != "--import" or not value.startswith("file:"):
+            continue
+        path = Path(unquote(urlparse(value).path))
+        if path.name == "loader.mjs" and path.parent.name == "dist" and path.parent.parent.name == "tsx":
+            return path.parent.parent
+    return None
 
 
 def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str, ...]] | None:
@@ -50,6 +64,28 @@ def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str
     if len(args) < 2 or args[:2] != ("vitest", "run"):
         return None
     return directory, args[1:]
+
+
+def tsx_test_invocation(command: Sequence[str]) -> tuple[str, tuple[str, ...]] | None:
+    """`tsx math.test.ts` in its installed forms: the test script and its arguments."""
+    if not command:
+        return None
+    name = Path(command[0]).name
+    args = tuple(command[1:])
+    if name == "npx" and args[:1] == ("--no-install",):
+        args = args[1:]
+    if name == "npx" and args[:1] == ("tsx",):
+        args = args[1:]
+    elif name in {"node", "nodejs"}:
+        args = args[len(_node_runtime_args(command)) :]
+        if not args or not args[0].replace("\\", "/").endswith("/node_modules/tsx/dist/cli.mjs"):
+            return None
+        args = args[1:]
+    elif name != "tsx":
+        return None
+    if not args or not _test_script(args[0], node=True):
+        return None
+    return args[0], args[1:]
 
 
 def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
@@ -82,6 +118,8 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
 def prepare_restricted_vitest(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None
 ) -> RestrictedPytestPlan:
+    if (tsx := tsx_test_invocation(_normalized_command(command))) is not None:
+        return _prepare_tsx_test(command, tsx, workspace=workspace, cwd=cwd)
     args = vitest_arguments(command)
     runtime_args = _node_runtime_args(command)
     invocation = bun_vitest_invocation(command)
@@ -125,6 +163,47 @@ def prepare_restricted_vitest(
         plan,
         profile_version=VITEST_READ_ONLY_PROFILE_VERSION,
         command=(str(plan.executable), *runtime_args, str(entry), *args),
+    )
+
+
+def _prepare_tsx_test(
+    command: Sequence[str], tsx: tuple[str, tuple[str, ...]], *, workspace: Path, cwd: Path | None
+) -> RestrictedPytestPlan:
+    """Load the script through tsx's own loader inside the Vitest transform boundary.
+
+    The tsx CLI listens on a local IPC socket, which the read-only profile does
+    not grant, so the plan runs Node with the package's loader instead.
+    """
+    argv = _normalized_command(command)
+    node = Path(argv[0]).name in {"node", "nodejs"}
+    runtime_args = _node_runtime_args(argv) if node else ()
+    plan = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd)
+    script_name, script_args = tsx
+    try:
+        modules = nearest_project_root(plan.cwd, plan.workspace, "node_modules/tsx/dist/loader.mjs") / "node_modules"
+        loader = (modules / "tsx" / "dist" / "loader.mjs").resolve(strict=True)
+        if not loader.is_file() or not _path_is_within(loader, modules):
+            raise OSError("invalid local tsx loader")
+        if node and (plan.cwd / argv[1 + len(runtime_args)]).resolve(strict=True) != loader.parent / "cli.mjs":
+            raise OSError("unexpected tsx entrypoint")
+    except (OSError, RuntimeError) as error:
+        raise RestrictedPytestError(
+            "vitest_restricted_dependency_unavailable",
+            "tsx is not installed inside this workspace. Guard did not download or execute a replacement.",
+        ) from error
+    try:
+        # A test script runs from the workspace, never from a link out of it.
+        script = (plan.cwd / script_name).resolve(strict=True)
+        if not _path_is_within(script, plan.workspace) or not script.is_file():
+            raise OSError("outside the workspace")
+    except (OSError, RuntimeError) as error:
+        raise RestrictedPytestError(
+            "vitest_restricted_invalid_command", "Test script is not in the workspace."
+        ) from error
+    return replace(
+        plan,
+        profile_version=VITEST_READ_ONLY_PROFILE_VERSION,
+        command=(str(plan.executable), *runtime_args, "--import", loader.as_uri(), script_name, *script_args),
     )
 
 
@@ -207,7 +286,13 @@ def run_restricted_node_plan(
 
             # Executable images have a separate read-only tree. A child cannot
             # replace the image by renaming a writable scratch ancestor.
-            esbuild = snapshot_esbuild(plan.workspace, Path(images).resolve())
+            # The transform image sits beside the package that runs the tests,
+            # which may be a package directory below the approved root.
+            # A tsx loader can pin its own nested esbuild. Start there so a
+            # hoisted binary of a different version is not selected instead.
+            anchor = _tsx_package_dir(plan.command) or plan.cwd
+            project = nearest_project_root(anchor, plan.workspace, "node_modules/esbuild/package.json")
+            esbuild = snapshot_esbuild(project, Path(images).resolve())
             if esbuild is not None:
                 source, image, version = esbuild
                 if authorize_capability is None:

@@ -8,16 +8,10 @@ from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext
 from .paseo_config import PaseoProvider, paseo_config_path, paseo_providers, require_local_path
-from .paseo_install import (
-    install_native,
-    native_context,
-    preflight_native,
-    protection_paths,
-    provider_status,
-    read_receipt,
-    receipt_path,
-    write_receipt,
-)
+from .paseo_install import native_context, preflight_native, provider_status, read_receipt, receipt_path
+
+# isort: split
+from .paseo_install import install_native, protection_paths, write_receipt
 
 PASEO_COVERAGE_LIMIT = (
     "Paseo delegates tool execution to native providers. Guard protects supported providers through their native "

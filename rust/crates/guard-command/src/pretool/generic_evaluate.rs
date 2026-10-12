@@ -18,10 +18,14 @@ pub(super) fn evaluate_signals(
         signals.tool_name.as_deref(),
         signals,
     );
+    // A command the Rust authority proved explicitly benign (a lone version
+    // query, say) keeps its command decision even when it names a package tool.
     if action_type == PreToolActionTypeV1::Command
         && command_decision
             .and_then(|decision| decision.as_ref().ok())
-            .is_some_and(|decision| package_command(&decision.command_model))
+            .is_some_and(|decision| {
+                !decision.explicitly_benign && package_command(&decision.command_model)
+            })
     {
         action_type = PreToolActionTypeV1::Package;
         operation = PreToolOperationV1::Install;
@@ -205,6 +209,23 @@ pub(super) fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
+        && super::omp::host_reference_reason(&signals.path_values[0]).is_some()
+    {
+        return generic_result(
+            action,
+            "allow",
+            super::omp::host_reference_reason(&signals.path_values[0]).unwrap_or_default(),
+            "This Oh My Pi artifact or skill reference names host-held content, not a filesystem path.",
+        );
+    }
+    if action_type == PreToolActionTypeV1::FileRead
+        && event == "PreToolUse"
+        && harness == "omp"
+        && signals.tool_name.as_deref() == Some("read")
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.command.is_none()
+        && signals.path_values.len() == 1
         && super::super::safe_reads::bounded_omp_file_read_target(
             &signals.path_values[0],
             home_dir,
@@ -243,11 +264,21 @@ pub(super) fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_file_read_target(
-            &signals.path_values[0],
-            home_dir,
-            cwd,
-        )
+        && if matches!(signals.tool_name.as_deref(), Some("Read" | "read")) {
+            // Only the host `Read` tools open their path literally, so a
+            // `[slug]` directory is a name. Any other tool may glob-expand.
+            super::super::safe_reads::bounded_structured_file_read_target(
+                &signals.path_values[0],
+                home_dir,
+                cwd,
+            )
+        } else {
+            super::super::safe_reads::bounded_file_read_target(
+                &signals.path_values[0],
+                home_dir,
+                cwd,
+            )
+        }
     {
         return generic_result(
             action,
@@ -265,17 +296,21 @@ pub(super) fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_native_file_write_target(
+        && (super::super::safe_reads::bounded_native_file_write_target(
             &signals.path_values[0],
             home_dir,
             cwd,
-        )
+        ) || super::super::safe_writes::bounded_native_temporary_write_target(
+            &signals.path_values[0],
+            home_dir,
+            cwd,
+        ))
     {
         return generic_result(
             action,
             "allow",
             "native_exact_safe_file_write",
-            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, or the verified user home and clears sensitive-path checks.",
+            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, the verified user home, or a private user-owned temporary directory and clears sensitive-path checks.",
         );
     }
     let (reason_code, reason) = review_reason(action_type);

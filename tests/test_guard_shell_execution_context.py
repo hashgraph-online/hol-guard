@@ -23,10 +23,8 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
 )
@@ -633,9 +631,16 @@ def test_destructive_shell_request_models_each_command_context_once(
         cwd: Path | None = None,
         workspace_root: Path | None = None,
         home_dir: Path | None = None,
+        classify_environment_secrets: bool = False,
     ):
         calls.append(command_text)
-        return original_model(command_text, cwd=cwd, workspace_root=workspace_root, home_dir=home_dir)
+        return original_model(
+            command_text,
+            cwd=cwd,
+            workspace_root=workspace_root,
+            home_dir=home_dir,
+            classify_environment_secrets=classify_environment_secrets,
+        )
 
     monkeypatch.setattr(secret_file_requests_module, "model_shell_execution_context", counting_model)
 

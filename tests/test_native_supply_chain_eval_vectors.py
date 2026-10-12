@@ -18,9 +18,9 @@ from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_reque
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
-    js_target,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.package_target_support import recorded_target
 
 VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "supply-chain-eval" / "cases.v1.json").read_text(encoding="utf-8")
@@ -39,7 +39,7 @@ def _artifact(targets: list[str], lockfile_paths: list[str]):
         intent_kind="install",
         command_tokens=tokens,
         redacted_command=" ".join(tokens),
-        targets=tuple(js_target(target) for target in targets),
+        targets=tuple(recorded_target("npm", target) for target in targets),
         manifest_paths=(),
         lockfile_paths=tuple(lockfile_paths),
         flags=(),

@@ -29,6 +29,7 @@ from .native_context import (
     ensure_resident_prerequisite,
 )
 from .native_resident_client import native_resident_client_request
+from .native_resident_prerequisite_reason import prerequisite_unavailable_code
 from .native_runtime import _isolated_environment
 from .native_runtime_resilience import (
     native_record_overload,
@@ -137,8 +138,7 @@ def native_mcp_tool_evidence_request(
     }
     status = _native_runtime_status_memo()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
@@ -151,7 +151,9 @@ def native_mcp_tool_evidence_request(
     except Exception as error:
         raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_prerequisite_unavailable") from error
     if not prerequisite:
-        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_prerequisite_unavailable")
+        raise NativeMcpToolEvidenceError(
+            prerequisite_unavailable_code("native_mcp_tool_evidence_prerequisite_unavailable", guard_home)
+        )
     try:
         request_sha256 = _canonical_request_sha256(request)
         # Rust bounds the ASCII-escaped canonical form, which can exceed the

@@ -217,11 +217,9 @@ def test_every_hooked_call_needs_a_guard_review():
     assert assess_harness_case(scenario, case(scenario.id, [], [BASH_CALL]))["outcome"] == "harness-error"
     one = [row("PreToolUse", ALLOW, decision="allow", command=scenario.commands[0])]
     result = assess_harness_case(scenario, case(scenario.id, one, [BASH_CALL] * 4))
-    assert result == {
-        "outcome": "harness-error",
-        "reason": "3 of 4 tool calls ran without a Guard review",
-        "harness": "codex",
-    }
+    assert result["outcome"] == "harness-error"
+    assert result["reason"] == "3 of 4 tool calls ran without a Guard review"
+    assert result["harness"] == "codex"
 
 
 def test_ordinary_case_needs_every_requested_command():

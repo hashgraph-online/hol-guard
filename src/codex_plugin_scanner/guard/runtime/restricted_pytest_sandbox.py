@@ -15,6 +15,7 @@ from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, TextIO
 
+from ..native_restricted_pytest import restricted_native
 from .restricted_credential_patterns import (
     _read_only_credential_denials,
     _read_only_credential_patterns,
@@ -26,15 +27,10 @@ from .restricted_pytest_model import (
     _DEFAULT_MEMORY_BYTES,
     _DEFAULT_OPEN_FILES,
     _DEFAULT_PROCESSES,
-    _DENIED_ENV_KEYS,
     _LINUX_READ_FILES,
     _LINUX_READ_ROOTS,
     _MACOS_READ_FILES,
     _MACOS_READ_ROOTS,
-    _PROXY_ENV_KEYS,
-    _SAFE_ENV_KEYS,
-    _SEALED_SYSTEM_EXECUTABLE_ROOTS,
-    _SECRET_ENV_PATTERN,
     PYTEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
     READ_ONLY_TEST_PROFILES,
@@ -42,11 +38,7 @@ from .restricted_pytest_model import (
     RestrictedPytestPlan,
 )
 from .restricted_pytest_validation import (
-    _first_symlink_expansion,
     _path_is_within,
-    _path_is_within_any,
-    _restricted_pythonpath,
-    _runtime_distribution_root,
 )
 
 _RESOURCE_AVAILABLE = os.name == "posix"
@@ -67,44 +59,20 @@ def _restricted_environment(
     private_tmp: Path,
     allowed_executables: tuple[Path, ...],
 ) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for key, value in source.items():
-        if (
-            key in _DENIED_ENV_KEYS
-            or key in _PROXY_ENV_KEYS
-            or _SECRET_ENV_PATTERN.search(key)
-            or "\x00" in key
-            or "\x00" in value
-        ):
-            continue
-        if key in {"HOME", "PATH", "TEMP", "TMP", "TMPDIR"}:
-            continue
-        if key == "PYTHONPATH":
-            result[key] = _restricted_pythonpath(value, workspace=workspace, cwd=cwd)
-            continue
-        if key == "VIRTUAL_ENV":
-            virtual_environment = Path(value).expanduser()
-            try:
-                resolved_virtual_environment = virtual_environment.resolve(strict=True)
-            except (OSError, RuntimeError):
-                continue
-            if _path_is_within(resolved_virtual_environment, workspace):
-                result[key] = str(resolved_virtual_environment)
-            continue
-        if key in _SAFE_ENV_KEYS or key.startswith("LC_"):
-            result[key] = value
-    executable_dirs = list(dict.fromkeys(str(path.parent) for path in allowed_executables))
-    result.update(
+    result = restricted_native(
+        "environment",
         {
-            "HOME": str(private_home),
-            "PATH": os.pathsep.join(executable_dirs),
-            "PWD": str(cwd),
-            "PYTHONNOUSERSITE": "1",
-            "TEMP": str(private_tmp),
-            "TMP": str(private_tmp),
-            "TMPDIR": str(private_tmp),
-        }
+            "source": dict(source),
+            "workspace": workspace,
+            "cwd": cwd,
+            "private_home": private_home,
+            "private_tmp": private_tmp,
+            "allowed_executables": allowed_executables,
+        },
+        dict,
     )
+    if not all(isinstance(value, str) for value in result.values()):
+        raise ValueError("Invalid native restricted environment reply")
     return result
 
 
@@ -249,74 +217,30 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
 
 
 def _dedupe_parent_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
-    resolved: list[Path] = []
-    for path in sorted(
-        {item.resolve(strict=False) for item in paths},
-        key=lambda item: (len(item.parts), str(item)),
-    ):
-        if any(_path_is_within(path, parent) for parent in resolved):
-            continue
-        resolved.append(path)
-    return tuple(resolved)
+    return tuple(Path(path) for path in restricted_native("dedupe_parent_paths", {"roots": paths}, list))
 
 
 def _ancestor_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
-    ancestors: list[Path] = []
-    for path in paths:
-        current = path
-        for parent in (current, *current.parents):
-            if parent == Path("/") or parent in ancestors:
-                continue
-            ancestors.append(parent)
-    return tuple(ancestors)
+    return tuple(Path(path) for path in restricted_native("ancestor_paths", {"roots": paths}, list))
 
 
 def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
-    roots: list[Path] = []
-    for executable in plan.allowed_executables:
-        if private_root is not None and _path_is_within(executable, private_root):
-            continue
-        symlink_runtime_roots = _symlink_runtime_roots(executable)
-        for symlink_runtime_root in symlink_runtime_roots:
-            if symlink_runtime_root not in roots:
-                roots.append(symlink_runtime_root)
-        if symlink_runtime_roots:
-            continue
-        if _path_is_within(executable, plan.workspace) or _path_is_within_any(
-            executable, _SEALED_SYSTEM_EXECUTABLE_ROOTS
-        ):
-            continue
-        root = executable.parent.parent if executable.parent.name == "bin" else executable.parent
-        if root not in roots:
-            roots.append(root)
-    return tuple(roots)
+    return tuple(
+        Path(path)
+        for path in restricted_native(
+            "runtime_roots",
+            {
+                "allowed_executables": plan.allowed_executables,
+                "workspace": plan.workspace,
+                "private_root": private_root,
+            },
+            list,
+        )
+    )
 
 
 def _symlink_runtime_roots(executable: Path) -> tuple[Path, ...]:
-    """Return lexical runtime roots named by an executable's symlink chain.
-
-    Managed Python installations commonly expose a stable version alias (for
-    example ``cpython-3.12-*``) that points at a patch-version directory.  The
-    macOS sandbox must be able to traverse that alias before it can reach the
-    already-approved resolved executable. Homebrew adds both a package alias
-    and a framework-entrypoint symlink, so walk every bounded expansion. Keep
-    each grant at its exact distribution root instead of widening it to a
-    user runtime cache or package-manager prefix.
-    """
-
-    roots: list[Path] = []
-    current = executable.absolute()
-    for _depth in range(16):
-        expansion = _first_symlink_expansion(current)
-        if expansion is None:
-            break
-        current = expansion
-        if _path_is_within_any(current, _SEALED_SYSTEM_EXECUTABLE_ROOTS):
-            continue
-        root = _runtime_distribution_root(current)
-        if root not in roots:
-            roots.append(root)
-    return tuple(roots)
+    return tuple(Path(path) for path in restricted_native("symlink_runtime_roots", {"path": executable}, list))
 
 
 def _current_user_process_ceiling() -> int:

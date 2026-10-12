@@ -21,7 +21,13 @@ def test_scenario_tool_inventory_matches_actual_task():
 
     for scenario in load_catalog():
         tools = set(_scenario_tools(scenario).split(","))
-        if scenario.oracle == "home-copy-task":
+        if scenario.oracle == "native-tools":
+            expected = set(scenario.required_tools) | ({"bash"} if scenario.commands else set())
+            # The SDK requires the actual read tool behind eval's tool.read.
+            if "eval" in scenario.required_tools:
+                expected.add("read")
+            assert tools == expected
+        elif scenario.oracle == "home-copy-task":
             assert tools == {"bash", "read"}
         elif scenario.commands:
             assert tools == {"bash"}
@@ -70,6 +76,7 @@ def observed_case(command="echo fixture", *, blocked=False):
                 "input": dict(args),
                 "input_sha256": input_digest(args),
                 "observed_input_sha256": "c" * 64,
+                "rendered_fields": [],
                 "tool": "bash",
                 "decision": "deny" if blocked else "allow",
                 "http_status": 200,
@@ -86,6 +93,7 @@ def observed_case(command="echo fixture", *, blocked=False):
                     "input": dict(args),
                     "input_sha256": input_digest(args),
                     "observed_input_sha256": "c" * 64,
+                    "rendered_fields": [],
                     "tool": "bash",
                     "decision": "allow",
                     "http_status": 200,

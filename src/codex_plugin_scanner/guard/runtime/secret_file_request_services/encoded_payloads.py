@@ -7,8 +7,7 @@ import binascii
 import re
 from pathlib import Path
 
-from ..command_critical_floors import command_critical_floor_factors
-from ..command_model import parse_shell_command
+from ...native_critical_floor import native_critical_floor_action
 from ..data_flow import extract_heredocs
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..shell_execution_context import (
@@ -219,10 +218,8 @@ def _looks_destructive_shell_command(
         Path(part).name.lower().removesuffix(".exe") in {"hol-guard", "plugin-guard"}
         for part in _split_shell_parts(normalized)
     )
-    if guard_command_token_present:
-        critical_factors = command_critical_floor_factors(parse_shell_command(normalized, cwd=cwd, home_dir=home_dir))
-        if any(factor.basis.action_floor == "block" for factor in critical_factors):
-            return True
+    if guard_command_token_present and native_critical_floor_action(normalized, cwd=cwd, home_dir=home_dir) == "block":
+        return True
     if not _execution_context_applied:
         execution_context = execution_context or model_shell_execution_context(
             normalized,

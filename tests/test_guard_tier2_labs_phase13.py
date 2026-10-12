@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_tier2_phase13_support import (
@@ -119,7 +120,7 @@ def test_tier2_fixture_labs_cover_safe_and_vulnerable_paths(
     workspace_dir = tmp_path / "workspace"
     _materialize_fixture_workspace(fixture_name, workspace_dir)
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(

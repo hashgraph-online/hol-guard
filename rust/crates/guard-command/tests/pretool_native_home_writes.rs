@@ -48,6 +48,16 @@ fn native_home_writes_keep_sensitive_targets_guarded() {
             (home.join("bin/tool"), false),
             (home.join("go/bin/tool"), false),
             (home.join(".local/bin/tool"), false),
+            (home.join("toolchain/lib/libz.so"), false),
+            (home.join("toolchain/lib/libz.so.1.3"), false),
+            (home.join("toolchain/lib/libz.dylib"), false),
+            (home.join("toolchain/lib/z.dll"), false),
+            (home.join("toolchain/lib/Z.framework/Z"), false),
+            (home.join("toolchain/lib/Z.framework/notes.txt"), false),
+            (home.join("project.so/notes.txt"), true),
+            (other.join("lib/index.ts"), true),
+            (other.join("docs/sound.md"), true),
+            (other.join("notes.so.txt"), true),
             (home.join("Library/Python/3.x/bin/tool"), false),
             (
                 home.join("Library/Application Support/Editor/settings.json"),
@@ -80,6 +90,35 @@ fn native_home_writes_keep_sensitive_targets_guarded() {
                 path.display()
             );
         }
+    }
+    // A shell copy reaches the same write proof as the write tool.
+    std::fs::create_dir_all(workspace.join("build")).unwrap();
+    std::fs::create_dir_all(home.join("toolchain/lib")).unwrap();
+    std::fs::write(workspace.join("build/libz.so.1"), "synthetic").unwrap();
+    std::fs::write(workspace.join("build/notes.txt"), "synthetic").unwrap();
+    for (command, allowed) in [
+        (
+            format!("cp build/notes.txt {}", other.join("notes.txt").display()),
+            true,
+        ),
+        (
+            format!(
+                "cp build/libz.so.1 {}",
+                home.join("toolchain/lib/libz.so.1").display()
+            ),
+            false,
+        ),
+    ] {
+        let result = evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input": {"command": command}}),
+            None,
+            None,
+            home.to_str(),
+            workspace.to_str(),
+        );
+        assert_eq!(result.minimum_action == "allow", allowed, "{command}");
     }
     for unverified_home in [None, Some("/")] {
         let result = evaluate_pre_tool_envelope_with_context(

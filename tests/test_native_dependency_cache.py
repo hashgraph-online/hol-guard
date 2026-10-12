@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _configuration() -> tuple[dict, dict]:
     """Load the cache action and expanded native workflow for dependency contract assertions."""
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text()))
-    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text()))
     return action, workflow
 
 
@@ -69,5 +69,8 @@ def test_dependency_cache_does_not_replace_same_run_wheel_or_full_regression_man
     assert run["env"]["HOL_GUARD_TEST_USE_INSTALLED"] == "1"
     assert "scripts/ci/native_regression_shard.py" in run["run"]
     assert not run.get("continue-on-error", False)
-    assert "native-regression-complete" in workflow["jobs"]["linux-x64"]["needs"]
-    assert "native-regression-complete" in workflow["jobs"]["windows-x64"]["needs"]
+    assert set(workflow["jobs"]["native-regression-complete"]["needs"]) == {
+        "linux-regression",
+        "windows-regression",
+        "macos-regression",
+    }

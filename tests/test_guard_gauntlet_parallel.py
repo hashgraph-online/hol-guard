@@ -257,6 +257,8 @@ def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, jobs: int, name: str) 
         def kill(self) -> None: ...
 
     monkeypatch.setattr(runner, "run_case", fake_run_case)
+    # A fake all-pass run would make every recorded known gap stale; staleness has its own tests.
+    monkeypatch.setattr(runner, "stale_gaps", lambda _report: [])
     monkeypatch.setattr(runner, "SubprocessCaseWorker", Handle)
     monkeypatch.setattr(parallel.time, "sleep", _no_sleep)
     report = runner.run_suite(
@@ -388,7 +390,10 @@ def test_interrupt_during_spawn_still_reaps_the_started_worker() -> None:
         return worker
 
     with pytest.raises(SystemExit):
-        parallel.run_scheduled(["a"], jobs=1, spawn=spawn, sleep=_no_sleep, grace=0.0)
+        # Yield to kernel signal delivery before the synthetic worker completes
+        # its 99 immediate polls; otherwise macOS may deliver SIGTERM only when
+        # the scheduler restores its outer signal handler after normal exit.
+        parallel.run_scheduled(["a"], jobs=1, spawn=spawn, sleep=time.sleep, poll_interval=0.001, grace=0.0)
     assert "kill:a" in log
 
 

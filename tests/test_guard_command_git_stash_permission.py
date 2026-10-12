@@ -64,7 +64,9 @@ def _permission_layer(permission_id: str, state: ControlState) -> ExtensionContr
         "git stash push -m wip",
     ),
 )
-def test_explicit_git_stash_permission_allows_wrapped_shell_forms(command: str, tmp_path: Path) -> None:
+def test_explicit_git_stash_permission_allows_wrapped_shell_forms(
+    command: str, tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     fixture, canonical, evaluation = _native_fixture(
         command,
         controls=(("permission", "command.git.permission.stash", "enabled"),),
@@ -104,6 +106,7 @@ def test_explicit_git_stash_permission_allows_wrapped_shell_forms(command: str, 
             ),
             artifact,
             "grok",
+            guard_home=native_approval_reuse_runtime,
         )
         == "allow"
     )
@@ -142,7 +145,7 @@ def test_explicit_git_stash_permission_does_not_unwrap_login_shells(tmp_path: Pa
     }
 
 
-def test_explicit_permission_allow_keeps_harness_risk_blocks(tmp_path: Path) -> None:
+def test_explicit_permission_allow_keeps_harness_risk_blocks(tmp_path: Path, native_approval_reuse_runtime) -> None:
     command = "gh pr merge 5115 --repo example/project --squash --auto"
     fixture, canonical, evaluation = _native_fixture(
         command,
@@ -173,13 +176,19 @@ def test_explicit_permission_allow_keeps_harness_risk_blocks(tmp_path: Path) -> 
 
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}), artifact, "codex"
+            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "block"
     )
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}), artifact, "codex"
+            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "allow"
     )
@@ -191,6 +200,7 @@ def test_explicit_permission_allow_keeps_harness_risk_blocks(tmp_path: Path) -> 
             ),
             artifact,
             "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "block"
     )

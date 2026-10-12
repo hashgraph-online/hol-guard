@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.models import (
     GuardAction,
     PolicyDecision,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )

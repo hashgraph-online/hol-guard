@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -13,9 +14,8 @@ from .codex_hook_command_line import (
     hook_token_name,
     plain_json_hook_argv,
 )
+from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import split_hook_command
-from .codex_hook_foreign_groups import is_foreign_guard_codex_hook_group, prune_foreign_guard_codex_hook_groups
-from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_hook_command
 from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
 
@@ -181,6 +181,28 @@ def _is_live_guard_codex_hook_command(command: str, *, windows: bool | None = No
     return False
 
 
+def missing_guard_hook_program(command: str, *, windows: bool | None = None) -> str | None:
+    """Return the absolute launcher or bridge path a Guard hook needs that no longer exists.
+
+    Codex cannot start such a handler, so it gives no protection. Bare names
+    resolve through PATH at launch time and are not checked here.
+    """
+    if hook_commands_use_windows_syntax(windows) != (os.name == "nt"):
+        return None
+    if not _is_live_guard_codex_hook_command(command, windows=windows):
+        return None
+    tokens = hook_command_tokens(command, windows=windows)
+    candidates = [tokens[0]]
+    payload = _skip_leading_flags(tokens[1:])
+    if payload and hook_token_name(payload[0], windows=windows) == "codex_daemon_hook_bridge.py":
+        candidates.append(payload[0])
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_absolute() and not path.exists():
+            return candidate
+    return None
+
+
 def require_codex_hook_owner(command: str, *, ownership: str, windows: bool | None = None) -> None:
     """Reject competing Guard handlers without silently adopting or deleting them.
 
@@ -194,6 +216,14 @@ def require_codex_hook_owner(command: str, *, ownership: str, windows: bool | No
         else _is_live_guard_codex_hook_command(command, windows=windows)
     )
     if ownership == "unmanaged" and guard_hook:
+        missing = missing_guard_hook_program(command, windows=windows)
+        if missing is not None:
+            raise RuntimeError(
+                f"codex_hook_owner_conflict: A Codex Guard handler runs {missing}, which no longer exists, "
+                "so Codex is not protected. It has no verified ownership binding, so Guard will not remove it. "
+                "Delete that handler from your Codex hooks configuration, then run `hol-guard install codex`; "
+                "existing hooks have been preserved."
+            )
         raise RuntimeError(
             "codex_hook_owner_conflict: An existing Codex Guard handler has no verified ownership binding. "
             "Resolve its installation owner before retrying install; existing hooks have been preserved."
@@ -229,7 +259,13 @@ def _group_has_active_guard_handler(
         return (
             isinstance(command, str)
             and _is_live_guard_codex_hook_command(command, windows=windows)
-            and (not require_launchable or hook_command_launchable(command, windows=windows))
+            and (
+                not require_launchable
+                or (
+                    hook_command_launchable(command, windows=windows)
+                    and missing_guard_hook_program(command, windows=windows) is None
+                )
+            )
         )
 
     handlers = group.get("hooks")
@@ -402,11 +438,10 @@ __all__ = [
     "finalize_codex_doctor_setup_status",
     "finalize_codex_doctor_warnings",
     "install_managed_codex_hook_groups",
-    "is_foreign_guard_codex_hook_group",
     "live_guard_codex_hooks_intercept",
     "live_owned_codex_event_matches",
+    "missing_guard_hook_program",
     "overlay_live_owned_event_matches",
-    "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
     "require_codex_hook_owner",
 ]

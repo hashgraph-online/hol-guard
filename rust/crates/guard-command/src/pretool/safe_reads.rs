@@ -1,8 +1,8 @@
 pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
-    bounded_omp_selector_requires_review, bounded_read_target, safe_read_target,
-    verified_path_context,
+    bounded_omp_selector_requires_review, bounded_read_target, bounded_structured_file_read_target,
+    safe_read_target, verified_path_context,
 };
 pub(super) use super::safe_scalar::{safe_date_arguments, safe_sleep_arguments};
 pub(super) use super::safe_writes::{
@@ -27,31 +27,6 @@ pub(super) fn safe_file_predicate_arguments(
         )
 }
 
-pub(super) fn safe_find_listing_arguments(
-    arguments: &[String],
-    context: super::PathContext<'_>,
-) -> bool {
-    let arguments = arguments
-        .strip_prefix(&["-P".to_owned()])
-        .unwrap_or(arguments);
-    let (target, valid) = match arguments {
-        [target, kind, file] => (target, kind == "-type" && file == "f"),
-        [target, depth_option, depth, kind, file] => (
-            target,
-            depth_option == "-maxdepth"
-                && depth.bytes().all(|byte| byte.is_ascii_digit())
-                && depth.parse::<u8>().is_ok_and(|value| value <= 32)
-                && kind == "-type"
-                && file == "f",
-        ),
-        _ => return false,
-    };
-    valid
-        && verified_path_context(context.home_dir, context.cwd)
-        && !target.starts_with('-')
-        && bounded_read_target(target, context.home_dir, context.cwd, true)
-}
-
 pub(super) fn safe_listing_arguments(
     arguments: &[String],
     context: super::PathContext<'_>,
@@ -64,10 +39,11 @@ pub(super) fn safe_listing_arguments(
             return !argument.contains('R');
         }
         command_read_target(argument, context, true)
+            || super::search::agent_root_listing(argument, context, false)
     })
 }
 
-fn command_read_target(
+pub(super) fn command_read_target(
     value: &str,
     context: super::PathContext<'_>,
     allow_directory: bool,
@@ -136,18 +112,24 @@ pub(super) fn safe_sed_arguments(
             || (targets.is_empty() && piped_input))
 }
 
+/// Upper bound on `cat` file operands. Each operand needs its own path proof,
+/// so this only keeps the per-command proof cost bounded.
+const MAX_PLAIN_FILE_TARGETS: usize = 16;
+
+/// `cat a b` reads exactly what `cat a; cat b` reads, so every operand gets the
+/// same single-file proof instead of sending multi-file reads to review.
 pub(super) fn safe_plain_file_arguments(
     arguments: &[String],
     context: super::PathContext<'_>,
 ) -> bool {
-    let mut saw_target = false;
+    let mut targets = 0usize;
     let mut after_options = false;
     for argument in arguments {
         if after_options {
-            if argument == "-" || !command_read_target(argument, context, false) || saw_target {
+            if argument == "-" || !command_read_target(argument, context, false) {
                 return false;
             }
-            saw_target = true;
+            targets += 1;
             continue;
         }
         if argument == "--" {
@@ -170,12 +152,9 @@ pub(super) fn safe_plain_file_arguments(
         if !command_read_target(argument, context, false) {
             return false;
         }
-        if saw_target {
-            return false;
-        }
-        saw_target = true;
+        targets += 1;
     }
-    saw_target
+    (1..=MAX_PLAIN_FILE_TARGETS).contains(&targets)
 }
 
 pub(super) fn safe_head_tail_arguments(

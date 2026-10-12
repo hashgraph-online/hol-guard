@@ -56,7 +56,116 @@ pub(super) fn claude_grep_directory_scope_proven(
     let Some(root) = verified_directory_root(target, home_dir, cwd) else {
         return false;
     };
-    walk_scope(&root, &filter).is_ok()
+    !super::read_paths::inside_agent_state_tree(&root, home_dir)
+        && walk_scope(&root, &filter, true).is_ok()
+}
+
+/// True when a Claude `Glob` returns only names under a verified directory
+/// whose whole reachable tree holds no sensitive file. The pattern must stay
+/// inside that directory: relative, no `..`, no alternation or escapes.
+pub(super) fn claude_glob_scope_proven(
+    payload: &Value,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(root) = payload.as_object() else {
+        return false;
+    };
+    if root.get("tool_name").and_then(Value::as_str) != Some("Glob")
+        || ["toolInput", "tool_args", "arguments", "input", "parameters"]
+            .iter()
+            .any(|key| root.contains_key(*key))
+    {
+        return false;
+    }
+    let Some(input) = root.get("tool_input").and_then(Value::as_object) else {
+        return false;
+    };
+    if input
+        .keys()
+        .any(|key| !matches!(key.as_str(), "pattern" | "path"))
+    {
+        return false;
+    }
+    let Some(pattern) = input.get("pattern").and_then(Value::as_str) else {
+        return false;
+    };
+    if pattern.is_empty()
+        || pattern.len() > 1024
+        || pattern.starts_with(['/', '~', '\\'])
+        || pattern.contains(['\0', '\n', '\r', '$', '`', '\\', '{', '}', '(', ')', '!'])
+        || pattern.split('/').any(|part| part == "..")
+        || pattern.as_bytes().get(1) == Some(&b':')
+    {
+        return false;
+    }
+    let target = match input.get("path") {
+        None => ".",
+        Some(Value::String(path)) if !path.is_empty() => path.as_str(),
+        Some(_) => return false,
+    };
+    unfiltered_directory_scope_proven(target, home_dir, cwd)
+}
+
+/// Content search (`grep`) variant of the unfiltered proof. Inside agent-state
+/// trees (`~/.agent/skills`, `~/.agent/artifacts`) the per-file rules that
+/// deny direct reads do not apply to a directory walk, so the walk must reach
+/// only documents a direct read would allow.
+pub(super) fn content_search_scope_proven(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
+        (!super::read_paths::inside_agent_state_tree(&root, home_dir)
+            || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
+            && unfiltered_walk_proven(&root)
+    })
+}
+
+/// Host-neutral variant for hosts whose search semantics are not modeled
+/// (Oh My Pi `grep`). No filter or ignore file narrows the scope: any
+/// sensitive file reachable below the directory fails the proof, so the
+/// result is at least as strict as the host's real search.
+pub(super) fn unfiltered_directory_scope_proven(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    unfiltered_directory_root(target, home_dir, cwd)
+        .is_some_and(|root| unfiltered_walk_proven(&root))
+}
+
+fn unfiltered_walk_proven(root: &Path) -> bool {
+    SearchFilter::from_input(&Map::new())
+        .is_some_and(|filter| walk_scope(root, &filter, false).is_ok())
+}
+
+/// Canonical directory an unfiltered search walks, with `~/` expanded the
+/// way the host does. Both the walk and the agent-state gate use this root.
+fn unfiltered_directory_root(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> Option<PathBuf> {
+    if !super::safe_reads::bounded_omp_directory_read_target(target, home_dir, cwd) {
+        return None;
+    }
+    let candidate = if Path::new(target).is_absolute() {
+        PathBuf::from(target)
+    } else if let Some(stripped) = target.strip_prefix("~/") {
+        Path::new(home_dir?).join(stripped)
+    } else if target == "~" {
+        return None;
+    } else {
+        Path::new(cwd?).join(target)
+    };
+    if guard_secure_fs::contains_symlink_component(&candidate) {
+        return None;
+    }
+    std::fs::canonicalize(candidate)
+        .ok()
+        .filter(|root| root.is_dir())
 }
 
 fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
@@ -181,13 +290,19 @@ struct PendingDirectory {
     tiers: Rc<IgnoreTiers>,
 }
 
-fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
-    let repository = repository_root(root);
+fn walk_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    honor_ignores: bool,
+) -> Result<(), ScopeUnproven> {
+    let repository = repository_root(root).filter(|_| honor_ignores);
     let mut tiers = IgnoreTiers::default();
     if let Some(repository) = &repository {
         tiers.git = ancestor_git_rules(root, repository)?;
     }
-    ancestor_custom_rules(root, &mut tiers)?;
+    if honor_ignores {
+        ancestor_custom_rules(root, &mut tiers)?;
+    }
     let mut pending = vec![PendingDirectory {
         path: root.to_path_buf(),
         depth: 0,
@@ -209,7 +324,9 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
             }
             load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
-        load_custom_rules(&directory.path, &mut tiers)?;
+        if honor_ignores {
+            load_custom_rules(&directory.path, &mut tiers)?;
+        }
         let tiers = Rc::new(tiers);
         let entries = std::fs::read_dir(&directory.path).map_err(|_| ScopeUnproven)?;
         for entry in entries {
@@ -221,7 +338,9 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
             let path = entry.path();
             let name = entry.file_name();
             let name = name.to_str().ok_or(ScopeUnproven)?;
-            if name == ".git" {
+            // The Claude walk models ripgrep and skips .git. The host-neutral
+            // walk has no such model, so it must inspect repository metadata.
+            if name == ".git" && honor_ignores {
                 continue;
             }
             // Metadata only: never follow links or open a candidate secret.
@@ -248,7 +367,7 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
                 Override::Searched => true,
                 Override::Undecided => {
                     let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
-                    if is_ignored(&tiers, &rendered, is_directory)? {
+                    if honor_ignores && is_ignored(&tiers, &rendered, is_directory)? {
                         continue;
                     }
                     is_directory || filter.type_allows(name)

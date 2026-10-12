@@ -155,6 +155,12 @@ def main() -> int:
         help="Parent for the short per-attempt fixture work directories (default /tmp/hol-guard-gauntlet-<uid>/w)",
     )
     qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
+    qualify.add_argument(
+        "--release-profile-wheel",
+        action="store_true",
+        help="Build the tested wheel with the production release profile (fat LTO) "
+        "instead of the faster development profile",
+    )
     qualify.add_argument("--sdk-root", type=Path, help="Pinned SDK directory; skips the lock-keyed SDK cache")
     qualify.add_argument("--keep-work", action="store_true", help="Keep passing attempts' work roots")
     qualify.add_argument("--timeout", type=float, default=300)

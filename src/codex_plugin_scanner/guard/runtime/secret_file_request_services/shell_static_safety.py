@@ -45,6 +45,9 @@ def _safe_cli_metadata_segment_is_safe(
         ["status"],
         ["status", "--json"],
         ["daemon", "status"],
+        ["daemon", "status", "--json"],
+        ["doctor"],
+        ["doctor", "--json"],
         ["settings"],
         ["settings", "--json"],
     ):

@@ -138,8 +138,7 @@ def _resident_ready(
     status = native_runtime_status(deadline_monotonic=effective_deadline)
     identity = status.identity
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or identity is None
         or status.capabilities is None

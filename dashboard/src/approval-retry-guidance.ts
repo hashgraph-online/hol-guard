@@ -13,19 +13,37 @@ export function oneTimeRetryWindowMinutes(item: GuardApprovalRequest): number {
   return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
 }
 
+/** Labels of the Extensions permissions Guard verified would let this command run, or null when none would. */
+function allowPermissionLabels(item: GuardApprovalRequest): string | null {
+  const recommendation = item.extension_recommendation;
+  if (recommendation?.status !== "available") return null;
+  const labels = recommendation.permissions.map((permission) => permission.label).filter((label) => label.length > 0);
+  if (labels.length === 0) return null;
+  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
 /** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
 export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
   const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
-  return item.exact_action_persistence_eligible === true
-    ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".`
-    : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
+  if (item.exact_action_persistence_eligible === true) {
+    return `${base} To let ${harness} run this exact command, choose "Always allow exact action".`;
+  }
+  const labels = allowPermissionLabels(item);
+  return labels === null
+    ? `${base} Copy the command and run it yourself.`
+    : `${base} To let ${harness} run commands like this, set ${labels} to Allow in Extensions, or copy the command and run it yourself.`;
 }
 
 /** Post-approval copy for a one-time approval that leaves the agent blocked. */
 export function retryBlockedApprovalCopy(item: GuardApprovalRequest, harness: string): string {
-  return item.exact_action_persistence_eligible === true
-    ? `Decision recorded. ${harness} will still be blocked on this command. To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`
-    : `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
+  const base = `Decision recorded. ${harness} will still be blocked on this command.`;
+  if (item.exact_action_persistence_eligible === true) {
+    return `${base} To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`;
+  }
+  const labels = allowPermissionLabels(item);
+  return labels === null
+    ? `${base} Copy the command and run it yourself.`
+    : `${base} To let it run commands like this, set ${labels} to Allow in Extensions, or run the command yourself.`;
 }
 
 /**

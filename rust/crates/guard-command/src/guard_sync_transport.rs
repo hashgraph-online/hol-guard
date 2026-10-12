@@ -13,6 +13,7 @@
 //! `validate_guard_sync_endpoint`).
 
 use std::collections::BTreeMap;
+#[cfg(test)]
 use std::time::Duration;
 
 use base64::Engine;
@@ -21,6 +22,7 @@ use ring::signature::{EcdsaKeyPair, Signature, ECDSA_P256_SHA256_FIXED_SIGNING};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::egress_broker::{self, EgressClass};
 use crate::supply_chain_package_eval::{EvalError, EvalResult, GuardSyncRequest};
 
 /// `runner.py:_GUARD_SYNC_USER_AGENT` — single value shared with Python so
@@ -54,6 +56,9 @@ const SYNC_429_DEFAULT_WAIT_SECONDS: f64 = 60.0;
 /// `runner.py:5056` — `time.sleep(min(retry_after, 120))`.
 const SYNC_429_MAX_WAIT_SECONDS: u64 = 120;
 const SYNC_GATEWAY_MAX_WAIT_SECONDS: u64 = 8;
+/// Largest Guard Cloud or OAuth response body read. This is `ureq`'s own
+/// default body limit, so the cap is unchanged from the direct transport.
+const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
@@ -696,7 +701,7 @@ fn sync_retry_poll_interval_seconds() -> f64 {
 
 /// `runner.py:801` — `_SYNC_RETRYABLE_GATEWAY_STATUS_CODES`, including the two
 /// Cloudflare codes (522, 524) whose omission stops a bounded retry early.
-fn status_is_retryable_gateway(status: u16) -> bool {
+pub(crate) fn status_is_retryable_gateway(status: u16) -> bool {
     matches!(status, 502..=504 | 522 | 524)
 }
 
@@ -727,7 +732,7 @@ pub fn urlopen_with_sync_retries(
     let mut rate_limit_retry_count: u32 = 0;
     let mut gateway_retry_count: u32 = 0;
     loop {
-        match execute_request(&current_request, current_timeout) {
+        match execute_request(EgressClass::Cloud, &current_request, current_timeout) {
             Ok(resp) => {
                 if parse_json_response {
                     let body = resp.body_bytes;
@@ -763,9 +768,7 @@ pub fn urlopen_with_sync_retries(
                     rate_limit_retry_count += 1;
                     let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS)
                         .min(SYNC_429_MAX_WAIT_SECONDS as f64);
-                    std::thread::sleep(Duration::from_secs_f64(
-                        wait.max(sync_retry_poll_interval_seconds()),
-                    ));
+                    egress_broker::pause(wait.max(sync_retry_poll_interval_seconds()));
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -779,7 +782,7 @@ pub fn urlopen_with_sync_retries(
                     gateway_retry_count += 1;
                     let wait = sync_retry_poll_interval_seconds()
                         .min(SYNC_GATEWAY_MAX_WAIT_SECONDS as f64);
-                    std::thread::sleep(Duration::from_secs_f64(wait));
+                    egress_broker::pause(wait);
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -870,11 +873,13 @@ fn http_error_reason_message(
     }
 }
 
-struct SyncResponse {
-    body_bytes: Vec<u8>,
+#[derive(Debug)]
+pub(crate) struct SyncResponse {
+    pub(crate) body_bytes: Vec<u8>,
 }
 
-enum SyncHttpError {
+#[derive(Debug)]
+pub(crate) enum SyncHttpError {
     Http {
         status: u16,
         headers: BTreeMap<String, String>,
@@ -884,9 +889,26 @@ enum SyncHttpError {
     Other(String),
 }
 
+/// A Guard Cloud or OAuth exchange. It is answered by the caller that owns the
+/// managed network policy (see `egress_broker`); this process never dials out
+/// for it.
 fn execute_request(
+    class: EgressClass,
     request: &GuardSyncRequest,
     timeout_seconds: f64,
+) -> Result<SyncResponse, SyncHttpError> {
+    egress_broker::exchange(class, request, timeout_seconds, 0, SYNC_RESPONSE_MAX_BYTES)
+}
+
+/// One direct HTTP exchange with an explicit redirect budget. Only this
+/// crate's transport tests call it: the resident reaches the network solely
+/// through `egress_broker`.
+#[cfg(test)]
+pub(crate) fn execute_request_following(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    max_redirects: u32,
+    max_response_bytes: u64,
 ) -> Result<SyncResponse, SyncHttpError> {
     let config = ureq::config::Config::builder()
         .timeout_global(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
@@ -894,7 +916,7 @@ fn execute_request(
         .timeout_recv_response(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .timeout_recv_body(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .http_status_as_error(false)
-        .max_redirects(0)
+        .max_redirects(max_redirects)
         .build();
     let agent = ureq::Agent::with_parts(
         config,
@@ -921,6 +943,8 @@ fn execute_request(
     }
     let body = response
         .body_mut()
+        .with_config()
+        .limit(max_response_bytes)
         .read_to_vec()
         .map_err(|e| SyncHttpError::Other(format!("read body: {e}")))?;
     if (200..300).contains(&status) {
@@ -933,6 +957,7 @@ fn execute_request(
     })
 }
 
+#[cfg(test)]
 fn map_ureq_error(error: ureq::Error) -> SyncHttpError {
     match error {
         ureq::Error::Timeout(_) => SyncHttpError::Timeout("request timed out".to_owned()),
@@ -1106,7 +1131,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
         dpop_nonce: req.nonce.map(str::to_owned),
         retry_context: None,
     };
-    match execute_request(&request, req.timeout_seconds) {
+    match execute_request(EgressClass::Oauth, &request, req.timeout_seconds) {
         Ok(resp) => {
             let Some(payload) =
                 parse_json_body(&resp.body_bytes).and_then(|v| v.as_object().cloned())

@@ -60,6 +60,7 @@ pub(super) struct Fixture {
     pub(super) store: super::super::PolicySnapshotStore,
     pub(super) snapshot: PolicySnapshotV3,
     pub(super) key: [u8; 32],
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub(super) source_document: Option<Value>,
 }
 impl Fixture {

@@ -155,7 +155,7 @@ fn layer(source: &ContributedMcpLayerV1) -> Result<ExtensionControlLayer, &'stat
     })
 }
 
-fn decide(request: &ContributedMcpDecisionRequestV1) -> Result<Value, &'static str> {
+pub(crate) fn decide(request: &ContributedMcpDecisionRequestV1) -> Result<Value, &'static str> {
     local_store_read::require_store_path(&request.store_path, &request.guard_home)
         .map_err(store_error)?;
     validate(request)?;

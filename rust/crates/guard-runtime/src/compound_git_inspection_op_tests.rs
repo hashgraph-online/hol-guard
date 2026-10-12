@@ -56,9 +56,11 @@ impl GitFacts for StubFacts {
         self.safe
     }
     fn probe(&self, _git: &Path, _cwd: &Path, _arguments: &[&str]) -> Option<ProbeOutput> {
-        self.probe
-            .clone()
-            .map(|(code, stdout)| ProbeOutput { code, stdout })
+        self.probe.clone().map(|(code, stdout)| ProbeOutput {
+            code,
+            stdout,
+            stderr: Vec::new(),
+        })
     }
 }
 
@@ -295,6 +297,42 @@ fn show_config_requires_clean_diff_environment_and_probe() {
     }
     req.segments[0].effective_cwd = None;
     assert!(!decide(&req, &StubFacts::default()).unwrap().allowed);
+}
+
+#[test]
+fn bounded_cached_diffs_use_the_ordinary_diff_proof() {
+    let cwd = temp_dir();
+    let mut req = request(CompoundGitCheckV1::Segment);
+    for tokens in [
+        ["git", "diff", "--cached", "--numstat"].as_slice(),
+        ["git", "diff", "--cached", "--quiet"].as_slice(),
+        ["git", "diff", "--cached", "-U3"].as_slice(),
+        ["git", "diff", "--cached", "--unified=3"].as_slice(),
+        ["git", "diff", "--staged", "--stat"].as_slice(),
+        ["git", "diff", "--no-ext-diff", "--cached", "--quiet"].as_slice(),
+        ["git", "diff", "--cached", "--name-only", "HEAD"].as_slice(),
+    ] {
+        req.segments = vec![git_segment(&cwd, tokens)];
+        assert!(
+            decide(&req, &StubFacts::default()).unwrap().allowed,
+            "{tokens:?}"
+        );
+    }
+    for tokens in [
+        ["git", "diff", "--cached", "--output=patch"].as_slice(),
+        ["git", "diff", "--cached", "--ext-diff"].as_slice(),
+        ["git", "diff", "--cached", "--textconv"].as_slice(),
+        ["git", "diff", "--cached", "-U"].as_slice(),
+        ["git", "diff", "--cached", "-U1234567"].as_slice(),
+        ["git", "diff", "--cached", "--color=always"].as_slice(),
+        ["git", "diff", "--cached", "--unified"].as_slice(),
+    ] {
+        req.segments = vec![git_segment(&cwd, tokens)];
+        assert!(
+            !decide(&req, &StubFacts::default()).unwrap().allowed,
+            "{tokens:?}"
+        );
+    }
 }
 
 #[test]

@@ -31,8 +31,8 @@ _OBSERVATION_TABLES = (
 # An observation can be forgotten only when nothing enrolled depends on it.
 # MCP connections that share a server with an enrolled record stay: their
 # presence keeps a legacy server-wide grant from covering a different
-# configured connection (see read_local_mcp_grant). A legacy server-wide row
-# may store the server hash only as its identity_hash, so both columns count.
+# configured connection (see the native local MCP grant op). A legacy
+# server-wide row may store the server hash only as its identity_hash, so both columns count.
 _ENROLLED_MCP_SERVERS = """
     select coalesce(enrolled.server_identity_hash, enrolled.identity_hash)
     from local_cli_observation enrolled

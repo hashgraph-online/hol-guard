@@ -6,14 +6,44 @@ const MAX_REF_TAIL: usize = 255;
 const MAX_COMPONENT_TAIL: usize = 127;
 const STATUS_WORDS: [&str; 4] = ["--short", "--branch", "--porcelain", "--porcelain=v1"];
 const FETCH_FLAGS: [&str; 3] = ["-q", "--quiet", "--no-tags"];
-const DIFF_WORDS: [&str; 6] = [
-    "--check",
-    "--stat",
-    "--name-only",
-    "--name-status",
-    "--cached",
-    "HEAD",
-];
+/// Stdout-only `git diff` options. A staged diff that uses just these prints no
+/// more than `git diff HEAD`, which this proof already admits. Forms that write
+/// a file, enable a helper, or name another revision stay out of this list.
+fn bounded_stdout_diff_option(arg: &str) -> bool {
+    const FLAGS: &[&str] = &[
+        "--cached",
+        "--staged",
+        "--check",
+        "--stat",
+        "--numstat",
+        "--shortstat",
+        "--summary",
+        "--name-only",
+        "--name-status",
+        "--patch",
+        "-p",
+        "--quiet",
+        "--exit-code",
+        "--no-color",
+        "--color=never",
+        "--no-ext-diff",
+        "--no-textconv",
+        "HEAD",
+    ];
+    FLAGS.contains(&arg) || unified_diff_context(arg)
+}
+
+/// `-U3` and `--unified=3`. A bare `--unified` or a non-digit count is not a
+/// context width.
+fn unified_diff_context(arg: &str) -> bool {
+    let Some(lines) = arg
+        .strip_prefix("-U")
+        .or_else(|| arg.strip_prefix("--unified="))
+    else {
+        return false;
+    };
+    !lines.is_empty() && lines.len() <= 6 && lines.bytes().all(|byte| byte.is_ascii_digit())
+}
 const SHOW_OPTIONS: [&str; 4] = ["--stat", "--oneline", "--name-only", "--name-status"];
 const OBJECT_TYPES: [&str; 5] = ["blob", "commit", "object", "tag", "tree"];
 
@@ -335,7 +365,7 @@ fn safe_diff_pathspec(value: &str) -> bool {
 }
 
 fn safe_diff_revision(arg: &str) -> bool {
-    DIFF_WORDS.contains(&arg) || safe_ref(arg)
+    bounded_stdout_diff_option(arg) || safe_ref(arg)
 }
 
 pub(crate) fn safe_diff_args(args: &[&str]) -> bool {

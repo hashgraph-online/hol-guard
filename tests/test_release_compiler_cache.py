@@ -37,14 +37,42 @@ def _release_compile_steps():
 )
 def test_release_compiler_cache_is_written_only_by_trusted_main_pushes(ref, event, mode):
     for _, step in _release_compile_steps():
-        expression = step["env"]["SCCACHE_GHA_RW_MODE"].strip()[3:-2]
-        for name, value in {"github.ref": ref, "github.event_name": event}.items():
-            expression = expression.replace(name, repr(value))
-        expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
-        tree = ast.parse(expression, mode="eval")
-        permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.Constant)
-        assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-mode expression"
-        assert eval(compile(tree, "<cache-mode>", "eval"), {"__builtins__": {}}) == mode
+        assert _evaluate(step["env"]["SCCACHE_GHA_RW_MODE"], ref=ref, event=event, fast_codegen=False) == mode
+
+
+@pytest.mark.parametrize(
+    ("ref", "event", "mode"),
+    [
+        ("refs/heads/main", "workflow_dispatch", "READ_WRITE"),
+        ("refs/heads/main", "push", "READ_WRITE"),
+        ("refs/heads/contributor", "workflow_dispatch", "READ_ONLY"),
+        ("refs/pull/3770/merge", "pull_request", "READ_ONLY"),
+        ("refs/tags/v3.35.0", "workflow_dispatch", "READ_ONLY"),
+    ],
+)
+def test_fast_alpha_compiler_cache_warms_from_main_in_its_own_namespace(ref, event, mode):
+    (_, prepare), _ = _release_compile_steps()
+    env = prepare["env"]
+    assert _evaluate(env["SCCACHE_GHA_RW_MODE"], ref=ref, event=event, fast_codegen=True) == mode
+    # Fast-codegen objects never mix with the fat-LTO stable namespace.
+    assert _evaluate(env["SCCACHE_GHA_VERSION"], ref=ref, event=event, fast_codegen=True) == "release-native-fast-v1"
+    assert _evaluate(env["SCCACHE_GHA_VERSION"], ref=ref, event=event, fast_codegen=False) == "release-native-v1"
+
+
+def _evaluate(value, *, ref, event, fast_codegen):
+    expression = value.strip()[3:-2]
+    for name, replacement in {
+        "github.ref": ref,
+        "github.event_name": event,
+        "inputs.fast_codegen": fast_codegen,
+    }.items():
+        expression = expression.replace(name, repr(replacement))
+    expression = expression.replace("== true", "== True")
+    expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
+    tree = ast.parse(expression, mode="eval")
+    permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.Constant)
+    assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-mode expression"
+    return eval(compile(tree, "<cache-mode>", "eval"), {"__builtins__": {}})
 
 
 def test_release_compilation_is_content_addressed_and_feature_unified():
@@ -62,7 +90,12 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
     wheel_steps = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]["steps"]
     for steps in (prepare_steps, wheel_steps):
         cache = next(item for item in steps if "rust-cache@" in item.get("uses", ""))
-        assert cache["with"]["prefix-key"] == "release-native-v1"
+        # The prepare workflow adds "-fast" only for alpha fast-codegen builds; wheel jobs and
+        # every stable build keep the shared fat-profile key.
+        assert cache["with"]["prefix-key"] in {
+            "release-native-v1",
+            "release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}",
+        }
         assert cache["with"]["cache-workspace-crates"] is False
     script = prepare["run"]
     builds = [line for line in script.splitlines() if line.strip().startswith("cargo build")]
@@ -132,8 +165,9 @@ def test_intel_binaries_are_cross_compiled_but_executed_only_on_native_intel():
     assert prepare["env"]["CROSS_COMPILED"] == "${{ matrix.cross == true }}"
     script = next(step for step in prepare["steps"] if step.get("name") == "Compile canonical release inputs")["run"]
     guard = script.index('if [[ "$CROSS_COMPILED" != "true" ]]; then')
-    assert guard < script.index("build_native_command_program.py") < script.index("self-test") < script.index("fi\n")
-    assert script.index("fi\n") < script.index("prepared_native.py pack")
+    closed = script.index("fi\n", script.index("self-test"))
+    assert guard < script.index("build_native_command_program.py") < script.index("self-test") < closed
+    assert closed < script.index("prepared_native.py pack")
     wheels = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]
     runners = {leg["target"]: leg["runner"] for leg in wheels["strategy"]["matrix"]["include"]}
     assert runners["x86_64-apple-darwin"] == "macos-15-intel"

@@ -120,15 +120,15 @@ def native_review_claimed_allow(
     if not claim_saved_approval:
         return True
     approval_id = decision.get("approval_id")
-    claim = getattr(store, "claim_local_once_approval", None)
+    claim = getattr(store, "claim_approval_reuse_decision", None)
     if not isinstance(approval_id, str) or not callable(claim):
         return False
     try:
         return (
             claim(
-                approval_id,
-                claimed_at=datetime.now(tz=timezone.utc).isoformat(),
-                expected_decision=decision,
+                decision,
+                now=datetime.now(tz=timezone.utc).isoformat(),
+                consume_local_once=True,
             )
             is True
         )

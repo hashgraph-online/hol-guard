@@ -448,10 +448,25 @@ FINITE_FAILURE_CODES = (
 )
 
 
+def resident_refusal_code(payload: object) -> str | None:
+    """Return the code of an exact ``{"error", "retryable"}`` resident refusal frame.
+
+    Anything else, including codes outside the finite vocabulary, is not a
+    refusal and returns ``None``.
+    """
+    if not isinstance(payload, dict) or set(payload) != {"error", "retryable"}:
+        return None
+    code = payload["error"]
+    if type(payload["retryable"]) is not bool or not isinstance(code, str):
+        return None
+    return code if code in FINITE_FAILURE_CODES else None
+
+
 __all__ = [
     "FINITE_FAILURE_CODES",
     "GENERIC_FAILURE_CODES",
     "NATIVE_APPROVAL_ERROR_CODES",
     "NATIVE_COMMAND_CONTROL_ERROR_CODES",
     "NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES",
+    "resident_refusal_code",
 ]

@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
 
 from .guard_tier2_phase13_support import (
     WORKSPACE_ID,
@@ -56,7 +57,7 @@ version = "4.5.7"
         + "\n",
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -142,7 +143,7 @@ require github.com/gin-gonic/gin v1.10.0
         + "\n",
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -274,7 +275,7 @@ def test_evaluate_package_request_artifact_blocks_tier2_versions_from_manifest_o
     if lockfile_name is not None and lockfile_text is not None:
         write_text(workspace_dir / lockfile_name, lockfile_text)
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -361,7 +362,7 @@ clap = "4.5"
     )
     write_text(workspace_dir / "Cargo.lock", "version = [\n")
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(

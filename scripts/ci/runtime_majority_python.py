@@ -12,24 +12,12 @@ from __future__ import annotations
 
 import ast
 import fnmatch
-import io
-import tokenize
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-_SKIP_TOKENS = frozenset(
-    {
-        tokenize.COMMENT,
-        tokenize.NL,
-        tokenize.NEWLINE,
-        tokenize.INDENT,
-        tokenize.DEDENT,
-        tokenize.ENCODING,
-        tokenize.ENDMARKER,
-    }
-)
+from scripts.ci.runtime_majority_functions import ModulePlan, counted_lines, is_type_checking_test
 
 
 @dataclass
@@ -53,18 +41,12 @@ class ImportGraph:
 
 
 def count_python_loc(source: str) -> int:
-    lines: set[int] = set()
-    try:
-        for token in tokenize.generate_tokens(io.StringIO(source).readline):
-            if token.type in _SKIP_TOKENS:
-                continue
-            lines.update(range(token.start[0], token.end[0] + 1))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return sum(1 for line in source.splitlines() if line.strip() and not line.lstrip().startswith("#"))
-    return len(lines)
+    return len(counted_lines(source))
 
 
-def discover_modules(repo: Path, package_root: str) -> dict[str, PythonModule]:
+def discover_modules(
+    repo: Path, package_root: str, plans: dict[str, ModulePlan] | None = None
+) -> dict[str, PythonModule]:
     root = repo / package_root
     top = root.name
     modules: dict[str, PythonModule] = {}
@@ -75,19 +57,16 @@ def discover_modules(repo: Path, package_root: str) -> dict[str, PythonModule]:
         if is_package:
             parts = parts[:-1]
         name = ".".join([top, *parts]) if parts else top
+        relative_path = path.relative_to(repo).as_posix()
+        plan = (plans or {}).get(relative_path)
+        counted = counted_lines(path.read_text(encoding="utf-8"))
         modules[name] = PythonModule(
             name=name,
-            path=path.relative_to(repo).as_posix(),
+            path=relative_path,
             is_package=is_package,
-            loc=count_python_loc(path.read_text(encoding="utf-8")),
+            loc=len(counted - plan.removed_lines) if plan else len(counted),
         )
     return modules
-
-
-def _is_type_checking(test: ast.expr) -> bool:
-    if isinstance(test, ast.Name):
-        return test.id == "TYPE_CHECKING"
-    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
 
 
 def _literal_package(node: ast.expr, module: PythonModule) -> str | None:
@@ -114,8 +93,9 @@ def _absolute_name(name: str, package: str | None) -> str | None:
 
 
 class _ImportCollector(ast.NodeVisitor):
-    def __init__(self, module: PythonModule) -> None:
+    def __init__(self, module: PythonModule, skip_linenos: set[int] | None = None) -> None:
         self.module = module
+        self._skip_linenos = skip_linenos or set()
         self.found: list[tuple[str, str, int, tuple[str, ...]]] = []
         self.dynamic_unresolved = 0
         self._function_depth = 0
@@ -123,8 +103,14 @@ class _ImportCollector(ast.NodeVisitor):
     def _mode(self) -> str:
         return "lazy" if self._function_depth else "eager"
 
+    def visit(self, node: ast.AST) -> None:
+        """Skip statements removed by a reviewed function-level exclusion."""
+        if isinstance(node, ast.stmt) and node.lineno in self._skip_linenos:
+            return
+        super().visit(node)
+
     def visit_If(self, node: ast.If) -> None:
-        if _is_type_checking(node.test):
+        if is_type_checking_test(node.test):
             for child in node.orelse:
                 self.visit(child)
             return
@@ -193,12 +179,13 @@ def _resolve(module: PythonModule, mode_found: tuple[str, str, int, tuple[str, .
     return mode, targets
 
 
-def build_graph(repo: Path, package_root: str) -> ImportGraph:
-    modules = discover_modules(repo, package_root)
+def build_graph(repo: Path, package_root: str, plans: dict[str, ModulePlan] | None = None) -> ImportGraph:
+    modules = discover_modules(repo, package_root, plans)
     graph = ImportGraph(modules=modules)
     for name, module in modules.items():
         source = (repo / module.path).read_text(encoding="utf-8")
-        collector = _ImportCollector(module)
+        plan = (plans or {}).get(module.path)
+        collector = _ImportCollector(module, plan.skip_linenos if plan else None)
         try:
             collector.visit(ast.parse(source))
         except SyntaxError:
@@ -215,6 +202,75 @@ def build_graph(repo: Path, package_root: str) -> ImportGraph:
             if parent in modules:
                 graph.eager[name].add(parent)
     return graph
+
+
+DYNAMIC_RESOLUTIONS = frozenset({"external", "follow", "unfollowed"})
+
+
+def validate_dynamic_imports(entries: list[dict[str, Any]]) -> None:
+    """Reject malformed ``dynamic_imports`` entries (raises ``ValueError``)."""
+    seen: set[str] = set()
+    for entry in entries:
+        path = entry.get("path")
+        if not isinstance(path, str) or not path or path in seen:
+            raise ValueError(f"dynamic import entry needs one unique path string: {path!r}")
+        seen.add(path)
+        count = entry.get("count")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            raise ValueError(f"dynamic import entry {path!r} needs a positive integer count")
+        if entry.get("resolution") not in DYNAMIC_RESOLUTIONS:
+            raise ValueError(f"dynamic import entry {path!r} resolution must be one of {sorted(DYNAMIC_RESOLUTIONS)}")
+        if not str(entry.get("evidence", "")).strip():
+            raise ValueError(f"dynamic import entry {path!r} needs evidence")
+        targets = entry.get("targets", [])
+        if entry["resolution"] != "external" and not (
+            isinstance(targets, list) and targets and all(isinstance(item, str) and item for item in targets)
+        ):
+            raise ValueError(f"dynamic import entry {path!r} needs a target module list")
+        if entry.get("mode", "lazy") not in {"eager", "lazy"}:
+            raise ValueError(f"dynamic import entry {path!r} mode must be eager or lazy")
+
+
+def apply_dynamic_imports(graph: ImportGraph, entries: list[dict[str, Any]]) -> None:
+    """Add the declared targets of ``follow`` entries as edges from the declaring module.
+
+    ``external`` (stdlib or third-party) and ``unfollowed`` (reviewed decision
+    not to count the targets) add nothing; an unfollowed target is in scope
+    only if a static import reaches it. Every declared target must resolve to a
+    module (raises ``ValueError``), so a misspelled target cannot shrink the scope.
+    """
+    by_path = {module.path: module for module in graph.modules.values()}
+    for entry in entries:
+        module = by_path.get(entry["path"])
+        if module is None or entry["resolution"] not in {"follow", "unfollowed"}:
+            continue
+        package = module.name if module.is_package else module.name.rpartition(".")[0]
+        edges = graph.eager if entry.get("mode") == "eager" else graph.lazy
+        for target in entry["targets"]:
+            name = _absolute_name(target, package)
+            resolved = _expand(graph.modules, name) if name else set()
+            if not resolved:
+                raise ValueError(f"dynamic import entry {entry['path']!r}: target {target!r} resolves to no module")
+            if entry["resolution"] == "follow":
+                edges.setdefault(module.name, set()).update(resolved - {module.name})
+
+
+def undeclared_dynamic_sites(graph: ImportGraph, in_scope: dict[str, str], entries: list[dict[str, Any]]) -> list[str]:
+    """Declarations that disagree with the graph.
+
+    An in-scope module's unresolved dynamic import count must equal its declared
+    count, including zero, so a declaration cannot outlive its last import site.
+    A declared path must name a module.
+    """
+    declared = {entry["path"]: entry["count"] for entry in entries}
+    known = {module.path for module in graph.modules.values()}
+    problems = [f"{path}: declared dynamic import entry names no module" for path in sorted(set(declared) - known)]
+    for name in sorted(in_scope):
+        found = graph.dynamic_unresolved.get(name, 0)
+        path = graph.modules[name].path
+        if found != declared.get(path, 0):
+            problems.append(f"{path}: {found} non-literal import site(s), declared {declared.get(path, 0)}")
+    return problems
 
 
 def path_matches(path: str, entry: dict[str, Any]) -> bool:

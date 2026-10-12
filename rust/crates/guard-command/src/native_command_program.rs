@@ -320,6 +320,65 @@ impl NativeCommandProgram {
             .map(|node| node.operation.as_str())
             .collect()
     }
+
+    /// Program names one of which every command matching this extension must
+    /// run: declared executables and, per rule, the executables its matcher
+    /// requires. Compatibility-only rules are attributed by `compatibility`.
+    /// `None` means some rule can match without naming a known program.
+    pub(crate) fn extension_names(
+        &self,
+        extension_index: usize,
+        compatibility: Option<&[&str]>,
+    ) -> Option<BTreeSet<String>> {
+        let mut names: BTreeSet<String> = self.extensions[extension_index]
+            .executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        for rule in self
+            .rules
+            .iter()
+            .filter(|rule| rule.extension_index == extension_index)
+        {
+            match rule.matcher {
+                Some(node) => names.extend(self.required_executables(node, 0)?),
+                None => names.extend(compatibility?.iter().map(|name| (*name).to_owned())),
+            }
+        }
+        Some(names)
+    }
+
+    /// Executables one of which a match of `node` must run. Alternatives need
+    /// all of theirs; a conjunction needs any one child's. Matchers without a
+    /// declared executable gate have no such set.
+    fn required_executables(&self, node: usize, depth: usize) -> Option<BTreeSet<String>> {
+        let executables = match &self.nodes.get(node)?.matcher {
+            Matcher::Executable(node) => node.contract.executables.clone(),
+            Matcher::Arguments(node) => node.executables.clone(),
+            Matcher::VersionedPackageSubcommand(node) => node.executables.clone(),
+            Matcher::Any(children) if depth < MAX_DEPTH && !children.is_empty() => {
+                let mut union = BTreeSet::new();
+                for child in children {
+                    union.extend(self.required_executables(*child, depth + 1)?);
+                }
+                union
+            }
+            Matcher::All(children) if depth < MAX_DEPTH => children
+                .iter()
+                .filter_map(|child| self.required_executables(*child, depth + 1))
+                .min_by_key(BTreeSet::len)?,
+            Matcher::Pipeline(producer, consumer) if depth < MAX_DEPTH => [producer, consumer]
+                .into_iter()
+                .filter_map(|child| self.required_executables(*child, depth + 1))
+                .min_by_key(BTreeSet::len)?,
+            _ => return None,
+        };
+        let executables: BTreeSet<String> = executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        (!executables.is_empty()).then_some(executables)
+    }
 }
 
 fn basename(value: &str) -> &str {

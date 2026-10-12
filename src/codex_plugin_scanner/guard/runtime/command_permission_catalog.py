@@ -163,9 +163,6 @@ class CommandPermissionCatalog:
 
         return self._by_action_class.get(action_class.strip().lower())
 
-    def for_typed_capability(self, capability: str) -> CommandPermissionSpec | None:
-        return self._by_capability.get(capability.strip().lower())
-
 
 def permission_for_rule(
     extension_id: str,

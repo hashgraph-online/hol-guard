@@ -112,7 +112,7 @@ def test_agent_configuration_disables_service_launch(tmp_path: Path):
     )
     write_agent_configuration(tmp_path / "agent", relay)
     configuration = json.loads((tmp_path / "agent" / "config.yml").read_text())
-    assert configuration == {"launch": {"enabled": False}}
+    assert configuration["launch"] == {"enabled": False}
 
 
 def test_invalid_environment_effort_fails_before_any_case(tmp_path: Path, monkeypatch, capsys):

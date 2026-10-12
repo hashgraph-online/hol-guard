@@ -29,6 +29,16 @@ def read_config_file_bytes(
 
     if filename not in ("config.toml", ".ai-plugin-scanner-guard.toml", ".hol-guard.toml"):
         raise ConfigFileTrustError("config_filename_not_allowed")
+    if os.name != "nt" and not require_canonical_directory:
+        # An absent optional file needs no directory walk: the checked read
+        # below also ends in None when the file is missing. Any other
+        # condition continues into the contained read.
+        try:
+            os.lstat(os.path.join(directory, filename))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            pass
     try:
         if require_canonical_directory:
             if not directory.is_absolute() or ".." in directory.parts:

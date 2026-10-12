@@ -115,6 +115,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
                 home_dir: request.home_dir.as_deref(),
                 cwd: request.cwd.as_deref(),
                 cdpath_unset: false,
+                rustup_override_absent: false,
             },
             request.execution_environment.as_ref(),
         );

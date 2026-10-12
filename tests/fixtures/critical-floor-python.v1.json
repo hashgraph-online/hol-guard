@@ -1,0 +1,709 @@
+{
+  "base_commit": "02aac58e8d98e0229a546e833d2bcc6308c2988c",
+  "cases": [
+    {
+      "action": "block",
+      "command": "aws route53 delete-hosted-zone --id zone --output json",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws --profile prod route53 delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --profile prod delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --region us-east-1 delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --no-cli-pager delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --prof prod delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --reg us-east-1 delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --prof=prod delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --cli-binary-format raw-in-base64-out delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "aws route53 --cli-binary-format=raw-in-base64-out delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "stripe products delete product --description=--help",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "stripe --api-key key products delete product",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "stripe products --api-key key delete product",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "env sh -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "rm -rf ./BUILD",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "rm --recurs --for workspace/target",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs rm -rf BUILD",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 bash -lc 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 /bin/bash -lc 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 /bin/sh -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 /usr/bin/dash -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 /usr/bin/zsh -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 /bin/ash -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -S'/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env --split-string='/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env --debug -i -v -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -iv -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env --ignore-environment --null --list-signal-handling -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -0ivS'/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -u TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -C workspace -P /bin -a shell -u TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -Cworkspace -P/bin -ashell -uTOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env --chdir workspace --argv0 shell --unset TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env --chdir=workspace --argv0=shell --unset=TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -vS '/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -iS'/bin/bash -c' 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env -S'bash -c \"rm -rf /\"'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 env --split-string='bash -c \"rm -rf /\"'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 bash --noprofile -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "timeout 5 bash -O extglob -c 'rm -rf workspace/target'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "sh <<'EOF'\nrm -rf workspace/target\nEOF",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "gh api graphql -f query='mutation{deletePackageVersion(input:{packageVersionId:\"x\"}){success}}'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "gh api --hostname github.com graphql -f query='mutation{deletePackageVersion(input:{packageVersionId:\"x\"}){success}}'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "gh --repo example/repo api graphql -f query='mutation{deletePackageVersion(input:{packageVersionId:\"x\"}){success}}'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard capability consume --capability-id x --replay-sequence 2",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard capability --verbose consume --capability-id x",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard hooks remove --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard hooks remove --stop-daemon",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs hol-guard hooks remove --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "sh -c 'hol-guard hooks remove --all'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard policy disable",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard clear --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs -P 4 hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs -P4 hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs -I {} hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs -J % hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs -R 2 hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs -S 128 hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs xargs xargs xargs hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel -j 4 hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --jobs 4 hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --colsep ' +' hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --colsep=' +' hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --header : hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --header=: hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --tagstring '{#}' hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --tagstring='{#}' hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --load 75% hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --load=75% hol-guard uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --tagstring tag rm -rf / ::: x",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --header : rm -rf / ::: x",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --colsep value rm -rf / ::: x",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --load 100% rm -rf / ::: x",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel --unknown parallel rm -rf / ::: x",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "find workspace -exec hol-guard uninstall --all {} ';'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "find workspace -exec echo {} ';' -exec hol-guard uninstall --all {} ';'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs sh -c 'hol-guard uninstall --all'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "find workspace -exec sh -c 'hol-guard uninstall --all' ';'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "parallel sh -c 'hol-guard uninstall --all'",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "xargs aws route53 delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "xargs gh pr merge 17 --repo example/repo --squash",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "sh -c 'gh pr merge 17 --repo example/repo --squash'",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "block",
+      "command": "aws.exe route53 delete-hosted-zone --id zone",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "/usr/bin/stripe.exe products delete product",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "hol-guard.exe uninstall --all",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "block",
+      "command": "rm.exe -rf workspace/target",
+      "legacy_assertion": "block"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "gh.exe pr merge 17 --repo example/repo --squash",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "PATH=scratch/bin:$PATH hol-guard status",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "export PATH=scratch/bin:$PATH; hol-guard status",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "npx --package tsc@file:./package tsc --noEmit",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "printf '%s' \"$(cat workspace/sensitive)\"",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "cat workspace/sensitive | tee scratch/output",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "require-reapproval",
+      "command": "keyring get service user",
+      "legacy_assertion": "require-reapproval"
+    },
+    {
+      "action": "review",
+      "command": "gh pr merge 17 --repo example/repo --squash --delete-branch",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "npm view typescript@5.0.0 dist.integrity",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "docker compose ps",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "docker inspect container --format '{{.State.Status}}'",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "aws sts get-caller-identity --profile profile --output json",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "gcloud projects describe project --format=json",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "getfacl workspace/service",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "systemctl status service",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "hol-guard uninstall --help --installation-id fixture",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "hol-guard hooks remove --help",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "hol-guard help uninstall",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "review",
+      "command": "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' -f threadId=T",
+      "legacy_assertion": "review"
+    },
+    {
+      "action": "block",
+      "command": "parallel --unknown value-0 --unknown value-1 --unknown value-2 --unknown value-3 --unknown value-4 --unknown value-5 --unknown value-6 --unknown value-7 --unknown value-8 --unknown value-9 --unknown value-10 --unknown value-11 --unknown value-12 --unknown value-13 --unknown value-14 --unknown value-15 --unknown value-16 --unknown value-17 --unknown value-18 --unknown value-19 --unknown value-20 --unknown value-21 --unknown value-22 --unknown value-23 --unknown value-24 --unknown value-25 --unknown value-26 --unknown value-27 --unknown value-28 --unknown value-29 --unknown value-30 --unknown value-31 --unknown value-32 --unknown value-33 --unknown value-34 --unknown value-35 --unknown value-36 --unknown value-37 --unknown value-38 --unknown value-39 --unknown value-40 --unknown value-41 --unknown value-42 --unknown value-43 --unknown value-44 --unknown value-45 --unknown value-46 --unknown value-47 --unknown value-48 --unknown value-49 --unknown value-50 --unknown value-51 --unknown value-52 --unknown value-53 --unknown value-54 --unknown value-55 --unknown value-56 --unknown value-57 --unknown value-58 --unknown value-59 --unknown value-60 --unknown value-61 --unknown value-62 --unknown value-63 --unknown value-64 --unknown value-65 --unknown value-66 --unknown value-67 --unknown value-68 --unknown value-69 --unknown value-70 --unknown value-71 --unknown value-72 --unknown value-73 --unknown value-74 --unknown value-75 --unknown value-76 --unknown value-77 --unknown value-78 --unknown value-79 --unknown value-80 --unknown value-81 --unknown value-82 --unknown value-83 --unknown value-84 --unknown value-85 --unknown value-86 --unknown value-87 --unknown value-88 --unknown value-89 --unknown value-90 --unknown value-91 --unknown value-92 --unknown value-93 --unknown value-94 --unknown value-95 --unknown value-96 --unknown value-97 --unknown value-98 --unknown value-99 --unknown value-100 --unknown value-101 --unknown value-102 --unknown value-103 --unknown value-104 --unknown value-105 --unknown value-106 --unknown value-107 --unknown value-108 --unknown value-109 --unknown value-110 --unknown value-111 --unknown value-112 --unknown value-113 --unknown value-114 --unknown value-115 --unknown value-116 --unknown value-117 --unknown value-118 --unknown value-119 --unknown value-120 --unknown value-121 --unknown value-122 --unknown value-123 --unknown value-124 --unknown value-125 --unknown value-126 --unknown value-127 --unknown value-128 --unknown value-129 --unknown value-130 --unknown value-131 --unknown value-132 --unknown value-133 --unknown value-134 --unknown value-135 --unknown value-136 --unknown value-137 --unknown value-138 --unknown value-139 --unknown value-140 --unknown value-141 --unknown value-142 --unknown value-143 --unknown value-144 --unknown value-145 --unknown value-146 --unknown value-147 --unknown value-148 --unknown value-149 --unknown value-150 --unknown value-151 --unknown value-152 --unknown value-153 --unknown value-154 --unknown value-155 --unknown value-156 --unknown value-157 --unknown value-158 --unknown value-159 --unknown value-160 --unknown value-161 --unknown value-162 --unknown value-163 --unknown value-164 --unknown value-165 --unknown value-166 --unknown value-167 --unknown value-168 --unknown value-169 --unknown value-170 --unknown value-171 --unknown value-172 --unknown value-173 --unknown value-174 --unknown value-175 --unknown value-176 --unknown value-177 --unknown value-178 --unknown value-179 --unknown value-180 --unknown value-181 --unknown value-182 --unknown value-183 --unknown value-184 --unknown value-185 --unknown value-186 --unknown value-187 --unknown value-188 --unknown value-189 --unknown value-190 --unknown value-191 --unknown value-192 --unknown value-193 --unknown value-194 --unknown value-195 --unknown value-196 --unknown value-197 --unknown value-198 --unknown value-199 --unknown value-200 --unknown value-201 --unknown value-202 --unknown value-203 --unknown value-204 --unknown value-205 --unknown value-206 --unknown value-207 --unknown value-208 --unknown value-209 --unknown value-210 --unknown value-211 --unknown value-212 --unknown value-213 --unknown value-214 --unknown value-215 --unknown value-216 --unknown value-217 --unknown value-218 --unknown value-219 --unknown value-220 --unknown value-221 --unknown value-222 --unknown value-223 --unknown value-224 --unknown value-225 --unknown value-226 --unknown value-227 --unknown value-228 --unknown value-229 --unknown value-230 --unknown value-231 --unknown value-232 --unknown value-233 --unknown value-234 --unknown value-235 --unknown value-236 --unknown value-237 --unknown value-238 --unknown value-239 --unknown value-240 --unknown value-241 --unknown value-242 --unknown value-243 --unknown value-244 --unknown value-245 --unknown value-246 --unknown value-247 --unknown value-248 --unknown value-249 --unknown value-250 --unknown value-251 --unknown value-252 --unknown value-253 --unknown value-254 --unknown value-255 --unknown value-256 --unknown value-257 --unknown value-258 --unknown value-259 --unknown value-260 --unknown value-261 --unknown value-262 --unknown value-263 --unknown value-264 --unknown value-265 --unknown value-266 --unknown value-267 --unknown value-268 --unknown value-269 --unknown value-270 --unknown value-271 --unknown value-272 --unknown value-273 --unknown value-274 --unknown value-275 --unknown value-276 --unknown value-277 --unknown value-278 --unknown value-279 --unknown value-280 --unknown value-281 --unknown value-282 --unknown value-283 --unknown value-284 --unknown value-285 --unknown value-286 --unknown value-287 --unknown value-288 --unknown value-289 --unknown value-290 --unknown value-291 --unknown value-292 --unknown value-293 --unknown value-294 --unknown value-295 --unknown value-296 --unknown value-297 --unknown value-298 --unknown value-299 printf safe"
+    }
+  ],
+  "github_facts": [
+    {
+      "args": [
+        "--repo",
+        "example/repo",
+        "api",
+        "graphql",
+        "-f",
+        "query=mutation{deletePackageVersion(input:{packageVersionId:\"x\"}){success}}"
+      ],
+      "capabilities": [
+        "delete_remote"
+      ],
+      "capability": "delete_remote",
+      "detail": "The GraphQL operation contains statically classified mutation root fields.",
+      "reason_code": "github.graphql.delete"
+    },
+    {
+      "args": [
+        "api",
+        "--hostname",
+        "github.com",
+        "graphql",
+        "-f",
+        "query=mutation{deletePackageVersion(input:{packageVersionId:\"x\"}){success}}"
+      ],
+      "capabilities": [
+        "delete_remote"
+      ],
+      "capability": "delete_remote",
+      "detail": "The GraphQL operation contains statically classified mutation root fields.",
+      "reason_code": "github.graphql.delete"
+    },
+    {
+      "args": [
+        "api",
+        "graphql",
+        "-f",
+        "query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}",
+        "-f",
+        "threadId=T"
+      ],
+      "capabilities": [
+        "maintain_remote"
+      ],
+      "capability": "maintain_remote",
+      "detail": "The GraphQL operation contains statically classified mutation root fields.",
+      "reason_code": "github.graphql.maintain"
+    },
+    {
+      "args": [
+        "api",
+        "graphql",
+        "-f",
+        "query=mutation{deletePackageVersion(input:{packageVersionId:\"x\"}){success}}"
+      ],
+      "capabilities": [
+        "delete_remote"
+      ],
+      "capability": "delete_remote",
+      "detail": "The GraphQL operation contains statically classified mutation root fields.",
+      "reason_code": "github.graphql.delete"
+    },
+    {
+      "args": [
+        "pr",
+        "merge",
+        "17",
+        "--repo",
+        "example/repo",
+        "--squash"
+      ],
+      "capabilities": [
+        "routine_merge_remote"
+      ],
+      "capability": "routine_merge_remote",
+      "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+      "reason_code": "github.command.pr-routine-squash-merge"
+    },
+    {
+      "args": [
+        "pr",
+        "merge",
+        "17",
+        "--repo",
+        "example/repo",
+        "--squash",
+        "--delete-branch"
+      ],
+      "capabilities": [
+        "routine_merge_remote"
+      ],
+      "capability": "routine_merge_remote",
+      "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+      "reason_code": "github.command.pr-routine-squash-merge"
+    }
+  ],
+  "github_facts_sha256": "43bdc91ba1a7bd4c165224ada0a2f671531d8a560894503fd81f459caf38ab19",
+  "near_misses": [
+    "gh pr view 17 --repo example/repo",
+    "rm -r workspace/cache",
+    "rm -rf ./build",
+    "rm --recursive --force ./dist ./coverage",
+    "printf '%s' workspace/sensitive",
+    "git diff --name-only | jq -R .",
+    "npm view",
+    "docker compose version",
+    "rm -- -rf",
+    "rm -f -- -r",
+    "rm -r -- -f",
+    "timeout 5 bash --norc 'rm -rf workspace/target'",
+    "timeout 5 env -S '/bin/bash -c' 'printf safe'",
+    "timeout 5 env -s '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --split-string '/bin/bash -c",
+    "timeout 5 env -u -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env -xS'/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --debugging -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --debug=1 -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --chdir= -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env --unset-name TOKEN -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env -C -S '/bin/bash -c' 'rm -rf workspace/target'",
+    "timeout 5 env -Something 'bash -c' 'rm -rf /'",
+    "timeout 5 env --split-strings='bash -c \"rm -rf /\"'",
+    "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
+    "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
+    "aws --profile route53 sts get-caller-identity --output delete-hosted-zone",
+    "aws route53 --cli value delete-hosted-zone --id zone",
+    "stripe --api-key products customers list delete",
+    "xargs echo hol-guard uninstall --all",
+    "find workspace -exec echo hol-guard uninstall --all {} ';'",
+    "xargs sh -c 'printf safe'",
+    "find workspace -exec sh -c 'printf safe' ';'",
+    "parallel sh -c 'printf safe'",
+    "not-gh.exe pr merge 17 --repo example/repo --squash"
+  ],
+  "schema": "critical-floor-python.v1",
+  "sources": {
+    "rust/crates/guard-command/src/github_capability_contract.rs": "c007ae95af44cbfc2f288910346ef5089f97cfecb4306c300594af1e955088d9",
+    "rust/crates/guard-command/src/github_capability_contract_tests.rs": "459a2c24163a289e210a7c86787d39f08d5c9e7dffbfd691d79cccc62e7b67fe",
+    "rust/crates/guard-command/src/github_capability_interaction.rs": "1fbfff58d9e4f43f91c2024fbe48fd761e3b469f871d47bb0ac3d513be0b7663",
+    "rust/crates/guard-command/src/github_command_capabilities.rs": "853cb2185fe736f3cc0635e93d200c46486c54fe53bff6aeecbd7331beba1c4f",
+    "rust/crates/guard-command/src/github_command_capabilities_tests.rs": "2f29130a29ed525514e8bf897f584e3b981b0125dc3cd6de67d6ca46f5cc13e1",
+    "rust/crates/guard-command/src/github_workflow_approval_record.rs": "488b2cb2f6be8e17793fa89c1362a2b02933fdf8fe382130e17f84aa1b6a54f6",
+    "rust/crates/guard-command/src/github_workflow_authorization.rs": "6b7d5ffea6d329d29fd0010a3989135815f5c9131849f9d774988a031c7eb982",
+    "rust/crates/guard-command/src/github_workflow_operations.rs": "357d3f27040c7405a12e358ca6ce4c1b11f3adcbc36d79ce2ba6f710497a2578",
+    "src/codex_plugin_scanner/guard/runtime/command_critical_floors.py": "91a5dd9c6b086775b9cc1d6cde353ff9c59129296f0f312f1d31aa14dfabf9e4",
+    "src/codex_plugin_scanner/guard/runtime/command_launcher_floors.py": "c90ebb1ea06a15f42304cbe92a7428a2fe1279d283374a5a16a28f903ca2fc28",
+    "src/codex_plugin_scanner/guard/runtime/command_model.py": "08e5cd246e20bd6e327f77d0986ac37ad89fa1ef6dd42e336addf2dfcd9d721c",
+    "src/codex_plugin_scanner/guard/runtime/effect_contract.py": "b77aa42909815227dedcf7b568e8f084f5ee24b5faf8f1fd4354a2a1f3296cc4",
+    "src/codex_plugin_scanner/guard/runtime/effect_decision.py": "0dc18708d4fa8baad3fa7e8dba394b5bcbedef69113193b81adfacf868ed1c18",
+    "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py": "c02fba8df5fa06594398cb4694333fc799e530b1a197b9651c2ba45856c543c0",
+    "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py": "d85871ebfb6b0d82c4f376aea1efac82d7312bd9c896fc3d3c6a4eaae59cb735",
+    "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py": "fc2ba409a1f956e8ea4b553cc7223ebd8592a7976bb3dd2bcc529903eba30cd7",
+    "tests/test_guard_command_critical_floors.py": "035656927b45ca582545567144dc3f8b9b91043cddb90cf174ca6c6c69bc1621"
+  }
+}

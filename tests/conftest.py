@@ -5,12 +5,18 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
+from contextlib import suppress
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
+from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
+from tests.home_isolation import isolate_user_home
+
+# Before any Guard module computes a default home or a test spawns a helper.
+isolate_user_home()
 
 pytest_plugins = [
     "tests.bundle_first_cloud",
@@ -42,21 +48,85 @@ os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
 os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "native_route_unpinned: exercise the real route transport, skipping the default-off route pinning",
+    )
+
+
 @pytest.fixture(autouse=True)
-def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
     """Use the compiled authority in native regression jobs.
 
     A caller's explicit mode is preserved, including deliberate unavailable
     runtime tests. Regression CI supplies an exact native binary; defaulting
-    those jobs to ``off`` would disable the implementation they must test.
+    those jobs to ``auto`` would not pin the implementation they must test.
     Ordinary isolated unit runs retain the explicit fail-safe surface.
     """
 
     monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
-        mode = "force" if os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" else "off"
-        monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
+        regression = os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1"
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "force" if regression else "auto")
+        return not regression
+    return False
+
+
+@pytest.fixture(autouse=True)
+def _reset_aibom_mcp_native_backoff() -> None:
+    """One outage's MCP-enrichment backoff must not leak into the next test."""
+
+    from codex_plugin_scanner.guard import aibom_detection
+
+    aibom_detection._mcp_native_backoff_until = 0.0
+
+
+@pytest.fixture(autouse=True)
+def _default_off_daemon_route_policy(
+    request: pytest.FixtureRequest,
+    _default_unit_test_native_mode: bool,
+) -> None:
+    """Keep daemon route and Origin policy native in default-off local runs.
+
+    The daemon's route policy is resident-owned and fails closed without a
+    runtime, which is correct for production and for tests that pin ``off``
+    explicitly (those use ``native_route_policy_with_hooks_off`` themselves).
+    A local run that merely inherited the conftest ``off`` default and names a
+    runtime binary gets the same route-transport pinning, so daemon tests that
+    do not care about hook mode still reach their assertions. Without a
+    binary nothing is pinned and the gate still fails closed.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if request.node.get_closest_marker("native_route_unpinned"):
+        return
+    if _default_unit_test_native_mode and binary and os.path.isfile(binary):
+        request.getfixturevalue("native_route_policy_with_hooks_off")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_native_resident_launch(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the native resident's process launch independent of test doubles.
+
+    Daemon tests replace ``subprocess.Popen`` on the shared module to fake the
+    process they spawn, while lifecycle decisions ask the native resident, which
+    is itself launched through ``subprocess``. Give the resident client a
+    private snapshot taken before any double is installed so only the code
+    under test sees the fake. Native transport tests own that surface and
+    patch it deliberately.
+    """
+
+    if request.module.__name__.rsplit(".", 1)[-1].startswith("test_native"):
+        return
+    import subprocess
+    import types
+
+    from codex_plugin_scanner.guard import native_resident_stream
+
+    monkeypatch.setattr(native_resident_stream, "subprocess", types.SimpleNamespace(**vars(subprocess)))
 
 
 class _GuardCommandsProxy:
@@ -161,9 +231,28 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         return
 
     from codex_plugin_scanner.guard.daemon.manager import retire_all_guard_daemons_for_home
+    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 
-    for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
-        retire_all_guard_daemons_for_home(guard_home)
+    # The per-test native mode is already undone here; the lifecycle decisions
+    # that identify the daemons to retire need the same compiled authority.
+    guard_homes = sorted(_test_guard_homes_with_daemon_state(test_tmp_path))
+    if guard_homes and "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_TEST_MODE"] = "1"
+        try:
+            _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+        finally:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
+            os.environ.pop("HOL_GUARD_TEST_MODE", None)
+        return
+    _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+
+
+def _retire_homes(guard_homes: list[Path], retire: Callable[[Path], object], unavailable: type[Exception]) -> None:
+    for guard_home in guard_homes:
+        # Best-effort cleanup: an unavailable native authority must not mask the test result.
+        with suppress(unavailable):
+            retire(guard_home)
 
 
 @pytest.fixture(autouse=True)
@@ -222,8 +311,8 @@ def _isolate_daemon_background_refresh_workers(
         if request.node.get_closest_marker(marker) is None:
             monkeypatch.setattr(daemon_server.GuardDaemonServer, method_name, lambda _self: None)
     if request.node.get_closest_marker("daemon_headless_queue") is None:
-        monkeypatch.setattr(
-            daemon_server,
+        patch_daemon_global(
+            monkeypatch,
             "_queue_headless_cloud_sync",
             lambda *, store: {
                 "status": "not_configured",

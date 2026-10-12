@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .local_supply_chain import audit_receipt_metadata
 from .store import GuardStore
+from .supply_chain_workspace_audit import audit_receipt_metadata
 
 
 def _read_string_list(value: object) -> list[str]:

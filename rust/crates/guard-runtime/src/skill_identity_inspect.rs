@@ -2,9 +2,8 @@
 //! state. A tree that cannot be inspected in full is never represented by a
 //! partial digest.
 
-use std::fs::{self, File, Metadata, OpenOptions};
+use std::fs::{self, Metadata};
 use std::io::{self, Read};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path};
 
 use guard_contracts::{
@@ -20,6 +19,10 @@ use crate::skill_identity_canon::{
 use crate::skill_identity_walk::{
     collect_entries, is_directory, lexical_normalize, resolve_existing, safe_lstat, security_mode,
     stat_key, EntryType, Structure, TreeEntry,
+};
+
+use crate::skill_identity_platform::{
+    directory_guard, open_regular, opened_stat_key, relative_to, unsupported_reparse,
 };
 
 const HASH_CHUNK_BYTES: usize = 64 * 1024;
@@ -132,14 +135,13 @@ fn run(
     let resolved_scope = resolve_scope_root(scope_root)?;
     validate_lexical_parent_links(scope_root, logical_root)?;
     let root_lstat = root_lstat(logical_root)?;
-    let root_key = stat_key(&root_lstat);
     let resolved_root = resolve_existing(logical_root, Failure::RootMissing)?;
     if !is_directory(&resolved_root) {
         return Err(Failure::RootNotDirectory);
     }
-    if !resolved_root.starts_with(&resolved_scope) {
-        return Err(Failure::SymlinkEscape);
-    }
+    relative_to(&resolved_root, &resolved_scope)?;
+    let _root_guard = directory_guard(&resolved_root)?;
+    let root_key = stat_key(logical_root, &root_lstat)?;
 
     let primary_name = match skill_document.components().next_back() {
         Some(Component::Normal(name)) => canonical_component(name)?,
@@ -168,7 +170,7 @@ fn run(
         }
     }
 
-    if stat_key(&safe_lstat(logical_root)?) != root_key {
+    if stat_key(logical_root, &safe_lstat(logical_root)?)? != root_key {
         return Err(Failure::TreeChangedDuringHash);
     }
     let (_, final_structure) = collect_pass(&resolved_root, limits, 2)?;
@@ -176,7 +178,7 @@ fn run(
         return Err(Failure::TreeChangedDuringHash);
     }
     let final_root = safe_lstat(logical_root)?;
-    if stat_key(&final_root) != root_key {
+    if stat_key(logical_root, &final_root)? != root_key {
         return Err(Failure::TreeChangedDuringHash);
     }
 
@@ -217,9 +219,7 @@ fn resolve_scope_root(scope_root: &Path) -> Result<std::path::PathBuf, Failure> 
 fn validate_lexical_parent_links(scope_root: &Path, logical_root: &Path) -> Result<(), Failure> {
     let scope = lexical_normalize(scope_root);
     let root = lexical_normalize(logical_root);
-    let relative = root
-        .strip_prefix(&scope)
-        .map_err(|_| Failure::SymlinkEscape)?;
+    let relative = relative_to(&root, &scope)?;
     let parts: Vec<_> = relative.components().collect();
     let mut current = scope.clone();
     for part in &parts[..parts.len().saturating_sub(1)] {
@@ -245,6 +245,9 @@ fn root_lstat(root: &Path) -> Result<Metadata, Failure> {
     if file_type.is_symlink() {
         return Err(Failure::SymlinkDirectoryUnsupported);
     }
+    if unsupported_reparse(&metadata) {
+        return Err(Failure::UnsupportedReparsePoint);
+    }
     if !file_type.is_dir() {
         return Err(Failure::RootNotDirectory);
     }
@@ -258,7 +261,7 @@ fn entry_record(
     state: &mut State,
 ) -> Result<(Value, Option<String>), Failure> {
     let metadata = safe_lstat(&entry.path)?;
-    if stat_key(&metadata) != entry.key {
+    if stat_key(&entry.path, &metadata)? != entry.key {
         return Err(Failure::TreeChangedDuringHash);
     }
     let mode = security_mode(&metadata);
@@ -287,7 +290,7 @@ fn entry_record(
 fn symlink_record(
     entry: &TreeEntry,
     root: &Path,
-    mode: &str,
+    mode: &Option<String>,
     limits: &SkillDirectoryLimitsV1,
     state: &mut State,
 ) -> Result<(Value, Option<String>), Failure> {
@@ -297,9 +300,7 @@ fn symlink_record(
         .ok_or(Failure::TreeChangedDuringHash)?;
     let base = entry.path.parent().unwrap_or(Path::new("/"));
     let resolved_target = resolve_existing(&base.join(raw_target), Failure::SymlinkBroken)?;
-    if !resolved_target.starts_with(root) {
-        return Err(Failure::SymlinkEscape);
-    }
+    relative_to(&resolved_target, root)?;
     let target_lstat = safe_lstat(&resolved_target)?;
     if target_lstat.file_type().is_dir() {
         return Err(Failure::SymlinkDirectoryUnsupported);
@@ -313,12 +314,12 @@ fn symlink_record(
     test_hooks::hashed(&resolved_target);
     let current_link = safe_lstat(&entry.path)?;
     let current_raw = fs::read_link(&entry.path).map_err(|_| Failure::TreeChangedDuringHash)?;
-    if stat_key(&current_link) != entry.key || current_raw.to_str() != Some(raw_target) {
+    if stat_key(&entry.path, &current_link)? != entry.key
+        || current_raw.to_str() != Some(raw_target)
+    {
         return Err(Failure::TreeChangedDuringHash);
     }
-    let relative_target = resolved_target
-        .strip_prefix(root)
-        .map_err(|_| Failure::SymlinkEscape)?;
+    let relative_target = relative_to(&resolved_target, root)?;
     let target_path = canonical_relative_path(
         relative_target
             .components()
@@ -340,25 +341,14 @@ fn symlink_record(
     ))
 }
 
-fn open_regular(path: &Path) -> Result<File, Failure> {
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-        .open(path)
-        .map_err(|error| match error.kind() {
-            io::ErrorKind::NotFound => Failure::TreeChangedDuringHash,
-            _ => Failure::UnreadableEntry,
-        })
-}
-
 fn hash_regular_file(
     path: &Path,
     expected: &Metadata,
     limits: &SkillDirectoryLimitsV1,
     state: &mut State,
 ) -> Result<(String, u64), Failure> {
-    let expected_key = stat_key(expected);
-    let size = expected.size();
+    let expected_key = stat_key(path, expected)?;
+    let size = expected.len();
     if size > limits.max_file_bytes {
         return Err(Failure::MaxFileBytesExceeded);
     }
@@ -367,10 +357,10 @@ fn hash_regular_file(
     }
     let mut file = open_regular(path)?;
     let opened = file.metadata().map_err(|_| Failure::UnreadableEntry)?;
-    if !opened.file_type().is_file() || stat_key(&opened) != expected_key {
+    if !opened.file_type().is_file() || opened_stat_key(path, &file)? != expected_key {
         return Err(Failure::TreeChangedDuringHash);
     }
-    let opened_key = stat_key(&opened);
+    let opened_key = opened_stat_key(path, &file)?;
     let mut total: u64 = 0;
     let mut digest = Sha256::new();
     let mut buffer = vec![0_u8; HASH_CHUNK_BYTES];
@@ -390,24 +380,24 @@ fn hash_regular_file(
         }
         digest.update(&buffer[..read]);
     }
-    let after = file.metadata().map_err(|_| Failure::UnreadableEntry)?;
-    if total != opened.size() || stat_key(&after) != opened_key {
+    if total != opened.len() || opened_stat_key(path, &file)? != opened_key {
         return Err(Failure::TreeChangedDuringHash);
     }
     drop(file);
-    if stat_key(&safe_lstat(path)?) != expected_key {
+    if stat_key(path, &safe_lstat(path)?)? != expected_key {
         return Err(Failure::TreeChangedDuringHash);
     }
     state.total_bytes += total;
     Ok((sha256_label(digest), total))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "skill_identity_race_tests.rs"]
 mod race_tests;
 
 #[cfg(test)]
 mod tests {
+    use std::fs::OpenOptions;
     use std::io::Write;
 
     use super::*;

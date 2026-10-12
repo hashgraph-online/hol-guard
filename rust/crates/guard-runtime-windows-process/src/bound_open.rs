@@ -154,6 +154,28 @@ pub fn regular_file_id(path: &Path, follow_leaf: bool) -> io::Result<(FileId, u3
     Ok((info.id, info.links))
 }
 
+/// Identity of one existing directory, without opening its ancestors.
+///
+/// A symlink, junction, or mount point at this path is rejected. Cloud
+/// placeholders stay, because they are not aliases. Ancestor junctions are
+/// left alone so a skill under a synced folder can still be named.
+pub fn directory_file_id(path: &Path) -> io::Result<FileId> {
+    let file = open_skill_directory(path)?;
+    Ok(checked_info(&file, true)?.id)
+}
+
+/// Hold one directory open. The handle pins that directory only.
+pub fn open_skill_directory(path: &Path) -> io::Result<std::fs::File> {
+    let file = open_raw_with_flags(
+        path,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        FILE_READ_ATTRIBUTES | FILE_TRAVERSE,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+    )?;
+    checked_info(&file, true)?;
+    Ok(file)
+}
+
 /// Return the identity of the file behind an open handle.
 pub fn handle_file_id(file: &std::fs::File) -> io::Result<FileId> {
     Ok(handle_info(file)?.id)
@@ -169,6 +191,16 @@ pub fn handle_file_id(file: &std::fs::File) -> io::Result<FileId> {
 /// shares only reads, so no writer can change the bytes while it is open.
 /// Callers compare `handle_file_id` with the file they inspected.
 pub fn open_bound_regular_file(canonical_path: &Path) -> io::Result<std::fs::File> {
+    open_bound_file(canonical_path, true)
+}
+
+/// Pin executable bytes without write/delete sharing. System executables may
+/// have legitimate WinSxS hardlinks; every link refers to the same locked file.
+pub fn open_bound_executable_file(canonical_path: &Path) -> io::Result<std::fs::File> {
+    open_bound_file(canonical_path, false)
+}
+
+fn open_bound_file(canonical_path: &Path, single_link: bool) -> io::Result<std::fs::File> {
     let mut components = canonical_path.components().peekable();
     let mut current = PathBuf::new();
     let mut ancestors = Vec::new();
@@ -179,7 +211,7 @@ pub fn open_bound_regular_file(canonical_path: &Path) -> io::Result<std::fs::Fil
             Component::Normal(name) => {
                 current.push(name);
                 if components.peek().is_none() {
-                    let file = open_leaf(&current);
+                    let file = open_leaf(&current, single_link);
                     drop(ancestors);
                     return file;
                 }
@@ -201,7 +233,7 @@ pub fn open_bound_regular_file(canonical_path: &Path) -> io::Result<std::fs::Fil
     ))
 }
 
-fn open_leaf(path: &Path) -> io::Result<std::fs::File> {
+fn open_leaf(path: &Path, single_link: bool) -> io::Result<std::fs::File> {
     let entry = open_raw_with_flags(
         path,
         FILE_SHARE_READ,
@@ -209,7 +241,7 @@ fn open_leaf(path: &Path) -> io::Result<std::fs::File> {
         FILE_FLAG_OPEN_REPARSE_POINT,
     )?;
     let info = checked_info(&entry, false)?;
-    if info.links != 1 {
+    if info.links == 0 || (single_link && info.links != 1) {
         return Err(changed("opened file has more than one directory entry"));
     }
     if info.reparse_tag.is_none() {

@@ -2,50 +2,53 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Mapping
 from typing import cast
 
-from .runtime.custom_extension_suggestion import (
-    LocalCliKind,
-    is_suggestable_custom_tool,
-    suggestion_score,
-)
+from .runtime.custom_extension_suggestion import SuggestionTool, suggestion_tool, suggestion_verdicts
+
+_LOGGER = logging.getLogger(__name__)
+# Native batches allow 4096 tools and a 2 MiB request; source paths can be
+# long, so stay well inside both.
+_SUGGESTION_BATCH = 256
 
 
-def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
-    kind = item.get("kind")
-    name = item.get("name")
-    if not isinstance(kind, str) or not isinstance(name, str):
+def _with_suggestions(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Rank items in bounded native batches; items the resident cannot rank stay hidden."""
+
+    ranked: list[tuple[dict[str, object], SuggestionTool]] = []
+    for item in items:
         item["suggestion_score"] = 0
         item["suggestable"] = False
-        return item
-    raw_path = item.get("source_path")
-    raw_count = item.get("observed_count")
-    raw_help = item.get("help_status")
-    raw_surface = item.get("surface")
-    source_path = raw_path if isinstance(raw_path, str) else None
-    observed_count = raw_count if isinstance(raw_count, int) else 0
-    help_status = raw_help if isinstance(raw_help, str) else None
-    surface = raw_surface if isinstance(raw_surface, str) else "cli"
-    typed_kind: LocalCliKind = "script" if kind == "script" else "executable"
-    item["suggestion_score"] = suggestion_score(
-        name=name,
-        kind=typed_kind,
-        source_path=source_path,
-        observed_count=observed_count,
-        help_status=help_status,
-        surface=surface,
-    )
-    item["suggestable"] = is_suggestable_custom_tool(
-        name=name,
-        kind=typed_kind,
-        source_path=source_path,
-        observed_count=observed_count,
-        help_status=help_status,
-        surface=surface,
-    )
-    return item
+        kind = item.get("kind")
+        name = item.get("name")
+        if not isinstance(kind, str) or not isinstance(name, str):
+            continue
+        raw_path = item.get("source_path")
+        raw_count = item.get("observed_count")
+        raw_help = item.get("help_status")
+        raw_surface = item.get("surface")
+        tool = suggestion_tool(
+            name=name,
+            kind="script" if kind == "script" else "executable",
+            source_path=raw_path if isinstance(raw_path, str) else None,
+            observed_count=raw_count if isinstance(raw_count, int) else 0,
+            help_status=raw_help if isinstance(raw_help, str) else None,
+            surface=raw_surface if isinstance(raw_surface, str) else "cli",
+        )
+        ranked.append((item, tool))
+    for offset in range(0, len(ranked), _SUGGESTION_BATCH):
+        batch = ranked[offset : offset + _SUGGESTION_BATCH]
+        verdicts = suggestion_verdicts([tool for _item, tool in batch])
+        if verdicts is None:
+            _LOGGER.warning("native custom extension suggestion unavailable for %d tools", len(batch))
+            continue
+        for (item, _tool), verdict in zip(batch, verdicts, strict=True):
+            item["suggestion_score"] = verdict["score"]
+            item["suggestable"] = verdict["suggestable"]
+    return items
 
 
 def _observation_from_row(row: object) -> dict[str, object]:

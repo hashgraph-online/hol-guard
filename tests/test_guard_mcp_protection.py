@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_mcp_tool_policy
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
@@ -18,10 +19,9 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
-    build_mcp_tool_identity,
-    mcp_server_identity_metadata,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 pytestmark = pytest.mark.usefixtures("_native_mcp_identity_authority")
 
@@ -125,10 +125,9 @@ def test_mcp_server_identity_binds_configured_env_values_without_exposing_them()
     assert first == reordered
     assert first.env_values_hash != changed.env_values_hash
     assert first.identity_hash != changed.identity_hash
-    serialized = str(mcp_server_identity_metadata(first))
+    serialized = str(asdict(first))
     assert secret_v1 not in serialized
     assert secret_v2 not in serialized
-    assert mcp_server_identity_metadata(first)["env_values_hash"] == first.env_values_hash
 
 
 def test_managed_stdio_servers_emit_server_identity() -> None:
@@ -454,6 +453,7 @@ def test_evaluate_tool_call_unknown_stored_action_requires_review(
         transport="stdio",
     )
     store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         store,
         "resolve_policy_decision_lookup_with_memory_pattern",

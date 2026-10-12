@@ -6,6 +6,7 @@ import os
 import stat
 from pathlib import Path
 
+from .path_resolution_cache import cached_realpath
 from .runtime.local_temp_paths import trusted_temporary_root_for_path
 
 
@@ -25,15 +26,15 @@ def canonical_guard_home_path(guard_home: Path | str) -> str:
     """
     expanded = Path(guard_home).expanduser()
     try:
-        candidate = os.path.realpath(os.fspath(expanded))
+        candidate = cached_realpath(os.fspath(expanded))
     except OSError:
         candidate = os.fspath(expanded)
     return os.path.normpath(candidate)
 
 
 def trusted_guard_directory_roots(guard_home: Path) -> tuple[Path, ...]:
-    current_home = Path.home().resolve()
-    guard_home_root = guard_home.expanduser().resolve().parent
+    current_home = Path(cached_realpath(os.fspath(Path.home())))
+    guard_home_root = Path(cached_realpath(os.fspath(guard_home.expanduser()))).parent
     roots = [current_home]
     if guard_home_root != current_home and not os.fspath(guard_home_root).startswith(
         os.fspath(current_home).rstrip(os.sep) + os.sep
@@ -52,11 +53,11 @@ def validate_guard_directory_path(
     if not os.path.isabs(expanded):
         raise DirectoryPathTrustError("relative_path")
     try:
-        candidate = os.path.realpath(expanded)
+        candidate = cached_realpath(expanded)
     except OSError:
         raise DirectoryPathTrustError("path_resolve_failed") from None
     for root in roots:
-        root_path = os.path.realpath(os.fspath(root))
+        root_path = cached_realpath(os.fspath(root))
         if candidate == root_path:
             return Path(root_path)
         if candidate.startswith(root_path.rstrip(os.sep) + os.sep):
@@ -70,13 +71,13 @@ def validate_guard_directory_path(
 
 def validated_owned_temporary_workspace(candidate: str) -> Path | None:
     try:
-        canonical_candidate = os.path.realpath(candidate)
+        canonical_candidate = cached_realpath(candidate)
         temporary_root = trusted_temporary_root_for_path(Path(canonical_candidate))
     except OSError:
         return None
     if temporary_root is None:
         return None
-    root_path = os.path.realpath(os.fspath(temporary_root))
+    root_path = cached_realpath(os.fspath(temporary_root))
     # Shared temp roots are not workspaces. Hook normalization already
     # treats an exact temporary-root argument as "no workspace".
     if not canonical_candidate.startswith(root_path.rstrip(os.sep) + os.sep):

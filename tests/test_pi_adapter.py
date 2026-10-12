@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _c
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import classify_secret_content
 from codex_plugin_scanner.guard.store import GuardStore
@@ -986,6 +987,10 @@ class TestPiRuntime:
 
     def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard-home")
+        # Provisioning the resident's verifier key writes a fake keyring beside
+        # the guard home. The shell context below hashes this directory, so
+        # provision before the first request instead of between the two.
+        assert ensure_resident_prerequisite(tmp_path / "guard-home")
         command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
 
         def queue_for(output: str) -> list[dict[str, object]]:

@@ -115,7 +115,10 @@ pub(crate) fn incomplete_state_hash_for_label(
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
+    #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
+    #[cfg(windows)]
+    use std::os::windows::ffi::OsStringExt;
 
     use super::*;
 
@@ -132,10 +135,21 @@ mod tests {
                 "{bad:?}"
             );
         }
+        #[cfg(unix)]
         let invalid = OsString::from_vec(vec![0x66, 0x80, 0x6f]);
+        #[cfg(windows)]
+        let invalid = OsString::from_wide(&[0x66, 0xd800, 0x6f]);
         assert_eq!(
             canonical_component(&invalid).unwrap_err(),
             Failure::InvalidPathEncoding
+        );
+    }
+
+    #[test]
+    fn incomplete_unreadable_hash_matches_canonical_json() {
+        assert_eq!(
+            incomplete_state_hash_for_label("unreadable_entry", None, 0, 0),
+            "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73"
         );
     }
 

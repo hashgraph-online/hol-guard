@@ -18,7 +18,7 @@ from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as package_eval_module
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
@@ -34,7 +34,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     local server pass sync_url=<url>.
     """
     from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
     dpop_key_material = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
@@ -300,17 +299,12 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
         encoding="utf-8",
     )
 
-    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
-        raise guard_commands_module.GuardSyncAuthorizationExpiredError(
-            "Guard authorization expired. Run `hol-guard connect` to sign in again."
-        )
+    # The resident resolves Cloud authorization itself, so a Python resolver patch
+    # never reaches it. Without this seam it would be asked to POST the evaluation
+    # to the real Cloud origin, and the verdict would depend on that network.
+    guard_runner_module._test_sync_auth_context_override = {"error": "authorization_expired"}
 
     evaluate_package_request = guard_commands_module.evaluate_package_request_artifact
-    monkeypatch.setattr(
-        package_eval_module,
-        "_resolve_guard_sync_auth_context",
-        raise_auth_expired,
-    )
     monkeypatch.setattr(
         guard_commands_module,
         "evaluate_package_request_artifact",

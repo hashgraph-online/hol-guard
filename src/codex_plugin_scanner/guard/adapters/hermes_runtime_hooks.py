@@ -235,20 +235,6 @@ def hermes_allowlist_path(hermes_home: Path) -> Path:
     return hermes_home.expanduser().resolve(strict=False) / _ALLOWLIST_NAME
 
 
-def prepare_hermes_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
-    """Normalize Hermes stdin onto Guard envelope keys."""
-
-    normalized = dict(payload)
-    event_name = normalized.get("hook_event_name")
-    if isinstance(event_name, str) and event_name.replace("_", "").replace("-", "").lower() == "pretoolcall":
-        normalized["hook_event_name"] = "PreToolUse"
-    if not isinstance(normalized.get("tool_input"), Mapping):
-        args = normalized.get("args")
-        if isinstance(args, Mapping):
-            normalized["tool_input"] = dict(args)
-    return normalized
-
-
 def hermes_native_decision(*, policy_action: str, reason: str) -> dict[str, object]:
     if policy_action in {"allow", "warn"}:
         return {"decision": "allow", "reason": reason}

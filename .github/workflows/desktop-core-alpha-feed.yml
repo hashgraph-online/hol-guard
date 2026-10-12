@@ -2,10 +2,14 @@ name: Publish Desktop Core stable feed
 on:
   pull_request:
     paths:
+      - .github/actions/release-api-token/**
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
       - tests/test_desktop_core_feed_queue.py
       - tests/test_core_feed_publication_handoff.py
+      - tests/test_desktop_core_alpha_channel_feed.py
+      - tests/test_desktop_core_alpha_channel_publication.py
+      - tests/test_desktop_core_alpha_channel_attestation.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
@@ -25,6 +29,7 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/actions/release-api-token/**
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
@@ -43,13 +48,20 @@ on:
   workflow_dispatch:
     inputs:
       core_version:
-        description: Optional exact published stable Core version to backfill
+        description: Optional exact published stable Core version to backfill; required exact alpha version for alpha
         type: string
+      release_channel:
+        description: Core release channel; alpha is explicit-dispatch only and needs publication_run_id and publication_source_sha
+        type: choice
+        options:
+          - stable
+          - alpha
+        default: stable
       publication_run_id:
-        description: Stable publish run whose registry verification must succeed
+        description: Publish run whose registry verification must succeed
         type: string
       publication_source_sha:
-        description: Exact automation commit of the stable publish run
+        description: Exact automation commit of a stable publish run, or the alpha source commit for alpha
         type: string
 permissions:
   contents: read
@@ -79,7 +91,8 @@ jobs:
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
     concurrency:
-      group: desktop-core-stable-feed-macos-arm64
+      # Alpha dispatches queue separately so they never delay or cancel the stable feed.
+      group: desktop-core-${{ inputs.release_channel == 'alpha' && 'alpha' || 'stable' }}-feed-macos-arm64
       cancel-in-progress: false
       queue: max
     # Dispatches run the main workflow file, already linted by its push run.
@@ -95,6 +108,7 @@ jobs:
       id-token: write
       attestations: write
     env:
+      RELEASE_CHANNEL: ${{ inputs.release_channel || 'stable' }}
       RELEASE_TARGET: aarch64-apple-darwin
       MINIMUM_DESKTOP_VERSION: 0.1.0-beta.0
       MINIMUM_DESKTOP_VERSION_ONEDIR: "3.0.113"
@@ -118,6 +132,26 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse 'HEAD^{commit}')" = "$GITHUB_SHA"
           test -z "$(git status --porcelain)"
+      # App tokens expire after an hour, so release reads and the final upload mint separately.
+      - name: Select release API token for release reads
+        id: release-token-read
+        uses: ./.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: read
+      - name: Validate release channel request
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
+          PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I scripts/release/desktop_core_alpha_feed.py validate-request \
+            --channel "$RELEASE_CHANNEL" --event-name "$EVENT_NAME" --version "$REQUESTED_CORE_VERSION" \
+            --publication-run-id "$PUBLICATION_RUN_ID" --publication-source-sha "$PUBLICATION_SOURCE_SHA"
       - name: Verify runner architecture
         run: test "$(uname -m)" = "arm64"
       - name: Require Apple signing and notarization configuration
@@ -136,10 +170,11 @@ jobs:
           test -n "$APPLE_ID"
           test -n "$APPLE_PASSWORD"
           test -n "$APPLE_TEAM_ID"
-      - name: Discover newest published stable Core release
+      - name: Discover newest published stable Core release, or the exact requested alpha prerelease
         id: release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-read.outputs.token }}
+          CORE_RELEASE_CHANNEL: ${{ inputs.release_channel || 'stable' }}
           REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
         shell: bash
         run: bash scripts/release/discover_core_release.sh 'macosx_.*_arm64' >> "$GITHUB_OUTPUT"
@@ -153,6 +188,7 @@ jobs:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: bash scripts/release/authorize_macos_core_source.sh
@@ -163,10 +199,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
+          PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "$PUBLICATION_RUN_ID" ]]; then
+          if [[ "$RELEASE_CHANNEL" == "alpha" ]]; then
+            # An alpha dispatch must prove its own publication run, the live prerelease's native wheel
+            # digest and the PyPI pure wheel (alphas upload no platform wheels to PyPI), even when the
+            # sidecar assets already exist; the wait fails the run rather than deferring silently.
+            python3 -I scripts/release/wait_for_core_publication.py \
+              --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" --filename "$ATTESTED_WHEEL_FILENAME" \
+              --channel alpha
+            echo registry_ready=true >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PUBLICATION_RUN_ID" ]]; then
             echo registry_ready=true >> "$GITHUB_OUTPUT"
           else
             python3 -I scripts/release/wait_for_core_publication.py --check-only \
@@ -182,7 +227,7 @@ jobs:
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-read.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -225,7 +270,7 @@ jobs:
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-read.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -601,7 +646,8 @@ jobs:
           BINARY="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           MANIFEST="$BINARY.json"
           COMMON=(--base "$BINARY" --manifest "$MANIFEST" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
-            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION")
+            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION" \
+            --channel "$RELEASE_CHANNEL")
           if [[ "$MODE" == "build" ]]; then
             python3 -I scripts/release/desktop_core_alpha_feed.py create-manifest "${COMMON[@]}"
           fi
@@ -617,7 +663,8 @@ jobs:
             fi
             OCOMMON=(--archive "$ONEDIR_ZIP" --tree "$ONEDIR_TREE" --manifest "$BINARY.onedir.json" \
               --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" \
-              --target "$RELEASE_TARGET" --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION_ONEDIR")
+              --target "$RELEASE_TARGET" --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION_ONEDIR" \
+              --channel "$RELEASE_CHANNEL")
             if [[ "$MODE" == "build" ]]; then
               python3 -I scripts/release/desktop_core_alpha_feed.py create-onedir-manifest "${OCOMMON[@]}"
             fi
@@ -645,7 +692,7 @@ jobs:
           else
             python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${COMMON[@]}"
           fi
-          python3 -I scripts/release/verify_desktop_core_attestation.py --binary "$BASE" --manifest "$BASE.json" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --team-id "$APPLE_TEAM_ID" --output "$RUNNER_TEMP/desktop-core-evidence.json"
+          python3 -I scripts/release/verify_desktop_core_attestation.py --binary "$BASE" --manifest "$BASE.json" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --team-id "$APPLE_TEAM_ID" --channel "$RELEASE_CHANNEL" --output "$RUNNER_TEMP/desktop-core-evidence.json"
           if [[ "$MODE" == "build" || "$HAS_ONEDIR" == "true" ]]; then
             OCOMMON=(--base "$BASE" --marker "$BASE.onedir.attested.json" --base-suffix .onedir \
               --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" \
@@ -661,7 +708,7 @@ jobs:
               --archive "$BASE.onedir.zip" --manifest "$BASE.onedir.json" \
               --marker "$BASE.onedir.attested.json" --version "$CORE_VERSION" \
               --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" \
-              --team-id "$APPLE_TEAM_ID" --output "$RUNNER_TEMP/desktop-core-onedir-evidence.json"
+              --team-id "$APPLE_TEAM_ID" --channel "$RELEASE_CHANNEL" --output "$RUNNER_TEMP/desktop-core-onedir-evidence.json"
           fi
       - name: Attest complete hardened Core asset set
         if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
@@ -681,13 +728,38 @@ jobs:
           PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || steps.registry.outputs.publication_run_id || '' }}
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || steps.registry.outputs.publication_source_sha || '' }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-        run: python3 -I scripts/release/wait_for_core_publication.py --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" --filename "$ATTESTED_WHEEL_FILENAME" --bundle "$RUNNER_TEMP/core-trust-assets/hol-guard-v${CORE_VERSION}.intoto.jsonl"
+        run: python3 -I scripts/release/wait_for_core_publication.py --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" --filename "$ATTESTED_WHEEL_FILENAME" --bundle "$RUNNER_TEMP/core-trust-assets/hol-guard-v${CORE_VERSION}.intoto.jsonl" --channel "$RELEASE_CHANNEL"
+      - name: Select release API token for asset upload
+        id: release-token-write
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
+        uses: ./.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Require alpha prerelease and tag to still be published
+        if: env.RELEASE_CHANNEL == 'alpha' && steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
+        env:
+          GH_TOKEN: ${{ steps.release-token-write.outputs.token }}
+          CORE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A retracted alpha (release or tag deleted during the build) fails here and is never recreated.
+          gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease \
+            > "$RUNNER_TEMP/alpha-release.json"
+          python3 -I scripts/release/desktop_core_alpha_feed.py require-prerelease \
+            --release-json "$RUNNER_TEMP/alpha-release.json" --tag "$CORE_TAG"
+          # Resolve to the commit so an annotated tag compares equal to the source commit.
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/refs/tags/${CORE_TAG}" --jq '.sha')
+          test "$tag_sha" = "$SOURCE_SHA"
       - name: Publish immutable Core assets
         if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-write.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
