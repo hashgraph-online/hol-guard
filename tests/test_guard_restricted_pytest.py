@@ -204,6 +204,7 @@ def test_pytest_contained_cli_workspace_defaults_to_cwd(
     assert observed["read_only_workspace"] is False
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_binds_profile_workspace_and_capabilities(tmp_path: Path) -> None:
     executable = Path(sys.executable)
     workspace = Path.cwd().resolve()
@@ -223,6 +224,7 @@ def test_prepare_restricted_pytest_binds_profile_workspace_and_capabilities(tmp_
     assert "write-outside-workspace-and-private-temp" in evidence["denied_capabilities"]
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_does_not_trust_spoofed_home(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -241,6 +243,7 @@ def test_prepare_restricted_pytest_does_not_trust_spoofed_home(
     assert plan.workspace == workspace
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_linux_profile_unshares_network_and_does_not_mount_shell_toolchain() -> None:
     workspace = Path.cwd().resolve()
     private_root = Path("/tmp/hol-guard-pytest-test")
@@ -269,6 +272,7 @@ def test_linux_profile_unshares_network_and_does_not_mount_shell_toolchain() -> 
     ]
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_macos_profile_grants_only_root_metadata_and_bounded_runtime_reads(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     plan = prepare_restricted_pytest(
@@ -293,6 +297,7 @@ def test_macos_profile_grants_only_root_metadata_and_bounded_runtime_reads(tmp_p
     assert f'(deny file-write* (literal "{image}"))' in profile
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_non_pytest_command() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -305,6 +310,7 @@ def test_prepare_restricted_pytest_rejects_non_pytest_command() -> None:
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_cwd_outside_workspace(tmp_path: Path) -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -318,6 +324,7 @@ def test_prepare_restricted_pytest_rejects_cwd_outside_workspace(tmp_path: Path)
     assert error.value.reason_code == PYTEST_INVALID_WORKSPACE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_broad_workspace_root() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -331,6 +338,7 @@ def test_prepare_restricted_pytest_rejects_broad_workspace_root() -> None:
     assert error.value.reason_code == PYTEST_INVALID_WORKSPACE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_non_python_pytest_entrypoint() -> None:
     workspace = Path.cwd().resolve()
     with tempfile.TemporaryDirectory(prefix=".guard-p35-entrypoint-", dir=workspace) as project_text:
@@ -350,6 +358,7 @@ def test_prepare_restricted_pytest_rejects_non_python_pytest_entrypoint() -> Non
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_unrecognized_external_python_runtime(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     external_python = tmp_path / "untrusted-runtime" / "bin" / "python"
@@ -372,6 +381,7 @@ def test_prepare_restricted_pytest_rejects_unrecognized_external_python_runtime(
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_unapproved_intermediate_symlink_root(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     intermediate_python = tmp_path / "host-content" / "bin" / "python"
@@ -393,6 +403,7 @@ def test_prepare_restricted_pytest_rejects_unapproved_intermediate_symlink_root(
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_restricted_pytest_rejects_external_pythonpath_before_backend_runs(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     external = tmp_path.resolve()
@@ -411,6 +422,7 @@ def test_restricted_pytest_rejects_external_pythonpath_before_backend_runs(tmp_p
     assert error.value.reason_code == PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_restricted_pytest_fails_closed_without_platform_backend() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -422,6 +434,7 @@ def test_restricted_pytest_fails_closed_without_platform_backend() -> None:
     assert error.value.reason_code == PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_restricted_pytest_fails_closed_when_supported_backend_is_missing(tmp_path: Path) -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -434,6 +447,7 @@ def test_restricted_pytest_fails_closed_when_supported_backend_is_missing(tmp_pa
     assert error.value.reason_code == PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
 @pytest.mark.parametrize("launch_style", ("module", "entrypoint"))
 def test_real_restricted_pytest_blocks_host_sinks_and_preserves_harmless_suite(

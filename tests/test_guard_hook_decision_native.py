@@ -88,18 +88,18 @@ def test_classifiers_run_only_when_the_resident_asks() -> None:
         return run
 
     classifiers = {
-        name: provider(name, name == "benign_tool_action")
+        name: provider(name, False)
         for name in (
             "prompt_clean",
             "post_tool_read_only_inspection",
             "verified_apply_patch",
-            "benign_native_file_read",
-            "benign_tool_action",
         )
     }
     composition, facts = decision.native_compose_current(_BASE_INPUTS, classifiers)
-    assert composition["composed_action"] == "warn"
-    assert facts == {"verified_apply_patch": False, "benign_native_file_read": False, "benign_tool_action": True}
+    # The resident owns the benign tool-action verdict; no classifier is asked.
+    assert composition["composed_action"] == "review"
+    assert composition["verified_benign"] is False
+    assert facts == {"verified_apply_patch": False}
     assert [name for name, _ in asked] == list(facts)
     assert {event for _, event in asked} == {"PreToolUse"}
 
@@ -206,3 +206,101 @@ def test_missing_resident_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_bound_answer_is_decoded(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request))
     assert decision.native_post_claim_reuse(_CLAIM) == ("allow", None)
+
+
+def test_composition_inputs_forward_raw_tool_call_without_verdicts(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli.commands_hook_native_generic_facts import (
+        composition_inputs,
+        hook_classifiers,
+    )
+
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "a.txt"}}
+
+    def inputs_for(event_payload: dict[str, object]) -> dict[str, object]:
+        return composition_inputs(
+            cli_action=None,
+            canonical_harness="codex",
+            configured_action="review",
+            has_command_text=True,
+            has_configured_override=False,
+            has_narrow_override=False,
+            harness="codex",
+            home_dir=tmp_path,
+            native_edge_result=None,
+            payload=event_payload,
+            runtime_artifact_checked=False,
+            runtime_workspace=tmp_path,
+        )
+
+    assert "native_request" not in inputs_for({**payload, "hook_event_name": "PostToolUse"})
+    oversized = {**payload, "tool_name": "Write", "tool_input": {"file_path": "a.txt", "content": "x" * 70_000}}
+    assert "native_request" not in inputs_for(oversized)
+    request = inputs_for(payload)["native_request"]
+    assert isinstance(request, dict)
+    assert request["tool_name"] == "Read"
+    assert request["tool_input"] == {"file_path": "a.txt"}
+    assert request["cwd"] == str(tmp_path) and request["home_dir"] == str(tmp_path)
+    assert set(request["host"]) == {
+        "process_cwd",
+        "home",
+        "account_home",
+        "groups",
+        "environment",
+        "git_executable",
+    }
+    classifiers = hook_classifiers(
+        canonical_harness="codex",
+        guard_home=None,
+        home_dir=tmp_path,
+        payload=payload,
+        runtime_artifact_checked=False,
+        runtime_workspace=tmp_path,
+    )
+    assert "benign_native_file_read" not in classifiers
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_resident_relaxes_review_default_for_benign_read_without_a_python_verdict(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli.commands_hook_native_generic_facts import (
+        composition_inputs,
+        hook_classifiers,
+    )
+
+    workspace, home = tmp_path / "work", tmp_path / "home"
+    workspace.mkdir()
+    home.mkdir()
+    target = workspace / "README.md"
+    target.write_text("hello", encoding="utf-8")
+
+    def compose(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
+        inputs = composition_inputs(
+            cli_action=None,
+            canonical_harness="codex",
+            configured_action="review",
+            has_command_text=True,
+            has_configured_override=False,
+            has_narrow_override=False,
+            harness="codex",
+            home_dir=home,
+            native_edge_result=None,
+            payload=payload,
+            runtime_artifact_checked=False,
+            runtime_workspace=workspace,
+        )
+        classifiers = hook_classifiers(
+            canonical_harness="codex",
+            guard_home=None,
+            home_dir=home,
+            payload=payload,
+            runtime_artifact_checked=False,
+            runtime_workspace=workspace,
+        )
+        classifiers["verified_apply_patch"] = lambda _event: False
+        return decision.native_compose_current(inputs, classifiers)
+
+    event = {"hook_event_name": "PreToolUse"}
+    composition, facts = compose({**event, "tool_name": "Read", "tool_input": {"path": str(target)}})
+    assert composition["composed_action"] == "warn"
+    assert "benign_native_file_read" not in facts
+    composition, _facts = compose({**event, "tool_name": "Read", "tool_input": {"path": str(workspace / "gone.md")}})
+    assert composition["composed_action"] == "review"

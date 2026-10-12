@@ -138,7 +138,7 @@ fn is_background_separator(chars: &[char], index: usize) -> bool {
 }
 
 /// `_split_top_level_pipes` (:286-304).
-fn split_top_level_pipes(command: &str) -> Vec<String> {
+pub(crate) fn split_top_level_pipes(command: &str) -> Vec<String> {
     let chars: Vec<char> = command.chars().collect();
     let n = chars.len();
     let mut parts: Vec<String> = Vec::new();

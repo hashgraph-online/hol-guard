@@ -8,9 +8,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import (
+    native_exact_action as native_exact_action_decision,
+)
 from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import (
     ONCE_ONLY_REASON_KEY,
-    native_exact_action_decision,
     native_saved_decision_response,
 )
 from codex_plugin_scanner.guard.store import GuardStore

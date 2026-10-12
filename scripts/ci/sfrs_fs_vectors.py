@@ -9,19 +9,22 @@ depends on the Python implementation and is retired with it.
 
 from __future__ import annotations
 
+import functools
 import gzip
 import json
+import operator
 import os
 import sys
 import tempfile
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.secret_file_request_services import source_edit_context
-
 from sfrs_graph_cases import graph_cases
 from sfrs_index_cases import index_cases
+from sfrs_pr_expansion_cases import pr_expansion_cases
 from sfrs_quote_cases import quote_cases
 from sfrs_source_edit_cases import source_edit_cases
+
+from codex_plugin_scanner.guard.runtime.secret_file_request_services import source_edit_context
 
 TOKEN = "{ROOT}"
 
@@ -150,10 +153,18 @@ def _cases(root: Path) -> list[dict[str, object]]:
         add("literal_sed_substitution_is_safe", [script], source_edit_context._literal_sed_substitution_is_safe(script))
     for pattern in ("a", "a.b", "a\\.b", "a\\/b", "a\\\\b", "a\\", "[x]", "a|b", "a\\q", "é", ""):
         for delimiter in ("/", "|"):
-            add("sed_pattern_is_literal", [pattern, delimiter], source_edit_context._sed_pattern_is_literal(pattern, delimiter=delimiter))
+            add(
+                "sed_pattern_is_literal",
+                [pattern, delimiter],
+                source_edit_context._sed_pattern_is_literal(pattern, delimiter=delimiter),
+            )
     for replacement in ("b", "&", "\\&", "$", "\\$", "\\n", "\\/", "\\\\", "a\nb", "b\\", "é", ""):
         for delimiter in ("/", "|"):
-            add("sed_replacement_is_literal", [replacement, delimiter], source_edit_context._sed_replacement_is_literal(replacement, delimiter=delimiter))
+            add(
+                "sed_replacement_is_literal",
+                [replacement, delimiter],
+                source_edit_context._sed_replacement_is_literal(replacement, delimiter=delimiter),
+            )
 
     workspaces = [
         proj,
@@ -218,15 +229,26 @@ def _cases(root: Path) -> list[dict[str, object]]:
         ["-i", "", "d", "src/a.txt"],
         ["-n", "", "s/a/b/", "src/a.txt"],
         ["-i", "x", "s/a/b/", "src/a.txt"],
-        ["-i", ""] + sum([["-e", "s/a/b/"] for _ in range(16)], []) + ["src/a.txt"],
-        ["-i", ""] + sum([["-e", "s/a/b/"] for _ in range(17)], []) + ["src/a.txt"],
+        ["-i", "", *functools.reduce(operator.iadd, [["-e", "s/a/b/"] for _ in range(16)], []), "src/a.txt"],
+        ["-i", "", *functools.reduce(operator.iadd, [["-e", "s/a/b/"] for _ in range(17)], []), "src/a.txt"],
     ):
         add(
             "bounded_in_place_sed_target",
             [args, str(sample), str(proj)],
             source_edit_context._bounded_in_place_sed_target(args, cwd=sample, workspace_root=proj),
         )
-    others = ["src/a.txt", "src/../src/a.txt", "link.txt", "dirlink/a.txt", "src/b.txt", "src/missing.txt", "outside.txt", "dangling.txt", "loop1", ""]
+    others = [
+        "src/a.txt",
+        "src/../src/a.txt",
+        "link.txt",
+        "dirlink/a.txt",
+        "src/b.txt",
+        "src/missing.txt",
+        "outside.txt",
+        "dangling.txt",
+        "loop1",
+        "",
+    ]
     for left in others:
         for right in others:
             add(
@@ -238,6 +260,7 @@ def _cases(root: Path) -> list[dict[str, object]]:
     index_cases(root, add)
     source_edit_cases(root, add)
     quote_cases(root, add)
+    pr_expansion_cases(root, add)
     return cases
 
 

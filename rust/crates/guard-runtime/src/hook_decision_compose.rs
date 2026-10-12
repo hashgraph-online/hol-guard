@@ -13,6 +13,8 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
+use crate::hook_decision_native_facts::{benign_native_file_read, benign_tool_action};
+
 pub(crate) const COPILOT_BENIGN_HINT_REASON: &str =
     "untrusted_hook_payload_hint_ignored_guard_verified_benign";
 pub(crate) const BENIGN_DEFAULT_REASON: &str = "configured_default_relaxed_guard_verified_benign";
@@ -46,6 +48,9 @@ pub(crate) struct Composed {
     pub(crate) daemon_status: Option<String>,
     pub(crate) fail_mode: Option<String>,
     pub(crate) grant_lookups_allowed: bool,
+    /// The resident's own `is_explicitly_benign_tool_action_request` verdict;
+    /// only a `PreToolUse` event asks for it.
+    pub(crate) verified_benign: bool,
 }
 
 /// `Err(name)`: the classifier verdict `name` is needed before composing.
@@ -56,7 +61,11 @@ pub(crate) fn compose(inputs: &HookCompositionInputsV1) -> Needs<Composed> {
     let event = event_name.as_deref();
     let configured =
         normalize_guard_action_result(&inputs.configured_action, GuardAction::RequireReapproval);
-    let relaxed = relax_configured_default(inputs, event, configured.action)?;
+    // Computed once, and only after every classifier fact this round needs is present.
+    let benign = std::cell::OnceCell::new();
+    let verified_benign =
+        || *benign.get_or_init(|| event == Some("PreToolUse") && benign_tool_action(inputs));
+    let relaxed = relax_configured_default(inputs, event, configured.action, &verified_benign)?;
     let current_config_normalization = if relaxed {
         normalize_guard_action_result(&Value::from("warn"), GuardAction::RequireReapproval)
     } else {
@@ -71,7 +80,8 @@ pub(crate) fn compose(inputs: &HookCompositionInputsV1) -> Needs<Composed> {
     let payload = inputs.has_payload_action.then(|| {
         normalize_guard_action_result(&inputs.payload_action, GuardAction::RequireReapproval)
     });
-    let ignored_payload_reason = ignored_payload_reason(inputs, payload.as_ref())?;
+    let ignored_payload_reason =
+        ignored_payload_reason(inputs, payload.as_ref(), verified_benign());
     let payload_disposition = if ignored_payload_reason.is_some() {
         Some("ignored")
     } else if payload.is_some() {
@@ -96,6 +106,7 @@ pub(crate) fn compose(inputs: &HookCompositionInputsV1) -> Needs<Composed> {
     }
     let classifier = relax_classifier(inputs, event);
     let effective_event = event.unwrap_or("PreToolUse").to_owned();
+    let verified_benign = verified_benign();
     let mut out = Composed {
         effective_event,
         event_name,
@@ -117,6 +128,7 @@ pub(crate) fn compose(inputs: &HookCompositionInputsV1) -> Needs<Composed> {
         daemon_status: optional_string(&inputs.daemon_status),
         fail_mode: optional_string(&inputs.fail_mode),
         grant_lookups_allowed: false,
+        verified_benign,
     };
     apply_daemon_hint(&mut out, inputs);
     out.grant_lookups_allowed = !inputs.has_configured_override
@@ -144,6 +156,7 @@ fn relax_configured_default(
     inputs: &HookCompositionInputsV1,
     event: Option<&str>,
     configured: GuardAction,
+    verified_benign: &dyn Fn() -> bool,
 ) -> Needs<bool> {
     if inputs.has_narrow_override
         || !matches!(
@@ -168,13 +181,10 @@ fn relax_configured_default(
         return Ok(true);
     }
     let pre = event == Some("PreToolUse");
-    if pre
-        && matches!(canonical, "claude-code" | "codex")
-        && fact(inputs, "benign_native_file_read")?
-    {
+    if pre && matches!(canonical, "claude-code" | "codex") && benign_native_file_read(inputs) {
         return Ok(true);
     }
-    Ok(pre && fact(inputs, "benign_tool_action")?)
+    Ok(pre && verified_benign())
 }
 
 /// The classifier that justified (or would justify) the relaxation, for audit.
@@ -196,15 +206,16 @@ fn relax_classifier(inputs: &HookCompositionInputsV1, event: Option<&str>) -> &'
 fn ignored_payload_reason(
     inputs: &HookCompositionInputsV1,
     payload: Option<&GuardActionNormalization>,
-) -> Needs<Option<&'static str>> {
+    verified_benign: bool,
+) -> Option<&'static str> {
     let recognized = payload.is_some_and(GuardActionNormalization::recognized);
     if !recognized
         || inputs.canonical_harness != "copilot"
         || copilot_stage(inputs).as_deref() != Some("pretooluse")
     {
-        return Ok(None);
+        return None;
     }
-    Ok(fact(inputs, "benign_tool_action")?.then_some(COPILOT_BENIGN_HINT_REASON))
+    verified_benign.then_some(COPILOT_BENIGN_HINT_REASON)
 }
 
 fn copilot_stage(inputs: &HookCompositionInputsV1) -> Option<String> {
@@ -229,7 +240,10 @@ fn truthy(value: &Value) -> bool {
 
 /// The edge verdict as a floor on the composed action. A present but
 /// unrecognized action fails closed to `block`.
-fn edge_floor(edge: Option<&HookNativeEdgeV1>, event: Option<&str>) -> Option<GuardAction> {
+pub(crate) fn edge_floor(
+    edge: Option<&HookNativeEdgeV1>,
+    event: Option<&str>,
+) -> Option<GuardAction> {
     let edge = edge?;
     let raw = if truthy(&edge.policy_action) {
         Some(&edge.policy_action)

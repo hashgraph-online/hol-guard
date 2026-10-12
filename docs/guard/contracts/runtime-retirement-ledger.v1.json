@@ -4009,5 +4009,48 @@
    ],
    "parity_fixture": "tests/fixtures/direct-tool-python.v1.json"
   }
+,
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_pytest_model.py",
+   "base_commit": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+   "source_sha256": "39725279d2225a1f926db286c1f80a35bd89ed879472c071764698a936e4e522",
+   "remaining_role": "Immutable plan DTOs, bounded resident transport, shared hook-path predicate and process/output handling remain; restricted launch validation, environment filtering and runtime read-root derivation are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/authority.rs",
+    "rust/crates/guard-command/src/restricted_pytest/validation.rs",
+    "rust/crates/guard-command/src/restricted_pytest/executables.rs",
+    "rust/crates/guard-command/src/restricted_pytest/environment.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/restricted_pytest_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_pytest_validation.py",
+   "base_commit": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+   "source_sha256": "4167da0044abf8b3ed85c7c7f82acd0abff10c546ad48280fd4bbda51523363c",
+   "remaining_role": "Immutable plan DTOs, bounded resident transport, shared hook-path predicate and process/output handling remain; restricted launch validation, environment filtering and runtime read-root derivation are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/authority.rs",
+    "rust/crates/guard-command/src/restricted_pytest/validation.rs",
+    "rust/crates/guard-command/src/restricted_pytest/executables.rs",
+    "rust/crates/guard-command/src/restricted_pytest/environment.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/restricted_pytest_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_pytest_sandbox.py",
+   "base_commit": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+   "source_sha256": "b7fa65965fee0f3cb4e4bd10f64a2f9a42fc5fdd7065d6478c07b0364599faa6",
+   "remaining_role": "Immutable plan DTOs, bounded resident transport, shared hook-path predicate and process/output handling remain; restricted launch validation, environment filtering and runtime read-root derivation are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/authority.rs",
+    "rust/crates/guard-command/src/restricted_pytest/validation.rs",
+    "rust/crates/guard-command/src/restricted_pytest/executables.rs",
+    "rust/crates/guard-command/src/restricted_pytest/environment.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/restricted_pytest_parity.json"
+  }
  ]
 }

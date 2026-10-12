@@ -25,10 +25,50 @@ pub enum GitRun {
     Failed(&'static str),
 }
 
+/// Outcome of one bounded git probe (`subprocess.run(..., timeout=1)`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitProbe {
+    pub code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
 /// Process-dependent services the review needs.
 pub trait InspectionHost {
     /// Value of an environment variable from the caller's snapshot.
     fn env(&self, name: &str) -> Option<String>;
+    /// Every variable of the caller's snapshot (`os.environ.items()`).
+    fn environment(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    /// `os.getuid()` of the caller; hosts that cannot report one refuse.
+    fn current_uid(&self) -> Option<u32> {
+        None
+    }
+    /// `build_runtime_executable_identity(command, search_path, cwd)` from the
+    /// resident. Hosts without that service defer to the in-crate resolver.
+    fn runtime_executable_identity(
+        &self,
+        _command: &str,
+        _search_path: Option<&str>,
+        _cwd: &str,
+    ) -> Option<serde_json::Value> {
+        None
+    }
+    /// `secrets.token_hex(16)`; hosts without a source defer to the OS.
+    fn reuse_nonce(&self) -> Option<String> {
+        None
+    }
+    /// `sys.executable` of the caller; hosts that cannot report one never
+    /// grant the guard-interpreter trust.
+    fn guard_executable(&self) -> Option<String> {
+        None
+    }
+    /// Whether the resident secret classifier finds secret material in `text`.
+    /// Hosts without that service refuse.
+    fn secret_content_found(&self, _text: &str, _is_path: bool) -> bool {
+        true
+    }
     /// `shutil.which("git")` from the caller.
     fn git_executable(&self) -> Option<String>;
     /// One git execution safety decision.
@@ -63,6 +103,11 @@ pub trait InspectionHost {
     ) -> bool {
         false
     }
+    /// `git_log_has_execution_free_config(cwd, git_binary=git)`: the
+    /// repository's `git log` configuration cannot execute anything.
+    fn git_log_execution_free_config(&self, _cwd: &str, _git: &str) -> bool {
+        false
+    }
     /// `is_low_risk_standalone_git_routine` over a modeled chain.
     fn standalone_git_routine(
         &self,
@@ -78,6 +123,31 @@ pub trait InspectionHost {
     }
     /// `build_local_package_script_evidence("bun", args, workspace)` is complete.
     fn bun_script_evidence_complete(&self, _script_args: &[String], _workspace: &str) -> bool {
+        false
+    }
+    /// `trusted_git_binary_for_cwd`: the canonical trusted git for `cwd`.
+    fn trusted_git_binary(&self, _cwd: &str) -> Option<String> {
+        None
+    }
+    /// One bounded `git <args>` run in `cwd` that keeps the exit status and
+    /// both streams; `None` is an `OSError`, a timeout, or no process service.
+    fn git_probe(&self, _git: &str, _args: &[String], _cwd: &str) -> Option<GitProbe> {
+        None
+    }
+    /// `git_worktree_add_has_execution_free_config` for `reference`.
+    fn git_worktree_add_config(&self, _git: &str, _cwd: &str, _reference: &str) -> bool {
+        false
+    }
+    /// `shutil.which("git-lfs")` resolves to a trusted executable for `cwd`.
+    fn git_lfs_trusted(&self, _cwd: &str) -> bool {
+        false
+    }
+    /// `canonical_home_git_c_path`: an unquoted canonical home `-C` operand.
+    fn home_git_c_path(&self, _command: &str) -> Option<String> {
+        None
+    }
+    /// `is_safe_standalone_git_object_existence_query`.
+    fn git_object_existence_query(&self, _command: &str, _cwd: &str) -> bool {
         false
     }
     /// Caller facts and resident filesystem trust for direct-tool recognition.

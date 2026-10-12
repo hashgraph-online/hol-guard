@@ -14,6 +14,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from ..native_restricted_pytest import restricted_native
 from .restricted_pytest_model import (
     _DEFAULT_TIMEOUT_SECONDS,
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
@@ -36,14 +37,6 @@ from .restricted_pytest_sandbox import (
     _restricted_environment,
     _run_backend_process,
 )
-from .restricted_pytest_validation import (
-    _allowed_executables,
-    _normalized_command,
-    _resolve_cwd,
-    _resolve_pytest_executable,
-    _resolve_workspace,
-    _select_backend,
-)
 
 
 def prepare_restricted_pytest(
@@ -55,54 +48,45 @@ def prepare_restricted_pytest(
     backend_executable: Path | None = None,
     read_only_workspace: bool = False,
 ) -> RestrictedPytestPlan:
-    """Validate and resolve a pytest argv without executing repository code."""
-
-    normalized_command = _normalized_command(command)
-    selected_backend, selected_backend_executable = _select_backend(
-        platform=platform or sys.platform,
-        backend_executable=backend_executable,
+    """Present the native validated launch plan without recalculating authority."""
+    result = restricted_native(
+        "prepare",
+        {
+            "command": [str(item) for item in command],
+            "workspace": workspace,
+            "cwd": cwd or Path.cwd(),
+            "platform": platform or sys.platform,
+            "backend_executable": backend_executable,
+            "read_only_workspace": read_only_workspace,
+        },
+        dict,
     )
-    if read_only_workspace and selected_backend not in {"macos-seatbelt", "linux-bubblewrap"}:
-        raise RestrictedPytestError(
-            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-            "The read-only pytest profile requires enforced workspace credential filtering; "
-            "this backend does not yet provide it. Execution was not started.",
+    scalar = {"profile_version", "backend", "backend_executable", "workspace", "cwd", "executable"}
+    arrays = {"command", "allowed_executables", "denied_capabilities"}
+    if (
+        set(result) != scalar | arrays
+        or any(not isinstance(result[key], str) for key in scalar)
+        or any(
+            not isinstance(result[key], list) or not all(isinstance(item, str) for item in result[key])
+            for key in arrays
         )
-    resolved_workspace = _resolve_workspace(workspace)
-    resolved_cwd = _resolve_cwd(cwd or Path.cwd(), workspace=resolved_workspace)
-    launch_executable, executable = _resolve_pytest_executable(
-        normalized_command,
-        cwd=resolved_cwd,
-        workspace=resolved_workspace,
-    )
-    allowed_executables = _allowed_executables(
-        executable,
-        launch_executable,
-        normalized_command,
-        cwd=resolved_cwd,
-        workspace=resolved_workspace,
-    )
+        or result["backend"] not in {"macos-seatbelt", "linux-bubblewrap"}
+        or result["profile_version"]
+        != (PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION)
+        or not result["command"]
+        or not result["allowed_executables"]
+    ):
+        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Invalid native restricted launch plan.")
     return RestrictedPytestPlan(
-        profile_version=(
-            PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION
-        ),
-        backend=selected_backend,
-        backend_executable=selected_backend_executable,
-        workspace=resolved_workspace,
-        cwd=resolved_cwd,
-        command=(str(launch_executable), *normalized_command[1:]),
-        executable=executable,
-        allowed_executables=allowed_executables,
-        denied_capabilities=(
-            "host-home-read",
-            "host-secret-environment",
-            "network",
-            "docker-socket",
-            "write-outside-workspace-and-private-temp",
-            "unapproved-process-exec",
-            "privileged-operation",
-        )
-        + (("workspace-write", "workspace-credential-read") if read_only_workspace else ()),
+        profile_version=result["profile_version"],
+        backend=result["backend"],
+        backend_executable=Path(result["backend_executable"]),
+        workspace=Path(result["workspace"]),
+        cwd=Path(result["cwd"]),
+        command=tuple(result["command"]),
+        executable=Path(result["executable"]),
+        allowed_executables=tuple(Path(path) for path in result["allowed_executables"]),
+        denied_capabilities=tuple(result["denied_capabilities"]),
     )
 
 

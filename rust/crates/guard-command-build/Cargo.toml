@@ -46,7 +46,7 @@ url = "=2.5.8"
 unicode-normalization = "0.1.25"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31.3", features = ["process", "signal"] }
+nix = { version = "0.31.3", features = ["process", "signal", "user"] }
 
 [build-dependencies]
 sha2 = "0.10.9"

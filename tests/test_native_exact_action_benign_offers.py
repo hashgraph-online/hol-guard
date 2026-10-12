@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import native_exact_action_decision
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import (
+    native_exact_action as native_exact_action_decision,
+)
 from tests.test_native_review_exact_action_always import (
     _HARNESS,
     _native_package_intent,  # noqa: F401  (autouse fixture)

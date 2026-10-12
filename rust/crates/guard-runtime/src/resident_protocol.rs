@@ -19,15 +19,16 @@ use guard_contracts::{
     LocalMcpGrantRequestV1, McpProxyDecisionRequestV1, McpRuntimeEvidenceRequestV1,
     McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
     McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
-    McpToolPolicyDecideRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageApprovalHashRequestV1, PackageAuditProjectionRequestV1, PackageAuthorityDecideRequestV1,
-    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PackagePolicyResolveRequestV1,
-    PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, ProtectRequestRequestV1, RequestContextRequestV1,
-    RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1,
-    ShimAdminRequestV2, SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1,
-    WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    McpToolPolicyDecideRequestV1, NativeExactActionRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageApprovalHashRequestV1, PackageAuditProjectionRequestV1,
+    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
+    PackageIntentParseRequestV1, PackagePolicyResolveRequestV1, PackagePostureRequestV1,
+    PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
+    ProtectRequestRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
+    RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1, ShimAdminRequestV2,
+    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1,
+    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
+    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -207,6 +208,7 @@ pub(crate) enum ResidentOperationV1 {
     ContributedMcpDecide(ContributedMcpDecisionRequestV1),
     RequestContextBuild(RequestContextRequestV1),
     McpToolPolicyDecide(McpToolPolicyDecideRequestV1),
+    NativeExactAction(NativeExactActionRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),

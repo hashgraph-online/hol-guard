@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from ..native_local_cli_identity import LocalCliIdentityUnavailableError
 from .hook_fail_closed import render_accepted_allow
-from .hook_native_launch_identity import launch_cwd as _launch_cwd
+from .hook_native_exact_action import launch_cwd as _launch_cwd
 from .hook_native_saved_approval import _native_review_is_overridable, _saved_block_response, store_guard_home
 from .hook_request_parsing import pre_tool_command
 

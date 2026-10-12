@@ -44,6 +44,7 @@ from .latency import summarize_hook_latency
 from .native_tools import cleanup_private_temp
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
+from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 
@@ -65,7 +66,11 @@ def run_case(
     from ci.native_runtime import probe_installed_native_extensions as native_probe
 
     first_contact = scenario.oracle == "native-tools"
-    fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=first_contact)
+    fixture = create_fixture(
+        root / scenario_fixture_name(scenario.id),
+        realistic=first_contact and scenario.id != WORKTREE_CASE,
+        linked_worktree=scenario.id == WORKTREE_CASE,
+    )
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
@@ -123,6 +128,8 @@ def run_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
                 )
+            if scenario.id == GITHUB_REVIEW_CASE:
+                case["extension_control"] = configure_github_review_controls(daemon, fixture.root / "guard-home")
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.
@@ -182,7 +189,7 @@ def run_case(
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
             if scenario.oracle == "watch-command":
                 environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
-            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES:
+            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),

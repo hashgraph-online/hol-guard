@@ -162,6 +162,10 @@ pub struct ShellContextV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", content = "body", rename_all = "snake_case")]
 pub enum RequestContextKindV1 {
+    RestrictedPytest {
+        operation: String,
+        input: Value,
+    },
     /// Rebuild monotonic command floors without workflow authorization grants.
     CriticalFloor(RequestContextCriticalFloorV1),
     /// Admit the request and build the whole canonical context.

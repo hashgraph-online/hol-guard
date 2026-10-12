@@ -857,6 +857,7 @@ version = "3.16.3"
 dependencies = [
  "aes",
  "base32ct",
+ "base64 0.22.1",
  "base64ct",
  "caseless",
  "cbc",

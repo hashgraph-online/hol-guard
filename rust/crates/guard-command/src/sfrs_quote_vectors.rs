@@ -100,6 +100,6 @@ pub(crate) fn run(function: &str, args: &[Value]) -> Option<Value> {
             Path::new(text(&args[2])),
         )
         .into(),
-        _ => return None,
+        other => return crate::sfrs_pr_expansion_vectors::run(other, args),
     })
 }

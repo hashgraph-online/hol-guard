@@ -13,6 +13,13 @@ from pathlib import Path
 
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .extension_adapters import EXTENSION_ADAPTERS
+from .review_fixtures import (
+    GH_LOG,
+    add_linked_worktree,
+    github_checks,
+    worktree_checks,
+    write_gh_stub,
+)
 
 EXECUTED_FLAG = "output/extension-executed.flag"
 SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds: 10,\n};\n"
@@ -104,7 +111,7 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def create_fixture(root: Path, *, realistic: bool = False) -> Fixture:
+def create_fixture(root: Path, *, realistic: bool = False, linked_worktree: bool = False) -> Fixture:
     """Create a fresh owned project; never reuse a developer's workspace.
 
     ``realistic`` adds the shapes that ordinary developer machines have and that a bare
@@ -114,7 +121,8 @@ def create_fixture(root: Path, *, realistic: bool = False) -> Fixture:
     nested repository, an untracked linked worktree inside the tree, project and home
     skill documents, an artifact document under the home directory and a bracketed route
     directory. Benign first-contact scenarios use it so a regression on any of those
-    shapes cannot hide behind a minimal fixture.
+    shapes cannot hide behind a minimal fixture. ``linked_worktree`` instead keeps the
+    main checkout as the workspace and adds a linked worktree beside it under the home.
     """
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     home = root / "home"
@@ -144,6 +152,10 @@ def create_fixture(root: Path, *, realistic: bool = False) -> Fixture:
     # Every sentinel records into one flag, so a business CLI case also sees an
     # extension adapter run under the same name.
     for executable in dict.fromkeys((*EXTENSION_ADAPTERS, *BUSINESS_CLI_EXECUTABLES)):
+        if executable == "gh":
+            # A recording stand-in: it logs argv inside the workspace and never touches the network.
+            write_gh_stub(sentinel_dir, workspace)
+            continue
         sentinel = sentinel_dir / executable
         sentinel.write_text(
             f"#!/bin/sh\nprintf '%s\\n' executed > {shlex.quote(str(workspace / EXECUTED_FLAG))}\nexit 0\n",
@@ -176,6 +188,8 @@ def create_fixture(root: Path, *, realistic: bool = False) -> Fixture:
             ["git", "-C", str(workspace), *args], env=environment, check=True, capture_output=True, timeout=15
         )
     protected_names = (".env", "deletion-target/keep.txt", ".git/config")
+    if linked_worktree:
+        add_linked_worktree(workspace, home, environment)
     if realistic:
         workspace = _add_realistic_shapes(workspace, home, environment)
         # A linked worktree's .git is a pointer file, so it has no config to fingerprint.
@@ -239,7 +253,11 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     if oracle == "home-copy-task":
         checks["sibling-copy-exact"] = exact_bytes(fixture.home / "other-project/copied.ts", SOURCE.encode("utf-8"))
     if oracle == "blocked-extension":
-        checks["extension-executed-absent"] = not (fixture.workspace / EXECUTED_FLAG).exists()
+        checks["extension-executed-absent"] = (
+            not (fixture.workspace / EXECUTED_FLAG).exists() and not (fixture.workspace / GH_LOG).exists()
+        )
+    checks.update(github_checks(fixture.workspace, scenario_id))
+    checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:
         checks["business-cli-executed-absent"] = not (fixture.workspace / EXECUTED_FLAG).exists()
     if scenario_id == "routed-git-and-workspace-writes":

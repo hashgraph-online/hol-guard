@@ -222,7 +222,10 @@ pub(crate) fn github_script_requires_review(script: &str) -> bool {
 }
 
 /// `_command_builtin_options_are_lookup_only`.
-fn command_builtin_options_are_lookup_only(segment: &[String], mut index: usize) -> bool {
+pub(crate) fn command_builtin_options_are_lookup_only(
+    segment: &[String],
+    mut index: usize,
+) -> bool {
     while index < segment.len() {
         let plain = &segment[index];
         if plain == "--" || !plain.starts_with('-') {

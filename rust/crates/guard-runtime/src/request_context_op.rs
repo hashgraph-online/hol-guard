@@ -285,6 +285,9 @@ pub(crate) fn build_with_shell_report(
 fn decide(request: &RequestContextRequestV1) -> Result<Value, &'static str> {
     let budget = admit(request)?;
     let payload = match &request.action {
+        RequestContextKindV1::RestrictedPytest { operation, input } => {
+            crate::restricted_pytest_op::evaluate(operation, input, &budget)?
+        }
         RequestContextKindV1::CriticalFloor(body) => {
             crate::critical_floor_op::evaluate(body, &budget)?
         }

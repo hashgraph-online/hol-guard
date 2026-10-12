@@ -147,6 +147,10 @@ _OPERATION = ResidentOperation(
 # ask with no time left fails closed without reaching the resident.
 _MAX_CONCURRENT_ASKS = 8
 _ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_ASKS)
+# Exact-action asks can run longer than the millisecond route asks, so they
+# queue on their own slots instead of starving every other daemon request.
+_MAX_CONCURRENT_EXACT_ACTION_ASKS = 4
+EXACT_ACTION_ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_EXACT_ACTION_ASKS)
 
 
 def _decide(
@@ -157,12 +161,15 @@ def _decide(
     *,
     operation: ResidentOperation | None = None,
     max_request_bytes: int | None = None,
+    slots: threading.BoundedSemaphore | None = None,
 ) -> dict[str, Any]:
     """Ask the resident and return its payload once it is bound and strictly shaped.
 
     ``operation`` selects the resident operation; every daemon operation shares
     the in-flight ask slots and the pinned transport. ``max_request_bytes``
     raises the envelope cap for an operation that carries larger requests.
+    ``slots`` replaces the shared in-flight ask slots for an operation that
+    must not contend with the short route asks.
     """
 
     operation = operation or _OPERATION
@@ -173,10 +180,11 @@ def _decide(
         if validate is not None:
             validate(payload)
 
+    ask_slots = slots or _ASK_SLOTS
     deadline = time.monotonic() + operation.timeout_seconds
 
     def bounded_request(*, timeout_seconds: float, **kwargs: Any) -> dict[str, object] | None:
-        if not _ASK_SLOTS.acquire(timeout=max(0.0, deadline - time.monotonic())):
+        if not ask_slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
             return None
         try:
             remaining = deadline - time.monotonic()
@@ -184,7 +192,7 @@ def _decide(
                 return None
             return _resident_request(timeout_seconds=min(timeout_seconds, remaining), **size_cap, **kwargs)
         finally:
-            _ASK_SLOTS.release()
+            ask_slots.release()
 
     return resident_decide(operation, bounded_request, query, guard_home, check)
 

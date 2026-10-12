@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
 
 
@@ -53,47 +52,6 @@ def _interpreter_evidence(command: str, *, cwd: Path) -> dict[str, object]:
     assert request is not None
     assert request.interpreter_executable_identities
     return request.interpreter_executable_identities[0]
-
-
-@pytest.mark.parametrize(
-    "command_builder",
-    (
-        lambda token: f"{token} -c \"print('fixture')\"",
-        lambda token: f"{token} <<'PY'\nprint('fixture')\nPY",
-    ),
-)
-def test_project_local_interpreter_never_inherits_python_basename_trust(
-    tmp_path: Path,
-    command_builder,
-) -> None:
-    workspace = tmp_path / "workspace"
-    interpreter = workspace / "python"
-    _write_interpreter(interpreter)
-    command = command_builder("./python")
-
-    request = _request(command, cwd=workspace)
-
-    assert request is not None
-    assert request.action_class == "untrusted Python interpreter"
-    assert request.reason_code == "interpreter_identity_untrusted"
-    evidence = request.interpreter_executable_identities[0]
-    assert evidence["raw_token"] == "./python"
-    assert evidence["normalized_name"] == "python"
-    assert evidence["trust"] == "workspace_local"
-    executable = evidence["executable"]
-    assert isinstance(executable, dict)
-    assert executable["launch_path"] == str(interpreter.absolute())
-    assert executable["path"] == str(interpreter.resolve())
-    assert executable["status"] == "verified"
-    assert executable["mode"] == 0o755
-    assert isinstance(executable["sha256"], str)
-    assert executable["path_chain"]
-    assert not is_explicitly_benign_tool_action_request(
-        "Bash",
-        {"command": command},
-        cwd=workspace,
-        home_dir=Path.home(),
-    )
 
 
 @pytest.mark.parametrize(
@@ -163,25 +121,6 @@ def test_shell_command_string_preserves_nested_interpreter_token(tmp_path: Path)
     assert evidence["trust"] == "workspace_local"
 
 
-def test_exact_guard_interpreter_keeps_read_only_commands_prompt_free(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    token = shlex.quote(sys.executable)
-    commands = (
-        f"{token} -c \"print('fixture')\"",
-        f"{token} <<'PY'\nprint('fixture')\nPY",
-    )
-
-    for command in commands:
-        assert _request(command, cwd=workspace) is None
-        assert is_explicitly_benign_tool_action_request(
-            "Bash",
-            {"command": command},
-            cwd=workspace,
-            home_dir=Path.home(),
-        )
-
-
 def test_same_directory_guard_interpreter_alias_is_trusted_but_workspace_alias_is_not(tmp_path: Path) -> None:
     guard_canonical = Path(sys.executable).resolve(strict=True)
     alias = next(
@@ -218,21 +157,6 @@ def test_verified_system_interpreter_keeps_normal_read_only_path_prompt_free(tmp
     command = "/usr/bin/python3 -c \"print('fixture')\""
 
     assert _request(command, cwd=workspace) is None
-
-
-@pytest.mark.skipif(not Path("/usr/bin/python3").is_file(), reason="trusted system Python is unavailable")
-def test_bare_interpreter_uses_effective_path_and_keeps_trusted_resolution_prompt_free(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    command = f"PATH=/usr/bin{os.pathsep}/bin python3 -c \"print('fixture')\""
-
-    assert _request(command, cwd=workspace) is None
-    assert is_explicitly_benign_tool_action_request(
-        "Bash",
-        {"command": command},
-        cwd=workspace,
-        home_dir=Path.home(),
-    )
 
 
 @pytest.mark.parametrize(

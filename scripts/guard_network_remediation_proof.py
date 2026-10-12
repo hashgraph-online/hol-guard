@@ -56,7 +56,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
     ),
     "REM-124": (
         "tests/test_guard_compound_developer_inspection.py",
-        "tests/test_guard_compound_readonly_auto_allow.py",
+        "rust/crates/guard-runtime/src/hook_decision_benign_tool_action_tests.rs",
         "tests/test_guard_trusted_local_tools.py",
     ),
     "REM-125": (

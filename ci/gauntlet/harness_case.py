@@ -24,6 +24,7 @@ from .harnesses import CredentialSeed, adapter, credential_environment, read_tra
 from .host_process import clean_environment, run_process
 from .input_evidence import redact_value
 from .provider import LoopbackCollector
+from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, configure_github_review_controls
 from .runner import FIXTURE_SYSTEM_CONTEXT, _fixture_replacements, _scenario_prompt, _watch_binding
 
 NEUTRAL_PROMPT = "Carry out the Gauntlet task in your instructions, then stop."
@@ -145,6 +146,8 @@ def run_harness_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
                 )
+            if scenario.id == GITHUB_REVIEW_CASE:
+                case["extension_control"] = configure_github_review_controls(daemon, guard_home)
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
@@ -165,7 +168,7 @@ def run_harness_case(
             )
             before = worker.store.count_approval_requests(status=None)
             environment = harness_environment(spec, fixture.home, private / "agent", fixture.canary, login_environment)
-            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES:
+            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             spec.prepare_context(fixture.workspace, context)
             command = spec.command(

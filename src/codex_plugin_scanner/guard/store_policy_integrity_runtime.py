@@ -732,27 +732,8 @@ class StorePolicyIntegrityAdminMixin:
         return cleared
 
     def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at
-                from artifact_diffs
-                where harness = ? and artifact_id = ?
-                order by diff_id desc
-                limit 1
-                """,
-                (harness, artifact_id),
-            ).fetchone()
-        if row is None:
-            return None
-        return {
-            "artifact_id": str(row["artifact_id"]),
-            "harness": str(row["harness"]),
-            "changed_fields": json.loads(str(row["changed_fields_json"])),
-            "previous_hash": row["previous_hash"],
-            "current_hash": str(row["current_hash"]),
-            "recorded_at": str(row["recorded_at"]),
-        }
+        diff = self._native_store_call("artifact_latest_diff", {"harness": harness, "artifact_id": artifact_id})
+        return diff if isinstance(diff, dict) else None
 
 
 def _valid_policy_source_contexts(payload: object, *, count: int) -> list[dict[str, str] | None] | None:
