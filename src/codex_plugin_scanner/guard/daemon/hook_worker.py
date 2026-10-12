@@ -34,9 +34,9 @@ from typing import TYPE_CHECKING, Protocol, cast, final
 from ..cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
 )
-from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher

@@ -60,6 +60,7 @@ def _build(tmp_path: Path) -> client.NativeRequestContext | client.NativeRequest
     [
         ("native_request_context_owner_mismatch", "native_request_context_owner_mismatch"),
         ("native_request_context_budget_exceeded", "native_request_context_budget_exceeded"),
+        ("native_sensitive_request_canonical_unbound", "native_sensitive_request_canonical_unbound"),
         ("free text", "native_request_context_unavailable"),
         (None, "native_request_context_unavailable"),
     ],

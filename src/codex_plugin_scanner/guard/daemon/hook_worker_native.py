@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..codex_binding_capture_writer import CodexBindingCaptureWriter
+from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import (

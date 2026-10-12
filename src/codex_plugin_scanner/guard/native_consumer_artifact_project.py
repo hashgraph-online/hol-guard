@@ -153,7 +153,18 @@ _RESULT_FIELDS: dict[str, str] = {
 
 def _answer_valid(kind: str, payload: dict[str, object]) -> bool:
     if kind == "artifact_result":
-        return all(name in payload and _field_valid(spec, payload[name]) for name, spec in _RESULT_FIELDS.items())
+        # A fail-closed row (no native decision) carries its evaluation error in
+        # place of an authoritative decision; every other row must carry one.
+        fail_closed = (
+            "authoritative_decision" not in payload
+            and payload.get("policy_action") == "block"
+            and isinstance(payload.get("evaluation_error"), dict)
+        )
+        return all(
+            name in payload and _field_valid(spec, payload[name])
+            for name, spec in _RESULT_FIELDS.items()
+            if not (fail_closed and name == "authoritative_decision")
+        )
     shape = _ANSWERS[kind]
     valid = set(payload) == set(shape) and all(_field_valid(spec, payload[name]) for name, spec in shape.items())
     if kind != "removed_result":

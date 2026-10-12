@@ -77,6 +77,7 @@ def _resident_request(
     response_schema: str | None = None,
     max_request_bytes: int = _MAX_REQUEST_BYTES,
     record_success: bool = True,
+    record_resilience: bool = True,
     status: NativeRuntimeStatus | None = None,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops.
@@ -120,21 +121,24 @@ def _resident_request(
         timeout_seconds=timeout_seconds,
     )
     if response is None:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_transport")
+        if record_resilience:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_transport")
         return None
     try:
         decoded = json.loads(response.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
+        if record_resilience:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if not isinstance(decoded, dict):
-        if not record_success:
+        if record_resilience and not record_success:
             native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if "schema" not in decoded:
         record_native_resident_error_frame(decoded)
     if response_schema is not None and decoded.get("schema") != response_schema:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
+        if record_resilience:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
         return None
     result_schema = {
         "prompt_analyze": "guard-prompt-analyze-result.v1",
@@ -177,6 +181,8 @@ def _resident_request(
             "hook_authority_state",
             "hook_render",
             "protect_request",
+            "hook_artifact_compose",
+            "consumer_artifact_compose",
             "mcp_tool_call_identity",
             "package_context_build",
         }:
@@ -185,10 +191,10 @@ def _resident_request(
             accepted = frozenset({"ok", "need", "error"})
         accepted_statuses = accepted if accepted is not None else frozenset({"ok"})
         if decoded.get("status") not in accepted_statuses:
-            if not record_success:
+            if record_resilience and not record_success:
                 native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_status")
             return None
-    if record_success:
+    if record_resilience and record_success:
         native_record_resident_success(status.identity.sha256, guard_home)
     return decoded
 

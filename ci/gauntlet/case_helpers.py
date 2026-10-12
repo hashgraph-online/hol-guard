@@ -107,10 +107,10 @@ def read_case_logs(
 
 def _scenario_prompt(scenario: Scenario) -> str:
     """Retain shared scheduling and literal commands, with Watch's explicit tool bound."""
-    prompt = scenario_prompt(scenario)
-    if scenario.oracle == "watch-command":
-        prompt += (
-            "\nSet timeout to 120 seconds explicitly. Omit cwd; the session already runs in the fixture workspace."
-            " Do not override the environment, enable PTY, or run in the background."
-        )
-    return prompt
+    if scenario.oracle != "watch-command":
+        return scenario_prompt(scenario)
+    return scenario_prompt(
+        scenario,
+        "\nSet timeout to 120 seconds explicitly. Omit cwd; the session already runs in the fixture workspace."
+        " Do not override the environment, enable PTY, or run in the background.",
+    )

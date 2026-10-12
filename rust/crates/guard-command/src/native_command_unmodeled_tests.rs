@@ -164,6 +164,8 @@ fn unmodeled_commands_that_move_data_or_hide_programs_keep_the_evaluation_failur
         "gh pr comment 12 --body-file - <<'EOF'\nFixed.\nEOF\ngh pr view 12",
         "sh <<'EOF'\ngh pr view 12\nEOF",
         "sh -c 'gh pr view 12'",
+        "command sh -c 'gh pr view 12'",
+        "env CI=1 sh -c 'gh pr view 12'",
         "env GH_HOST=example.com gh pr view 12",
         "fd -x gh pr view {}",
         "for x in a; do PATH=/tmp:$PATH gh pr view 12; done",
@@ -192,5 +194,79 @@ fn program_names_survive_quoting_paths_and_windows_suffixes() {
     let named = named_words("sh -c 'g\"\"h pr view' && C:\\tools\\GH.EXE x | /opt/bin/kubectl get");
     for name in ["gh", "kubectl", "sh"] {
         assert!(named.contains(name), "{name}: {named:?}");
+    }
+}
+
+fn git_push(state: &str) -> CompiledNativeCommandControls {
+    let program = packaged_command_program().unwrap();
+    let permission = &program
+        .rules
+        .iter()
+        .find(|rule| rule.rule_id == "command.git.push")
+        .unwrap()
+        .permission_id;
+    controls(
+        serde_json::json!([{"target_kind": "permission", "target_id": permission, "state": state}]),
+        false,
+    )
+}
+
+#[test]
+fn build_commands_behind_command_time_or_plain_env_are_not_evaluation_failures() {
+    let controls = controls(serde_json::json!([]), false);
+    for command in [
+        "command bun run build",
+        "time bun run build",
+        "cd build && command bun run build 2>&1 | tail -10",
+        "NODE_ENV=production bun run build",
+        "env CI=1 FORCE_COLOR=0 bun run lint",
+    ] {
+        assert_ne!(
+            decision(&controls, command).1,
+            "native_command_extension_evaluation_failed",
+            "{command}"
+        );
+    }
+    for command in [
+        "NODE_OPTIONS=--require=./x.js bun run build",
+        "env LD_PRELOAD=./x.so vite build",
+        "GIT_SSH_COMMAND=./x git fetch",
+        "env GIT_SSH_COMMAND=./x git fetch",
+        "NODE_PATH=./evil node build.js",
+        "RUSTFLAGS='-C linker=./x' cargo build",
+        "GOFLAGS=-toolexec=./x go build",
+        "CC=./x npm run build",
+        "APP_FLAG=1 bun run build",
+        "PORT=3000 npm run dev",
+        "VITE_BASE=/app/ vite build",
+    ] {
+        assert_eq!(decision(&controls, command).0, "block", "{command}");
+    }
+}
+
+#[test]
+fn prefixed_git_commands_keep_the_git_permission_decision() {
+    for state in ["disabled", "enabled"] {
+        let controls = git_push(state);
+        let bare = decision(&controls, "git push origin main").0;
+        if state == "disabled" {
+            assert_eq!(bare, "block");
+        }
+        for command in [
+            "command git push origin main",
+            "time git push origin main",
+            "CI=1 git push origin main",
+            "env CI=1 git push origin main",
+        ] {
+            assert_eq!(decision(&controls, command).0, bare, "{state}: {command}");
+        }
+    }
+    let controls = git_push("disabled");
+    for command in [
+        "env GIT_TRACE=1 git push origin main",
+        "APP_FLAG=1 git push origin main",
+        "command command git push origin main",
+    ] {
+        assert_eq!(decision(&controls, command).0, "block", "{command}");
     }
 }

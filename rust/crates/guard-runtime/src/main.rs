@@ -36,6 +36,24 @@ mod archive_acquisition_op;
 mod archive_inspect;
 mod archive_inspect_containment;
 mod archive_verdict_seam;
+#[cfg(unix)]
+mod binding_capture_capture;
+#[cfg(unix)]
+mod binding_capture_crypto;
+#[cfg(unix)]
+mod binding_capture_fs;
+#[cfg(unix)]
+mod binding_capture_join;
+#[cfg(unix)]
+mod binding_capture_json;
+#[cfg(unix)]
+mod binding_capture_op;
+#[cfg(unix)]
+mod binding_capture_receipt;
+#[cfg(unix)]
+mod binding_capture_record;
+#[cfg(all(test, unix))]
+mod binding_capture_vectors_tests;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -56,6 +74,22 @@ mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
 mod claude_guard_question;
+#[cfg(unix)]
+mod claude_hook_bridge;
+#[cfg(unix)]
+mod claude_hook_bridge_auth;
+#[cfg(all(test, unix))]
+mod claude_hook_bridge_fixture;
+#[cfg(unix)]
+mod claude_hook_bridge_http;
+#[cfg(unix)]
+mod claude_hook_bridge_http_text;
+#[cfg(unix)]
+mod claude_hook_bridge_render;
+#[cfg(unix)]
+mod claude_hook_bridge_transport;
+#[cfg(unix)]
+mod claude_hook_bridge_url;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
 mod cloud_action_envelope;
@@ -117,6 +151,11 @@ mod context_digest_json;
 mod context_digest_local_cli;
 mod context_digest_package_scripts;
 mod context_digest_result_check;
+mod continuation_authority_op;
+mod continuation_grants;
+mod continuation_lineage;
+mod continuation_metadata;
+mod continuation_store;
 mod contributed_mcp_decision_op;
 mod critical_floor_op;
 mod cursor_observer_proof_op;
@@ -147,11 +186,15 @@ mod daemon_route_paths;
 mod daemon_route_resolve;
 mod daemon_route_session;
 mod data_flow_analyze_op;
+mod decision_authority_op;
+#[cfg(test)]
+mod decision_authority_vectors_tests;
 mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;
 mod direct_tool_managed_bun;
 mod edge;
+mod edge_git_push;
 mod encrypted_secret_store;
 mod git_execution_safety_binary;
 mod git_execution_safety_checks;
@@ -281,6 +324,8 @@ mod hook_decision_native_facts;
 mod hook_decision_native_facts_tests;
 mod hook_decision_op;
 mod hook_decision_settle;
+#[cfg(unix)]
+mod hook_env_stamp;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
@@ -326,6 +371,7 @@ mod mcp_tool_policy_grants;
 mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
+mod memory_pattern;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_runtime_admission;
@@ -375,6 +421,7 @@ mod policy_bundle_v1_rules;
 mod policy_bundle_v2;
 mod policy_bundle_v2_ack;
 mod policy_decision_lookup_op;
+mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
 mod policy_integrity_resolver;
@@ -402,6 +449,7 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod restricted_process_ceiling;
 mod restricted_pytest_op;
 mod rich_command_model_op;
 mod runner_authority_detector;
@@ -414,12 +462,19 @@ mod runner_sync_url;
 mod runtime_cli;
 mod runtime_detector_run_op;
 mod secrets_cli;
+mod sensitive_request_op;
 #[cfg(all(test, unix))]
 #[allow(dead_code, clippy::pedantic)]
 #[path = "../../guard-command/tests/sfrs_support/mod.rs"]
 mod sfrs_support;
 mod shell_helpers_op;
 mod shim_op;
+mod signal_projection_approval;
+mod signal_projection_decode;
+mod signal_projection_op;
+mod signal_projection_receipt;
+#[cfg(test)]
+mod signal_projection_vectors_tests;
 mod skill_directory_identity_op;
 mod skill_identity_canon;
 mod skill_identity_discovery;
@@ -547,6 +602,13 @@ fn run() -> Result<(), String> {
 }
 
 fn main() {
+    // The runtime also hosts the declarative source-compiler front end so the
+    // wheel ships a single native binary. Dispatch before the panic hook so
+    // compiler behavior (including its own exit paths) stays identical.
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if guard_command::source_cli::is_command(&arguments) {
+        std::process::exit(guard_command::source_cli::main(arguments));
+    }
     std::panic::set_hook(Box::new(|_| eprintln!("native_runtime_panicked")));
     if let Err(code) = run() {
         eprintln!("{code}");

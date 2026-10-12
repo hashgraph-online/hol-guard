@@ -49,9 +49,46 @@ def test_peels_verified_cd_and_bounded_filters(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("command", "core", "output"),
+    [
+        (
+            'python3 -m unittest -q 2>&1; echo "exit=$?"',
+            "python3 -m unittest -q",
+            OutputFilter("all", 0, True, "exit="),
+        ),
+        (
+            'pytest -q 2>&1 | tail -5 ; echo "EXIT CODE: $?"',
+            "pytest -q",
+            OutputFilter("tail", 5, True, "EXIT CODE: "),
+        ),
+        ("pytest -q; echo $?", "pytest -q", OutputFilter("all", 0, False, "")),
+        ("pytest -q 2>&1", "pytest -q", OutputFilter("all", 0, True)),
+    ],
+)
+def test_peels_merged_stderr_and_final_status_echo(
+    tmp_path: Path, command: str, core: str, output: OutputFilter
+) -> None:
+    assert peel_contained_wrapper(command, workspace=tmp_path) == (core, tmp_path, output)
+
+
+def test_status_echo_reports_the_shell_status() -> None:
+    assert OutputFilter("all", 0, True, "exit=").status_line(3) == "exit=3\n"
+    # After a pipe, `$?` is the filter's status, not the producer's.
+    assert OutputFilter("tail", 5, True, "exit=").status_line(3) == "exit=0\n"
+    assert OutputFilter("all", 0, True).status_line(3) is None
+
+
+@pytest.mark.parametrize(
     "command",
     [
         "cd {web} && pytest -q && rm -rf /",
+        "cd {web} && pytest -q; echo 'exit=$?'",
+        'cd {web} && pytest -q; echo "exit=$?" > out.txt',
+        'cd {web} && pytest -q; echo "$(id)$?"',
+        'cd {web} && pytest -q; echo "exit=$?"; rm -rf /',
+        'cd {web} && pytest -q; rm -rf /; echo "exit=$?"',
+        'cd {web} && pytest -q; echo "exit=$?" "$?"',
+        "cd {web} && pytest -q; echo exit is $?",
         "cd {web} && pytest -q; ls",
         "cd {web} && cd .. && pytest -q",
         "cd {outside} && pytest -q",
@@ -118,6 +155,38 @@ def test_quoted_words_are_single_arguments(tmp_path: Path, command: str, core: s
     assert peel_contained_wrapper(command, workspace=tmp_path) == (core, tmp_path, output)
 
 
+def test_sandbox_merge_keeps_alternating_writes_in_order(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    script = tmp_path / "alternate.py"
+    script.write_text(
+        "import sys\n"
+        "sys.stdout.write('A\\n')\n"
+        "sys.stdout.flush()\n"
+        "sys.stderr.write('B\\n')\n"
+        "sys.stderr.flush()\n"
+        "sys.stdout.write('C\\n')\n"
+        "sys.stdout.flush()\n",
+        encoding="utf-8",
+    )
+    import os
+    import sys
+
+    from codex_plugin_scanner.guard.runtime.restricted_pytest_sandbox import _run_backend_process
+
+    def run(*, merge_stderr: bool) -> tuple[int, str, str]:
+        code = _run_backend_process(
+            [sys.executable, str(script)],
+            env={"PATH": os.environ.get("PATH", ""), "PYTHONDONTWRITEBYTECODE": "1"},
+            timeout_seconds=30,
+            cwd=tmp_path,
+            merge_stderr=merge_stderr,
+        )
+        captured = capsys.readouterr()
+        return code, captured.out, captured.err
+
+    assert run(merge_stderr=True) == (0, "A\nB\nC\n", "")
+    assert run(merge_stderr=False) == (0, "A\nC\n", "B\n")
+
+
 def emit() -> None:
     import sys
 
@@ -133,7 +202,7 @@ def test_output_filter_runs_in_process(capsys: pytest.CaptureFixture[str]) -> No
     captured = capsys.readouterr()
     assert captured.out == "out 2\nout 3\n"
     assert captured.err == "err 0\nerr 1\nerr 2\n"
-    # With 2>&1 the sandbox's stdout precedes its stderr, then the bound applies.
+    # In-process writes keep call order. emit() finishes stdout before stderr.
     with bounded_output(OutputFilter("tail", 4, merge_stderr=True)):
         emit()
     assert capsys.readouterr() == ("out 3\nerr 0\nerr 1\nerr 2\n", "")
@@ -182,6 +251,31 @@ def test_sink_reauthorizes_the_core_in_its_resolved_directory(
     ]
     lines = [f"out {index}\n" for index in range(4)] + [f"err {index}\n" for index in range(3)]
     assert capsys.readouterr() == ("".join(lines), "")
+
+
+def test_sink_prints_the_status_echo_after_contained_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", lambda *args, **kwargs: None)
+
+    def execute(*args, **kwargs):
+        emit()
+        return 1
+
+    def authorize(original):
+        calls.append(original["tool_input"]["command"])
+        return required_profile()
+
+    monkeypatch.setattr(sink, "run_restricted_pytest", execute)
+    original = {"tool_name": "bash", "tool_input": {"command": 'pytest -q 2>&1; echo "exit=$?"'}}
+    exit_code = sink.run_authorized_contained_test(
+        original, workspace=tmp_path, timeout_seconds=20, authorize=authorize
+    )
+    assert exit_code == 0
+    assert calls == ['pytest -q 2>&1; echo "exit=$?"', "pytest -q"]
+    lines = [f"out {index}\n" for index in range(4)] + [f"err {index}\n" for index in range(3)]
+    assert capsys.readouterr() == ("".join(lines) + "exit=1\n", "")
 
 
 @pytest.mark.parametrize("failure", ["allow", "review", "watch", "no-profile"])
@@ -289,6 +383,35 @@ def test_home_itself_is_never_a_sibling_repository(tmp_path: Path) -> None:
     assert sibling_project_root(home / "loose", home=home) is None
     with pytest.raises(ValueError):
         peel_contained_wrapper(f"cd {home / 'loose'} && pytest -q", workspace=workspace, home=home)
+
+
+def test_unquoted_home_cd_expands_from_home(tmp_path: Path) -> None:
+    home, workspace, sibling = sibling_home(tmp_path)
+    command = "cd ~/sibling-worktree/dashboard && node node_modules/vite/bin/vite.js build 2>&1 | tail -12"
+    assert peel_contained_wrapper(command, workspace=workspace, home=home) == (
+        "node node_modules/vite/bin/vite.js build",
+        (sibling / "dashboard").resolve(),
+        OutputFilter("tail", 12, merge_stderr=True),
+    )
+    assert peel_contained_wrapper("cd ~/project && pytest -q | tail -5", workspace=workspace, home=home)[1] == (
+        workspace.resolve()
+    )
+    # A quoted `~` stays a literal relative directory, and no home means no expansion.
+    for rejected in ('cd "~/project" && pytest -q', "cd '~/project' && pytest -q", "cd ~nobody && pytest -q"):
+        with pytest.raises((ValueError, OSError)):
+            peel_contained_wrapper(rejected, workspace=workspace, home=home)
+    with pytest.raises(ValueError):
+        peel_contained_wrapper("cd ~/project && pytest -q", workspace=workspace)
+    doubled = "cd ~//sibling-worktree/dashboard && node node_modules/vite/bin/vite.js build 2>&1 | tail -12"
+    assert peel_contained_wrapper(doubled, workspace=workspace, home=home)[1] == (
+        sibling / "dashboard"
+    ).resolve()
+    for mixed in (
+        'cd ~"/sibling-worktree/dashboard" && node node_modules/vite/bin/vite.js build',
+        "cd ~'/sibling-worktree/dashboard' && node node_modules/vite/bin/vite.js build",
+    ):
+        with pytest.raises((ValueError, OSError)):
+            peel_contained_wrapper(mixed, workspace=workspace, home=home)
 
 
 def test_sink_moves_the_approved_root_to_the_sibling_repository(

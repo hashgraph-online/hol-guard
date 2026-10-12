@@ -13,7 +13,6 @@ from urllib.parse import parse_qs
 
 if __package__:
     from ..approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    from ..codex_binding_capture import record_bridge_ingress
     from ..codex_hook_bridge_runtime import BridgeConfig
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
@@ -30,6 +29,7 @@ if __package__:
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from ..native_codex_binding_capture import record_bridge_ingress
     from .codex_contained_tests import route_codex_containment
     from .codex_daemon_bridge_failure_reason import AUTHENTICATION_FAILED_REASON, daemon_failure_reason
     from .codex_daemon_hook_bridge_flow import bridge_review_response
@@ -54,7 +54,6 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         codex_hook_response as _codex_hook_response,
     )
     from codex_plugin_scanner.guard.approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    from codex_plugin_scanner.guard.codex_binding_capture import record_bridge_ingress
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         BridgeConfig,
     )
@@ -79,6 +78,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from codex_plugin_scanner.guard.native_codex_binding_capture import record_bridge_ingress
 
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1

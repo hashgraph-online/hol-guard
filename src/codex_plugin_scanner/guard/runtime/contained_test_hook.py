@@ -5,14 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import stat
-from collections.abc import Callable, Mapping
+import sys
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
 from .contained_wrapper import bounded_output, peel_contained_wrapper, sibling_project_root
-from .restricted_inline_eval import is_inline_eval, prepare_restricted_inline_eval, run_restricted_inline_eval
+from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
     PACKAGE_TEST_REASON,
@@ -108,6 +111,92 @@ def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: 
         raise _reject() from error
 
 
+# Mirrors the native inert-assignment allowlist: these names change output or
+# presentation, never which program runs or what it loads.
+_INERT_ENVIRONMENT_NAMES = frozenset(
+    {
+        "CI",
+        "NODE_ENV",
+        "FORCE_COLOR",
+        "NO_COLOR",
+        "CLICOLOR",
+        "CLICOLOR_FORCE",
+        "TERM",
+        "TZ",
+        "LANG",
+        "LANGUAGE",
+        "COLUMNS",
+        "LINES",
+        "DEBUG",
+        "NODE_NO_WARNINGS",
+        "RUST_LOG",
+        "RUST_BACKTRACE",
+        "PYTHONUNBUFFERED",
+        "PYTHONDONTWRITEBYTECODE",
+    }
+)
+
+
+def _inert_assignment(word: str) -> tuple[str, str] | None:
+    name, separator, value = word.partition("=")
+    if (
+        separator
+        and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+        and (name in _INERT_ENVIRONMENT_NAMES or name.startswith("LC_"))
+    ):
+        return name, value
+    return None
+
+
+def _split_command_prefix(command: list[str]) -> tuple[list[str], dict[str, str]]:
+    """Peel `command`/`time`/`env` prefixes and inert `NAME=value` assignments.
+
+    The native model reads `CI=1 command bun run build` as `bun run build`
+    with an inert assignment. An option such as `command -v` or `env -i`
+    keeps its prefix, and any other assignment stays in the command, so the
+    core is rejected.
+    """
+    assignments: dict[str, str] = {}
+    for _ in range(16):
+        if len(command) > 1 and command[0] in {"command", "time", "env"} and not command[1].startswith("-"):
+            command = command[1:]
+        elif command and (assignment := _inert_assignment(command[0])) is not None:
+            assignments[assignment[0]] = assignment[1]
+            command = command[1:]
+        else:
+            break
+    return command, assignments
+
+
+@contextmanager
+def _assignments_applied(assignments: Mapping[str, str]) -> Iterator[None]:
+    """Export the assignments to the runner's source environment for one run.
+
+    Each restricted profile still filters that environment, exactly as it
+    filters a variable the agent's shell exported.
+    """
+    previous = {name: os.environ.get(name) for name in assignments}
+    os.environ.update(assignments)
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def _contained_receipt(receipt: object) -> bool:
+    return (
+        isinstance(receipt, Mapping)
+        and receipt.get("decision") == "deny"
+        and receipt.get("policy_action") == "sandbox-required"
+        and isinstance(receipt.get("required_execution_profile"), str)
+        and receipt.get("observe_mode") is not True
+    )
+
+
 def run_authorized_contained_test(
     payload: dict[str, object],
     *,
@@ -116,6 +205,7 @@ def run_authorized_contained_test(
     timeout_seconds: int,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    merge_stderr: bool = False,
 ) -> int:
     """Recheck native authority for the original input before protected execution.
 
@@ -135,14 +225,7 @@ def run_authorized_contained_test(
     if peeled is not None:
         # The wrapped original must carry the receipt; the core is then
         # re-authorized in its resolved directory by the recursive call.
-        receipt = authorize(payload)
-        if (
-            not isinstance(receipt, Mapping)
-            or receipt.get("decision") != "deny"
-            or receipt.get("policy_action") != "sandbox-required"
-            or not isinstance(receipt.get("required_execution_profile"), str)
-            or receipt.get("observe_mode") is True
-        ):
+        if not _contained_receipt(authorize(payload)):
             raise _reject()
         core, directory, output = peeled
         if not _path_is_within(directory, workspace.resolve(strict=True)):
@@ -151,69 +234,53 @@ def run_authorized_contained_test(
                 raise _reject()
             workspace = sibling
         with bounded_output(output):
-            return run_authorized_contained_test(
+            exit_code = run_authorized_contained_test(
                 {**payload, "cwd": str(directory), "tool_input": {**tool_input, "command": core}},
                 workspace=workspace,
                 authorize=authorize,
                 timeout_seconds=timeout_seconds,
                 cwd=directory,
                 home_dir=home_dir,
+                merge_stderr=output is not None and output.merge_stderr,
             )
+        status_line = output.status_line(exit_code) if output is not None else None
+        if status_line is None:
+            return exit_code
+        # The shell's status is the echo's own.
+        sys.stdout.write(status_line)
+        sys.stdout.flush()
+        return 0
     try:
-        command = shlex.split(tool_input["command"], posix=True)
+        command, assignments = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
     except ValueError as error:
         raise _reject() from error
+    if assignments:
+        # Like a wrapper: the original carries the receipt, then the core is
+        # authorized again and runs with the assignments exported.
+        if not command or not _contained_receipt(authorize(payload)):
+            raise _reject()
+        with _assignments_applied(assignments):
+            return run_authorized_contained_test(
+                {**payload, "tool_input": {**tool_input, "command": shlex.join(command)}},
+                workspace=workspace,
+                authorize=authorize,
+                timeout_seconds=timeout_seconds,
+                cwd=cwd,
+                home_dir=home_dir,
+                merge_stderr=merge_stderr,
+            )
     package_test = is_package_test(command)
     if package_test:
         command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
-    inline_eval = is_inline_eval(command)
-    # Fail before the authority request if the backend cannot enforce the profile.
-    node_runtime_args = (
-        restricted_node_test._node_runtime_args(command)
-        if command and Path(command[0]).name in {"node", "nodejs"}
-        else ()
-    )
-    node_test_index = 1 + len(node_runtime_args)
-    node_test = (
-        len(command) > node_test_index
-        and Path(command[0]).name in {"node", "nodejs"}
-        and command[node_test_index] == "--test"
-    )
-    vitest = bool(command) and (
-        Path(command[0]).name in {"bunx", "npx", "vitest"}
-        or restricted_vitest.bun_vitest_invocation(command) is not None
-        or restricted_vitest.tsx_test_invocation(command) is not None
-        or (
-            len(command) > 1
-            and Path(command[0]).name in {"node", "nodejs"}
-            and any(argument.endswith("/node_modules/vitest/vitest.mjs") for argument in command[1:3])
-        )
-    )
-    git = bool(command) and Path(command[0]).name == "git"
-    node_tool = (
-        restricted_vitest.bun_vitest_invocation(command) is None
-        and bool(command)
-        and (
-            Path(command[0]).name in {"eslint", "tsc", "vite", "bun", "npm", "pnpm"}
-            or (
-                Path(command[0]).name in {"bunx", "npx"}
-                and any(arg in {"eslint", "tsc", "vite"} for arg in command[1:3])
-            )
-            or (
-                len(command) > 1
-                and Path(command[0]).name in {"node", "nodejs"}
-                and any(
-                    argument.endswith(
-                        (
-                            "/node_modules/eslint/bin/eslint.js",
-                            "/node_modules/typescript/bin/tsc",
-                            "/node_modules/vite/bin/vite.js",
-                        )
-                    )
-                    for argument in command[1:3]
-                )
-            )
-        )
+    from ..native_restricted_pytest import restricted_native
+
+    kinds = restricted_native("contained_kind", {"command": command}, dict)
+    if set(kinds) != {"inline_eval", "node_test", "vitest", "git", "node_tool"} or any(
+        type(value) is not bool for value in kinds.values()
+    ):
+        raise _reject()
+    inline_eval, node_test, vitest, git, node_tool = (
+        kinds[key] for key in ("inline_eval", "node_test", "vitest", "git", "node_tool")
     )
     inline_plan = node_tool_plan = git_plan = vitest_plan = node_test_plan = None
     if inline_eval:
@@ -292,17 +359,23 @@ def run_authorized_contained_test(
         if not required(authorize(underlying)):
             raise _reject()
         return run_restricted_inline_eval(
-            inline_plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
+            inline_plan,
+            timeout_seconds=timeout_seconds,
+            authorize_capability=authorize_capability,
+            merge_stderr=merge_stderr,
         )
     if node_tool_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_tool_plan.command)}}
         if not required(authorize(underlying)):
             raise _reject()
         return restricted_node_tool.run_restricted_node_tool(
-            node_tool_plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
+            node_tool_plan,
+            timeout_seconds=timeout_seconds,
+            authorize_capability=authorize_capability,
+            merge_stderr=merge_stderr,
         )
     if git_plan is not None:
-        return restricted_git.run_restricted_git(git_plan, timeout_seconds=timeout_seconds)
+        return restricted_git.run_restricted_git(git_plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
     if vitest_plan is not None:
         # Check the resolved Node/script action too: wrapper consent must not
         # override an extension deny for the underlying executable.
@@ -318,6 +391,7 @@ def run_authorized_contained_test(
             timeout_seconds=timeout_seconds,
             prepared_plan=vitest_plan,
             authorize_capability=authorize_capability,
+            merge_stderr=merge_stderr,
         )
     if node_test_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_test_plan.command)}}
@@ -330,6 +404,7 @@ def run_authorized_contained_test(
             timeout_seconds=timeout_seconds,
             prepared_plan=node_test_plan,
             authorize_capability=authorize_capability,
+            merge_stderr=merge_stderr,
         )
     return run_restricted_pytest(
         command,
@@ -337,4 +412,5 @@ def run_authorized_contained_test(
         cwd=cwd,
         timeout_seconds=timeout_seconds,
         read_only_workspace=True,
+        merge_stderr=merge_stderr,
     )

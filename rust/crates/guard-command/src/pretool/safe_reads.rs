@@ -38,8 +38,12 @@ pub(super) fn safe_listing_arguments(
         if argument.starts_with('-') {
             return !argument.contains('R');
         }
-        command_read_target(argument, context, true)
+        (command_read_target(argument, context, true)
+            && !super::search::skill_link_resolves_over_home(argument, context))
             || super::search::agent_root_listing(argument, context, false)
+            || (super::search::skill_listing_root(argument, context)
+                && !super::search::skill_link_resolves_over_home(argument, context))
+            || super::listing_reads::absent_listing_operand(argument, context)
     })
 }
 

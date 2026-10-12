@@ -55,7 +55,7 @@ fn normalize(text: &str) -> String {
 
 /// Python `str.lower()`, including final sigma. This is not casefold:
 /// `ß` stays `ß`, and `İ` still expands to `i` plus a combining dot.
-fn python_lower(text: &str) -> String {
+pub(crate) fn python_lower(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut lowered = String::with_capacity(text.len());
     for (index, ch) in chars.iter().copied().enumerate() {

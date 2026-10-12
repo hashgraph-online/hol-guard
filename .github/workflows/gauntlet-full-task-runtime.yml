@@ -1,0 +1,106 @@
+name: Gauntlet full-task runtime
+
+# Builds the Linux arm64 native Guard wheel that the Docker full-task Gauntlet installs when it
+# runs the agent container natively on an arm64 host. Not a required check; never runs on push.
+on:
+  pull_request:
+    paths:
+      - 'ci/gauntlet/docker/**'
+      - 'ci/gauntlet/full_task*'
+      - '.github/workflows/gauntlet-full-task-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gauntlet-full-task-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-arm64-build:
+    name: Linux arm64 static native wheel build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      TARGET: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: aarch64-unknown-linux-musl
+      - name: Install static Linux linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Build static native runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" -p hol-guard-runtime
+          runtime="rust/target/$TARGET/release/hol-guard-runtime"
+          LDD_OUTPUT=$(ldd "$runtime" 2>&1 || true)
+          if grep -Eq 'not a dynamic executable|statically linked' <<< "$LDD_OUTPUT"; then
+            echo "Runtime is static"
+          else
+            echo "Linux runtime must be statically linked" >&2
+            printf '%s\n' "$LDD_OUTPUT" >&2
+            exit 1
+          fi
+          "$runtime" self-test --json
+      - name: Build and prove the declarative source compiler
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" -p guard-command --bin guard-command-source
+          compiler="rust/target/$TARGET/release/guard-command-source"
+          "$compiler" export-trust > contracts/extensions/build-trust-class-map.v1.json
+          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
+          "$compiler" compile < source-build.json > source-compiled.json
+          jq --slurpfile build source-build.json '. + {build:$build[0]}' rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json > source-fixtures.json
+          "$compiler" test < source-fixtures.json > source-fixture-results.json
+      - name: Assemble and install native wheel
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          uv build --wheel --out-dir pure-dist
+          runtime="rust/target/$TARGET/release/hol-guard-runtime"
+          compiler="rust/target/$TARGET/release/guard-command-source"
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag manylinux_2_17_aarch64 \
+            --target "$TARGET" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --source-compiler "$compiler" \
+            --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
+            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+          uv pip uninstall --python .venv/bin/python hol-guard
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+          (cd native-dist && sha256sum ./*.whl)
+      - name: Upload the arm64 native wheel
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-build-linux-arm64
+          path: native-dist/*.whl
+          if-no-files-found: error
+          compression-level: 0

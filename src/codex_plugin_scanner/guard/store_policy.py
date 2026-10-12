@@ -48,13 +48,9 @@ if TYPE_CHECKING:
 
 # ruff: noqa: F403,F405
 from .action_lattice import guard_action_severity
-from .memory_pattern_fingerprint import (
-    build_exact_command_memory_artifact_id,
-    build_exact_shell_command_memory_artifact_id,
-    build_memory_pattern_fingerprint,
-)
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
+from .native_memory_pattern import memory_pattern_verdict
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from .native_policy_snapshot_windows_support import _runtime_state_directory
@@ -75,23 +71,7 @@ APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON = "approval_reuse_integrity_failure
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
 _RESIDENT_VERDICT_ATTEMPTS = 6
-
-
-def _memory_artifact_is_shell_command(
-    artifact_type: str | None,
-    artifact_name: str | None,
-) -> bool:
-    normalized_type = artifact_type.strip().casefold() if isinstance(artifact_type, str) else ""
-    if normalized_type in {"bash", "shell", "shell_command"}:
-        return True
-    if normalized_type != "tool_action_request" or not isinstance(artifact_name, str):
-        return False
-    normalized_name = artifact_name.strip().casefold()
-    return normalized_name in {"bash", "shell"} or normalized_name.startswith(("bash ", "shell "))
-
-
-def _distinct_non_null(values: Sequence[str | None]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(value for value in values if value is not None))
+_DEGRADED_AUTHORITY_REVISION = -1
 
 
 @dataclass(frozen=True)
@@ -126,6 +106,18 @@ def _degraded_lookup_evidence(
     )
 
 
+def _remembered_rules_disabled(lookup: PolicyDecisionLookupResult) -> bool:
+    """Whether the lookup is the empty answer of a home that serves no authority."""
+
+    trust = lookup.get("trust_status")
+    return (
+        lookup["decision"] is None
+        and lookup["authority_revision"] == _DEGRADED_AUTHORITY_REVISION
+        and isinstance(trust, dict)
+        and trust.get("remembered_rules") == "disabled_degraded"
+    )
+
+
 def memory_lookup_candidates(
     harness: str,
     artifact_id: str | None,
@@ -133,32 +125,23 @@ def memory_lookup_candidates(
     memory_command: str | None,
     memory_artifact_type: str | None,
     memory_artifact_name: str | None,
+    guard_home: Path | None = None,
 ) -> tuple[tuple[str, ...], str | None]:
-    """Exact-command ids and the memory-pattern id probed after the direct artifact."""
+    """Exact-command ids and the memory-pattern id probed after the direct artifact.
 
-    exact_ids: tuple[str, ...] = ()
-    if _memory_artifact_is_shell_command(memory_artifact_type, memory_artifact_name):
-        exact_ids = tuple(
-            candidate
-            for candidate in _distinct_non_null(
-                (
-                    build_exact_shell_command_memory_artifact_id(memory_command),
-                    build_exact_command_memory_artifact_id(memory_command),
-                )
-            )
-            if candidate != artifact_id
-        )
-    memory_pattern = build_memory_pattern_fingerprint(
+    The resident builds both; a native failure raises rather than skipping the
+    remembered-decision probes.
+    """
+
+    verdict = memory_pattern_verdict(
         command=memory_command,
         artifact_type=memory_artifact_type,
         artifact_id=artifact_id,
         artifact_name=memory_artifact_name,
         harness=harness,
+        guard_home=guard_home,
     )
-    memory_id = (
-        None if memory_pattern is None else f"memory:{harness}:{memory_pattern.kind}:{memory_pattern.fingerprint}"
-    )
-    return exact_ids, (None if memory_id == artifact_id else memory_id)
+    return verdict.exact_artifact_ids, verdict.memory_artifact_id
 
 
 def _most_restrictive_policy_lookup(
@@ -977,6 +960,10 @@ class StorePolicyMixin:
             consume_one_shot=consume_one_shot,
         )
         candidate_lookups = [direct_lookup]
+        # A degraded store honors no saved decision, so the remembered-decision
+        # probes cannot change the answer and need no resident fingerprint.
+        if _remembered_rules_disabled(direct_lookup):
+            return direct_lookup
         if consume_one_shot and (
             direct_lookup["decision"] is not None or direct_lookup.get("ignored_local_integrity") is not None
         ):
@@ -987,6 +974,7 @@ class StorePolicyMixin:
             memory_command=memory_command,
             memory_artifact_type=memory_artifact_type,
             memory_artifact_name=memory_artifact_name,
+            guard_home=Path(self.guard_home),
         )
         for exact_command_artifact_id in exact_command_artifact_ids:
             exact_command_lookup = self.resolve_policy_decision_lookup(
@@ -1090,7 +1078,7 @@ class StorePolicyMixin:
                 "decision": None,
                 "ignored_local_integrity": None,
                 "trust_status": evidence.degraded_trust_status,
-                "authority_revision": -1,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
             }
 
         request: dict[str, object] = {

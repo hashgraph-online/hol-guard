@@ -12,8 +12,11 @@ use fancy_regex::Regex as FancyRegex;
 
 use crate::codex_output_env::Ctx;
 use crate::codex_output_py::py_strip;
+#[cfg(unix)]
 use crate::contained_runner::common::normpath;
 use crate::false_positive_rules::fd_arg_requests_exec;
+#[cfg(windows)]
+use crate::home_path_text::normpath_nt as normpath;
 use crate::hook_adapter_pytext::compile_fancy;
 use crate::sfrs_developer_inspection::{
     fd_exec_sed_read_only_args_are_safe, find_args_use_write_or_unsafe_exec_action,

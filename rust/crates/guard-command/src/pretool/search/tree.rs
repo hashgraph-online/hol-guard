@@ -39,7 +39,7 @@ pub(in crate::pretool) const SECRET_EXTENSIONS: &[&str] = &[
 
 /// Names-only recursive listing (`ls -R`).
 pub(in crate::pretool) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bool {
-    safe_walk_target(value, context, &[], &[])
+    safe_walk_target(value, context, &[], &[], false)
         || super::agent_root::agent_root_listing(value, context, true)
 }
 
@@ -50,81 +50,32 @@ pub(in crate::pretool) fn safe_recursive_search_target(
     value: &str,
     context: ReadContext<'_>,
 ) -> bool {
-    safe_recursive_target_excluding(value, context, &[], &[])
+    safe_recursive_target_excluding(value, context, &[], &[], false)
 }
 
+/// `git_metadata` lets a `grep -r` walk read a screened `.git` entry.
 pub(super) fn safe_recursive_target_excluding(
     value: &str,
     context: ReadContext<'_>,
     excluded_files: &[&str],
     excluded_directories: &[&str],
+    git_metadata: bool,
 ) -> bool {
     if expanded_operand(value, context).is_some_and(|root| inside_agent_state(&root, context)) {
         return false;
     }
-    safe_walk_target(value, context, excluded_files, excluded_directories)
+    safe_walk_target(
+        value,
+        context,
+        excluded_files,
+        excluded_directories,
+        git_metadata,
+    )
 }
 
-/// An absolute or `~` `rg` root that names a real directory below the cwd is
-/// the same search as its cwd-relative spelling, which `rg` already confines
-/// to non-hidden, non-ignored entries without following links. Agents working
-/// from a multi-repository parent spell child repositories this way, and the
-/// metadata walk would refuse them for their `.git` directory alone.
-///
-/// Every component below the cwd must be a non-hidden real directory, so the
-/// root cannot reach a dot directory or leave the cwd through a link, and the
-/// relative spelling must clear the same screens as a typed relative operand.
-pub(in crate::pretool) fn rg_root_inside_cwd(value: &str, context: ReadContext<'_>) -> bool {
-    home_relative(context.cwd.unwrap_or_default(), context.home_dir)
-        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
-        .is_some_and(|cwd| root_below(value, context, &cwd, false))
-}
+pub(in crate::pretool) use super::roots::{listing_root_below_home, rg_root_inside_cwd};
 
-/// `fd` prints names, never contents, and skips hidden and ignored entries
-/// without following links. A names-only listing may therefore start at any
-/// non-hidden directory strictly below home, such as the parent that holds the
-/// current repository and its siblings, under the same component screens.
-pub(in crate::pretool) fn listing_root_below_home(value: &str, context: ReadContext<'_>) -> bool {
-    context
-        .home_dir
-        .and_then(|home| std::fs::canonicalize(home).ok())
-        .is_some_and(|home| root_below(value, context, &home, true))
-}
-
-fn root_below(value: &str, context: ReadContext<'_>, base: &Path, strict: bool) -> bool {
-    if !value.starts_with(['/', '~'])
-        || value.len() > 4096
-        || value.contains(HAZARDS)
-        || value.contains(['*', '?', '[', ']', '{', '}'])
-        || value.split('/').any(|part| part == "..")
-        || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
-    {
-        return false;
-    }
-    let Some(root) = expanded_operand(value, context) else {
-        return false;
-    };
-    let Ok(canonical) = std::fs::canonicalize(&root) else {
-        return false;
-    };
-    let Ok(relative) = canonical.strip_prefix(base) else {
-        return false;
-    };
-    let relative = relative.to_string_lossy().replace('\\', "/");
-    canonical == root
-        && canonical.is_dir()
-        && !(strict && relative.is_empty())
-        && relative
-            .split('/')
-            .filter(|part| !part.is_empty())
-            .all(|part| !part.starts_with('.'))
-        && !inside_agent_state(&canonical, context)
-        && (relative.is_empty()
-            || !(super::sensitive_path_argument(&relative)
-                || super::glob_can_select_sensitive_path(&relative)))
-}
-
-fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_>) -> bool {
+pub(super) fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_>) -> bool {
     std::fs::canonicalize(path).is_ok_and(|canonical| {
         super::super::read_paths::inside_agent_state_tree(&canonical, context.home_dir)
     })
@@ -135,6 +86,7 @@ fn safe_walk_target(
     context: ReadContext<'_>,
     excluded_files: &[&str],
     excluded_directories: &[&str],
+    git_metadata: bool,
 ) -> bool {
     if !super::super::safe_reads::bounded_read_target(value, context.home_dir, context.cwd, true) {
         return false;
@@ -142,7 +94,7 @@ fn safe_walk_target(
     let Some(root) = expanded_operand(value, context) else {
         return false;
     };
-    walk(root, excluded_files, excluded_directories)
+    walk(root, excluded_files, excluded_directories, git_metadata)
 }
 
 /// A recursive `ls` operand that the shell passes through literally. Only
@@ -155,7 +107,7 @@ pub(in crate::pretool) fn safe_literal_bracket_tree(
     let Some(root) = checked_directory(value, context) else {
         return false;
     };
-    !recursive || walk(root, &[], &[])
+    !recursive || walk(root, &[], &[], false)
 }
 
 /// A glob operand that is expanded here, component by component. Every
@@ -177,7 +129,7 @@ pub(in crate::pretool) fn safe_glob_operand(
         .is_some_and(|part| part.len() > 1 && part.bytes().all(|byte| byte == b'*'));
     matches.into_iter().all(|path| {
         if recursive || final_globstar {
-            walk(path, &[], &[])
+            walk(path, &[], &[], false)
         } else {
             true
         }
@@ -207,11 +159,11 @@ pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadCon
     expand_glob(value, context).is_some_and(|matches| {
         matches
             .into_iter()
-            .all(|path| !inside_agent_state(&path, context) && walk(path, &[], &[]))
+            .all(|path| !inside_agent_state(&path, context) && walk(path, &[], &[], false))
     })
 }
 
-fn home_relative(value: &str, home: Option<&str>) -> Option<PathBuf> {
+pub(super) fn home_relative(value: &str, home: Option<&str>) -> Option<PathBuf> {
     if value == "~" || value.starts_with("~/") {
         Some(Path::new(home?).join(value.strip_prefix("~/").unwrap_or("")))
     } else {
@@ -285,7 +237,12 @@ pub(super) fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> boo
         && !guard_secure_fs::credential_named_path(relative)
 }
 
-pub(super) fn walk(root: PathBuf, excluded_files: &[&str], excluded_directories: &[&str]) -> bool {
+pub(super) fn walk(
+    root: PathBuf,
+    excluded_files: &[&str],
+    excluded_directories: &[&str],
+    git_metadata: bool,
+) -> bool {
     let mut pending = vec![(root.clone(), 0_usize)];
     let mut inspected = 0_usize;
     // Inspect metadata only. Never follow links or read a secret to classify it.
@@ -306,6 +263,12 @@ pub(super) fn walk(root: PathBuf, excluded_files: &[&str], excluded_directories:
                     || (metadata.is_file() && excluded_files.contains(&name))
             }) {
                 continue;
+            }
+            if git_metadata && basename == Some(".git") {
+                match super::git_metadata::safe_git_entry(&path, &metadata) {
+                    true => continue,
+                    false => return false,
+                }
             }
             if !descendant_allowed(&path, &root, metadata.is_file()) {
                 return false;

@@ -64,6 +64,7 @@ from ..trusted_local_tools import (
     matching_local_tool_grant,
 )
 from ._commands_shared import *
+from .commands_hook_decision_copy import native_hook_decision_copy
 from .commands_hook_github_workflow import (
     claimed_approval_request_id,
     github_workflow_approval_evidence,
@@ -1019,48 +1020,29 @@ def evaluate_native_artifact_hook(
     )
     if action_envelope is not None:
         action_envelope = action_envelope.with_pre_execution_result(policy_action)
-    decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
-    decision_v2_payload = decision_v2.to_dict()
-    copy_answer = native_hook_compose(
-        "decision_copy",
-        {
-            "policy_action": policy_action,
-            "package": (
-                {
-                    "reason_codes": [
-                        _optional_string(reason.get("code")) or ""
-                        for reason in package_evaluation.reasons
-                        if isinstance(reason, Mapping)
-                    ],
-                    "user_title": package_evaluation.user_copy.title,
-                    "user_summary": package_evaluation.user_copy.summary,
-                    "user_harness_message": package_evaluation.user_copy.harness_message,
-                }
-                if package_evaluation is not None
-                else None
-            ),
-            "package_policy_action": package_policy_action,
-            "has_compound_findings": has_compound_findings,
-            "compound_finding_count": compound_finding_count if has_compound_findings else None,
-            "risk_summary": risk_summary,
-            "scanner_raised_to_block": scanner_raised_to_block,
-            "has_scanner_evidence": bool(scanner_evidence),
-            "scanner_primary_signal": scanner_risk_signals[0] if scanner_risk_signals else None,
-            "base_user_body": decision_v2_payload.get("user_body"),
-            "base_harness_message": decision_v2_payload.get("harness_message"),
-            "base_dashboard_primary_detail": decision_v2_payload.get("dashboard_primary_detail"),
-            "remembered_rule_reason": (
-                _remembered_rule_rejection_reason(
-                    response_payload={"remembered_rule_rejection": remembered_rule_rejection},
-                    artifact=runtime_artifact,
-                )
-                if remembered_rule_rejection is not None
-                else None
-            ),
-        },
+    copy_answer = native_hook_decision_copy(
+        composer=native_hook_compose,
         guard_home=guard_home,
+        policy_action=policy_action,
+        decision_signals=decision_signals,
+        package_evaluation=package_evaluation,
+        package_policy_action=package_policy_action,
+        has_compound_findings=has_compound_findings,
+        compound_finding_count=compound_finding_count,
+        risk_summary=risk_summary,
+        scanner_raised_to_block=scanner_raised_to_block,
+        has_scanner_evidence=bool(scanner_evidence),
+        scanner_risk_signals=scanner_risk_signals,
+        remembered_rule_reason=(
+            _remembered_rule_rejection_reason(
+                response_payload={"remembered_rule_rejection": remembered_rule_rejection},
+                artifact=runtime_artifact,
+            )
+            if remembered_rule_rejection is not None
+            else None
+        ),
     )
-    decision_v2_payload.update(cast("dict[str, object]", copy_answer["decision_overrides"]))
+    decision_v2_payload = cast("dict[str, object]", copy_answer["decision_v2"])
     incident = build_incident_context(
         harness=args.harness,
         artifact=runtime_artifact,

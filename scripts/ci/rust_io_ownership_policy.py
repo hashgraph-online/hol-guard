@@ -53,6 +53,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
         # Native acquisition request binding and managed trust DTO transport.
         "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
+        # Request identity and typed portable-policy DTO transport only.
+        "src/codex_plugin_scanner/guard/native_policy_document.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         # Per-request status reuse. stat() only rechecks the validated binary.
         "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
@@ -75,6 +77,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
         # Resident request transport; the observed git path is a fact, never a verdict.
         "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
+        # Resident sensitive-request transport; the observed git path is a fact, never a verdict.
+        "src/codex_plugin_scanner/guard/native_sensitive_request.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     }
 )
@@ -230,6 +234,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident runner-authority response envelope and
         # projects typed runner state to it; Rust owns every authority answer.
         "src/codex_plugin_scanner/guard/native_runner_authority.py",
+        "src/codex_plugin_scanner/guard/native_continuation_authority.py",
+        "src/codex_plugin_scanner/guard/native_decisions.py",
+        "src/codex_plugin_scanner/guard/native_signal_projection.py",
         # Fused CLI input/identity DTO from the existing bound resident stream.
         "src/codex_plugin_scanner/guard/native_cli_runtime_support.py",
         "src/codex_plugin_scanner/guard/runtime/runner_native_authority.py",
@@ -423,14 +430,4 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/trusted_package_tools.py",
     }
 )
-_PERSISTENCE_ONLY_PATHS: Final = frozenset(
-    {
-        # Opt-in sealed diagnostics; these helpers never authorize a decision.
-        "src/codex_plugin_scanner/guard/codex_binding_capture.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_bounds.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_crypto.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_fs.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_join.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_writer.py",
-    }
-)
+_PERSISTENCE_ONLY_PATHS: Final[frozenset[str]] = frozenset()

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
 from codex_plugin_scanner.guard.adapters.zcode_contained_tests import (
     cleanup_stale_zcode_requests,
     contained_zcode_response,
@@ -230,6 +231,11 @@ def test_frozen_routing_preserves_home_and_workspace_arguments(routing_inputs, m
     assert argv[0] == "guard-test-cli"
     assert argv[argv.index("--home") + 1] == str(tmp_path)
     assert argv[argv.index("--workspace") + 1] == str(tmp_path)
+    # The Desktop launcher runs as `hol-guard`; the rewritten command must parse there.
+    parsed = _build_parser("hol-guard", program_mode="hol-guard").parse_args(
+        _resolve_legacy_args(argv[1:], program_mode="hol-guard")
+    )
+    assert parsed.guard_command == "execute-contained-test"
 
 
 @pytest.mark.parametrize("failure", ["launch", "cleanup"])

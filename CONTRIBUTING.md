@@ -194,7 +194,7 @@ extension directory at startup. External extensions retain their opt-in requirem
 
 A source checkout or generic wheel build does not qualify a platform release. The
 [nightly native workflow](.github/workflows/nightly-native.yml) assembles and tests the native
-runtime and source compiler with their manifests; the
+runtime — which hosts the source-compiler operations — with its manifests; the
 [installed Builder matrix](docs/guard/extension-builder/VALIDATION.md#installed-wheel-matrix)
 checks authoring outside the checkout. Include the relevant CI results in the PR.
 

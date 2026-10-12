@@ -10,6 +10,18 @@ export const REQUEST_MODEL = 'native-luna';
 export const THINKING_LEVELS = ['medium', 'high', 'low'];
 export const BACKEND_PROVIDER = 'openai-codex';
 export const BACKEND_MODEL = 'gpt-6-luna';
+// Every native backend this transport may load, with the efforts its catalog entry accepts.
+// Only the Responses lane streams SSE argument bytes; Devin's agent API is protobuf.
+export const BACKENDS: Record<string, string[]> = {
+  [`${BACKEND_PROVIDER}/${BACKEND_MODEL}`]: THINKING_LEVELS,
+  'devin/swe-2': ['medium', 'high'],
+};
+export function nativeBackend(value: string | undefined) {
+  const name = value || `${BACKEND_PROVIDER}/${BACKEND_MODEL}`;
+  if (!BACKENDS[name]) throw new Error('Unsupported native backend');
+  const [provider, id] = name.split('/');
+  return { name, provider, id, levels: BACKENDS[name], sse: name === `${BACKEND_PROVIDER}/${BACKEND_MODEL}` };
+}
 let model: any;
 export function setModel(value: any) { model = value; }
 const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
@@ -67,8 +79,8 @@ export function requirePromptable(converted: any[]) {
   return converted;
 }
 
-export function thinkingLevel(value: string | undefined) {
-  if (!THINKING_LEVELS.includes(value ?? '')) throw new Error('Unsupported Luna thinking level');
+export function thinkingLevel(value: string | undefined, levels: string[] = THINKING_LEVELS) {
+  if (!levels.includes(value ?? '')) throw new Error('Unsupported Luna thinking level');
   return value as string;
 }
 
@@ -161,7 +173,24 @@ export class WireArguments {
     return original.slice(delivered.length);
   }
 }
-export function eventDelta(event: any, indices: Map<number, number>, wire?: WireArguments) {
+// A backend without SSE argument bytes (protobuf) streams deltas or only a final
+// call; when nothing streamed, its native argument object is sent once, unchanged.
+export class StreamedArguments {
+  streamed = new Map<number, string>();
+  remaining(event: any) {
+    const delivered = this.streamed.get(event.contentIndex) ?? '';
+    if (delivered) {
+      try { JSON.parse(delivered); } catch { throw new Error('Incomplete native argument stream'); }
+      return '';
+    }
+    const args = event.toolCall?.arguments;
+    if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Missing native tool arguments');
+    const text = JSON.stringify(args);
+    this.streamed.set(event.contentIndex, text);
+    return text;
+  }
+}
+export function eventDelta(event: any, indices: Map<number, number>, wire?: WireArguments | StreamedArguments) {
   if (event.type === 'text_delta') return { content: event.delta };
   if (event.type === 'toolcall_start') {
     const tool = event.partial.content[event.contentIndex];
@@ -194,7 +223,9 @@ async function main() {
 const token = process.env.GUARD_GAUNTLET_ROUTE_TOKEN ?? '';
 delete process.env.GUARD_GAUNTLET_ROUTE_TOKEN;
 if (token.length < 32) throw new Error('Missing per-run route token');
-const thinking = thinkingLevel(process.env.GUARD_GAUNTLET_LUNA_THINKING);
+const backend = nativeBackend(process.env.GUARD_GAUNTLET_NATIVE_BACKEND);
+delete process.env.GUARD_GAUNTLET_NATIVE_BACKEND;
+const thinking = thinkingLevel(process.env.GUARD_GAUNTLET_LUNA_THINKING, backend.levels);
 delete process.env.GUARD_GAUNTLET_LUNA_THINKING;
 const sdkRoot = process.argv[2];
 if (!sdkRoot || !isAbsolute(sdkRoot)) throw new Error('Usage: luna_adapter.ts ABSOLUTE_SDK_ROOT');
@@ -203,9 +234,11 @@ const { Agent } = await load('@oh-my-pi/pi-agent-core');
 const { discoverAuthStorage, ModelRegistry } = await load('@oh-my-pi/pi-coding-agent');
 const auth = await discoverAuthStorage();
 const registry = new ModelRegistry(auth);
-model = registry.find(BACKEND_PROVIDER, BACKEND_MODEL);
+model = registry.find(backend.provider, backend.id);
+// Discovered providers (Devin) list their models only after a catalog refresh.
+if (!model) { await registry.refresh(); model = registry.find(backend.provider, backend.id); }
 setModel(model);
-if (!model) throw new Error('Pinned native Luna model unavailable');
+if (!model) throw new Error('Pinned native model unavailable');
 const active = new Set<any>();
 const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
   async fetch(request) {
@@ -223,7 +256,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       convertTools(body.tools ?? []);
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
-    const wire = new WireArguments();
+    const wire = backend.sse ? new WireArguments() : new StreamedArguments();
     const agent = new Agent({
       initialState: { model, thinkingLevel: thinking, systemPrompt:
         body.messages.filter((m: any) => m.role === 'system' || m.role === 'developer')
@@ -235,7 +268,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       // Advertise the host's independent native-tool capability without forcing
       // any tool choice, call count, argument, or model-selected batch.
       onPayload: (payload: any) => { payload.parallel_tool_calls = true; },
-      onSseEvent: event => wire.capture(event),
+      onSseEvent: event => { if (wire instanceof WireArguments) wire.capture(event); },
       // Prompt-cache affinity per case; sessionId stays unset so the
       // websocket/session transport state is untouched.
       promptCacheKey: promptCacheKey(request.headers.get('x-opencode-session')),
@@ -256,7 +289,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
         const send = (delta: any, finish_reason: string | null = null, usage?: any) => {
           const data = `data: ${JSON.stringify({ id: 'native-luna', object: 'chat.completion.chunk',
             // The real backend identity, recorded by the relay as the response model.
-            model: `${BACKEND_PROVIDER}/${BACKEND_MODEL}`, choices: [{ index: 0, delta, finish_reason }],
+            model: `${model.provider}/${model.id}`, choices: [{ index: 0, delta, finish_reason }],
             ...(usage ? { usage } : {}) })}\n\n`;
           bytes += Buffer.byteLength(data);
           if (bytes > 4_000_000) throw new Error('Transport response limit');

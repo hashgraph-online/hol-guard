@@ -82,6 +82,7 @@ _RESULT_OPTIONAL_KEYS = {
     "custom_extension_suggestion",
     "managed_controls_policy_fields",
     "claude_guard_question",
+    "memory_pattern",
 }
 _RESULT_CODES = {
     "ok",
@@ -320,7 +321,9 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
         from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
         from .store import GuardStore
 
-        store = GuardStore(guard_home)
+        # Provisioning the resident key must not prime policy decisions or
+        # refresh signed store state on the evaluation hot path.
+        store = GuardStore(guard_home, prime_policy_integrity=False)
         phase = "provision_key"
         provision_native_verifier_key_for_store(store)
     except Exception as error:

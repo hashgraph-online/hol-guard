@@ -112,8 +112,13 @@ def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
     mk = {**_call("bash", command="mktemp -d"), "result": {"content": [{"type": "text", "text": "/tmp/tmp.ab\n"}]}}
     scratch = _call("write", path="/tmp/tmp.ab/scratch-notes.txt")
     assert native_tools_scope_error(temp, [mk, scratch, scratch], {}) is None
-    timed = {**mk, "result": {"content": [{"type": "text", "text": "/tmp/tmp.ab\n\n\nWall time: 0.03 seconds"}],
-                              "details": {"wallTimeMs": 33.046916}}}
+    timed = {
+        **mk,
+        "result": {
+            "content": [{"type": "text", "text": "/tmp/tmp.ab\n\n\nWall time: 0.03 seconds"}],
+            "details": {"wallTimeMs": 33.046916},
+        },
+    }
     assert native_tools_scope_error(temp, [timed, scratch, scratch], {}) is None
     timed["result"]["details"]["wallTimeMs"] = 100
     assert native_tools_scope_error(temp, [timed, scratch, scratch], {}) is not None
@@ -153,11 +158,15 @@ def test_private_temp_output_requires_metadata_bound_timing_and_one_absolute_pat
     timed = stdout + "\n\nWall time: 0.03 seconds"
     assert _created_directory(result(stdout)) == "/tmp/tmp.created"
     assert _created_directory(result(timed, {"wallTimeMs": 33.046916})) == "/tmp/tmp.created"
-    for value in [result(timed), result(timed, {"wallTimeMs": 100}),
-                  result(timed, {"wallTimeMs": float("nan")}),
-                  result("relative\n"), result("/tmp/../other\n"),
-                  result("/tmp/one\n/tmp/two\n"),
-                  result(timed + "\nextra", {"wallTimeMs": 33.046916})]:
+    for value in [
+        result(timed),
+        result(timed, {"wallTimeMs": 100}),
+        result(timed, {"wallTimeMs": float("nan")}),
+        result("relative\n"),
+        result("/tmp/../other\n"),
+        result("/tmp/one\n/tmp/two\n"),
+        result(timed + "\nextra", {"wallTimeMs": 33.046916}),
+    ]:
         assert _created_directory(value) is None
 
 
@@ -223,3 +232,17 @@ def test_approval_rows_name_the_tool_from_the_stored_action_envelope(monkeypatch
     assert rows[0]["tool_name"] == "read" and rows[0]["reason_code"] == "native_x_review"
     assert always_gap(rows) == ["read"]
     assert rows[0]["once_only_reason"] == "unproven_launch" and rows[0]["exact_context_token_present"] is False
+
+
+@pytest.mark.parametrize(("os_name", "platform"), [("nt", "win32"), ("posix", "linux"), ("posix", "darwin")])
+def test_realistic_environment_sets_a_loader_path_only_where_the_loader_reads_one(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, os_name: str, platform: str
+) -> None:
+    from ci.gauntlet import host_process
+
+    monkeypatch.setattr(host_process.os, "name", os_name)
+    monkeypatch.setattr(host_process.sys, "platform", platform)
+    environment = host_process.realistic_environment({}, tmp_path)
+    loaders = {name for name in environment if name.startswith(("LD_", "DYLD_"))}
+    expected = {"nt": set(), "linux": {"LD_LIBRARY_PATH"}, "darwin": {"LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"}}
+    assert loaders == expected["nt" if os_name == "nt" else platform]

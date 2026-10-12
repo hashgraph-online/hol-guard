@@ -42,6 +42,8 @@ pub(super) fn git_helper_context_required(
                             // The probe screens the printed entries for credentials.
                             "config" => super::git_config_reads::read_form(&arguments[1..])
                                 .is_some(),
+                            // merge-base does not page by default, but pager.merge-base can.
+                            "merge-base" => true,
                             _ => false,
                         }
                     })

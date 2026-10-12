@@ -62,6 +62,18 @@ fn request_digest(request: &RunnerAuthorityRequestV1) -> Result<String, &'static
 
 pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
+        "continuation_authority" => crate::continuation_authority_op::evaluate(args),
+        "projection_approval"
+        | "projection_receipt"
+        | "projection_surfaces"
+        | "projection_surfaces_batch"
+        | "projection_artifact_surfaces" => crate::signal_projection_op::dispatch(kind, args),
+        "decision_v2_decode"
+        | "decision_enforcement_decode"
+        | "decision_authoritative_decode"
+        | "decision_artifact_decode"
+        | "decision_legacy"
+        | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),

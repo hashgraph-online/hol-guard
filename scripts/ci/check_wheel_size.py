@@ -34,7 +34,6 @@ def inspect_native(directory: Path, platform: str, budgets: dict[str, dict[str, 
     suffix = ".exe" if platform.startswith("win") else ""
     sizes = {
         "runtime": (directory / ("hol-guard-runtime" + suffix)).stat().st_size,
-        "compiler": (directory / ("guard-command-source" + suffix)).stat().st_size,
     }
     lines, failures = check_sizes(platform + " native binaries", sizes, budgets[platform])
     return "\n".join(lines) + "\n", failures
@@ -75,17 +74,13 @@ def inspect_wheel(
                 NATIVE + "hol-guard-runtime.exe",
             }
         ),
-        "compiler": sum(
-            entry.file_size
-            for entry in files
-            if entry.filename
-            in {
-                NATIVE + "guard-command-source",
-                NATIVE + "guard-command-source.exe",
-            }
-        ),
     }
     lines, failures = check_sizes(path.name, sizes, budget)
+    # The packaged runtime hosts the source compiler; platform wheels must not
+    # ship a second native executable.
+    for member in (NATIVE + "guard-command-source", NATIVE + "guard-command-source.exe"):
+        if any(entry.filename == member for entry in files):
+            failures.append(f"{path.name}: platform wheel must not contain {member}")
     lines.extend(["", "Largest compressed members:", ""])
     for entry in sorted(files, key=lambda item: item.compress_size, reverse=True)[:10]:
         lines.append(

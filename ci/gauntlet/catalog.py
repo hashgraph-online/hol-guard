@@ -110,6 +110,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-extension",
             "blocked-package",
             "native-tools",
+            "full-task",
         }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
         if (
@@ -119,6 +120,10 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("single-attempt cases require one exact command")
         if scenario.oracle == "native-tools" and (scenario.expectation != "allow" or not scenario.required_tools):
             raise ValueError("native-tools cases are allow-only and must name their required tools")
+        if scenario.oracle == "full-task" and (
+            scenario.expectation != "allow" or scenario.commands or "core" in scenario.profiles
+        ):
+            raise ValueError("full tasks are allow-only, name no commands and never join the core profile")
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])
         if (scenario.oracle == "blocked-package") != (scenario.id in PACKAGE_BLOCK_REASONS):

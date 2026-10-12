@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
 import { authorized, convertMessages, convertTools, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
+  StreamedArguments, nativeBackend,
   requireTransportSelection, thinkingLevel, promptCacheKey, usageChunk,
   REQUEST_MODEL, THINKING_LEVELS, keepStreamAlive } from './luna_adapter';
 
@@ -237,4 +238,25 @@ test('a conversation must end with a user or tool message', () => {
   expect(() => requirePromptable(convertMessages([{ role: 'user', content: 'u' },
     { role: 'assistant', content: 'a' }]))).toThrow();
   expect(requirePromptable(convertMessages([{ role: 'user', content: 'u' }])).length).toBe(1);
+});
+
+test('only listed native backends load, each with its own efforts', () => {
+  expect(nativeBackend(undefined)).toMatchObject({ provider: 'openai-codex', id: 'gpt-6-luna', sse: true });
+  const devin = nativeBackend('devin/swe-2');
+  expect(devin).toMatchObject({ provider: 'devin', id: 'swe-2', sse: false });
+  expect(thinkingLevel('high', devin.levels)).toBe('high');
+  expect(() => thinkingLevel('max', devin.levels)).toThrow();
+  expect(() => thinkingLevel('max')).toThrow();
+  expect(() => nativeBackend('openrouter/anything')).toThrow('Unsupported native backend');
+});
+
+test('a backend without SSE bytes sends its native arguments once, or keeps a complete stream', () => {
+  const wire = new StreamedArguments();
+  const call = { type: 'toolcall_end', contentIndex: 0, toolCall: { arguments: { command: 'ls' } } };
+  expect(wire.remaining(call)).toBe('{"command":"ls"}');
+  expect(wire.remaining(call)).toBe('');
+  const streamed = new StreamedArguments();
+  streamed.streamed.set(1, '{"path":');
+  expect(() => streamed.remaining({ ...call, contentIndex: 1 })).toThrow('Incomplete native argument stream');
+  expect(() => new StreamedArguments().remaining({ contentIndex: 2, toolCall: { arguments: [] } })).toThrow();
 });

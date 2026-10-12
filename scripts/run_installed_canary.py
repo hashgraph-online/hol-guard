@@ -114,8 +114,9 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
     native_root = Path(str(distribution("hol-guard").locate_file("codex_plugin_scanner/_native")))
     suffix = ".exe" if sys.platform == "win32" else ""
     runtime = native_root / f"hol-guard-runtime{suffix}"
-    compiler = native_root / f"guard-command-source{suffix}"
-    if not runtime.is_file() or not compiler.is_file():
+    # The packaged runtime also hosts the source compiler operations.
+    compiler = runtime
+    if not runtime.is_file():
         raise InstalledCanaryError("Installed Guard package is missing native corpus binaries")
     environment = _child_python_environment()
     environment["HOL_GUARD_NATIVE_BINARY"] = str(runtime)

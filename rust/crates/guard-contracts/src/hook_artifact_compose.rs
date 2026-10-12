@@ -52,6 +52,8 @@ pub enum HookArtifactComposeQueryV1 {
     ClaimedReuse(Box<ClaimedReuseQueryV1>),
     /// Decision copy overlay for the composed action.
     DecisionCopy(Box<DecisionCopyQueryV1>),
+    /// Build the canonical decision and its copy in the same resident request.
+    DecisionBuildCopy(Box<DecisionBuildCopyQueryV1>),
 }
 
 /// Guard configuration facts the native policy-config action reads.
@@ -225,6 +227,14 @@ pub struct DecisionCopyQueryV1 {
     pub base_harness_message: Value,
     pub base_dashboard_primary_detail: Value,
     pub remembered_rule_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionBuildCopyQueryV1 {
+    pub copy: DecisionCopyQueryV1,
+    pub reason: String,
+    pub signals: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

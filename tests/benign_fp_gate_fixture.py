@@ -152,6 +152,10 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
     _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
     _write(home / ".ssh" / "id_rsa", "-----BEGIN FIXTURE KEY-----\nnot-a-real-key\n-----END FIXTURE KEY-----\n")
+    # Sibling repository outside the workspace, as in the live Gauntlet fixture.
+    _git(home / "other-project", "init", "--quiet", "--initial-branch=main", home=home)
+    _git(home / "other-project", "add", "-A", home=home)
+    _git(home / "other-project", "commit", "--quiet", "-m", "sibling base", home=home)
 
     parent.mkdir(parents=True)
     _git(parent, "init", "--quiet", "--initial-branch=main", home=home)
@@ -165,6 +169,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
     _node_toolchain(worktree)
+    _write(worktree / "test_calc.py", "assert 1 + 1 == 2\nprint('ok')\n")
 
     # Untracked child repository nested inside the parent working tree.
     nested.mkdir(parents=True)

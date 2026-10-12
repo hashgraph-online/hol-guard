@@ -24,13 +24,21 @@ pub(crate) fn evaluate_hook_artifact_compose_request(
     if request.schema != HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA {
         return Err("native_hook_artifact_compose_schema_mismatch".to_owned());
     }
+    let (status, code, payload) = match compose(&request.query) {
+        Ok(payload) => ("ok", "ok", payload),
+        Err(message) => (
+            "error",
+            "native_hook_artifact_compose_validation_refused",
+            json!({"error_type": "ValueError", "message": message.chars().take(1024).collect::<String>()}),
+        ),
+    };
     crate::resident_protocol::encode_response(&HookArtifactComposeResultV1 {
         schema: HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
-        status: "ok".to_owned(),
-        code: "ok".to_owned(),
-        payload: Some(compose(&request.query)),
+        status: status.to_owned(),
+        code: code.to_owned(),
+        payload: Some(payload),
     })
 }
 
@@ -46,8 +54,8 @@ fn request_digest(request: &HookArtifactComposeRequestV1) -> Result<String, Stri
     ))
 }
 
-pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Value {
-    match query {
+pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Result<Value, String> {
+    Ok(match query {
         HookArtifactComposeQueryV1::PolicyStack(query) => policy_stack(query),
         HookArtifactComposeQueryV1::ConfigAction(query) => {
             let mut events = Vec::new();
@@ -69,7 +77,8 @@ pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Value {
         HookArtifactComposeQueryV1::TrustedOverride(query) => reuse::trusted_override(query),
         HookArtifactComposeQueryV1::ClaimedReuse(query) => reuse::claimed_reuse(query),
         HookArtifactComposeQueryV1::DecisionCopy(query) => reuse::decision_copy(query),
-    }
+        HookArtifactComposeQueryV1::DecisionBuildCopy(query) => reuse::decision_build_copy(query)?,
+    })
 }
 
 pub(crate) fn act(value: &Value) -> GuardAction {

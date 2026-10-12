@@ -16,6 +16,7 @@ from ci.gauntlet.proofs import BLOCK_REASONS, block_reasons, required_checks
 from ci.gauntlet.supply_chain import (
     CANARY,
     HTTP_SOURCE_CASE,
+    LOCKFILE_INTEGRITY_CASE,
     NPM_LOGS,
     PACKAGE_BLOCK_REASONS,
     PIP_TARGET,
@@ -107,6 +108,17 @@ def test_pip_installs_into_the_workspace_and_is_proven_absent(tmp_path):
     (fixture.workspace / PIP_TARGET).mkdir()
     checks = filesystem_checks(fixture, "blocked-package", SETUP_PY_CASE)
     assert checks["protected:supply-chain-install-absent"] is False
+
+
+def test_missing_integrity_lock_pins_a_remote_source_without_a_hash(tmp_path):
+    fixture = _staged(tmp_path, LOCKFILE_INTEGRITY_CASE)
+    lock = json.loads((fixture.workspace / "package-lock.json").read_text(encoding="utf-8"))
+    entry = lock["packages"]["node_modules/build-helper"]
+    # A local file: dependency needs no integrity hash, so the pin must be a remote
+    # resolved URL for a missing hash to represent a real unverifiable-source risk.
+    assert entry["resolved"].startswith("http://127.0.0.1:")
+    assert not entry["resolved"].startswith("file:")
+    assert "integrity" not in entry
 
 
 def test_package_cases_end_on_their_first_result():

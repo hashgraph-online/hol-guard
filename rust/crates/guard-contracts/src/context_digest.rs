@@ -317,6 +317,17 @@ pub enum ContextDigestKindV1 {
         /// The pending approval's prompt fields.
         pending: Value,
     },
+    /// Fingerprint a remembered decision's behavior and name the
+    /// exact-command and memory-pattern policy ids probed after the direct
+    /// artifact.
+    MemoryPattern {
+        command: Option<String>,
+        artifact_type: Option<String>,
+        artifact_id: Option<String>,
+        artifact_name: Option<String>,
+        /// The harness; lookups always carry one, decision events may not.
+        harness: Option<String>,
+    },
     McpServerIdentity {
         request: McpServerIdentityRequestV1,
     },
@@ -568,6 +579,33 @@ pub struct ContextDigestResultV1 {
     /// `claude_guard_question` answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_guard_question: Option<ClaudeGuardQuestionVerdictV1>,
+    /// `memory_pattern` answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_pattern: Option<MemoryPatternVerdictV1>,
+}
+
+/// A remembered decision's behavior fingerprint and lookup candidates.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryPatternVerdictV1 {
+    /// `None` when the signal is too generic to anchor memory.
+    pub pattern: Option<MemoryPatternFingerprintV1>,
+    /// Shell-domain exact-command policy ids, distinct and excluding the
+    /// direct artifact id.
+    pub exact_artifact_ids: Vec<String>,
+    /// `memory:<harness>:<kind>:<fingerprint>`; `None` without a harness or
+    /// pattern, or when it is the direct artifact id.
+    pub memory_artifact_id: Option<String>,
+}
+
+/// One memory pattern fingerprint and the dimensions that produced it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryPatternFingerprintV1 {
+    pub fingerprint: String,
+    pub kind: String,
+    /// `[name, value]` pairs in the order the builder added them.
+    pub components: Vec<[String; 2]>,
 }
 
 /// Whether a hook answers the pending HOL Guard approval prompt.

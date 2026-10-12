@@ -9,6 +9,7 @@ from typing import Any
 from ..native_codex_tool_output import codex_tool_output_native
 from ..native_context import bound_context_digest_home
 from ..native_rich_command_model import NativeCommandModelError
+from ..native_sensitive_request import NativeSensitiveRequestError
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.direct_vitest import (
@@ -543,7 +544,7 @@ def _hook_runtime_artifact(**kwargs: Any) -> GuardArtifact | None:
     try:
         with bound_context_digest_home(kwargs.get("guard_home")):
             return _hook_runtime_artifact_with_native(**kwargs)
-    except NativeCommandModelError:
+    except (NativeCommandModelError, NativeSensitiveRequestError):
         harness = _canonical_harness_name(kwargs["harness"])
         return GuardArtifact(
             artifact_id=f"{harness}:native-command-unavailable",

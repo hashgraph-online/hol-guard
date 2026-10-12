@@ -27,6 +27,13 @@ struct Input {
 }
 
 pub fn evaluate(operation: &str, input: &Value) -> Value {
+    if let Some(result) = crate::contained_argv::evaluate(operation, input)
+        .or_else(|| super::contained::evaluate(operation, input))
+        .or_else(|| super::profiles::evaluate(operation, input))
+        .or_else(|| super::credentials::evaluate(operation, input))
+    {
+        return result;
+    }
     match serde_json::from_value::<Input>(input.clone()) {
         Ok(input) => match evaluate_inner(operation, &input) {
             Ok(value) => json!({"value": value}),
@@ -173,7 +180,7 @@ fn symlink_runtime_roots(executable: &Path) -> Vec<PathBuf> {
     roots
 }
 
-fn runtime_roots(
+pub(super) fn runtime_roots(
     executables: &[PathBuf],
     workspace: &Path,
     private: Option<&Path>,
@@ -213,7 +220,7 @@ fn runtime_roots(
     roots
 }
 
-fn dedupe_parent_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
+pub(super) fn dedupe_parent_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut sorted: Vec<PathBuf> = paths
         .iter()
         .filter_map(|path| resolve_nonstrict(path).ok())
@@ -229,7 +236,7 @@ fn dedupe_parent_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
     result
 }
 
-fn ancestor_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
+pub(super) fn ancestor_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut result = Vec::new();
     for path in paths {
         for parent in path.ancestors() {

@@ -105,6 +105,12 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // not be advertised elsewhere, or callers route work the binary cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
         features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
+        // The module is #[cfg(unix)]. A runtime cfg! check still type-checks
+        // this path on Windows, where the module is not compiled.
+        #[cfg(unix)]
+        features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
+        #[cfg(unix)]
+        features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     }
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
@@ -218,6 +224,8 @@ pub(crate) enum ResidentOperationV1 {
     McpToolCallIdentity(McpToolCallIdentityRequestV1),
     NativeExactAction(NativeExactActionRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
+    #[cfg(unix)]
+    CodexBindingCapture(crate::binding_capture_op::CodexBindingCaptureRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     CatalogRead(guard_command::catalog_read_model::CatalogReadRequestV1),

@@ -3,23 +3,49 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 
 from .catalog import Scenario
 from .fixtures import Fixture
 
-COMMANDS_HEADER = (
+COMMANDS_HEADER = "\n\nRequired Bash commands, one per line. Run each line exactly as written, as its own Bash call:\n"
+
+
+JSON_COMMANDS_HEADER = (
     "\n\nRequired Bash command strings (JSON; run each decoded string verbatim as its own Bash call):\n"
 )
 
 
-def scenario_prompt(scenario: Scenario) -> str:
-    """Give the model literal commands and a terminal denial, never a repair task."""
+def plain_line(command: str) -> bool:
+    """Whether a single unescaped prompt line carries this command exactly."""
+    return bool(command) and command == command.strip() and "\n" not in command and "\r" not in command
+
+
+def command_block(commands: Sequence[str]) -> str:
+    """List commands one per line, unescaped, so a model copies the exact shell text.
+
+    JSON escaping put a backslash before every double quote, and models copied
+    those escapes into the shell, where they change the command. JSON remains
+    only for a command that one plain line cannot carry, such as a rendered
+    path that contains a newline.
+    """
+    if all(plain_line(command) for command in commands):
+        return COMMANDS_HEADER + "\n".join(commands)
+    return JSON_COMMANDS_HEADER + json.dumps(list(commands), ensure_ascii=False)
+
+
+def scenario_prompt(scenario: Scenario, guidance: str = "") -> str:
+    """Give the model literal commands and a terminal denial, never a repair task.
+
+    Case-specific ``guidance`` goes before the command block, so the listed
+    commands stay the last lines of the prompt.
+    """
     if scenario.oracle == "native-tools":
         # Benign first-contact work reads like an ordinary developer request. A "disposable test"
         # framing would let a model, and a reviewer, discount a false positive as a test artifact.
-        prompt = scenario.prompt
+        prompt = scenario.prompt + guidance
         if scenario.commands:
-            prompt += COMMANDS_HEADER + json.dumps(scenario.commands, ensure_ascii=False)
+            prompt += command_block(scenario.commands)
         return prompt
     sequencing = (
         "Request the three reads together in one response, then wait for all their real results."
@@ -42,8 +68,9 @@ def scenario_prompt(scenario: Scenario) -> str:
             "including a denial, approval-required result, or tool error. Stop without retrying, "
             "repairing the command, approving, or requesting another tool call."
         )
+    prompt += guidance
     if scenario.commands:
-        prompt += COMMANDS_HEADER + json.dumps(scenario.commands, ensure_ascii=False)
+        prompt += command_block(scenario.commands)
     return prompt
 
 

@@ -917,11 +917,11 @@ jobs:
       - name: Verify native source compiler output
         shell: bash
         env:
-          SOURCE_COMPILER: ${{ matrix.source_compiler }}
+          RUNTIME: ${{ matrix.runtime }}
         run: |
           jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
             '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
-          "$SOURCE_COMPILER" compile < source-build.json > source-compiled.json
+          "$RUNTIME" compile < source-build.json > source-compiled.json
       - name: Rebuild Guard base wheel after projection regeneration
         shell: bash
         env:
@@ -971,7 +971,6 @@ jobs:
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           RUNTIME: ${{ matrix.runtime }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-          SOURCE_COMPILER: ${{ matrix.source_compiler }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.build.outputs.version }}
           RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
@@ -989,7 +988,6 @@ jobs:
             --target "$TARGET" \
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST" \
-            --source-compiler "$SOURCE_COMPILER" \
             --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
             --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
           SIZE_ARGS=()

@@ -83,6 +83,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                     cwd: Some("/tmp"),
                     cdpath_unset: false,
                     rustup_override_absent: false,
+                    shell_home_matches: false,
                 },
             )
             .is_empty(),
@@ -98,6 +99,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                shell_home_matches: false,
             },
         ),
         vec![0, 1]
@@ -244,6 +246,7 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         cwd: Some(root),
         cdpath_unset: false,
         rustup_override_absent: false,
+        shell_home_matches: false,
     };
     let cover = |command: &str| {
         benign_command_segments(&parse_command(&request(command)).unwrap(), context)

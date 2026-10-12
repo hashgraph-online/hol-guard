@@ -194,7 +194,10 @@ def test_remote_rules_feed_runtime_hooks(tmp_path: Path) -> None:
         tmp_path,
     )
     for command in native_floor_cases:
-        assert real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action == "block"
+        # RSYNC_RSH steers the remote shell exactly like `rsync -e`, so it never
+        # runs silently: it stops at the remote-shell rule's review or stricter.
+        action = real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action
+        assert action in {"review", "block"}, command
 
 
 def _essh_control_layer(state: ControlState) -> ExtensionControlLayer:

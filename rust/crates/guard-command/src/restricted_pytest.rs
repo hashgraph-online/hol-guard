@@ -206,10 +206,25 @@ fn executable_file(candidate: &Path) -> bool {
 }
 
 mod authority;
+mod contained;
+#[cfg(test)]
+mod contained_tests;
+mod credentials;
 mod environment;
 mod executables;
+mod mapping;
+mod mapping_elf;
+mod mapping_snapshot;
 mod paths;
+mod profiles;
 mod validation;
+pub fn evaluate_with_deadline(
+    operation: &str,
+    input: &serde_json::Value,
+    deadline: std::time::Instant,
+) -> serde_json::Value {
+    mapping::evaluate(operation, input, deadline).unwrap_or_else(|| evaluate(operation, input))
+}
 pub use authority::evaluate;
 #[cfg(test)]
 mod parity_tests;

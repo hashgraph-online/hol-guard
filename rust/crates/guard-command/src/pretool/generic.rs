@@ -123,6 +123,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            shell_home_matches: false,
         },
         None,
     )
@@ -381,34 +382,12 @@ fn evaluate_envelope(
         // read-only containment below; do not replace that protection.
         && result.reason_code != "native_git_helper_context_review"
         && command_model.is_some_and(|model| {
-            let destination =
-                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd, ..context });
-            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd), ..context };
-            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd, ..context });
-            model.segments.iter().enumerate().any(|(index, segment)| {
-                segment.executable.as_deref().is_some_and(|executable| {
-                    if super::executable_basename(executable) != "git" {
-                        return false;
-                    }
-                    let inspection = super::git_config::execution_free(
-                        executable,
-                        &segment.arguments,
-                        context,
-                        deadline,
-                        execution_environment,
-                        super::git_helper_context::stdout_piped(model, index),
-                    );
-                    !segment.environment_names.is_empty()
-                        || !super::directory_targets::drive_targets_quoted(segment)
-                        || inspection == Some(false)
-                        // Only inspection operations have a configuration proof
-                        // to invalidate. Other Git operations retain their own
-                        // native review/permission floors, not this read floor.
-                        || (inspection.is_some()
-                            && index > 0
-                            && (0..index).any(|prior| !benign.contains(&prior)))
-                })
-            })
+            super::git_read_floor::requires_review(
+                model,
+                super::PathContext { home_dir, cwd, ..context },
+                deadline,
+                execution_environment,
+            )
         })
         && matches!(
             result.minimum_action.as_str(),

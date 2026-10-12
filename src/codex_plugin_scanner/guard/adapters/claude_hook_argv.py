@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -16,6 +17,8 @@ from .claude_hook_config import (
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
 )
 
+NATIVE_CLAUDE_HOOK_COMMAND = "claude-hook-bridge"
+NATIVE_CLAUDE_HOOK_FEATURE = "claude-hook-bridge-v1"
 _SESSION_START_ERROR = (
     "claude_session_start_argv_invalid: reinstall the managed Claude hooks with `hol-guard install claude`"
 )
@@ -23,6 +26,29 @@ _SESSION_START_ERROR = (
 
 def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
+
+
+def _native_bridge_executable() -> Path | None:
+    """The validated native runtime when it can proxy Claude hooks itself.
+
+    The native bridge ports ``claude_daemon_hook_bridge`` so each hook call
+    skips the Python interpreter start. Windows keeps the Python bridge.
+    """
+
+    if os.name == "nt":
+        return None
+    from ..native_runtime import native_runtime_status
+
+    status = native_runtime_status()
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or NATIVE_CLAUDE_HOOK_FEATURE not in status.capabilities.features
+    ):
+        return None
+    return status.identity.path
 
 
 def run_session_start_from_argv(
@@ -90,16 +116,21 @@ def daemon_hook_command_parts(
     state_path = context.guard_home / "daemon-state.json"
     fallback_command = guard_hook_command_parts(context)
     package_root = Path(__file__).resolve().parents[3]
-    bridge_config = json.dumps(
-        {
-            "state_path": str(state_path),
-            "fallback_daemon_url": fallback_daemon_url,
-            "fallback_command": list(fallback_command),
-            "query": urlencode(_hook_query(context, cursor_hook_query_extras())),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
+    query = urlencode(_hook_query(context, cursor_hook_query_extras()))
+    config: dict[str, object] = {
+        "state_path": str(state_path),
+        "fallback_daemon_url": fallback_daemon_url,
+        "fallback_command": list(fallback_command),
+        "query": query,
+    }
+    native_bridge = None if _is_frozen() else _native_bridge_executable()
+    if native_bridge is not None:
+        from .claude_daemon_hook_bridge import _recovery_command
+
+        config["recovery_command"] = list(_recovery_command(state_path, query))
+    bridge_config = json.dumps(config, ensure_ascii=False, separators=(",", ":"))
+    if native_bridge is not None:
+        return (str(native_bridge), NATIVE_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_DAEMON_HOOK_MARKER, bridge_config)
     if _is_frozen():
         return (sys.executable, FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_DAEMON_HOOK_MARKER, bridge_config)
     code = (

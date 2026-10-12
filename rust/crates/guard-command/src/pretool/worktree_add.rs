@@ -34,6 +34,7 @@ pub(super) fn exact_safe_command(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        shell_home_matches: context.shell_home_matches,
         cwd: cwd_proof
             .as_ref()
             .map(|proof| proof.cwd.as_str())
@@ -105,12 +106,13 @@ pub(super) fn exact_safe_command(
     worktree_seen
 }
 
-struct WorktreeCwdProof {
-    cd_index: usize,
-    cwd: String,
+pub(super) struct WorktreeCwdProof {
+    pub(super) cd_index: usize,
+    pub(super) cwd: String,
 }
 
-fn verified_worktree_cwd_context(
+/// The cwd a leading `cd` proves, allowing only bounded `sleep` before it.
+pub(super) fn verified_worktree_cwd_context(
     model: &CanonicalCommandV1,
     cd_index: usize,
     context: super::PathContext<'_>,
@@ -248,7 +250,7 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
     })
 }
 
-fn valid_branch_name(value: &str) -> bool {
+pub(super) fn valid_branch_name(value: &str) -> bool {
     valid_ref_component(value)
         && !value.starts_with('-')
         && !value.ends_with('.')

@@ -50,6 +50,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            shell_home_matches: false,
         },
         Some(&context),
     )

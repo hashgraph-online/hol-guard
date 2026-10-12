@@ -106,9 +106,9 @@ callbacks, imports, candidate indexes, and contributor-supplied native
 function names are rejected.
 
 Contributors do not need a Rust toolchain. The reviewed compiler ships inside the
-installed `hol-guard` package at `codex_plugin_scanner/_native/guard-command-source`
-and is digest-verified on every invocation. Resolve it once, then pass it to the
-preparation command:
+installed `hol-guard` package: `codex_plugin_scanner/_native/hol-guard-runtime`
+hosts the source-compiler operations and is digest-verified on every invocation.
+Resolve it once, then pass it to the preparation command:
 
 ```sh
 COMPILER=$(uv run --no-sync python -c \

@@ -43,8 +43,7 @@ pub struct ToolActionControls {
 /// `is_explicitly_benign_tool_action_request` over the payload's raw
 /// `tool_name` and `tool_input`: every candidate command is a recognized
 /// benign routine. `controls` is `None` when no control snapshot is active.
-/// Anything the resident cannot compute is not benign; non-unix hosts never
-/// recognize a routine.
+/// Anything the resident cannot compute is not benign.
 #[must_use]
 pub fn is_benign_tool_action(
     tool_name: &Value,
@@ -54,25 +53,17 @@ pub fn is_benign_tool_action(
     ctx: &Ctx,
     controls: Option<&ToolActionControls>,
 ) -> bool {
-    #[cfg(unix)]
-    {
-        let inputs = crate::sfrs_benign_tool_action::ToolActionInputs {
-            cwd,
-            home_dir,
-            ctx,
-            controls,
-        };
-        crate::sfrs_benign_tool_action::is_explicitly_benign_tool_action_request(
-            &ovalue_from_json(tool_name),
-            tool_input,
-            &inputs,
-        )
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (tool_name, tool_input, cwd, home_dir, ctx, controls);
-        false
-    }
+    let inputs = crate::sfrs_benign_tool_action::ToolActionInputs {
+        cwd,
+        home_dir,
+        ctx,
+        controls,
+    };
+    crate::sfrs_benign_tool_action::is_explicitly_benign_tool_action_request(
+        &ovalue_from_json(tool_name),
+        tool_input,
+        &inputs,
+    )
 }
 
 /// Plain JSON to a Python-faithful value, keeping number spelling.

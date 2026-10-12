@@ -18,6 +18,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         cwd: Some(CWD),
         cdpath_unset: false,
         rustup_override_absent: false,
+        shell_home_matches: false,
     }
 }
 
@@ -120,6 +121,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         cwd: Some(&cwd),
         cdpath_unset: false,
         rustup_override_absent: false,
+        shell_home_matches: false,
     };
     for command in [
         "echo hi > link/hosts".to_owned(),

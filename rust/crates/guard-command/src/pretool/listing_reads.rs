@@ -152,11 +152,92 @@ pub(super) fn safe_listing_segment(
     surviving > 0 || !recursive || search::safe_recursive_target(".", context)
 }
 
+/// `ls` of a path that does not exist prints only an error. Agents probe for
+/// optional directories this way (`ls ~/work/scripts 2>/dev/null`). The
+/// nearest existing ancestor must be a directory a listing may name, and every
+/// missing component must be a visible name that clears the sensitive screens,
+/// so the probe cannot spell a hidden or credential location.
+pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    if value.is_empty()
+        || value.len() > 4096
+        || value.starts_with('-')
+        || value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\', '*', '?', '[', ']', '{', '}',
+        ])
+        || value.split('/').any(|part| part == "..")
+        || super::sensitive_read_path_argument(value)
+        || !safe_reads::verified_path_context(context.home_dir, context.cwd)
+    {
+        return false;
+    }
+    let expanded = if value.starts_with('~') {
+        let Some(expanded) = super::read_paths::expand_home_read_path(value, context.home_dir)
+        else {
+            return false;
+        };
+        std::path::PathBuf::from(expanded)
+    } else if std::path::Path::new(value).is_absolute() {
+        std::path::PathBuf::from(value)
+    } else {
+        let Some(cwd) = context.cwd.and_then(|cwd| {
+            super::read_paths::expand_home_read_path(cwd, context.home_dir)
+                .or_else(|| Some(cwd.to_owned()))
+        }) else {
+            return false;
+        };
+        std::path::Path::new(&cwd).join(value)
+    };
+    if !std::fs::symlink_metadata(&expanded)
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    {
+        return false;
+    }
+    let mut missing = Vec::new();
+    for ancestor in expanded.ancestors() {
+        match std::fs::symlink_metadata(ancestor) {
+            Ok(_) => {
+                return !missing.is_empty()
+                    && missing
+                        .iter()
+                        .all(|part: &&std::ffi::OsStr| !part.to_string_lossy().starts_with('.'))
+                    && ancestor.to_str().is_some_and(|parent| {
+                        safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
+                            || search::skill_listing_root(parent, context)
+                    });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let Some(name) = ancestor.file_name() else {
+                    return false;
+                };
+                missing.push(name);
+            }
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
 fn is_recursive_flag(argument: &str) -> bool {
     // GNU getopt accepts any unambiguous prefix (`--rec`), so treat them all as recursive.
     argument.strip_prefix("--").is_some_and(|name| {
         name.len() >= 2 && "recursive".starts_with(name.split('=').next().unwrap_or(name))
     }) || (argument.starts_with('-') && !argument.starts_with("--") && argument.contains('R'))
+        || (crate::powershell_reads::windows_powershell_host() && powershell_recursion(argument))
+}
+
+/// On Windows `ls` can be PowerShell's Get-ChildItem. `-s` is the documented
+/// alias of `-Recurse`. Any other case-insensitive prefix of `-Recurse` or
+/// `-Depth` (`-rec`, `-depth:2`) is recursive too.
+fn powershell_recursion(argument: &str) -> bool {
+    let Some(name) = argument
+        .strip_prefix('-')
+        .filter(|name| !name.starts_with('-'))
+    else {
+        return false;
+    };
+    let name = name.split(':').next().unwrap_or(name).to_ascii_lowercase();
+    // `s` is Get-ChildItem's documented alias for `-Recurse`.
+    name == "s" || (name.len() >= 2 && ("recurse".starts_with(&name) || "depth".starts_with(&name)))
 }
 
 fn follows_links(argument: &str) -> bool {

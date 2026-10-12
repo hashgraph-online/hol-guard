@@ -41,7 +41,15 @@ jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source
   --slurpfile trust "$trust" \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
-"$compiler" compile < source-build.json > source-compiled.json
+# Revisions whose wheel builder still embeds a standalone compiler predate the
+# runtime-hosted compiler; their runtime cannot answer `compile`.
+compiler_arguments=()
+identity_binary=$runtime
+if grep -q -- '--source-compiler' scripts/build_native_hol_guard_wheel.py; then
+  compiler_arguments=(--source-compiler "$compiler")
+  identity_binary=$compiler
+fi
+"$identity_binary" compile < source-build.json > source-compiled.json
 
 uv build --wheel --out-dir pure-dist
 rule_digest=$("$runtime" capabilities --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
@@ -54,7 +62,7 @@ HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" .venv/bin/python scripts/build_nativ
   --target "$target" \
   --source-sha "$source_sha" \
   --rule-digest "$rule_digest" \
-  --source-compiler "$compiler" \
+  ${compiler_arguments[@]+"${compiler_arguments[@]}"} \
   --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
   --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
 

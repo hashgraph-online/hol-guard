@@ -97,6 +97,22 @@ def test_bound_answer_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
     assert healthy is True
 
 
+def test_bound_validation_refusal_preserves_message_and_resident_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = _resident_returning(
+        monkeypatch,
+        lambda request: _good(
+            request,
+            status="error",
+            code="native_consumer_artifact_compose_validation_refused",
+            payload={"error_type": "ValueError", "message": "configured action cannot be weakened"},
+        ),
+    )
+    for _ in range(3):
+        with pytest.raises(compose.NativeConsumerComposeValidationError, match="cannot be weakened"):
+            _compose_current()
+    assert [item for item in seen if isinstance(item, bool)] == [True, True, True]
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -201,12 +217,18 @@ def test_request_key_set_is_exact(monkeypatch: pytest.MonkeyPatch, kind: str, fi
 
 
 @pytest.mark.usefixtures("native_prompt_runtime")
-@pytest.mark.parametrize("failing", [("current_action", "runtime_decision"), ("runtime_decision",)])
+@pytest.mark.parametrize("failing", [("current_action", "runtime_authoritative"), ("runtime_authoritative",)])
 def test_resident_failure_blocks_each_artifact_without_aborting(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failing: tuple[str, ...],
 ) -> None:
+    from codex_plugin_scanner.guard import native_decisions
+
+    def no_second_authority_request(*args: object, **kwargs: object) -> object:
+        pytest.fail("an unavailable resident must not receive a second decision request")
+
+    monkeypatch.setattr(native_decisions, "_request", no_second_authority_request)
     answer = compose.native_consumer_compose
 
     def unavailable(kind: str, fields: Mapping[str, object], *, guard_home: Path | None) -> dict[str, object]:
@@ -250,3 +272,6 @@ def test_resident_failure_blocks_each_artifact_without_aborting(
     assert item["policy_composition"]["native_compose_error"] == "native_consumer_artifact_compose_unavailable"
     assert item["trusted_request_override"]["applied"] is False
     assert "approval_claim" not in item
+    assert item["evaluation_error"]["code"] == "native_consumer_artifact_compose_unavailable"
+    for field in ("decision_v2", "action_envelope", "authoritative_decision", "enforcement", "launch_permitted"):
+        assert field not in item

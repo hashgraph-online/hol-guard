@@ -105,6 +105,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::LocalCliIdentify { .. } => "local_cli_identify",
         Kind::CustomExtensionSuggestion { .. } => "custom_extension_suggestion",
         Kind::ClaudeGuardQuestion { .. } => "claude_guard_question",
+        Kind::MemoryPattern { .. } => "memory_pattern",
         Kind::McpServerIdentity { .. } => "mcp_server_identity",
         Kind::McpToolIdentity { .. } => "mcp_tool_identity",
         Kind::McpServerDescriptor { .. } => "mcp_server_descriptor",
@@ -143,6 +144,7 @@ fn required_output(kind: &str) -> Option<&'static str> {
         "browser_mcp" => "browser_mcp",
         "package_launcher_token" => "package_launcher",
         "claude_guard_question" => "claude_guard_question",
+        "memory_pattern" => "memory_pattern",
         _ => return None,
     })
 }
@@ -164,7 +166,7 @@ fn nullable_output(kind: &str) -> Option<&'static str> {
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 7] = [
+const KIND_GATED_FIELDS: [(&str, &str); 8] = [
     ("local_cli_identity", "local_cli_identity"),
     (
         "managed_controls_policy_fields",
@@ -175,6 +177,7 @@ const KIND_GATED_FIELDS: [(&str, &str); 7] = [
     ("custom_extension_suggestion", "custom_extension_suggestion"),
     ("custom_extension_continuity", "custom_extension_continuity"),
     ("claude_guard_question", "claude_guard_question"),
+    ("memory_pattern", "memory_pattern"),
 ];
 
 fn is_sha256(value: &Value) -> bool {

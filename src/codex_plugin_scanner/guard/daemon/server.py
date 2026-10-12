@@ -35,7 +35,6 @@ from ..approval_gate import (
 )
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..browser_opener import open_browser_url
-from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..config import (
@@ -60,6 +59,7 @@ from ..local_dashboard_session import (
 from ..models import (
     GuardRuntimeRegistration,
 )
+from ..native_codex_binding_capture import start_codex_binding_capture_writer
 from ..native_daemon_handler import (
     HandlerDecision,
     NativeDaemonHandlerError,

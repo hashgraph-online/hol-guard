@@ -275,6 +275,7 @@ fn evaluate_validated_envelope(
         "PreToolUse" | "UserPromptSubmit" => {
             let unavailable_environment =
                 guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+            crate::edge_git_push::install();
             let native = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
                 &harness,
                 &event_name,
@@ -291,6 +292,7 @@ fn evaluate_validated_envelope(
                     cwd: envelope.source.cwd.as_deref(),
                     cdpath_unset: false,
                     rustup_override_absent: false,
+                    shell_home_matches: false,
                 },
                 Some(
                     envelope

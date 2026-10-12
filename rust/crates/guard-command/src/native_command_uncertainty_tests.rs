@@ -62,6 +62,75 @@ fn uncertain_git_attribution_requires_review_instead_of_a_hard_block() {
 }
 
 #[test]
+fn assignment_prefixes_keep_the_native_floor_instead_of_an_evaluation_block() {
+    let binding = binding_with_layers(serde_json::json!([]));
+    for command in [
+        "X=1 ls",
+        "TODO_FILE=/tmp/todo.json ./todo.py list",
+        "NODE_ENV=test node --test",
+    ] {
+        let result = evaluate(&binding, command);
+        let evidence = result.command_extensions.as_ref().unwrap();
+        assert_eq!(evidence.evaluation_error, None, "{command}");
+        assert_ne!(result.minimum_action, "block", "{command}");
+        assert_ne!(result.minimum_action, "allow", "{command}");
+    }
+    let steered = evaluate(&binding, "GIT_DIR=/tmp/other git push origin main");
+    assert_ne!(steered.minimum_action, "block");
+    assert_ne!(steered.minimum_action, "allow");
+    let evidence = steered.command_extensions.as_ref().unwrap();
+    assert_eq!(evidence.evaluation_error, None);
+    assert!(evidence.binding.uncertainty_count > 0);
+}
+
+#[test]
+fn credential_assignment_prefixes_block_like_the_env_wrapper() {
+    let binding = binding_with_layers(serde_json::json!([]));
+    for command in [
+        "GH_TOKEN=literal gh api repos/o/r",
+        "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json ls",
+        "env GH_TOKEN=literal gh api repos/o/r",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "block", "{command}");
+        let evidence = result.command_extensions.as_ref().unwrap();
+        assert!(evidence.evaluation_error.is_some(), "{command}");
+    }
+    for command in [
+        "TOKENIZERS_PARALLELISM=false ls",
+        "XDG_CONFIG_HOME=./x ls",
+        "KUBECONFIG=/tmp/kube ls",
+        "AWS_PROFILE=other ls",
+        "AWS_CONFIG_FILE=/tmp/aws ls",
+        "DOCKER_CONFIG=/tmp/docker ls",
+        "CLOUDSDK_CONFIG=/tmp/gcloud ls",
+        "NETRC=/tmp/netrc ls",
+        "HOME=/tmp/home ls",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_ne!(result.minimum_action, "block", "{command}");
+        let evidence = result.command_extensions.as_ref().unwrap();
+        assert!(evidence.evaluation_error.is_none(), "{command}");
+    }
+}
+
+#[test]
+fn assignment_prefixes_cannot_evade_a_disabled_permission() {
+    let binding = binding_with_layers(disabled_permission_layer("command.git.push"));
+    for command in [
+        "GIT_DIR=/tmp/other git push origin main",
+        "GIT_DIR=/tmp/other git push origin main --force --dry-run",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "block", "{command}");
+        assert_eq!(
+            result.reason_code, "native_command_permission_disabled",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_disabled_permission_still_blocks_uncertain_and_redirected_commands() {
     let binding = binding_with_layers(disabled_permission_layer("command.git.push"));
     for command in [

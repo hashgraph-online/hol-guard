@@ -13,12 +13,15 @@ use std::time::Instant;
 mod catalog;
 #[path = "command_compatibility/domains.rs"]
 mod domains;
+#[path = "command_compatibility/environment.rs"]
+mod environment;
 #[path = "command_compatibility/git.rs"]
 mod git;
 #[path = "command_compatibility/github.rs"]
 mod github;
 
 pub use catalog::compatibility_rule_ids;
+pub(crate) use environment::inert_environment_name;
 
 pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     github::arguments_are_read_only(arguments, text)
@@ -66,6 +69,16 @@ impl CompatibilityObservations {
             segment_indexes: vec![index],
             uncertainty,
         });
+    }
+
+    fn mark_uncertain(&mut self, segments: &[usize]) {
+        let steered = |indexes: &[usize]| indexes.iter().any(|index| segments.contains(index));
+        for item in &mut self.rule_matches {
+            item.uncertainty |= steered(&item.segment_indexes);
+        }
+        for item in &mut self.permission_matches {
+            item.uncertainty |= steered(&item.segment_indexes);
+        }
     }
 
     fn normalize(&mut self) {
@@ -140,6 +153,32 @@ fn basename(segment: &CommandSegmentV1) -> String {
         .to_owned()
 }
 
+/// Toolchain runners take the rest of the command as code they compile or
+/// execute. A non-inert assignment can point that runner at other code, and
+/// the loader and compiler names do that for any program. Credential names
+/// swap whose authority any program runs with, as `env NAME=` already does.
+fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
+    let non_inert = segment
+        .environment_names
+        .iter()
+        .any(|name| !environment::inert_environment_name(name));
+    non_inert
+        && (segment.environment_names.iter().any(|name| {
+            matches!(
+                name.as_str(),
+                "CC" | "GIT_SSH_COMMAND"
+                    | "GOFLAGS"
+                    | "LD_PRELOAD"
+                    | "NODE_OPTIONS"
+                    | "NODE_PATH"
+                    | "RUSTFLAGS"
+            ) || environment::credential_routing_environment_name(name)
+        }) || matches!(
+            basename(segment).as_str(),
+            "bun" | "cargo" | "go" | "node" | "npm" | "vite"
+        ))
+}
+
 pub fn compatibility_observations(
     command: &CanonicalCommandV1,
     deadline: Option<Instant>,
@@ -201,6 +240,7 @@ pub fn compatibility_observations_with_context(
         return Err("native_command_compatibility_model_unsupported");
     }
     let mut result = CompatibilityObservations::default();
+    let mut steered = Vec::new();
     for (index, segment) in command.segments.iter().enumerate() {
         deadline_check(deadline)?;
         if segment.executable.is_none()
@@ -209,11 +249,28 @@ pub fn compatibility_observations_with_context(
                 .wrapper_chain
                 .iter()
                 .any(|wrapper| !matches!(wrapper.as_str(), "sudo" | "timeout"))
-            || !segment.environment_names.is_empty()
             || segment.text.contains('\0')
             || segment.arguments.iter().any(|value| value.contains('\0'))
         {
             return Err("native_command_compatibility_context_unsupported");
+        }
+        // Inert names (`CI`, `LANG`, `LC_*`) do not steer, so the segment
+        // keeps the same permission decision as the unprefixed command.
+        // A loader, compiler or credential name, or any non-inert name on a
+        // toolchain runner, is not a reviewable prefix: it can run other code
+        // or another identity, so the context is unsupported. Every other non-inert name (`GIT_DIR=`,
+        // `GH_HOST=`, `X=`) stays uncertainty. It takes the owners' floor and
+        // no permission can allow it, without turning the evaluation into a
+        // failure that would hide a disabled permission.
+        if assignment_prefix_is_unsupported(segment) {
+            return Err("native_command_compatibility_context_unsupported");
+        }
+        if segment
+            .environment_names
+            .iter()
+            .any(|name| !environment::inert_environment_name(name))
+        {
+            steered.push(index);
         }
         match basename(segment).as_str() {
             "git" => git::observe_with_context(segment, index, &mut result, context),
@@ -223,6 +280,7 @@ pub fn compatibility_observations_with_context(
         domains::observe(command, segment, index, &mut result);
     }
     deadline_check(deadline)?;
+    result.mark_uncertain(&steered);
     result.normalize();
     Ok(result)
 }

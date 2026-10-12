@@ -365,6 +365,10 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            #[cfg(unix)]
+            ResidentOperationV1::CodexBindingCapture(request) => {
+                crate::binding_capture_op::evaluate_codex_binding_capture_request(&request)
+            }
             ResidentOperationV1::ContributedMcpDecide(request) => {
                 crate::contributed_mcp_decision_op::evaluate_contributed_mcp_decision_request(
                     &request,
@@ -531,6 +535,8 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::RichCommandModel(request) => Some(&request.guard_home),
         ResidentOperationV1::RequestContextBuild(request) => Some(&request.guard_home),
         ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
+        #[cfg(unix)]
+        ResidentOperationV1::CodexBindingCapture(request) => Some(&request.guard_home),
         ResidentOperationV1::ProtectRequest(request) => Some(&request.guard_home),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.guard_home),
         _ => None,

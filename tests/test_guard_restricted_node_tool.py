@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["bunx", "eslint@evil", "src"],
         ["bun", "run", "other"],
         ["bunx", "tsc"],
+        ["bun", "x", "tsc"],
+        ["bun", "x", "eslint@evil", "src"],
         ["eslint", "--fix", "src"],
         ["eslint", "--output-file=.env", "src"],
         ["node", "--max-old-space-size=999999", "typescript/bin/tsc", "--noEmit"],
@@ -48,6 +50,18 @@ def test_bounded_heap_option_is_preserved_before_verified_entry(monkeypatch, tmp
         "--incremental",
         "false",
     )
+
+
+def test_bun_x_is_read_as_bunx(monkeypatch, tmp_path):
+    entry = tmp_path / "node_modules/typescript/bin/tsc"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("// fixture compiler")
+    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
+    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
+    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
+    plan = tool.prepare_restricted_node_tool(["bun", "x", "tsc", "--noEmit"], workspace=tmp_path)
+    assert plan.profile_version == "node-tool-readonly-v1"
+    assert plan.command[-1] == "--noEmit"
 
 
 @pytest.mark.parametrize("script", ["curl https://example.invalid", "", "eslint src && curl https://example.invalid"])
@@ -109,7 +123,8 @@ def test_native_capability_gate_does_not_override_extension_denial(monkeypatch, 
     calls, executed = [], []
     monkeypatch.setattr(tool, "prepare_restricted_node_tool", lambda *args, **kwargs: plan)
 
-    def run(plan, *, timeout_seconds, authorize_capability):
+    def run(plan, *, timeout_seconds, authorize_capability, merge_stderr=False):
+        assert merge_stderr is False
         authorize_capability(("/usr/bin/node", "--help"))
         executed.append(True)
         return 0
@@ -169,3 +184,35 @@ def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
     with pytest.raises(RestrictedPytestError):
         tool.validate_build_output_root(output, workspace=tmp_path)
     assert source.read_text() == "source"
+
+
+@pytest.mark.parametrize("spelling", ["node_modules/vite/bin/vite.js", "./node_modules/vite/bin/vite.js"])
+def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tmp_path, spelling):
+    project = tmp_path / "project"
+    entry = project / "node_modules/vite/bin/vite.js"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("// fixture bundler")
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "node_modules/vite/bin").mkdir(parents=True)
+    (elsewhere / "node_modules/vite/bin/vite.js").write_text("// other bundler")
+    monkeypatch.chdir(elsewhere)
+    base = SimpleNamespace(workspace=project, cwd=project, executable="/usr/bin/node", denied_capabilities=())
+    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
+    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
+    plan = tool.prepare_restricted_node_tool(["node", spelling, "build"], workspace=project)
+    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build", "--configLoader", "runner")
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ("node_modules/vite/bin/vite.js", True),
+        ("./node_modules/vite/bin/vite.js", True),
+        ("/work/app/node_modules/vite/bin/vite.js", True),
+        ("xnode_modules/vite/bin/vite.js", False),
+        ("node_modules_evil/vite/bin/vite.js", False),
+        ("vite/bin/vite.js", False),
+    ],
+)
+def test_local_package_entry_spellings(argument, expected):
+    assert tool.is_local_package_entry(argument, "vite/bin/vite.js") is expected

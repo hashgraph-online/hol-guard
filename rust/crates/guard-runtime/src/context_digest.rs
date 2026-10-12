@@ -686,6 +686,23 @@ fn evaluate_request(
                 },
             ));
         }
+        ContextDigestKindV1::MemoryPattern {
+            command,
+            artifact_type,
+            artifact_id,
+            artifact_name,
+            harness,
+        } => {
+            result.memory_pattern = Some(super::memory_pattern::verdict(
+                &super::memory_pattern::MemoryRequest {
+                    command: command.as_deref(),
+                    artifact_type: artifact_type.as_deref(),
+                    artifact_id: artifact_id.as_deref(),
+                    artifact_name: artifact_name.as_deref(),
+                    harness: harness.as_deref(),
+                },
+            ));
+        }
         ContextDigestKindV1::CustomExtensionSuggestion { tools } => {
             result.custom_extension_suggestion = Some(
                 super::custom_extension_suggestion::suggestion_verdicts(tools)?,
@@ -887,6 +904,7 @@ fn evaluate_context_digest_request_inner(
         local_cli_identities: None,
         custom_extension_suggestion: None,
         claude_guard_question: None,
+        memory_pattern: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

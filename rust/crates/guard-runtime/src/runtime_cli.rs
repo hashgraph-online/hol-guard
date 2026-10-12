@@ -17,6 +17,12 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if command == "self-test" && flag == "--json" => {
             write_json(&serde_json::json!({"ok": true, "capabilities": capabilities()}))
         }
+        #[cfg(unix)]
+        [command, marker, config]
+            if command == "claude-hook-bridge" && marker == claude_hook_bridge::BRIDGE_MARKER =>
+        {
+            claude_hook_bridge::run(config)
+        }
         [command, flag] if command == "hook" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_hook_bytes(&bytes)?;

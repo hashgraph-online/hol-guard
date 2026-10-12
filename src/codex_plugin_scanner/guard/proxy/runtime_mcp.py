@@ -51,6 +51,7 @@ from ..native_approval_proof import (
     claimed_approval_authorizes_postclaim_review,
     fresh_claim_allows_reapproval,
 )
+from ..native_decisions import NativeDecisionAuthorityError, NativeDecisionUnavailableError
 from ..native_execution import (
     mcp_stdio_session_close_native,
     mcp_stdio_session_open_native,
@@ -1059,7 +1060,13 @@ class RuntimeMcpGuardProxy:
                 server_output=server_output,
                 approval_callback=approval_callback,
             )
-        except (NativeMcpProxyDecisionError, KeyError, TypeError):
+        except (
+            NativeMcpProxyDecisionError,
+            NativeDecisionAuthorityError,
+            NativeDecisionUnavailableError,
+            KeyError,
+            TypeError,
+        ):
             # No authoritative native answer, or one whose shape the proxy cannot
             # read: nothing executes.
             return _blocked_tool_response(

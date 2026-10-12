@@ -171,6 +171,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                         context,
                         &excluded_files,
                         &excluded_directories,
+                        true,
                     )
                 })))
 }

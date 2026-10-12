@@ -72,6 +72,17 @@ fn devin_home() -> std::path::PathBuf {
         ".agents/skills/example/.hidden.md",
         ".agents/skills/example/credentials.md",
         ".agents/skills/example/run.py",
+        ".codex/plans/evidence/review-a/runtime-final.json",
+        ".codex/plans/evidence/review-a/notes.txt",
+        ".codex/plans/evidence/review-a/run.sh",
+        ".codex/plans/evidence/review-a/credentials.json",
+        ".codex/plans/evidence/review-a/.env",
+        ".codex/plans/evidence/.cache/state.json",
+        ".codex/auth.json",
+        ".codex/sessions/2026/rollout.json",
+        ".claude/plans/quiet-guard.md",
+        ".claude/.credentials.json",
+        ".claude/projects/session.json",
     ] {
         let path = root.join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -142,6 +153,42 @@ fn zcode_reads_skill_documents_but_not_hidden_or_sensitive_skill_files() {
             home.to_str(),
         );
         assert_eq!(result.minimum_action == "allow", allowed, "{path}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn agent_plan_notes_are_readable_but_agent_state_is_not() {
+    let home = devin_home();
+    for (path, allowed) in [
+        ("~/.codex/plans/evidence/review-a/runtime-final.json", true),
+        ("~/.codex/plans/evidence/review-a/notes.txt", true),
+        ("~/.claude/plans/quiet-guard.md", true),
+        ("~/.codex/plans/evidence/review-a/run.sh", false),
+        ("~/.codex/plans/evidence/review-a/credentials.json", false),
+        ("~/.codex/plans/evidence/review-a/.env", false),
+        ("~/.codex/plans/evidence/.cache/state.json", false),
+        ("~/.codex/plans/../auth.json", false),
+        ("~/.codex/sessions/2026/rollout.json", false),
+        ("~/.claude/.credentials.json", false),
+        ("~/.claude/projects/session.json", false),
+    ] {
+        for harness in ["zcode", "claude-code"] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name": "Read", "tool_input": {"file_path": path}}),
+                None,
+                None,
+                home.to_str(),
+                home.join("project").to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{harness}: {path}"
+            );
+        }
     }
 }
 

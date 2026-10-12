@@ -97,17 +97,13 @@ def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str
 def realistic_environment(environment: dict[str, str], home: Path) -> dict[str, str]:
     """Overlay the variables a developer shell carries that a bare environment lacks.
 
-    The loader path points at an empty directory, so it is set but inert. Together with the
-    fixture's global git config (LFS filter, gpg program, hooks path) it reproduces the shapes
-    that made ordinary shell commands look unusual to Guard.
+    On Linux and macOS the loader path points at an empty directory, so it is set but inert.
+    Together with the fixture's global git config (LFS filter, gpg program, hooks path) it
+    reproduces the shapes that made ordinary shell commands look unusual to Guard.
     """
-    libraries = home / ".local/lib"
-    libraries.mkdir(parents=True, exist_ok=True)
-    loader = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
     environment = dict(environment)
     environment.update(
         {
-            "LD_LIBRARY_PATH": str(libraries),
             "SHELL": "/bin/sh",
             "USER": "developer",
             "LOGNAME": "developer",
@@ -121,8 +117,13 @@ def realistic_environment(environment: dict[str, str], home: Path) -> dict[str, 
             "PYTHONDONTWRITEBYTECODE": "1",
         }
     )
-    if loader != "LD_LIBRARY_PATH":
-        environment[loader] = str(libraries)
+    # Windows resolves DLLs through PATH, so a Windows developer shell carries no loader path.
+    if os.name != "nt":
+        libraries = home / ".local/lib"
+        libraries.mkdir(parents=True, exist_ok=True)
+        environment["LD_LIBRARY_PATH"] = str(libraries)
+        if sys.platform == "darwin":
+            environment["DYLD_LIBRARY_PATH"] = str(libraries)
     return environment
 
 

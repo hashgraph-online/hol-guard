@@ -155,6 +155,30 @@ pub(crate) fn append_request_snapshot_event(
     request_snapshot: Option<&Map<String, Value>>,
     native_replay: bool,
 ) -> StoreResult<i64> {
+    append_request_snapshot_event_with_continuation(
+        connection,
+        request_id,
+        source,
+        event_type,
+        occurred_at,
+        request_snapshot,
+        native_replay,
+        None,
+    )
+}
+
+/// The continuation transaction appends its terminal result in the same outbox allocation.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_request_snapshot_event_with_continuation(
+    connection: &Connection,
+    request_id: &str,
+    source: &str,
+    event_type: &str,
+    occurred_at: &str,
+    request_snapshot: Option<&Map<String, Value>>,
+    native_replay: bool,
+    continuation_result: Option<&Value>,
+) -> StoreResult<i64> {
     let request: Map<String, Value> = match request_snapshot {
         None => {
             let Some(row) = query_one(
@@ -184,6 +208,13 @@ pub(crate) fn append_request_snapshot_event(
     let (values, binding_status, quarantine_reason) =
         binding_for_append(connection, request_id, source)?;
     let payload = payload_json(&request, event_type, occurred_at, native_replay)?;
+    let payload = if let Some(result) = continuation_result {
+        let mut value: Value = serde_json::from_str(&payload).map_err(|_| UNREPRESENTABLE)?;
+        value["continuationResult"] = result.clone();
+        dumps_sorted(&value).ok_or(UNREPRESENTABLE)?
+    } else {
+        payload
+    };
     let [subject, workspace, machine, installation] = &values;
     exec(
         connection,

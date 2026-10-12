@@ -53,6 +53,7 @@ fn every_kind_name_is_a_contract_tag() {
         "local_cli_identify",
         "custom_extension_suggestion",
         "claude_guard_question",
+        "memory_pattern",
         "mcp_server_identity",
         "mcp_tool_identity",
         "mcp_server_descriptor",

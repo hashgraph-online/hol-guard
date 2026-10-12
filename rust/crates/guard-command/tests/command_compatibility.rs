@@ -161,10 +161,30 @@ fn budget_and_parser_failures_cannot_become_empty_success() {
     uncertain.confidence = "uncertain".to_owned();
     assert!(compatibility_observations(&uncertain, None).is_err());
     let mut overridden = exact;
-    overridden.segments[0]
-        .environment_names
-        .push("GIT_CONFIG_GLOBAL".to_owned());
+    overridden.segments[0].path_overridden = true;
     assert!(compatibility_observations(&overridden, None).is_err());
+}
+
+#[test]
+fn assignment_prefixes_are_attributed_as_uncertainty_not_evaluation_failure() {
+    for command in ["X=1 ls", "TODO_FILE=/tmp/todo.json ./todo.py list"] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert!(observed.permission_matches.is_empty(), "{command}");
+    }
+    let push =
+        compatibility_observations(&model("GIT_DIR=/tmp/x git push origin main"), None).unwrap();
+    assert!(!push.rule_matches.is_empty());
+    assert!(push.rule_matches.iter().all(|item| item.uncertainty));
+    let view =
+        compatibility_observations(&model("GH_HOST=example.com gh pr view 12"), None).unwrap();
+    assert!(!view.permission_matches.is_empty());
+    assert!(view.permission_matches.iter().all(|item| item.uncertainty));
+    // Only the steered segment loses certainty.
+    let mixed = compatibility_observations(&model("X=1 ls && git push"), None).unwrap();
+    assert_eq!(mixed.rule_matches.len(), 1);
+    assert!(!mixed.rule_matches[0].uncertainty);
+    assert!(compatibility_observations(&model("PATH=/tmp git status"), None).is_err());
 }
 
 #[test]

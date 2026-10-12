@@ -10712,9 +10712,11 @@
       "enabled_extensions": [
         "command.keibidrop"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
-      "id": "env-prefix-blocks",
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "env-prefix-reviews",
       "rule_id": "command.keibidrop.pull-file"
     },
     {

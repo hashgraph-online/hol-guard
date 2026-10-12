@@ -12,7 +12,11 @@ from .continuation_snapshot import (
     non_resumable_continuation_snapshot,
     validated_continuation_snapshot,
 )
-from .decision_boundaries import CanonicalApprovalSurfaces, canonical_approval_surfaces
+from .decision_boundaries import (
+    CanonicalApprovalSurfaces,
+    canonical_approval_surfaces,
+    canonical_approval_surfaces_batch,
+)
 from .models import GuardApprovalRequest
 from .native_approval_queue_identity import (
     ApprovalQueueIdentityUnavailableError,
@@ -32,16 +36,17 @@ def add_approval_request(
     oauth_source: str = "default",
     guard_home: Path | None = None,
 ) -> str:
+    home = guard_home or connection_guard_home(connection)
     canonical_decision = canonical_approval_surfaces(
         request.policy_action,
         request.decision_v2_json,
         request.action_envelope_json,
         reject_contradiction=True,
+        guard_home=home,
     )
     # Identify the request natively before taking the write lock: the identity
     # is pure request material, and the resident round trip must not run inside
     # the transaction. Every lookup and write below still happens under it.
-    home = guard_home or connection_guard_home(connection)
     if home is None:
         raise ApprovalQueueIdentityUnavailableError
     identity = _queue_identity(request, home)
@@ -58,6 +63,7 @@ def add_approval_request(
             oauth_source=oauth_source,
             canonical_decision=canonical_decision,
             identity=identity,
+            guard_home=home,
         )
     except BaseException:
         connection.execute("rollback to savepoint approval_request_write")
@@ -75,6 +81,7 @@ def _add_approval_request_in_transaction(
     oauth_source: str,
     canonical_decision: CanonicalApprovalSurfaces,
     identity: QueueIdentity,
+    guard_home: Path,
 ) -> str:
     normalized_oauth_source = oauth_source.strip().lower() or "default"
     identity_key, action_identity, queue_group_id = identity
@@ -85,6 +92,7 @@ def _add_approval_request_in_transaction(
         oauth_source=normalized_oauth_source,
         queue_group_id=queue_group_id,
         now=now,
+        guard_home=guard_home,
     )
     request_id = _existing_request_id(
         connection,
@@ -93,7 +101,7 @@ def _add_approval_request_in_transaction(
         identity_key=identity_key,
         queue_group_id=queue_group_id,
     )
-    if request_id is not None and not _consistent_pending_request(connection, request_id):
+    if request_id is not None and not _consistent_pending_requests(connection, [request_id], guard_home=guard_home):
         if request_id == request.request_id:
             raise ValueError("fresh_review_request_id_required")
         # Only a new, canonically validated host attempt can replace this row.
@@ -157,6 +165,7 @@ def _expire_inconsistent_group_requests(
     oauth_source: str,
     queue_group_id: str,
     now: str,
+    guard_home: Path,
 ) -> None:
     """Retire invalid older cards even when a newer valid card wins deduplication."""
 
@@ -166,11 +175,10 @@ def _expire_inconsistent_group_requests(
            order by last_seen_at desc, request_id desc""",
         (queue_group_id, harness, oauth_source),
     ).fetchall()
-    valid_ids: list[str] = []
-    invalid_ids: list[str] = []
-    for row in rows:
-        existing_id = str(row["request_id"])
-        (valid_ids if _consistent_pending_request(connection, existing_id) else invalid_ids).append(existing_id)
+    group_ids = [str(row["request_id"]) for row in rows]
+    consistent = _consistent_pending_requests(connection, group_ids, guard_home=guard_home)
+    valid_ids = [existing_id for existing_id in group_ids if existing_id in consistent]
+    invalid_ids = [existing_id for existing_id in group_ids if existing_id not in consistent]
     if request_id in invalid_ids:
         raise ValueError("fresh_review_request_id_required")
     replacement_id = valid_ids[0] if valid_ids else request_id
@@ -183,23 +191,52 @@ def _expire_inconsistent_group_requests(
         )
 
 
-def _consistent_pending_request(connection: sqlite3.Connection, request_id: str) -> bool:
-    row = connection.execute(
-        "select policy_action, decision_v2_json, action_envelope_json from approval_requests where request_id = ?",
-        (request_id,),
-    ).fetchone()
-    if row is None:
-        return False
-    try:
-        canonical = canonical_approval_surfaces(
-            row[0],
-            json.loads(row[1]) if row[1] is not None else None,
-            json.loads(row[2]) if row[2] is not None else None,
-            reject_contradiction=False,
+_REQUEST_ID_CHUNK = 500
+
+
+def _consistent_pending_requests(
+    connection: sqlite3.Connection, request_ids: Sequence[str], *, guard_home: Path
+) -> set[str]:
+    """Return the IDs whose stored decision projects without a contract error.
+
+    The caller holds the write lock, so every row is checked in one batched
+    resident round trip rather than one request per row.
+    """
+    if not request_ids:
+        return set()
+    rows: list[sqlite3.Row] = []
+    # Chunk the lookup so a large queue group stays under SQLite's host-parameter cap.
+    for start in range(0, len(request_ids), _REQUEST_ID_CHUNK):
+        chunk = tuple(request_ids[start : start + _REQUEST_ID_CHUNK])
+        placeholders = ", ".join("?" for _ in chunk)
+        rows.extend(
+            connection.execute(
+                "select request_id, policy_action, decision_v2_json, action_envelope_json from approval_requests"
+                f" where request_id in ({placeholders})",
+                chunk,
+            ).fetchall()
         )
-        return canonical.contract_error is None
-    except (TypeError, ValueError):
-        return False
+    candidates: list[tuple[str, tuple[object, object, object]]] = []
+    for row in rows:
+        try:
+            decision = json.loads(row[2]) if row[2] is not None else None
+            envelope = json.loads(row[3]) if row[3] is not None else None
+        except (TypeError, ValueError):
+            continue
+        candidates.append((str(row[0]), (row[1], decision, envelope)))
+    if not candidates:
+        return set()
+    try:
+        projections = canonical_approval_surfaces_batch(
+            [inputs for _request_id, inputs in candidates], guard_home=guard_home
+        )
+    except ValueError:
+        return set()
+    return {
+        request_id
+        for (request_id, _inputs), projection in zip(candidates, projections, strict=True)
+        if projection.contract_error is None
+    }
 
 
 def _existing_request_id(

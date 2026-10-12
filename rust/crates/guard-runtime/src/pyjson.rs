@@ -234,20 +234,50 @@ pub(crate) fn parse_unique(text: &str) -> Result<PyVal, JsonFailure> {
 }
 
 fn parse_with(text: &str, unique: bool, lone_surrogate: char) -> Result<PyVal, JsonFailure> {
-    let mut parser = Parser {
-        text: text.as_bytes(),
-        position: 0,
-        unique,
-        saw_lone_surrogate: false,
-        lone_surrogate,
-    };
+    parse_parser(Parser::new(text, unique, lone_surrogate, false)).map(|(value, _)| value)
+}
+
+/// First code point of the private-use range a lone surrogate maps onto in
+/// [`parse_mapping_lone_surrogates`]: U+D800..=U+DFFF become
+/// U+F0000..=U+F07FF, so a value or key keeps one distinct character per
+/// surrogate CPython would keep.
+pub(crate) const SURROGATE_PLANE_BASE: u32 = 0xF0000;
+
+/// Whether `character` lies in the range lone surrogates map onto.
+pub(crate) fn in_surrogate_plane(character: char) -> bool {
+    (SURROGATE_PLANE_BASE..SURROGATE_PLANE_BASE + 0x800).contains(&(character as u32))
+}
+
+/// A parse in which every lone surrogate escape, in a key or a value, maps
+/// onto [`SURROGATE_PLANE_BASE`] instead of being replaced or refused.
+pub(crate) struct SurrogateMapped {
+    pub(crate) value: PyVal,
+    /// At least one lone surrogate was mapped.
+    pub(crate) mapped: bool,
+    /// The text already held a character in the mapped range, so a mapped
+    /// character can no longer be told from a genuine one.
+    pub(crate) collision: bool,
+}
+
+pub(crate) fn parse_mapping_lone_surrogates(text: &str) -> Result<SurrogateMapped, JsonFailure> {
+    let raw_collision = text.chars().any(in_surrogate_plane);
+    let (value, parser_state) =
+        parse_parser(Parser::new(text, false, char::REPLACEMENT_CHARACTER, true))?;
+    Ok(SurrogateMapped {
+        value,
+        mapped: parser_state.0,
+        collision: raw_collision || parser_state.1,
+    })
+}
+
+fn parse_parser(mut parser: Parser<'_>) -> Result<(PyVal, (bool, bool)), JsonFailure> {
     parser.skip_space();
     let value = parser.value(0)?;
     parser.skip_space();
     if parser.position != parser.text.len() {
         return Err(JsonFailure::Syntax);
     }
-    Ok(value)
+    Ok((value, (parser.mapped, parser.plane_collision)))
 }
 
 struct Parser<'a> {
@@ -257,9 +287,26 @@ struct Parser<'a> {
     saw_lone_surrogate: bool,
     /// What a lone surrogate escape in a value decodes to.
     lone_surrogate: char,
+    /// Map lone surrogates onto [`SURROGATE_PLANE_BASE`] in keys and values.
+    map_surrogates: bool,
+    mapped: bool,
+    plane_collision: bool,
 }
 
-impl Parser<'_> {
+impl<'a> Parser<'a> {
+    fn new(text: &'a str, unique: bool, lone_surrogate: char, map_surrogates: bool) -> Self {
+        Parser {
+            text: text.as_bytes(),
+            position: 0,
+            unique,
+            saw_lone_surrogate: false,
+            lone_surrogate,
+            map_surrogates,
+            mapped: false,
+            plane_collision: false,
+        }
+    }
+
     fn peek(&self) -> Option<u8> {
         self.text.get(self.position).copied()
     }
@@ -410,7 +457,17 @@ impl Parser<'_> {
                                 }
                             }
                             let character = match char::from_u32(code) {
-                                Some(character) => character,
+                                Some(character) => {
+                                    if self.map_surrogates && in_surrogate_plane(character) {
+                                        self.plane_collision = true;
+                                    }
+                                    character
+                                }
+                                None if self.map_surrogates => {
+                                    self.mapped = true;
+                                    char::from_u32(SURROGATE_PLANE_BASE + code - 0xd800)
+                                        .ok_or(JsonFailure::Syntax)?
+                                }
                                 None => {
                                     self.saw_lone_surrogate = true;
                                     self.lone_surrogate

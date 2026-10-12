@@ -5045,6 +5045,42 @@
    ],
    "status": "native_behavior_ported_requires_ci",
    "rationale": "Exact original portable outcomes and source hashes are frozen; compiled native encoded requests replace the retired executable Python oracle. Native public-caller tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_extensions_are_preserved_and_signed",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::extensions_round_trip_and_change_the_native_document_digest",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_canonical_hash_vector_is_cross_language_stable[basic]",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::normative_policy_hashes_and_utf16_order_are_cross_language_stable",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_canonical_hash_vector_is_cross_language_stable[business-selector]",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::normative_policy_hashes_and_utf16_order_are_cross_language_stable",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_canonical_object_keys_use_utf16_order",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::normative_policy_hashes_and_utf16_order_are_cross_language_stable",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
   }
  ],
  "preserved_tests": [
@@ -5340,6 +5376,103 @@
  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188",
  "replaced_implementations": [
   {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_node_test.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "1188bd505740a12b2507284217f00481bdad5d87df6badae296aa7646f6da3b3",
+   "remaining_role": "Native launch-plan projection and Node process orchestration; argv and executable admission are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-command/src/restricted_pytest/contained.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_vitest.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "9d1684406dc67261a3813b6194fd69fd060fee76e3d8cf6318ffed246a7dafc0",
+   "remaining_role": "Native launch-plan projection and Vitest process orchestration; dependency admission and Bun/Node invocation construction are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-command/src/restricted_pytest/contained.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_inline_eval.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "9eea9ae400dc6631696401f84d02bf6ae4009218a250500288e02d0652e81ad9",
+   "remaining_role": "Native launch-plan projection and inline process orchestration; command admission and Python isolation flags are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-command/src/restricted_pytest/contained.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_credential_patterns.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "ee4457fac77d70e091e7786c9436d942749a6a6ef8004460b8d23c84150d9908",
+   "remaining_role": "Native transport projection of credential patterns and Seatbelt denials only; pattern construction and string escaping are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/credentials.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_mapping_plan.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "0b7d2c667b1da815b33870865be842e46702a96a9bd8271dcafa1e98329a4e4a",
+   "remaining_role": "Bounded owner-only mapping input/result snapshot handoff and path-based ELF projection; ELF parsing and dependency-closure evidence are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/mapping.rs",
+    "rust/crates/guard-command/src/restricted_pytest/mapping_elf.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "fe10f99e29110692288aa3c162ca745d1def40f843eced5036376cb565b3d6be",
+   "remaining_role": "Authorization receipt checks, wrapper peeling and runner dispatch; contained-command classification is native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/decision_projection_boundaries.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "7882c11404caa5388afbf8f2262b6fa1804b76ad824a59f8f823387f80cad8cd",
+   "remaining_role": "Immutable public approval DTO and resident transport; native owner validates and canonicalizes action, signals and presentation fields.",
+   "native_replacements": ["rust/crates/guard-runtime/src/signal_projection_approval.rs"],
+   "parity_fixture": "tests/fixtures/signal_projection_vectors.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/decision_boundaries.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "411d6e1e3a400955c466de1338c3725c60fb8458d321342c7f448cd3c64eca2f",
+   "remaining_role": "Immutable receipt/approval DTOs and bounded batch framing; Rust validates aliases, preserves Watch observations and synchronizes canonical surfaces.",
+   "native_replacements": ["rust/crates/guard-runtime/src/signal_projection_receipt.rs", "rust/crates/guard-runtime/src/signal_projection_op.rs"],
+   "parity_fixture": "tests/fixtures/signal_projection_vectors.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/decisions.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "deff9f12e7d0be568f1e0531627d3b41479fdce4690f118d7293053bbb53bded",
+   "remaining_role": "Immutable public DTOs, serialization and resident transport only; native decision builders and action/schema/composition/approval/scanner validators replace Python semantic bodies.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/decisions.rs",
+    "rust/crates/guard-runtime/src/decision_authority_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/decision_authority_vectors.json"
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py",
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "cf9143df681b5db68cd5f03f12028dda0ad4e88ad9a9f7c9e09c330af7f2dd68",
@@ -5356,7 +5489,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "193d26d4434ac4b7a079f3ec311ee9dcfd4d097a5cfec2a1cec63ebbf273d17f",
    "remaining_role": "Public option payload DTO and bound resident projection only; option and operand admission retired.",
-   "native_replacements": ["rust/crates/guard-command/src/shell_interpreter_options.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_interpreter_options.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5364,7 +5500,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09",
    "remaining_role": "Public structures and native transport only; segmentation, pipe and redirect semantics retired.",
-   "native_replacements": ["rust/crates/guard-command/src/data_flow.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/data_flow.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5372,7 +5511,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "01fb4f0525876ab940cb5f3480254d112a46e3a4b823459a28247c9a005bb65e",
    "remaining_role": "Source-span DTOs and native scan-trace projection only; quote, heredoc, substitution and masking algorithms retired.",
-   "native_replacements": ["rust/crates/guard-command/src/shell_structure.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_structure.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5380,7 +5522,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "5b9cfa2345ffbbcb059220d97e3b70df74612dfc49b3804cd2a2701477579842",
    "remaining_role": "Public normalization DTO and resident transport only; wrapper parsing and path trust authority retired.",
-   "native_replacements": ["rust/crates/guard-command/src/shell_command_wrappers.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_command_wrappers.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5512,13 +5657,15 @@
    "path": "src/codex_plugin_scanner/guard/runtime/restricted_pytest_sandbox.py",
    "base_commit": "d75f7f7c590536b3116bd03643033e19ca4117f9",
    "source_sha256": "b7fa65965fee0f3cb4e4bd10f64a2f9a42fc5fdd7065d6478c07b0364599faa6",
-   "remaining_role": "Immutable plan DTOs, bounded resident transport, shared hook-path predicate and process/output handling remain; restricted launch validation, environment filtering and runtime read-root derivation are native.",
+   "remaining_role": "Native sandbox-policy projection plus environment and process orchestration; policy construction and process-budget measurement are native. Linux namespace and mount enforcement remain in Python.",
    "native_replacements": [
     "rust/crates/guard-command/src/restricted_pytest/authority.rs",
     "rust/crates/guard-command/src/restricted_pytest/validation.rs",
     "rust/crates/guard-command/src/restricted_pytest/executables.rs",
     "rust/crates/guard-command/src/restricted_pytest/environment.rs",
-    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs",
+    "rust/crates/guard-command/src/restricted_pytest/profiles.rs",
+    "rust/crates/guard-runtime/src/restricted_process_ceiling.rs"
    ],
    "parity_fixture": "rust/crates/guard-command/tests/fixtures/restricted_pytest_parity.json"
   },
@@ -5592,6 +5739,61 @@
     "rust/crates/guard-runtime/src/skill_identity_canon.rs"
    ],
    "parity_fixture": "rust/crates/guard-runtime/tests/fixtures/skill_directory_portable_vectors.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "c20051517d9e4c1a4ead1dea82e80bbc348adbc3082d8ae6baf7cc430157c3d3",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_compile.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "fe49be0d05d452542b306f91b42dac6df04a8c7036a62870a5b8ef508e59a0d6",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_diff.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "bb64b381dc4ae89e0a2597215dff08738b4c35627bff7216d866e092b71a3fa9",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_business_bounds.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "5a042e1dafd502452d6884640fcefa449e7059c666db742c3e0b982dbea43c5c",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_yaml.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "f2011f8a4153dfabb2bb97572ae1b5edf8afb60accfa2082c53b1dbd5e5113c2",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
   }
  ],
  "retired_bodies": [
@@ -5615,6 +5817,34 @@
    "replacement_nodes": [
     "rust/crates/guard-command/src/content_sensitivity_tests.rs::original_python_sensitivity_and_mediation_vectors_replay"
    ]
-  }
+  },
+ {
+  "path": "src/codex_plugin_scanner/guard/continuation_payload.py",
+  "source_sha256": "59edb10a1c1aa0fdc1f5a8e646a928a573e817ca457344a525ea3b0bfb755d5a",
+  "replacement_nodes": [
+   "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/continuation_contract.py",
+  "source_sha256": "720a603a64ba01ccd95bfc86921337c82821db686148c0761e44140f2666c3bc",
+  "replacement_nodes": [
+   "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/continuation_runtime.py",
+  "source_sha256": "1b0d650716f78bf3d48564323e02874b8015c7c7fdccf395ad25b09c3497893a",
+  "replacement_nodes": [
+   "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/store_continuation.py",
+  "source_sha256": "4d60d9eb2881d6d45d0ac6f7f1a27c17277cb34a79f1c798375bb6db7535c580",
+  "replacement_nodes": [
+   "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+  ]
+ }
  ]
 }

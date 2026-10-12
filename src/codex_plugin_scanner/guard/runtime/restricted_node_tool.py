@@ -24,6 +24,12 @@ from .secret_sensitivity import classify_secret_path
 _ENTRIES = {"eslint": "eslint/bin/eslint.js", "tsc": "typescript/bin/tsc", "vite": "vite/bin/vite.js"}
 
 
+def is_local_package_entry(argument: str, package_entry: str) -> bool:
+    """`node_modules/<entry>`, `./node_modules/<entry>` or `<dir>/node_modules/<entry>`."""
+    prefix = argument.removesuffix("node_modules/" + package_entry)
+    return prefix != argument and (prefix == "" or prefix.endswith("/"))
+
+
 def validate_build_output_root(path: Path, *, workspace: Path) -> None:
     if path.parent != workspace or path.name not in {"dist", "build", "out"} or path.is_symlink():
         raise RestrictedPytestError(
@@ -58,6 +64,9 @@ def prepare_restricted_node_tool(
     name, args = Path(argv[0]).name, argv[1:]
     expected_entry = None
     runtime_args: tuple[str, ...] = ()
+    if name == "bun" and args[:1] == ("x",):
+        # `bun x` is Bun's spelling of `bunx`.
+        name, args = "bunx", args[1:]
     if name in {"bun", "npm", "pnpm"}:
         if len(args) != 2 or args[0] != "run" or args[1] not in {"lint", "typecheck", "build"}:
             raise RestrictedPytestError(
@@ -95,9 +104,7 @@ def prepare_restricted_node_tool(
         if not args:
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local entrypoint.")
         expected_entry = Path(args[0])
-        name = next(
-            (tool for tool, entry in _ENTRIES.items() if str(expected_entry).endswith("/node_modules/" + entry)), ""
-        )
+        name = next((tool for tool, entry in _ENTRIES.items() if is_local_package_entry(args[0], entry)), "")
         args = args[1:]
     if (
         name not in _ENTRIES
@@ -135,7 +142,8 @@ def prepare_restricted_node_tool(
         entry = (modules / _ENTRIES[name]).resolve(strict=True)
         if not entry.is_file() or not _path_is_within(entry, modules):
             raise OSError("external tool entrypoint")
-        if expected_entry is not None and expected_entry.resolve(strict=True) != entry:
+        # A relative entrypoint names a file below the command's directory.
+        if expected_entry is not None and (base.cwd / expected_entry).resolve(strict=True) != entry:
             raise OSError("unexpected tool entrypoint")
     except (OSError, RuntimeError) as error:
         raise RestrictedPytestError(
@@ -159,5 +167,11 @@ def run_restricted_node_tool(
     *,
     timeout_seconds: int,
     authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
+    merge_stderr: bool = False,
 ) -> int:
-    return run_restricted_node_plan(plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability)
+    return run_restricted_node_plan(
+        plan,
+        timeout_seconds=timeout_seconds,
+        authorize_capability=authorize_capability,
+        merge_stderr=merge_stderr,
+    )

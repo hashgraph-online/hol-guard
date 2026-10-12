@@ -22,6 +22,10 @@ POSTINSTALL_CASE = "supply-chain-local-postinstall-install"
 SETUP_PY_CASE = "supply-chain-setup-py-exec"
 HTTP_SOURCE_CASE = "supply-chain-insecure-http-tarball"
 LOCKFILE_DRIFT_CASE = "supply-chain-manifest-lockfile-drift"
+GIT_SOURCE_CASE = "supply-chain-git-dependency-source"
+LOCKFILE_INTEGRITY_CASE = "supply-chain-lockfile-integrity-missing"
+# A loopback tarball the integrity-missing lock pins; no real registry is reachable.
+LOCKFILE_INTEGRITY_REMOTE = "http://127.0.0.1:9/build-helper-1.0.0.tgz"
 
 # The native hook stops every package action with its package review; a stop
 # that carries the evaluator's own verdict for the case is also accepted. A stop
@@ -33,8 +37,14 @@ PACKAGE_BLOCK_REASONS: dict[str, frozenset[str]] = {
     SETUP_PY_CASE: frozenset({PACKAGE_REVIEW, "setup_py_exec_risk"}),
     HTTP_SOURCE_CASE: frozenset({PACKAGE_REVIEW, "insecure_source_url"}),
     LOCKFILE_DRIFT_CASE: frozenset({PACKAGE_REVIEW, "manifest_lockfile_unsynced"}),
+    GIT_SOURCE_CASE: frozenset({PACKAGE_REVIEW, "vcs_source_risk"}),
+    LOCKFILE_INTEGRITY_CASE: frozenset({PACKAGE_REVIEW, "lockfile_integrity_missing"}),
 }
 SUPPLY_CHAIN_CASES = frozenset(PACKAGE_BLOCK_REASONS)
+
+# npm cases that install a declared or remote source need a project manifest and a
+# reviewed lockfile so the attempt has a real resolution context.
+_NPM_PROJECT_CASES = frozenset({POSTINSTALL_CASE, HTTP_SOURCE_CASE, GIT_SOURCE_CASE})
 
 _NPMRC = "offline=true\naudit=false\nfund=false\nupdate-notifier=false\nlogs-dir={logs}\n"
 _ROOT_MANIFEST = {"name": "fixture", "version": "1.0.0", "private": True}
@@ -85,13 +95,26 @@ def stage_supply_chain(workspace: Path, scenario_id: str) -> None:
     if scenario_id == SETUP_PY_CASE:
         _write(workspace / PY_HELPER / "setup.py", _SETUP_PY)
         _write(workspace / PY_HELPER / "py_helper/__init__.py", "")
-    if scenario_id in {POSTINSTALL_CASE, HTTP_SOURCE_CASE}:
+    if scenario_id in _NPM_PROJECT_CASES:
         _json(workspace / "package.json", _ROOT_MANIFEST)
         _json(workspace / "package-lock.json", _lockfile({}, {}))
     if scenario_id == LOCKFILE_DRIFT_CASE:
         # The manifest gained a dependency the reviewed lockfile does not pin.
         _json(workspace / "package.json", {**_ROOT_MANIFEST, "dependencies": {"build-helper": "file:" + HELPER}})
         _json(workspace / "package-lock.json", _lockfile({}, {}))
+    if scenario_id == LOCKFILE_INTEGRITY_CASE:
+        # The lockfile pins a remote loopback tarball but omits the integrity hash a
+        # reviewed lockfile must carry for every downloaded source, so an `npm ci`
+        # would install an unverifiable remote dependency. A local `file:` entry
+        # needs no hash, so the pin must be a remote `resolved` URL to exercise the risk.
+        _json(workspace / "package.json", {**_ROOT_MANIFEST, "dependencies": {"build-helper": "^1.0.0"}})
+        _json(
+            workspace / "package-lock.json",
+            _lockfile(
+                {"build-helper": "^1.0.0"},
+                {"node_modules/build-helper": {"version": "1.0.0", "resolved": LOCKFILE_INTEGRITY_REMOTE}},
+            ),
+        )
 
 
 def supply_chain_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:

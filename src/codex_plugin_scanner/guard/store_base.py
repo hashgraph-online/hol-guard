@@ -74,10 +74,10 @@ from .sqlite_tuning import (
 from .store_approvals import (
     _json_object,
     _json_object_list,
-    approval_request_surfaces_are_resolvable,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
+    resolvable_approval_request_ids,
 )
 from .store_approval_writes import (
     add_approval_request as persist_approval_request,

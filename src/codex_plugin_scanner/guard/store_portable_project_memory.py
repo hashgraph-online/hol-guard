@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 
 from .action_lattice import guard_action_severity
 from .project_identity import (
@@ -128,6 +129,7 @@ class StorePortableProjectMemoryMixin:
             memory_command=memory_command,
             memory_artifact_type=memory_artifact_type,
             memory_artifact_name=memory_artifact_name,
+            guard_home=Path(self.guard_home),
         )
         lookup: dict[str, object] = {
             "store_path": str(self.path),

@@ -1,75 +1,24 @@
-"""Shared credential-path expressions for restricted operating-system profiles."""
+"""Parity entry points for native credential-path expressions.
+
+Contained profiles are built in the resident. The parity recorder calls these
+functions so the recorded native replies stay attached to this module. They
+are not a second source for the macOS profile.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from ..native_restricted_pytest import restricted_native
+
 
 def _read_only_credential_patterns() -> tuple[str, ...]:
-    # Deny rules dominate workspace/runtime read grants, including paths reached
-    # through symlinks. Match case variants consistently with native path policy.
-    def literal(value: str) -> str:
-        escaped: list[str] = []
-        for character in value:
-            if character.isascii() and character.isalpha():
-                escaped.append(f"[{character.lower()}{character.upper()}]")
-            elif character in ".-":
-                escaped.append("\\" + character)
-            else:
-                escaped.append(character)
-        return "".join(escaped)
-
-    names = (
-        ".envrc",
-        ".authrc",
-        ".npmrc",
-        ".pypirc",
-        ".netrc",
-        ".git-credentials",
-        "terraform.tfvars",
-        "private.key",
-        "wallet.key",
-    )
-    return (
-        f"(^|/){literal('.env')}($|[./])",
-        f"(^|/)[^/]*{literal('.key')}$",
-        f"(^|/){literal('krb5cc_')}[^/]*$",
-        "(^|/)(" + "|".join(literal(name) for name in names) + ")$",
-        "(^|/)[^/]*("
-        + "|".join(
-            literal(name)
-            for name in (
-                "private-key",
-                "private_key",
-                "wallet-key",
-                "wallet_key",
-            )
-        )
-        + ")[^/]*$",
-        "(^|/)("
-        + "|".join(
-            literal(name)
-            for name in (
-                ".ssh",
-                ".aws",
-                ".docker",
-                ".kube",
-                ".gnupg",
-                ".hol-guard",
-            )
-        )
-        + ")(/|$)",
-    )
+    return tuple(restricted_native("credential_patterns", {}, list))
 
 
 def _seatbelt_string(path: Path | str) -> str:
-    value = str(path)
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
-    return f'"{escaped}"'
+    return restricted_native("seatbelt_string", {"value": str(path)}, str)
 
 
 def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
-    operation = "file-read*" if hide_metadata else "file-read-data"
-    return tuple(
-        f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in _read_only_credential_patterns()
-    )
+    return tuple(restricted_native("credential_denials", {"hide_metadata": hide_metadata}, list))

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..native_sensitive_request import NativeSensitiveRequestError
 from ..runtime.secret_file_requests import _read_only_lookup_target_is_safe
 from ..runtime.source_paths import resolve_source_candidate_path
 
@@ -68,12 +69,17 @@ def _native_search_targets(tool_input: dict[str, object]) -> tuple[str, ...] | N
     return tuple(targets)
 
 
+def _lookup_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None) -> bool:
+    """An unanswered classifier is not a read-only proof."""
+
+    try:
+        return _read_only_lookup_target_is_safe(target, allow_dirs=allow_dirs, home_dir=home_dir)
+    except NativeSensitiveRequestError:
+        return False
+
+
 def _safe_glob(value: object, *, home_dir: Path | None) -> bool:
-    return _nonempty_string(value) and _read_only_lookup_target_is_safe(
-        str(value),
-        allow_dirs=False,
-        home_dir=home_dir,
-    )
+    return _nonempty_string(value) and _lookup_is_safe(str(value), allow_dirs=False, home_dir=home_dir)
 
 
 def _native_search_target_is_safe(
@@ -84,7 +90,7 @@ def _native_search_target_is_safe(
 ) -> bool:
     if any(marker in target for marker in ("*", "?", "[", "]")):
         return False
-    if not _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir):
+    if not _lookup_is_safe(target, allow_dirs=True, home_dir=home_dir):
         return False
     candidate = resolve_source_candidate_path(target, cwd=cwd, home_dir=home_dir)
     if candidate is None:
@@ -93,7 +99,7 @@ def _native_search_target_is_safe(
         resolved = candidate.resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
         return False
-    return (resolved.is_file() or resolved.is_dir()) and _read_only_lookup_target_is_safe(
+    return (resolved.is_file() or resolved.is_dir()) and _lookup_is_safe(
         str(resolved), allow_dirs=True, home_dir=home_dir
     )
 

@@ -5,7 +5,8 @@
 //! directory, and the expression may use only matching, depth and print
 //! predicates. Actions (`-exec*`, `-ok*`, `-delete`, `-fprint*`, `-fls`,
 //! `-printf`), link-following options (`-L`, `-H`, `-follow`) and anything
-//! unrecognised keep review.
+//! unrecognised keep review. Skill directories and `~/.agents` may be roots
+//! because the expression prints names, never contents.
 
 use super::safe_reads::{bounded_read_target, verified_path_context};
 
@@ -29,9 +30,11 @@ pub(super) fn safe_find_listing_arguments(
         return false;
     }
     verified_path_context(context.home_dir, context.cwd)
-        && roots
-            .iter()
-            .all(|root| bounded_read_target(root, context.home_dir, context.cwd, true))
+        && roots.iter().all(|root| {
+            !super::search::skill_link_resolves_over_home(root, context)
+                && (bounded_read_target(root, context.home_dir, context.cwd, true)
+                    || super::search::skill_listing_root(root, context))
+        })
         && safe_expression(expression)
 }
 

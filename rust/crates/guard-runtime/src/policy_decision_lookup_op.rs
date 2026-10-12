@@ -146,6 +146,16 @@ pub(crate) fn workspace_policy_key(workspace: Option<&str>) -> Option<String> {
     if ws.starts_with("workspace:") {
         return Some(ws.to_string());
     }
+    computed_workspace_policy_key(Some(ws))
+}
+
+/// `_workspace_policy_key` (`store_base.py`) exactly: always hashes the
+/// normalized path, with no passthrough for already-keyed input.
+pub(crate) fn computed_workspace_policy_key(workspace: Option<&str>) -> Option<String> {
+    let ws = workspace?;
+    if ws.trim().is_empty() {
+        return None;
+    }
     Some(format!(
         "workspace:{}",
         sha256_hex(normalized_workspace_path(ws).as_bytes())

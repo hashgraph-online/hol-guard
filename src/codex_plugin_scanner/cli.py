@@ -244,11 +244,12 @@ def _resolve_legacy_args(
         if program_mode == "hol-guard":
             return ["--help"]
         return argv
-    if program_mode == "guard":
+    if program_mode in {"guard", "hol-guard"}:
+        # Guard-generated commands spell the combined form `<cli> guard ...`.
+        # Neither standalone launcher has a `guard` subcommand, so the prefix
+        # is dropped instead of failing the whole command.
         if argv[0] == "guard":
             return argv[1:]
-        return _resolve_hermes_args(argv)
-    if program_mode == "hol-guard":
         return _resolve_hermes_args(argv)
     if program_mode == "combined" and argv[0] == "hook":
         return ["guard", *argv]

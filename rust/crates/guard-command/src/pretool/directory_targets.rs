@@ -33,6 +33,18 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     if context.home_dir.is_none() || context.cwd.is_none() || !safe_directory_target(value) {
         return None;
     }
+    // An unquoted leading `~` expands from the shell's HOME, so it is proved
+    // only when that HOME is the declared one.
+    let expanded;
+    let value = if value == "~" || value.starts_with("~/") {
+        if cfg!(windows) || !context.shell_home_matches {
+            return None;
+        }
+        expanded = super::read_paths::expand_home_read_path(value, context.home_dir)?;
+        expanded.as_str()
+    } else {
+        value
+    };
     let supplied = std::path::Path::new(value);
     let joined;
     let supplied = if supplied.is_absolute() {
@@ -172,23 +184,66 @@ pub(crate) fn search_home_targets_safe(
 fn shell_keeps_tilde_literal(text: &str) -> bool {
     let mut quote = None;
     let mut escaped = false;
-    for character in text.chars() {
+    let mut word_start = true;
+    let chars: Vec<char> = text.chars().collect();
+    for (index, character) in chars.iter().copied().enumerate() {
         if escaped {
             escaped = false;
             if character == '~' {
                 return true;
             }
+            word_start = false;
             continue;
+        }
+        // `~"/project"` keeps the tilde literal: the slash is quoted, so the
+        // shell does not expand it to home. The quote-stripped argument is
+        // still `~/project`, which must not be proved as that home path.
+        if quote.is_none()
+            && word_start
+            && character == '~'
+            && mixed_tilde_prefix(&chars[index + 1..])
+        {
+            return true;
         }
         match (quote, character) {
             (Some(_), '~') => return true,
             (None | Some('"'), '\\') => escaped = true,
             (None, '\'' | '"') => quote = Some(character),
             (Some(open), _) if character == open => quote = None,
+            (None, character) if is_shell_word_boundary(character) => {
+                word_start = true;
+                continue;
+            }
+            _ => {}
+        }
+        if quote.is_none() {
+            word_start = false;
+        }
+    }
+    false
+}
+
+/// A quote or escape between a word-initial `~` and the first unquoted `/`
+/// means the shell will not perform the home expansion the path proof assumes.
+fn mixed_tilde_prefix(rest: &[char]) -> bool {
+    let mut escaped = false;
+    for character in rest.iter().copied() {
+        if escaped {
+            return true;
+        }
+        match character {
+            '\\' => escaped = true,
+            '\'' | '"' => return true,
+            '/' => return false,
+            character if is_shell_word_boundary(character) => return false,
             _ => {}
         }
     }
     false
+}
+
+fn is_shell_word_boundary(character: char) -> bool {
+    character.is_whitespace() || matches!(character, ';' | '|' | '&' | '(' | ')' | '<' | '>' | '\n')
 }
 
 /// A backslash the shell would remove or reinterpret: any unquoted backslash,
@@ -273,11 +328,28 @@ impl<'a> super::PathContext<'a> {
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
         };
+        // The shell expands `~` from its own HOME: the stamped one, or the
+        // runtime's when no environment was stamped.
+        let shell_home = match execution_environment {
+            Some(environment) if environment.has_valid_shape() => environment.home.clone(),
+            Some(_) => None,
+            None => std::env::var("HOME").ok(),
+        };
+        let canonical = |path: &str| {
+            std::path::Path::new(path)
+                .is_absolute()
+                .then(|| std::fs::canonicalize(path).ok())
+                .flatten()
+        };
+        let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
+            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
+        });
         Self {
             home_dir,
             cwd,
             cdpath_unset,
             rustup_override_absent,
+            shell_home_matches,
         }
     }
 }
