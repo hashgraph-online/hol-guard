@@ -5,7 +5,7 @@ use std::path::Path;
 
 pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
     let allowed: &[&str] = match action {
-        "masked_bodies" | "masked_complete" => &["command", "heredocs"],
+        "masked_bodies" | "masked_complete" => &["command", "heredocs", "spans_json"],
         "normalization" | "trusted_path" => &["command", "cwd", "home_dir"],
         "trace" => &["command", "state", "index"],
         "top_level" => &["command", "state"],
@@ -65,6 +65,39 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
             shell_structure::extract_expanded_heredoc_substitution_spans(command)
         )),
         "masked_bodies" | "masked_complete" => {
+            if input.get("spans_json").is_some() {
+                if input.get("heredocs").is_some() {
+                    return Err("shell_helpers_invalid");
+                }
+                let encoded = input["spans_json"]
+                    .as_str()
+                    .ok_or("shell_helpers_invalid")?;
+                let spans: Vec<[usize; 4]> =
+                    serde_json::from_str(encoded).map_err(|_| "shell_helpers_invalid_spans")?;
+                let mut chars: Vec<char> = command.chars().collect();
+                if spans.len() > 131_072
+                    || spans.iter().any(|s| {
+                        s[0] > s[1] || s[1] > chars.len() || s[2] > s[3] || s[3] > chars.len()
+                    })
+                {
+                    return Err("shell_helpers_invalid_spans");
+                }
+                for [start, declaration_end, body_start, end] in spans {
+                    for c in &mut chars[body_start..end] {
+                        if *c != '\n' {
+                            *c = ' ';
+                        }
+                    }
+                    if action == "masked_complete" {
+                        for c in &mut chars[start..declaration_end] {
+                            if *c != '\n' {
+                                *c = ' ';
+                            }
+                        }
+                    }
+                }
+                return Ok(json!(chars.iter().collect::<String>()));
+            }
             let heredocs: Vec<shell_structure::ShellHeredoc> =
                 serde_json::from_value(input["heredocs"].clone())
                     .map_err(|_| "shell_helpers_invalid")?;

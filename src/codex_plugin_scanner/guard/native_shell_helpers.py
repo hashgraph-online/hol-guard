@@ -15,6 +15,9 @@ def runtime_key() -> tuple[object, ...]:
     from .native_context import _native_runtime_status_memo as native_runtime_status
 
     status = native_runtime_status()
+    if "spans" in fields:
+        encoded = json.dumps(fields.pop("spans"), separators=(",", ":"))
+        fields["spans_chunks"] = [encoded[i : i + 131_072] for i in range(0, len(encoded), 131_072)]
     if not status.available or not status.compatible or status.identity is None:
         raise NativeShellHelpersError("native_shell_helpers_unavailable")
     identity = status.identity
@@ -42,7 +45,11 @@ def call(action: str, command: str, **fields: Any) -> Any:
             "schema": "guard-shell-helpers-request.v1",
             "request_id": native_execution._request_id("shell_helpers"),
             "action": "heredocs_page" if paged else action,
-            "input": {"command": command, **fields, **({"offset": offset} if paged else {})},
+            "input": {
+                "command_chunks": [command[i : i + 131_072] for i in range(0, len(command), 131_072)],
+                **fields,
+                **({"offset": offset} if paged else {}),
+            },
             "timeout_ms": max(1, int(remaining * 1000)),
         }
         frame = {"operation": "shell_helpers", "request": request}

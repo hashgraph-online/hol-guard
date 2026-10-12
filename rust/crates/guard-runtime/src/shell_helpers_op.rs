@@ -31,12 +31,15 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
         guard_contracts::MAX_NATIVE_REQUEST_BYTES,
     )
     .map_err(|_| "shell_helpers_invalid_request")?;
-    let observed = if request.action == "heredocs_page" {
-        match request.input.as_object() {
+    let decoded = unpack_claims(&request.input);
+    let observed = match decoded {
+      Err(code) => Err(code),
+      Ok(input) if request.action == "heredocs_page" => {
+        match input.as_object() {
             Some(fields) if fields.len() == 2 && fields.contains_key("command") && fields.contains_key("offset") => {
-                guard_command::shell_helpers::evaluate("heredocs", &json!({"command":request.input["command"]})).and_then(|value| {
+                guard_command::shell_helpers::evaluate("heredocs", &json!({"command":input["command"]})).and_then(|value| {
                     let rows = value.as_array().ok_or("shell_helpers_invalid")?;
-                    let offset = usize::try_from(request.input["offset"].as_u64().ok_or("shell_helpers_invalid")?).map_err(|_| "shell_helpers_invalid")?;
+                    let offset = usize::try_from(input["offset"].as_u64().ok_or("shell_helpers_invalid")?).map_err(|_| "shell_helpers_invalid")?;
                     if offset > rows.len() { return Err("shell_helpers_invalid"); }
                     let end = (offset + 1024).min(rows.len());
                     Ok(json!({"items":rows[offset..end],"next_offset":if end < rows.len() {Some(end)} else {None}}))
@@ -44,8 +47,8 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
             }
             _ => Err("shell_helpers_invalid"),
         }
-    } else {
-        guard_command::shell_helpers::evaluate(&request.action, &request.input)
+      }
+      Ok(input) => guard_command::shell_helpers::evaluate(&request.action, &input),
     };
     let (code, result) = match observed {
         Ok(value) => ("ok", value),
@@ -63,6 +66,36 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
         ),
         answer => answer,
     }
+}
+
+fn unpack_claims(input: &Value) -> Result<Value, &'static str> {
+    let mut fields = input.as_object().ok_or("shell_helpers_invalid")?.clone();
+    for (packed, plain) in [
+        ("command_chunks", "command"),
+        ("spans_chunks", "spans_json"),
+    ] {
+        if let Some(value) = fields.remove(packed) {
+            if fields.contains_key(plain) {
+                return Err("shell_helpers_invalid");
+            }
+            let chunks = value.as_array().ok_or("shell_helpers_invalid")?;
+            if chunks.len() > 128 {
+                return Err("shell_helpers_bounds");
+            }
+            let mut joined = String::new();
+            for chunk in chunks {
+                let chunk = chunk.as_str().ok_or("shell_helpers_invalid")?;
+                if chunk.len() > 1024 * 1024
+                    || joined.len().saturating_add(chunk.len()) > 6 * 1024 * 1024
+                {
+                    return Err("shell_helpers_bounds");
+                }
+                joined.push_str(chunk);
+            }
+            fields.insert(plain.into(), json!(joined));
+        }
+    }
+    Ok(Value::Object(fields))
 }
 
 fn reply(

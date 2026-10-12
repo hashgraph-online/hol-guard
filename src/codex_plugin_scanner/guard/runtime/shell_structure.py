@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from ..native_shell_helpers import call, runtime_key
@@ -48,11 +48,15 @@ def extract_command_substitutions(command: str) -> tuple[str, ...]:
 
 
 def mask_heredoc_bodies(command: str, heredocs: tuple[ShellHeredoc, ...]) -> str:
-    return call("masked_bodies", command, heredocs=[asdict(h) for h in heredocs])
+    return call(
+        "masked_bodies", command, spans=[(h.operator_start, h.declaration_end, h.body_start, h.end) for h in heredocs]
+    )
 
 
 def mask_complete_heredocs(command: str, heredocs: tuple[ShellHeredoc, ...]) -> str:
-    return call("masked_complete", command, heredocs=[asdict(h) for h in heredocs])
+    return call(
+        "masked_complete", command, spans=[(h.operator_start, h.declaration_end, h.body_start, h.end) for h in heredocs]
+    )
 
 
 class ShellScanState:

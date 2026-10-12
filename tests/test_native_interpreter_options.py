@@ -19,4 +19,6 @@ def test_interpreter_and_wrapper_public_callers_share_native_option_admission(na
         assert asdict(payload) == vector["expected"]
     for command in ("bash --command 'echo value'", "bash -co pipefail 'echo value'"):
         expected = next(v["expected"]["normalization"] for v in fixture["vectors"] if v["command"] == command)
-        assert asdict(normalize_transparent_shell_command(command)) == expected
+        actual = asdict(normalize_transparent_shell_command(command))
+        actual["wrapper_chain"] = list(actual["wrapper_chain"])
+        assert actual == expected

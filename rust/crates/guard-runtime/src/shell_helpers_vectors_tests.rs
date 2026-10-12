@@ -1,6 +1,21 @@
 use super::*;
 use serde_json::{json, Value};
 
+fn chunks(text: &str) -> Value {
+    let chars: Vec<char> = text.chars().collect();
+    json!(chars
+        .chunks(131_072)
+        .map(|part| part.iter().collect::<String>())
+        .collect::<Vec<_>>())
+}
+
+fn resident_reply(request: &ShellHelpersRequest) -> Value {
+    let frame = json!({"operation":"shell_helpers", "request":request,"deadline_budget_ms":10_000});
+    let encoded = serde_json::to_vec(&frame).unwrap();
+    serde_json::from_slice(&crate::resident_ops::evaluate_resident_bytes(&encoded, None).unwrap())
+        .unwrap()
+}
+
 #[cfg(unix)]
 #[test]
 fn trusted_absolute_env_wrapper_uses_native_observations() {
@@ -37,9 +52,22 @@ fn original_python_shell_helpers_replay() {
             if vector["expected"].get(action).is_none() {
                 continue;
             }
-            let mut input = json!({"command":command});
+            let mut input = json!({"command_chunks":chunks(command.as_str().unwrap())});
             if action.starts_with("masked_") {
-                input["heredocs"] = vector["expected"]["heredocs"].clone();
+                let spans: Vec<Value> = vector["expected"]["heredocs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|h| {
+                        json!([
+                            h["operator_start"],
+                            h["declaration_end"],
+                            h["body_start"],
+                            h["end"]
+                        ])
+                    })
+                    .collect();
+                input["spans_chunks"] = chunks(&serde_json::to_string(&spans).unwrap());
             }
             if action == "trace" {
                 input["state"] = json!([null, 0, false]);
@@ -60,12 +88,12 @@ fn original_python_shell_helpers_replay() {
                 input,
                 timeout_ms: 10_000,
             };
-            let mut reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+            let mut reply = resident_reply(&request);
             if action == "heredocs" {
                 let mut rows = reply["result"]["items"].as_array().unwrap().clone();
                 while !reply["result"]["next_offset"].is_null() {
                     request.input["offset"] = reply["result"]["next_offset"].clone();
-                    reply = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+                    reply = resident_reply(&request);
                     rows.extend(reply["result"]["items"].as_array().unwrap().iter().cloned());
                 }
                 reply["result"] = json!(rows);
@@ -78,7 +106,7 @@ fn original_python_shell_helpers_replay() {
                     let last = rows.last().unwrap();
                     request.input["index"] = last[1].clone();
                     request.input["state"] = json!([last[2], last[3], last[4]]);
-                    reply = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+                    reply = resident_reply(&request);
                     let page = reply["result"].as_array().unwrap();
                     assert!(!page.is_empty());
                     rows.extend(page.iter().cloned());
@@ -132,7 +160,7 @@ fn input_rejections_are_bound_replies_and_large_results_are_bounded() {
         ),
         (
             "normalization",
-            json!({"command":"x".repeat(1_100_000)}),
+            json!({"command_chunks":chunks(&"x".repeat(1_100_000))}),
             "shell_helpers_response_bounds",
         ),
     ] {
@@ -143,7 +171,7 @@ fn input_rejections_are_bound_replies_and_large_results_are_bounded() {
             input,
             timeout_ms: 10_000,
         };
-        let reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+        let reply = resident_reply(&request);
         assert_eq!(reply["status"], json!("ok"));
         assert_eq!(reply["code"], json!(code));
         assert!(reply["result"].is_null());
