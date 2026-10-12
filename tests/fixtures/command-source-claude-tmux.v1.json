@@ -36,7 +36,7 @@
        "default_enabled": true,
        "dependencies": [],
        "deprecated": false,
-       "description": "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the confirmation prompt by hand — --force, a pipeline feeding the prompt its consent, or a here-string holding it. Every pane in a selected session is terminated, ending the agent teams running in them and discarding the unsaved terminal state they hold. With no target and no selection flag the run sweeps every session on the host.",
+       "description": "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the confirmation prompt by hand — --force, or a pipeline feeding the prompt its consent. Every pane in a selected session is terminated, ending the agent teams running in them and discarding the unsaved terminal state they hold. With no target and no selection flag the run sweeps every session on the host.",
        "example_command": "ctc --all --force",
        "family": null,
        "fixed_reason": null,
@@ -94,7 +94,7 @@
         "claude tmux session teardown command"
        ],
        "default_mode": "review",
-       "description": "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the confirmation prompt by hand — --force, a pipeline feeding the prompt its consent, or a here-string holding it. Every pane in a selected session is terminated, ending the agent teams running in them and discarding the unsaved terminal state they hold. With no target and no selection flag the run sweeps every session on the host.",
+       "description": "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the confirmation prompt by hand — --force, or a pipeline feeding the prompt its consent. Every pane in a selected session is terminated, ending the agent teams running in them and discarding the unsaved terminal state they hold. With no target and no selection flag the run sweeps every session on the host.",
        "family": null,
        "matcher": {
         "config": {},
@@ -208,79 +208,442 @@
           "op": "executable.v1"
          },
          {
-          "config": {
-           "feeders": [
-            "echo",
-            "printf",
-            "yes"
-           ],
-           "forwarders": [
-            "cat"
-           ],
-           "values": [
-            "y",
-            "y\\n",
-            "yes",
-            "yes\\n"
-           ]
-          },
-          "consumer": {
-           "config": {},
-           "matchers": [
-            {
-             "config": {
-              "allow_leading_options": false,
-              "executables": [
-               "claude-tmux-cleanup",
-               "claude-tmux-cleanup.cmd",
-               "claude-tmux-cleanup.exe"
-              ],
-              "fail_secure_unknown_options": false,
-              "forbidden_flags": [
-               "--help",
-               "-h"
-              ],
-              "interspersed_flags": [],
-              "interspersed_options_with_values": [],
-              "inverse_flag_pairs": [],
-              "leading_options_with_values": [],
-              "options_with_values": [],
-              "required_flags": [],
-              "required_flags_in_all_arguments": false,
-              "required_option_values": [],
-              "subcommands": []
-             },
-             "op": "executable.v1"
+          "config": {},
+          "matchers": [
+           {
+            "config": {},
+            "consumer": {
+             "config": {},
+             "matchers": [
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "claude-tmux-cleanup",
+                 "claude-tmux-cleanup.cmd",
+                 "claude-tmux-cleanup.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "ctc",
+                 "ctc.cmd",
+                 "ctc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              }
+             ],
+             "op": "any.v1"
             },
-            {
-             "config": {
-              "allow_leading_options": false,
-              "executables": [
-               "ctc",
-               "ctc.cmd",
-               "ctc.exe"
-              ],
-              "fail_secure_unknown_options": false,
-              "forbidden_flags": [
-               "--help",
-               "-h"
-              ],
-              "interspersed_flags": [],
-              "interspersed_options_with_values": [],
-              "inverse_flag_pairs": [],
-              "leading_options_with_values": [],
-              "options_with_values": [],
-              "required_flags": [],
-              "required_flags_in_all_arguments": false,
-              "required_option_values": [],
-              "subcommands": []
-             },
-             "op": "executable.v1"
+            "op": "pipeline.v1",
+            "producer": {
+             "config": {},
+             "matchers": [
+              {
+               "config": {},
+               "matchers": [
+                {
+                 "config": {
+                  "executables": [
+                   "yes"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": []
+                 },
+                 "op": "zero-operand-flags.v1"
+                },
+                {
+                 "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                   "yes"
+                  ],
+                  "fail_secure_unknown_options": false,
+                  "forbidden_flags": [
+                   "--help",
+                   "--version"
+                  ],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": []
+                 },
+                 "op": "executable.v1"
+                }
+               ],
+               "op": "all.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "echo",
+                 "yes"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "y"
+                ]
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "echo",
+                 "yes"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "yes"
+                ]
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "printf"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "y\\n"
+                ]
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "printf"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "yes\\n"
+                ]
+               },
+               "op": "executable.v1"
+              }
+             ],
+             "op": "any.v1"
             }
-           ],
-           "op": "any.v1"
-          },
-          "op": "confirmation-fed.v1"
+           },
+           {
+            "config": {},
+            "consumer": {
+             "config": {},
+             "matchers": [
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "claude-tmux-cleanup",
+                 "claude-tmux-cleanup.cmd",
+                 "claude-tmux-cleanup.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "ctc",
+                 "ctc.cmd",
+                 "ctc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              }
+             ],
+             "op": "any.v1"
+            },
+            "op": "pipeline.v1",
+            "producer": {
+             "config": {},
+             "consumer": {
+              "config": {},
+              "matchers": [
+               {
+                "config": {
+                 "executables": [
+                  "cat"
+                 ],
+                 "options_with_values": [],
+                 "required_flags": []
+                },
+                "op": "zero-operand-flags.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "cat"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "-"
+                 ]
+                },
+                "op": "executable.v1"
+               }
+              ],
+              "op": "any.v1"
+             },
+             "op": "pipeline.v1",
+             "producer": {
+              "config": {},
+              "matchers": [
+               {
+                "config": {},
+                "matchers": [
+                 {
+                  "config": {
+                   "executables": [
+                    "yes"
+                   ],
+                   "options_with_values": [],
+                   "required_flags": []
+                  },
+                  "op": "zero-operand-flags.v1"
+                 },
+                 {
+                  "config": {
+                   "allow_leading_options": false,
+                   "executables": [
+                    "yes"
+                   ],
+                   "fail_secure_unknown_options": false,
+                   "forbidden_flags": [
+                    "--help",
+                    "--version"
+                   ],
+                   "interspersed_flags": [],
+                   "interspersed_options_with_values": [],
+                   "inverse_flag_pairs": [],
+                   "leading_options_with_values": [],
+                   "options_with_values": [],
+                   "required_flags": [],
+                   "required_flags_in_all_arguments": false,
+                   "required_option_values": [],
+                   "subcommands": []
+                  },
+                  "op": "executable.v1"
+                 }
+                ],
+                "op": "all.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "echo",
+                  "yes"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "y"
+                 ]
+                },
+                "op": "executable.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "echo",
+                  "yes"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "yes"
+                 ]
+                },
+                "op": "executable.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "printf"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "y\\n"
+                 ]
+                },
+                "op": "executable.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "printf"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "yes\\n"
+                 ]
+                },
+                "op": "executable.v1"
+               }
+              ],
+              "op": "any.v1"
+             }
+            }
+           }
+          ],
+          "op": "any.v1"
          }
         ],
         "op": "any.v1"
@@ -653,137 +1016,558 @@
           "op": "executable.v1"
          },
          {
-          "config": {
-           "feeders": [
-            "echo",
-            "printf",
-            "yes"
-           ],
-           "forwarders": [
-            "cat"
-           ],
-           "values": [
-            "y",
-            "y\\n",
-            "yes",
-            "yes\\n"
-           ]
-          },
-          "consumer": {
-           "config": {},
-           "matchers": [
-            {
-             "config": {
-              "allow_leading_options": false,
-              "executables": [
-               "claude-tmux-cleanup",
-               "claude-tmux-cleanup.cmd",
-               "claude-tmux-cleanup.exe"
-              ],
-              "fail_secure_unknown_options": false,
-              "forbidden_flags": [
-               "--help",
-               "-h"
-              ],
-              "interspersed_flags": [],
-              "interspersed_options_with_values": [],
-              "inverse_flag_pairs": [],
-              "leading_options_with_values": [],
-              "options_with_values": [],
-              "required_flags": [
-               "--prune"
-              ],
-              "required_flags_in_all_arguments": false,
-              "required_option_values": [],
-              "subcommands": []
-             },
-             "op": "executable.v1"
+          "config": {},
+          "matchers": [
+           {
+            "config": {},
+            "consumer": {
+             "config": {},
+             "matchers": [
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "claude-tmux-cleanup",
+                 "claude-tmux-cleanup.cmd",
+                 "claude-tmux-cleanup.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "--prune"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "ctc",
+                 "ctc.cmd",
+                 "ctc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "--prune"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "claude-tmux-cleanup",
+                 "claude-tmux-cleanup.cmd",
+                 "claude-tmux-cleanup.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "-p"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "ctc",
+                 "ctc.cmd",
+                 "ctc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "-p"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              }
+             ],
+             "op": "any.v1"
             },
-            {
-             "config": {
-              "allow_leading_options": false,
-              "executables": [
-               "ctc",
-               "ctc.cmd",
-               "ctc.exe"
-              ],
-              "fail_secure_unknown_options": false,
-              "forbidden_flags": [
-               "--help",
-               "-h"
-              ],
-              "interspersed_flags": [],
-              "interspersed_options_with_values": [],
-              "inverse_flag_pairs": [],
-              "leading_options_with_values": [],
-              "options_with_values": [],
-              "required_flags": [
-               "--prune"
-              ],
-              "required_flags_in_all_arguments": false,
-              "required_option_values": [],
-              "subcommands": []
-             },
-             "op": "executable.v1"
-            },
-            {
-             "config": {
-              "allow_leading_options": false,
-              "executables": [
-               "claude-tmux-cleanup",
-               "claude-tmux-cleanup.cmd",
-               "claude-tmux-cleanup.exe"
-              ],
-              "fail_secure_unknown_options": false,
-              "forbidden_flags": [
-               "--help",
-               "-h"
-              ],
-              "interspersed_flags": [],
-              "interspersed_options_with_values": [],
-              "inverse_flag_pairs": [],
-              "leading_options_with_values": [],
-              "options_with_values": [],
-              "required_flags": [
-               "-p"
-              ],
-              "required_flags_in_all_arguments": false,
-              "required_option_values": [],
-              "subcommands": []
-             },
-             "op": "executable.v1"
-            },
-            {
-             "config": {
-              "allow_leading_options": false,
-              "executables": [
-               "ctc",
-               "ctc.cmd",
-               "ctc.exe"
-              ],
-              "fail_secure_unknown_options": false,
-              "forbidden_flags": [
-               "--help",
-               "-h"
-              ],
-              "interspersed_flags": [],
-              "interspersed_options_with_values": [],
-              "inverse_flag_pairs": [],
-              "leading_options_with_values": [],
-              "options_with_values": [],
-              "required_flags": [
-               "-p"
-              ],
-              "required_flags_in_all_arguments": false,
-              "required_option_values": [],
-              "subcommands": []
-             },
-             "op": "executable.v1"
+            "op": "pipeline.v1",
+            "producer": {
+             "config": {},
+             "matchers": [
+              {
+               "config": {},
+               "matchers": [
+                {
+                 "config": {
+                  "executables": [
+                   "yes"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": []
+                 },
+                 "op": "zero-operand-flags.v1"
+                },
+                {
+                 "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                   "yes"
+                  ],
+                  "fail_secure_unknown_options": false,
+                  "forbidden_flags": [
+                   "--help",
+                   "--version"
+                  ],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": []
+                 },
+                 "op": "executable.v1"
+                }
+               ],
+               "op": "all.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "echo",
+                 "yes"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "y"
+                ]
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "echo",
+                 "yes"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "yes"
+                ]
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "printf"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "y\\n"
+                ]
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "printf"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                 "yes\\n"
+                ]
+               },
+               "op": "executable.v1"
+              }
+             ],
+             "op": "any.v1"
             }
-           ],
-           "op": "any.v1"
-          },
-          "op": "confirmation-fed.v1"
+           },
+           {
+            "config": {},
+            "consumer": {
+             "config": {},
+             "matchers": [
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "claude-tmux-cleanup",
+                 "claude-tmux-cleanup.cmd",
+                 "claude-tmux-cleanup.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "--prune"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "ctc",
+                 "ctc.cmd",
+                 "ctc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "--prune"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "claude-tmux-cleanup",
+                 "claude-tmux-cleanup.cmd",
+                 "claude-tmux-cleanup.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "-p"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              },
+              {
+               "config": {
+                "allow_leading_options": false,
+                "executables": [
+                 "ctc",
+                 "ctc.cmd",
+                 "ctc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                 "--help",
+                 "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                 "-p"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+               },
+               "op": "executable.v1"
+              }
+             ],
+             "op": "any.v1"
+            },
+            "op": "pipeline.v1",
+            "producer": {
+             "config": {},
+             "consumer": {
+              "config": {},
+              "matchers": [
+               {
+                "config": {
+                 "executables": [
+                  "cat"
+                 ],
+                 "options_with_values": [],
+                 "required_flags": []
+                },
+                "op": "zero-operand-flags.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "cat"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "-"
+                 ]
+                },
+                "op": "executable.v1"
+               }
+              ],
+              "op": "any.v1"
+             },
+             "op": "pipeline.v1",
+             "producer": {
+              "config": {},
+              "matchers": [
+               {
+                "config": {},
+                "matchers": [
+                 {
+                  "config": {
+                   "executables": [
+                    "yes"
+                   ],
+                   "options_with_values": [],
+                   "required_flags": []
+                  },
+                  "op": "zero-operand-flags.v1"
+                 },
+                 {
+                  "config": {
+                   "allow_leading_options": false,
+                   "executables": [
+                    "yes"
+                   ],
+                   "fail_secure_unknown_options": false,
+                   "forbidden_flags": [
+                    "--help",
+                    "--version"
+                   ],
+                   "interspersed_flags": [],
+                   "interspersed_options_with_values": [],
+                   "inverse_flag_pairs": [],
+                   "leading_options_with_values": [],
+                   "options_with_values": [],
+                   "required_flags": [],
+                   "required_flags_in_all_arguments": false,
+                   "required_option_values": [],
+                   "subcommands": []
+                  },
+                  "op": "executable.v1"
+                 }
+                ],
+                "op": "all.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "echo",
+                  "yes"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "y"
+                 ]
+                },
+                "op": "executable.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "echo",
+                  "yes"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "yes"
+                 ]
+                },
+                "op": "executable.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "printf"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "y\\n"
+                 ]
+                },
+                "op": "executable.v1"
+               },
+               {
+                "config": {
+                 "allow_leading_options": false,
+                 "executables": [
+                  "printf"
+                 ],
+                 "fail_secure_unknown_options": false,
+                 "forbidden_flags": [],
+                 "interspersed_flags": [],
+                 "interspersed_options_with_values": [],
+                 "inverse_flag_pairs": [],
+                 "leading_options_with_values": [],
+                 "options_with_values": [],
+                 "required_flags": [],
+                 "required_flags_in_all_arguments": false,
+                 "required_option_values": [],
+                 "subcommands": [
+                  "yes\\n"
+                 ]
+                },
+                "op": "executable.v1"
+               }
+              ],
+              "op": "any.v1"
+             }
+            }
+           }
+          ],
+          "op": "any.v1"
          }
         ],
         "op": "any.v1"
@@ -11213,6 +11997,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    0,
     1
    ],
    "id": "teardown-piped-yes",
@@ -11226,6 +12011,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    0,
     1
    ],
    "id": "teardown-piped-echo",
@@ -11239,6 +12025,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    1,
     2
    ],
    "id": "teardown-piped-through-cat",
@@ -11252,6 +12039,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    0,
     1
    ],
    "id": "prune-piped-yes",
@@ -11401,6 +12189,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    1,
     2
    ],
    "id": "teardown-piped-through-cat-dash",
@@ -11414,6 +12203,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    0,
     1
    ],
    "id": "teardown-piped-echo-yes",
@@ -11427,6 +12217,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    0,
     1
    ],
    "id": "teardown-piped-minimal-sweep",
@@ -11440,6 +12231,7 @@
    ],
    "expected_action": "review",
    "expected_effective_segments": [
+    0,
     1
    ],
    "id": "prune-piped-minimal",
