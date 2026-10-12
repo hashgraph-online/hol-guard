@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
+from codex_plugin_scanner.guard.proxy import native_mcp_child_io as native_child_io_module
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages
@@ -81,7 +82,7 @@ def test_frame_during_the_quiet_edge_blocks_the_call_before_it_is_written(
         seen.append(str(message["method"]))
         return {"outcome": "boundary", "written": False, "event_kind": "child_notification", "frame": _LIST_CHANGED}
 
-    monkeypatch.setattr(runtime_mcp_module, "mcp_stdio_session_exchange_native", boundary)
+    monkeypatch.setattr(native_child_io_module, "mcp_stdio_session_exchange_native", boundary)
     result = proxy.run_session(_call_messages())
     assert seen == ["tools/call"]
     assert marker.exists() is False
@@ -96,7 +97,7 @@ def test_silent_child_after_the_write_times_out_like_a_separate_recv(
 ) -> None:
     proxy, marker = _proxy(tmp_path, monkeypatch, native_mcp_probe)
     monkeypatch.setattr(
-        runtime_mcp_module,
+        native_child_io_module,
         "mcp_stdio_session_exchange_native",
         lambda *_args, **_kwargs: {"outcome": "timeout", "written": True},
     )
@@ -109,7 +110,92 @@ def test_unusable_exchange_answer_fails_the_call_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_mcp_probe
 ) -> None:
     proxy, marker = _proxy(tmp_path, monkeypatch, native_mcp_probe)
-    monkeypatch.setattr(runtime_mcp_module, "mcp_stdio_session_exchange_native", lambda *_a, **_k: None)
+    monkeypatch.setattr(native_child_io_module, "mcp_stdio_session_exchange_native", lambda *_a, **_k: None)
     with pytest.raises(RuntimeError, match="exchange failed"):
         proxy.run_session(_call_messages())
     assert marker.exists() is False
+
+
+def test_malformed_outcome_counts_a_failure_not_a_streak_reset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import types
+
+    from codex_plugin_scanner.guard import native_mcp_stdio_exchange
+
+    captured: dict[str, object] = {}
+
+    def fake_request(**kwargs):
+        captured.update(kwargs)
+        return {"status": "sent", "payload": {"outcome": "gibberish"}}
+
+    identity = types.SimpleNamespace(sha256="identity-hash")
+    monkeypatch.setattr(native_mcp_stdio_exchange, "_resident_request", fake_request)
+    monkeypatch.setattr(
+        native_mcp_stdio_exchange,
+        "native_runtime_status",
+        lambda: types.SimpleNamespace(identity=identity),
+    )
+    failures: list[dict[str, object]] = []
+    successes: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        native_mcp_stdio_exchange,
+        "native_record_resident_failure",
+        lambda *_a, **k: failures.append(k),
+    )
+    monkeypatch.setattr(
+        native_mcp_stdio_exchange,
+        "native_record_resident_success",
+        lambda *a: successes.append(a),
+    )
+
+    answer = native_mcp_stdio_exchange.mcp_stdio_session_exchange_native(
+        "sess-1",
+        {"id": 1, "method": "tools/call"},
+        guard_home=tmp_path,
+        quiet_seconds=0.005,
+        response_timeout_seconds=30.0,
+    )
+
+    assert answer is None
+    assert failures == [{"reason": "native_mcp_stdio_exchange_unusable"}]
+    assert successes == []
+    # Quiet + quiet extension + write window + response + transport margin.
+    assert captured["timeout_seconds"] == 0.005 + 1.0 + 5.0 + 30.0 + 2.0
+    assert captured["record_success"] is False
+
+
+def test_unknown_outcome_and_good_outcome_record_health_appropriately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    from codex_plugin_scanner.guard import native_mcp_stdio_exchange
+
+    replies = iter(
+        [
+            {"status": "sent", "payload": {"outcome": "response", "written": True, "frame": {"id": 1}}},
+            {"status": "error", "payload": "child_write_failed"},
+        ]
+    )
+    monkeypatch.setattr(native_mcp_stdio_exchange, "_resident_request", lambda **_: next(replies))
+    monkeypatch.setattr(
+        native_mcp_stdio_exchange,
+        "native_runtime_status",
+        lambda: types.SimpleNamespace(identity=types.SimpleNamespace(sha256="h")),
+    )
+    successes: list[tuple[object, ...]] = []
+    failures: list[dict[str, object]] = []
+    monkeypatch.setattr(native_mcp_stdio_exchange, "native_record_resident_success", lambda *a: successes.append(a))
+    monkeypatch.setattr(
+        native_mcp_stdio_exchange, "native_record_resident_failure", lambda *_a, **k: failures.append(k)
+    )
+
+    good = native_mcp_stdio_exchange.mcp_stdio_session_exchange_native(
+        "s", {}, guard_home=tmp_path, quiet_seconds=0.0, response_timeout_seconds=1.0
+    )
+    refused = native_mcp_stdio_exchange.mcp_stdio_session_exchange_native(
+        "s", {}, guard_home=tmp_path, quiet_seconds=0.0, response_timeout_seconds=1.0
+    )
+    assert good == {"outcome": "response", "written": True, "frame": {"id": 1}}
+    assert refused is None
+    assert len(successes) == 1  # only a usable sent outcome answers
+    assert failures == [{"reason": "native_mcp_stdio_exchange_unusable"}]
