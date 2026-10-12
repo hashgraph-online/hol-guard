@@ -1,5 +1,5 @@
 //! Request-bound resident access to the shared shell helper kernels.
-use base64::Engine;
+use base64ct::{Base64, Encoding};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -130,7 +130,7 @@ fn page_result(result: Value, offset: usize) -> Result<Value, &'static str> {
     }
     let end = offset.saturating_add(PAGE_BYTES).min(bytes.len());
     Ok(json!({
-        "fragment_b64":base64::engine::general_purpose::STANDARD.encode(&bytes[offset..end]),
+        "fragment_b64":Base64::encode_string(&bytes[offset..end]),
         "byte_offset":offset,"total_bytes":bytes.len(),
         "next_offset":if end < bytes.len() {Some(end)} else {None},
         "result_sha256":guard_policy_snapshot::digest_bytes(&bytes),
