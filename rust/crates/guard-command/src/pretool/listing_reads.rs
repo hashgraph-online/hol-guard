@@ -160,8 +160,9 @@ fn is_recursive_flag(argument: &str) -> bool {
         || (crate::powershell_reads::windows_powershell_host() && powershell_recursion(argument))
 }
 
-/// On Windows `ls` can be PowerShell's Get-ChildItem, which accepts any
-/// case-insensitive prefix of `-Recurse` or `-Depth` (`-rec`, `-depth:2`).
+/// On Windows `ls` can be PowerShell's Get-ChildItem. `-s` is the documented
+/// alias of `-Recurse`. Any other case-insensitive prefix of `-Recurse` or
+/// `-Depth` (`-rec`, `-depth:2`) is recursive too.
 fn powershell_recursion(argument: &str) -> bool {
     let Some(name) = argument
         .strip_prefix('-')
@@ -170,7 +171,8 @@ fn powershell_recursion(argument: &str) -> bool {
         return false;
     };
     let name = name.split(':').next().unwrap_or(name).to_ascii_lowercase();
-    name.len() >= 2 && ("recurse".starts_with(&name) || "depth".starts_with(&name))
+    // `s` is Get-ChildItem's documented alias for `-Recurse`.
+    name == "s" || (name.len() >= 2 && ("recurse".starts_with(&name) || "depth".starts_with(&name)))
 }
 
 fn follows_links(argument: &str) -> bool {
