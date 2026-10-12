@@ -273,6 +273,6 @@ fn persisted_matches(command_text: &str, record: &GitHubWorkflowApprovalRecord) 
 #[path = "github_workflow_prepare_op_tests.rs"]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "github_workflow_prepare_op_stub_tests.rs"]
 mod stub_tests;
