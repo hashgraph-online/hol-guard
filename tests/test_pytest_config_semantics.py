@@ -23,8 +23,8 @@ from codex_plugin_scanner.guard.runtime.pytest_config import (
     PYTEST_CONFIG_VALUE_TYPE_INVALID,
     parse_pytest_config,
 )
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.interpreter_trust import _pytest_args_from_segment
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    _pytest_args_from_segment,
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )

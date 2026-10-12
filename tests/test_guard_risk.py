@@ -36,14 +36,24 @@ from codex_plugin_scanner.guard.risk import (
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.git_execution_safety import git_binary_path_is_trusted
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    _gh_pr_create_body_has_shell_command_substitution,
-    _path_text_is_within_root_text,
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.credential_exfiltration import (
     _read_small_runtime_text_file,
+)
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_expansion import (
+    _gh_pr_create_body_has_shell_command_substitution,
+)
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters import (
+    _split_attached_redirection_token,
+)
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.sensitive_read_pipeline import (
     _resolved_runtime_path,
     _runtime_entry_for_name,
+)
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_static_safety import (
+    _path_text_is_within_root_text,
     _script_has_aliased_risky_import,
-    _split_attached_redirection_token,
+)
+from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
     classify_sensitive_path,

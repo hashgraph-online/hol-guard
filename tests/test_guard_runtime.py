@@ -72,7 +72,6 @@ from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import runner_native_sync, wrapper_run_finish
-from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.approval_context import (
@@ -82,6 +81,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
+from codex_plugin_scanner.guard.runtime.secret_file_request_services import constants_core, pytest_target_detection
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
@@ -16985,7 +16985,7 @@ def test_guard_runtime_requires_restricted_profile_for_simple_pytest_module_invo
     ),
 )
 def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(command, tmp_path):
-    assert secret_file_requests_module._shell_command_targets_pytest(command)
+    assert pytest_target_detection._shell_command_targets_pytest(command)
 
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
 
@@ -16997,7 +16997,7 @@ def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(com
 def test_guard_runtime_does_not_target_harmless_inline_process_command():
     command = "python -c \"import subprocess as sp; sp.run(['echo', 'harmless'])\""
 
-    assert not secret_file_requests_module._shell_command_targets_pytest(
+    assert not pytest_target_detection._shell_command_targets_pytest(
         command,
     )
 
@@ -17856,10 +17856,10 @@ def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
 
 
 def test_guard_runtime_keeps_pytest_allowlist_disjoint_from_mutating_flags():
-    pytest_mutating_flags = secret_file_requests_module._PYTHON_MODULE_MUTATING_FLAGS["pytest"]
+    pytest_mutating_flags = constants_core._PYTHON_MODULE_MUTATING_FLAGS["pytest"]
 
-    assert secret_file_requests_module._PYTEST_SAFE_FLAGS.isdisjoint(pytest_mutating_flags)
-    assert secret_file_requests_module._PYTEST_SAFE_FLAGS_WITH_VALUES.isdisjoint(pytest_mutating_flags)
+    assert constants_core._PYTEST_SAFE_FLAGS.isdisjoint(pytest_mutating_flags)
+    assert constants_core._PYTEST_SAFE_FLAGS_WITH_VALUES.isdisjoint(pytest_mutating_flags)
 
 
 def test_guard_runtime_tool_action_classification_uses_exact_action_classes():

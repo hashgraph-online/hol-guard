@@ -513,6 +513,14 @@
     ],
     "reviewed_runtime": [
       {
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/data_flow.py",
+          "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
+          "src/codex_plugin_scanner/guard/runtime/kubernetes_*.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads and Kubernetes secret reads when it builds runtime artifacts. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
         "reason": "Reviewed and retained in runtime scope: Copilot hook processing captures local retry correlation metadata through capture_retry_lineage. The identifiers are diagnostic inputs, not authorization. Native continuation finalization preserves the first valid lineage when updating an operation; the remaining Python capture path stays counted."
       },

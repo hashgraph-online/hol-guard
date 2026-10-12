@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
 )
 from codex_plugin_scanner.guard.cli.commands_support_native_search import native_post_tool_search_is_read_only
 from codex_plugin_scanner.guard.runtime.actions import command_text_from_tool_payload, normalize_harness_payload
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters import (
     _read_only_lookup_filter_grep_args_are_safe,
 )
 
