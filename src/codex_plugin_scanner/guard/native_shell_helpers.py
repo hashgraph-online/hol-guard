@@ -15,9 +15,6 @@ def runtime_key() -> tuple[object, ...]:
     from .native_context import _native_runtime_status_memo as native_runtime_status
 
     status = native_runtime_status()
-    if "spans" in fields:
-        encoded = json.dumps(fields.pop("spans"), separators=(",", ":"))
-        fields["spans_chunks"] = [encoded[i : i + 131_072] for i in range(0, len(encoded), 131_072)]
     if not status.available or not status.compatible or status.identity is None:
         raise NativeShellHelpersError("native_shell_helpers_unavailable")
     identity = status.identity
@@ -34,6 +31,9 @@ def call(action: str, command: str, **fields: Any) -> Any:
     if not ensure_resident_prerequisite(home):
         raise NativeShellHelpersError("native_shell_helpers_unavailable")
     status = native_runtime_status()
+    if "spans" in fields:
+        encoded = json.dumps(fields.pop("spans"), separators=(",", ":"))
+        fields["spans_chunks"] = [encoded[i : i + 131_072] for i in range(0, len(encoded), 131_072)]
     paged = action == "heredocs"
     offset = 0
     rows: list[Any] = []
