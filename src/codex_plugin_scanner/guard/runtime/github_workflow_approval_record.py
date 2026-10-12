@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final
 
-from ..workflow_capabilities import (
-    WorkflowCapabilityBinding,
-    WorkflowCapabilityError,
-    canonical_framed_payload,
-)
-from .github_workflow_authorization import build_github_workflow_binding
-from .github_workflow_context import GitHubWorkflowDescriptor
+from ..workflow_capabilities import WorkflowCapabilityBinding
 
 GITHUB_WORKFLOW_APPROVAL_RECORD_SCHEMA: Final = "guard.github-workflow-approval-record.v1"
 
@@ -52,18 +44,6 @@ class GitHubWorkflowApprovalRecord:
             raise ValueError("GitHub workflow resource binding mismatch")
         _validate_sha256(self.command_identity_sha256)
         _validate_sha256(self.operation_digest_sha256)
-
-    @classmethod
-    def from_descriptor(cls, descriptor: GitHubWorkflowDescriptor) -> GitHubWorkflowApprovalRecord:
-        operation = descriptor.operation
-        return cls(
-            schema_version=GITHUB_WORKFLOW_APPROVAL_RECORD_SCHEMA,
-            operation_kind=operation.kind,
-            resource_type=operation.resource_type,
-            command_identity_sha256=_digest("github-workflow-command-identity", operation.command_identity),
-            operation_digest_sha256=_digest("github-workflow-operation-digest", operation.operation_digest),
-            binding=build_github_workflow_binding(operation, descriptor.binding_context),
-        )
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> GitHubWorkflowApprovalRecord:
@@ -113,16 +93,6 @@ class GitHubWorkflowApprovalRecord:
             },
         }
 
-    def matches_descriptor(self, descriptor: GitHubWorkflowDescriptor) -> bool:
-        try:
-            candidate = GitHubWorkflowApprovalRecord.from_descriptor(descriptor)
-            return hmac.compare_digest(
-                _digest("github-workflow-approval-record", self.to_dict()),
-                _digest("github-workflow-approval-record", candidate.to_dict()),
-            )
-        except (TypeError, ValueError, WorkflowCapabilityError):
-            return False
-
 
 def _required_string(payload: Mapping[str, object], key: str) -> str:
     value = payload.get(key)
@@ -134,10 +104,6 @@ def _required_string(payload: Mapping[str, object], key: str) -> str:
 def _validate_sha256(value: str) -> None:
     if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
         raise ValueError("invalid GitHub workflow approval digest")
-
-
-def _digest(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
 
 
 __all__ = (

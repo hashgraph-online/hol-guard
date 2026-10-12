@@ -128,6 +128,8 @@ mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;
 mod github_cli_classify_op;
+mod github_workflow_context_io;
+mod github_workflow_prepare_op;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;

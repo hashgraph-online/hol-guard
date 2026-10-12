@@ -369,6 +369,7 @@
     "src/codex_plugin_scanner/guard/native_hook_adapter.py",
     "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
     "src/codex_plugin_scanner/guard/native_github_cli.py",
+    "src/codex_plugin_scanner/guard/native_github_workflow.py",
     "src/codex_plugin_scanner/guard/native_protect_request.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
     "src/codex_plugin_scanner/guard/native_mcp_extension_input.py",

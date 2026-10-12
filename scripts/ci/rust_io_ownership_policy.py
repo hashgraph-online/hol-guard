@@ -105,6 +105,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Same correlation-only digest for the GitHub workflow prepare op.
+        "src/codex_plugin_scanner/guard/native_github_workflow.py",
         "src/codex_plugin_scanner/guard/native_protect_request.py",
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
@@ -181,6 +183,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Decodes the bounded resident GitHub workflow prepare envelope; the
+        # record is strictly validated and never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_github_workflow.py",
         # Decodes the bounded resident install-time protect envelope.
         "src/codex_plugin_scanner/guard/native_protect_request.py",
         # Decodes the bounded resident MCP tool-policy envelope; the decision
@@ -353,8 +358,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_operations.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/jsonc.py",
         "src/codex_plugin_scanner/guard/runtime/local_cli_commands.py",

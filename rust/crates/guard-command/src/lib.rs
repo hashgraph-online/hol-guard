@@ -90,6 +90,7 @@ pub mod github_command_capabilities;
 mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
 pub mod github_workflow_authorization;
+pub mod github_workflow_descriptor;
 pub mod github_workflow_operations;
 mod home_path_text;
 pub mod homebrew_intent;

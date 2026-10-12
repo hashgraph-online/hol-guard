@@ -218,6 +218,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
+            ResidentOperationV1::GithubWorkflowPrepare(request) => {
+                crate::github_workflow_prepare_op::evaluate_github_workflow_prepare_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ProtectRequest(request) => {
                 crate::protect_request_op::evaluate_protect_request_op(&request)
             }

@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
 import shlex
-import subprocess
-import sys
 from collections.abc import Mapping
-from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -20,20 +15,9 @@ from codex_plugin_scanner.guard.approval_scope_support import request_scope_cont
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_resolution import native_approval_resolution_plan
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.native_github_workflow import GitHubWorkflowDescriptor
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
-from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from codex_plugin_scanner.guard.runtime.github_workflow_authorization import (
-    GitHubWorkflowBindingContext,
-    github_repository_sha256,
-)
-from codex_plugin_scanner.guard.runtime.github_workflow_context import (
-    GITHUB_WORKFLOW_DESCRIPTOR_SCHEMA,
-    GitHubWorkflowDescriptor,
-    build_github_workflow_descriptor,
-)
-from codex_plugin_scanner.guard.runtime.github_workflow_operations import parse_github_workflow_operation
 from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
     claim_resolved_github_workflow_authorization,
     github_workflow_capability_required,
@@ -41,24 +25,20 @@ from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
-from codex_plugin_scanner.guard.workflow_capabilities import (
-    WorkflowCapabilityRuleBinding,
-    canonical_framed_payload,
-    format_utc_timestamp,
-)
+from codex_plugin_scanner.guard.workflow_capabilities import format_utc_timestamp
+from tests.github_workflow_test_support import descriptor as build_descriptor
+from tests.github_workflow_test_support import digest as _digest
+from tests.github_workflow_test_support import native_lineage_verified as native_lineage_verified
+from tests.github_workflow_test_support import with_binding
 from tests.native_workflow_test_support import evaluate_native_workflow_command
 
 _ISSUED = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
 _GH_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "github-workflow" / "gh"
 _COMMAND = f"{shlex.quote(str(_GH_FIXTURE))} issue lock 17 --repo example/repo"
-_GRAPHQL_COMMAND = (
-    f"{shlex.quote(str(_GH_FIXTURE))} api graphql -f query="
-    "'mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' -f threadId=THREAD_1"
-)
 
 
 @pytest.fixture(autouse=True)
-def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+def fixed_authority(monkeypatch: pytest.MonkeyPatch, native_lineage_verified: None) -> None:
     def authority(_store: object, **_kwargs: object) -> tuple[bytes, str]:
         return b"r" * 32, "guard-policy-integrity-key:github-runtime-test"
 
@@ -66,45 +46,8 @@ def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", lambda: format_utc_timestamp(_ISSUED))
 
 
-def _digest(label: str) -> str:
-    return hashlib.sha256(label.encode("ascii")).hexdigest()
-
-
-def _framed_digest(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
-
-
 def _descriptor(command: str = _COMMAND) -> GitHubWorkflowDescriptor:
-    executable = str(_GH_FIXTURE)
-    operation = parse_github_workflow_operation(
-        parse_shell_command(command),
-        repository="example/repo",
-        expected_executable=executable,
-    )
-    assert operation is not None
-    return GitHubWorkflowDescriptor(
-        schema_version=GITHUB_WORKFLOW_DESCRIPTOR_SCHEMA,
-        operation=operation,
-        binding_context=GitHubWorkflowBindingContext(
-            repository_sha256=github_repository_sha256("example/repo"),
-            workspace_sha256=_framed_digest("github-workspace", str(Path("/workspace").resolve())),
-            executable_sha256=hashlib.sha256(Path(executable).read_bytes()).hexdigest(),
-            cwd_sha256=_digest("cwd"),
-            environment_sha256=_digest("environment"),
-            configuration_sha256=_digest("configuration"),
-            manifest_sha256=_digest("manifest"),
-            lockfile_sha256=_digest("lockfile"),
-            sandbox_sha256=_digest("sandbox"),
-            policy_id="guard.command-policy",
-            policy_version="policy.v1",
-            effect_id="github.maintain-remote",
-            effect_version="effect.v1",
-            decision_id="github.workflow-authorized",
-            decision_version="decision.v1",
-            rules=(WorkflowCapabilityRuleBinding("github.maintain-remote", "rule.v1"),),
-        ),
-        viewer_sha256=_digest("viewer"),
-    )
+    return build_descriptor(command)
 
 
 def _seed_resolved_request(
@@ -134,7 +77,7 @@ def _seed_resolved_request(
         scanner_evidence=(
             {
                 "source": "github_workflow_approval_record",
-                "record": GitHubWorkflowApprovalRecord.from_descriptor(descriptor).to_dict(),
+                "record": descriptor.record.to_dict(),
             },
         ),
         raw_command_text=_COMMAND,
@@ -276,22 +219,10 @@ def test_spoofed_ids_and_binding_drift_fail_closed(tmp_path: Path) -> None:
         claim_resolved_github_workflow_authorization(
             store,
             "request-github-1",
-            replace(
-                descriptor,
-                binding_context=replace(descriptor.binding_context, **{field: _digest(f"other-{field}")}),
-            ),
+            with_binding(descriptor, **{field: _digest(f"other-{field}")}),
         )
         is not None
-        for field in (
-            "workspace_sha256",
-            "executable_sha256",
-            "cwd_sha256",
-            "environment_sha256",
-            "configuration_sha256",
-            "manifest_sha256",
-            "lockfile_sha256",
-            "sandbox_sha256",
-        )
+        for field in ("workspace_sha256", "executable_sha256", "launch_sha256")
     )
     assert all(
         claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor) is not None
@@ -312,147 +243,3 @@ def test_workflow_events_do_not_expose_remote_identity(tmp_path: Path) -> None:
     encoded = json.dumps(events)
     assert "example/repo" not in encoded
     assert "issue lock 17" not in encoded
-
-
-def test_cli_descriptor_requires_workspace_remote_and_authenticated_viewer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
-
-    def response(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
-        if "remote.origin.url" in arguments:
-            return b"https://github.com/example/repo.git\n"
-        return b'{"login":"reviewer"}'
-
-    monkeypatch.setattr(context_module, "_run_bounded", response)
-    descriptor = build_github_workflow_descriptor(
-        _COMMAND,
-        workspace=tmp_path,
-        config_path=str(tmp_path / "config.toml"),
-        configuration={"mode": "enforce"},
-        sandbox={"analysis": True},
-        environment={"PATH": os.environ.get("PATH", "")},
-    )
-    assert descriptor is not None
-    assert descriptor.operation.repository == "example/repo"
-
-
-def test_review_thread_descriptor_uses_exact_identity_bound_locator(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
-    located = {
-        "data": {
-            "node": {
-                "__typename": "PullRequestReviewThread",
-                "id": "THREAD_1",
-                "pullRequest": {"number": 17, "repository": {"nameWithOwner": "example/repo"}},
-            },
-            "viewer": {"login": "reviewer"},
-        }
-    }
-
-    def response(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
-        if "remote.origin.url" in arguments:
-            return b"git@github.com:example/repo.git\n"
-        assert arguments[1:3] == ("api", "graphql")
-        assert "threadId=THREAD_1" in arguments
-        return json.dumps(located, separators=(",", ":")).encode("utf-8")
-
-    monkeypatch.setattr(context_module, "_run_bounded", response)
-    descriptor = build_github_workflow_descriptor(
-        _GRAPHQL_COMMAND,
-        workspace=tmp_path,
-        config_path=str(tmp_path / "config.toml"),
-        configuration={},
-        sandbox={},
-        environment={"PATH": os.environ.get("PATH", "")},
-    )
-    assert descriptor is not None
-    assert descriptor.operation.resource_type == "github-review-thread"
-    assert descriptor.operation.resource_id == "THREAD_1"
-
-
-@pytest.mark.parametrize(
-    "locator_payload",
-    (
-        b'{"data":{"node":{"__typename":"Issue","id":"THREAD_1","pullRequest":{}},"viewer":{"login":"u"}}}',
-        b'{"data":{"node":{"__typename":"PullRequestReviewThread","id":"OTHER","pullRequest":{}},"viewer":{"login":"u"}}}',
-        b'{"data":{"node":null,"viewer":{"login":"u"}}}',
-        b'{"data":{"node":null,"node":null,"viewer":{"login":"u"}}}',
-        b'{"data":{"node":{"__typename":"PullRequestReviewThread","id":"THREAD_1","pullRequest":{"number":17,"repository":{"nameWithOwner":"other/repo"}}},"viewer":{"login":"u"}}}',
-        b'{"data":{"node":{"__typename":"PullRequestReviewThread","id":"THREAD_1","pullRequest":{"number":17,"repository":{"nameWithOwner":"example/repo"}}},"viewer":{}}}',
-        b"{" + b"x" * (64 * 1024) + b"}",
-    ),
-)
-def test_review_thread_locator_malformed_or_oversized_response_fails_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locator_payload: bytes
-) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
-
-    def response(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
-        if "remote.origin.url" in arguments:
-            return b"https://github.com/example/repo.git\n"
-        return locator_payload
-
-    monkeypatch.setattr(context_module, "_run_bounded", response)
-    assert (
-        build_github_workflow_descriptor(
-            _GRAPHQL_COMMAND,
-            workspace=tmp_path,
-            config_path=str(tmp_path / "config.toml"),
-            configuration={},
-            sandbox={},
-            environment={"PATH": os.environ.get("PATH", "")},
-        )
-        is None
-    )
-
-
-def test_destructive_operation_never_gets_a_descriptor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
-    monkeypatch.setattr(
-        context_module,
-        "_run_bounded",
-        lambda arguments, **_kwargs: (
-            b"https://github.com/example/repo.git\n" if "remote.origin.url" in arguments else b'{"login":"reviewer"}'
-        ),
-    )
-    assert (
-        build_github_workflow_descriptor(
-            "gh pr merge 17 --squash --repo example/repo",
-            workspace=tmp_path,
-            config_path=str(tmp_path / "config.toml"),
-            configuration={},
-            sandbox={},
-            environment={"PATH": os.environ.get("PATH", "")},
-        )
-        is None
-    )
-
-
-def test_bounded_locator_rejects_oversized_output_and_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    env = {"HOME": str(tmp_path), "PATH": os.environ.get("PATH", "")}
-    with pytest.raises(subprocess.SubprocessError):
-        _ = context_module._run_bounded(
-            (sys.executable, "-c", "import sys;sys.stdout.write('x'*65537)"),
-            cwd=tmp_path,
-            env=env,
-        )
-    monkeypatch.setattr(context_module, "_TIMEOUT_SECONDS", 0.05)
-    with pytest.raises(subprocess.TimeoutExpired):
-        _ = context_module._run_bounded(
-            (sys.executable, "-c", "import time;time.sleep(1)"),
-            cwd=tmp_path,
-            env=env,
-        )
