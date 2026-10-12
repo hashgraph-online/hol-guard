@@ -261,9 +261,8 @@ fn persisted_matches(command_text: &str, record: &GitHubWorkflowApprovalRecord) 
     if !path.is_absolute() || canonical_path(path).as_deref() != Some(path) {
         return false;
     }
-    let sha = file_sha256(path);
     if !crate::github_workflow_context_io::is_executable_file(path)
-        || sha.as_deref() != Some(record.binding.executable_sha256.as_str())
+        || file_sha256(path).as_deref() != Some(record.binding.executable_sha256.as_str())
     {
         return false;
     }
