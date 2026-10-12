@@ -4,7 +4,7 @@
 use std::path::Path;
 #[path = "shell_interpreter_options.rs"]
 mod interpreter_options;
-pub use interpreter_options::{shell_interpreter_command_payload, InterpreterFlagPayload};
+pub use interpreter_options::shell_interpreter_command_payload;
 #[path = "shell_command_wrappers_paths.rs"]
 mod paths;
 pub use paths::is_trusted_absolute_command_path;

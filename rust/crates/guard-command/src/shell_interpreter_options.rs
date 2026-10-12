@@ -5,13 +5,20 @@ pub struct InterpreterFlagPayload {
     pub tokens_consumed: usize,
 }
 
+static LETTERS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+
+fn letter_run(token: &str) -> bool {
+    LETTERS
+        .get_or_init(|| regex::Regex::new(r"^\p{L}+$").expect("literal regex"))
+        .is_match(token)
+}
+
 /// Exact option/operand admission shared by the wrapper and public helper.
 pub fn shell_interpreter_command_payload(
     parts: &[String],
     command_index: usize,
 ) -> Option<InterpreterFlagPayload> {
     use crate::command_option_parsing::python_is_whitespace;
-    static LETTERS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let mut index = command_index.checked_add(1)?;
     while index < parts.len() {
         let token = parts[index]
@@ -55,10 +62,7 @@ pub fn shell_interpreter_command_payload(
         let flags: Vec<char> = token[1..].chars().collect();
         let mut has_command = false;
         let mut consumes_value = false;
-        if LETTERS
-            .get_or_init(|| regex::Regex::new(r"^\p{L}+$").expect("literal regex"))
-            .is_match(&token[1..])
-        {
+        if letter_run(&token[1..]) {
             for (flag_index, flag) in flags.iter().enumerate() {
                 if matches!(*flag, 'O' | 'o') {
                     consumes_value = flag_index == flags.len() - 1;
