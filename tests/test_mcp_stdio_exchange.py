@@ -197,5 +197,5 @@ def test_unknown_outcome_and_good_outcome_record_health_appropriately(
     )
     assert good == {"outcome": "response", "written": True, "frame": {"id": 1}}
     assert refused is None
-    assert len(successes) == 1  # only a usable sent outcome answers
-    assert failures == [{"reason": "native_mcp_stdio_exchange_unusable"}]
+    assert len(successes) == 2  # usable outcome and bound refusal both answer
+    assert failures == []

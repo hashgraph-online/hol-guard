@@ -77,6 +77,10 @@ def mcp_stdio_session_exchange_native(
     # unusable here is recorded below so it cannot reset the failure streak.
     identity = status.identity
     payload = reply.get("payload")
+    if reply.get("status") == "error":
+        if identity is not None:
+            native_record_resident_success(identity.sha256, guard_home)
+        return None
     if reply.get("status") != "sent" or not isinstance(payload, dict) or payload.get("outcome") not in _OUTCOMES:
         if identity is not None:
             native_record_resident_failure(identity.sha256, guard_home, reason="native_mcp_stdio_exchange_unusable")
