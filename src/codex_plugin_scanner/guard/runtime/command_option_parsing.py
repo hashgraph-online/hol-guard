@@ -3,11 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import cast
+from functools import lru_cache
+from typing import Any, cast
 
-from ..native_shell_helpers import call
+from ..native_shell_helpers import call, runtime_key
 
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
+_cached_runtime: tuple[object, ...] | None = None
+
+
+@lru_cache(maxsize=512)
+def _option_result(action: str, identity: tuple[object, ...], fields: tuple[tuple[str, Any], ...]) -> Any:
+    """Reuse bound native DTOs only for identical inputs and runtime identity."""
+    return call(action, "", **dict(fields))
+
+
+def _option_call(action: str, _command: str, **fields: Any) -> Any:
+    global _cached_runtime
+    identity = runtime_key()
+    if identity != _cached_runtime:
+        _option_result.cache_clear()
+        _cached_runtime = identity
+    key = tuple(sorted((name, tuple(value) if isinstance(value, list) else value) for name, value in fields.items()))
+    if len(repr(key)) > 8192:
+        return call(action, "", **fields)
+    return _option_result(action, identity, key)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +48,7 @@ def argument_semantics(
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset(),
 ) -> ArgumentSemantics:
-    result = call(
+    result = _option_call(
         "argument_semantics",
         "",
         arguments=arguments,
@@ -49,7 +69,7 @@ def matches_subcommands_conservatively(
 ) -> bool:
     return cast(
         bool,
-        call(
+        _option_call(
             "matches_subcommands",
             "",
             arguments=arguments,
@@ -69,7 +89,7 @@ def flags_present_in_all_option_parses(
 ) -> bool:
     return cast(
         bool,
-        call(
+        _option_call(
             "flags_all",
             "",
             arguments=arguments,
@@ -85,7 +105,7 @@ def known_option_advance(
 ) -> int | None:
     return cast(
         int | None,
-        call(
+        _option_call(
             "option_advance",
             "",
             argument=argument,
@@ -96,4 +116,4 @@ def known_option_advance(
 
 
 def long_flag_assignment_is_enabled(argument: str) -> bool:
-    return cast(bool, call("long_flag", "", argument=argument))
+    return cast(bool, _option_call("long_flag", "", argument=argument))

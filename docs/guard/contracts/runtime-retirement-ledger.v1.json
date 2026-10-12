@@ -41,6 +41,14 @@
  ],
  "retired_tests": [
   {
+   "old_node": "tests/test_guard_command_backup_extensions.py::test_backup_option_parse_limit_fails_secure",
+   "source_sha256": "0b192edbae47d6dcc96aa9d27e9ad516b5b62be81239fd1b445a58ef3b31fc12",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_option_parsing_tests.rs::state_exhaustion_keeps_destructive_matching_and_denies_safety_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
    "old_node": "tests/test_command_option_parsing_reference.py::test_short_value_option_presence_preserves_parse_boundaries[arguments0-True]",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_option_helpers_replay"
