@@ -24,8 +24,9 @@ def record_package_shim_audit_result(
 ) -> dict[str, object]:
     """Stamp the audit time. A refused write is a ``ValueError``.
 
-    An unavailable or overloaded resident returns ``audit_proof_recorded``
-    false and does not discard the audit the caller already finished.
+    An unavailable or overloaded resident, or a manifest that is not strict
+    JSON, returns ``audit_proof_recorded`` false and does not discard the
+    audit the caller already finished.
     """
 
     try:

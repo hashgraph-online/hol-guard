@@ -13,6 +13,7 @@
 
 mod admin;
 mod audit;
+mod audit_manifest;
 mod frozen;
 mod generate;
 mod manifest;

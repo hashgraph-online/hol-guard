@@ -88,6 +88,28 @@ def test_refused_audit_write_still_raises(tmp_path: Path, monkeypatch: pytest.Mo
         )
 
 
+@pytest.mark.parametrize("original", ["", " \n\t ", '{"enabled": true, "score": NaN'])
+def test_unusable_package_shim_manifest_is_left_unstamped(tmp_path: Path, original: str) -> None:
+    """A blank or truncated manifest is not replaced and is not a recorded proof."""
+
+    context = _harness_context(tmp_path)
+    manifest_dir = context.guard_home / "package-shims"
+    manifest_dir.mkdir(parents=True)
+    manifest = manifest_dir / "manifest.json"
+    manifest.write_text(original, encoding="utf-8")
+
+    recorded = record_package_shim_audit_result(
+        context,
+        audited_at="2026-06-10T01:00:00+00:00",
+    )
+
+    assert manifest.read_text(encoding="utf-8") == original
+    assert recorded == {
+        "audit_proof_recorded": False,
+        "audit_proof_error": "native_shim_admin_failed",
+    }
+
+
 def test_package_shim_audit_refuses_manifest_outside_guard_home(tmp_path: Path) -> None:
     context = _harness_context(tmp_path)
     outside = tmp_path / "outside"

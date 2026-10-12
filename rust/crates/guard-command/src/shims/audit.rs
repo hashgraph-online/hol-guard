@@ -1,33 +1,26 @@
-//! The package-shim audit stamp (`record_package_shim_audit_result`).
-//!
-//! Unlike the shim lifecycle, the audit stamp rewrites a manifest the lifecycle
-//! owns and never validates, so it keeps the Python reader's permissive load and
-//! the no-follow atomic publication of `write_text_atomic_no_follow`.
+//! Package-shim audit stamp. Non-finite JSON objects keep their other fields.
 
 use std::io;
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
+use super::audit_manifest::{read_manifest, with_stamp, ManifestBody};
 use super::pyfs::ReadError;
-use super::values::py_json_dumps;
 use super::{ShimContext, ShimResult};
 
-/// `_load_package_shim_manifest` (the audit reader): any JSON object, else empty.
-fn load_any(context: &ShimContext) -> ShimResult<Map<String, Value>> {
+/// `_load_package_shim_manifest`: a JSON object, or the original non-finite text.
+fn load_any(context: &ShimContext) -> ShimResult<ManifestBody> {
     let facts = &context.facts;
     let path = context.manifest_path();
     if !facts.exists(&path) {
-        return Ok(Map::new());
+        return Ok(ManifestBody::Object(Default::default()));
     }
     let text = match facts.read_text(&path) {
         Ok(text) => text,
-        Err(ReadError::Io(_)) => return Ok(Map::new()),
+        Err(ReadError::Io(_)) => return Ok(ManifestBody::Object(Default::default())),
         Err(error) => return Err(error.message(&path)),
     };
-    match serde_json::from_str::<Value>(&text) {
-        Ok(Value::Object(map)) => Ok(map),
-        _ => Ok(Map::new()),
-    }
+    read_manifest(&text)
 }
 
 /// `record_package_shim_audit_result`: stamp `last_audit_at` into the manifest.
@@ -36,9 +29,8 @@ pub fn record_package_shim_audit_result(
     audited_at: Option<&str>,
 ) -> ShimResult<Value> {
     let facts = &context.facts;
-    let mut manifest = load_any(context)?;
+    let body = load_any(context)?;
     let stamp = audited_at.unwrap_or(&facts.now).to_owned();
-    manifest.insert("last_audit_at".to_owned(), Value::String(stamp.clone()));
     let path = facts.expanded_abspath(&context.manifest_path());
     let root = facts.expanded_abspath(&context.guard_home);
     let within = match (facts.resolve(&root), facts.resolve(&path)) {
@@ -50,7 +42,7 @@ pub fn record_package_shim_audit_result(
     if !within {
         return Err("package shim manifest escapes the Guard home".to_owned());
     }
-    let payload = py_json_dumps(&Value::Object(manifest), true);
+    let payload = with_stamp(body, &stamp);
     write_no_follow(&path, payload.as_bytes())
         .map_err(|error| format!("cannot write {path}: {error}"))?;
     Ok(json!({ "last_audit_at": stamp }))
@@ -61,11 +53,7 @@ fn errno_io(error: nix::errno::Errno) -> io::Error {
     io::Error::from_raw_os_error(error as i32)
 }
 
-/// Atomically replace `path` without following any symlink on the way to it:
-/// every directory is opened relative to its parent with `O_NOFOLLOW` (and
-/// created `0o755` when missing), and the bytes land in an exclusive `0o600`
-/// sibling that is renamed over the target. A root-owned system symlink such
-/// as `/tmp` or `/var` is resolved first; every other symlink is refused.
+/// Replace `path` without following an untrusted symlink.
 #[cfg(unix)]
 fn write_no_follow(path: &str, payload: &[u8]) -> io::Result<()> {
     use std::fs::File;
@@ -377,6 +365,16 @@ mod tests {
             fs::read_to_string(&manifest).expect("manifest"),
             "{\"last_audit_at\": \"2026-01-01T00:00:00+00:00\"}"
         );
+        fs::write(
+            &manifest,
+            "{\"enabled\": true, \"score\": NaN, \"limit\": Infinity}",
+        )
+        .expect("nan");
+        record_package_shim_audit_result(&context, None).expect("stamp nan");
+        assert_eq!(
+            fs::read_to_string(&manifest).expect("manifest"),
+            "{\"enabled\": true, \"score\": NaN, \"limit\": Infinity, \"last_audit_at\": \"2026-01-01T00:00:00+00:00\"}"
+        );
         fs::remove_dir_all(&root).expect("cleanup");
     }
 
@@ -496,3 +494,7 @@ mod windows_tests {
         fs::remove_dir_all(&root).expect("cleanup");
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "audit_fail_closed_tests.rs"]
+mod audit_fail_closed_tests;

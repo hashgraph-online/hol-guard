@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 
 UNAVAILABLE = "native_shim_admin_unavailable"
 _UNRECORDED_AUDIT_PROOF = frozenset({UNAVAILABLE, "native_overloaded"})
+# Exact resident detail for a blank, truncated, or otherwise unusable manifest.
+# Other `native_shim_admin_failed` outcomes, including a refused write, still raise.
+_STRICT_MANIFEST_DETAIL = "package shim manifest is not strict JSON"
 _OPERATION = "shim_admin"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _FEATURE = "shim-admin-v3"
@@ -413,15 +416,19 @@ def package_shim_supported_managers(guard_home: Path | None = None) -> tuple[str
 def record_package_shim_audit_result(guard_home: Path, *, audited_at: str | None = None) -> dict[str, object]:
     """Stamp ``last_audit_at``. The resident owns the write.
 
-    A resident that is unavailable or overloaded leaves the finished audit
-    unstamped and reports that. This does not write the manifest in Python
-    and does not authorize anything. A refused write still raises.
+    A resident that is unavailable or overloaded, and a manifest that is not
+    strict JSON, leaves the finished audit unstamped and reports that. This
+    does not write the manifest in Python and does not authorize anything.
+    A refused write still raises.
     """
 
     try:
         native_shim_admin("record_audit", guard_home=guard_home, generated_at=audited_at)
     except NativeShimAdminError as error:
-        if error.code in _UNRECORDED_AUDIT_PROOF:
+        unrecorded = error.code in _UNRECORDED_AUDIT_PROOF or (
+            error.code == "native_shim_admin_failed" and error.detail == _STRICT_MANIFEST_DETAIL
+        )
+        if unrecorded:
             logger.warning("package shim audit proof was not recorded: %s", error.code)
             return {"audit_proof_recorded": False, "audit_proof_error": error.code}
         raise
