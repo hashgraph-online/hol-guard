@@ -8,6 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Instant;
 
 use guard_command::command_model::parse_shell_command;
 use guard_command::github_workflow_approval_record::GitHubWorkflowApprovalRecord;
@@ -29,6 +30,7 @@ use serde_json::{json, Value};
 
 use crate::github_workflow_context_io::{
     canonical_path, file_sha256, resolve_executable, run_bounded, workspace_file_entries,
+    REQUEST_BUDGET,
 };
 use crate::package_authority_op::request_digest_with_limit;
 
@@ -131,12 +133,13 @@ fn collect_descriptor(
     environment: &BTreeMap<String, String>,
     policy_version: &str,
 ) -> Option<(String, Value)> {
+    let deadline = Instant::now() + REQUEST_BUDGET;
     let root = canonical_path(workspace)?;
     let root_text = root.to_str()?;
     let path_value = environment.get("PATH").map(String::as_str);
     let gh_path = resolve_executable("gh", path_value)?;
     let gh_text = gh_path.to_str()?.to_owned();
-    let repository = workspace_repository(&root, environment, path_value)?;
+    let repository = workspace_repository(&root, environment, path_value, deadline)?;
     let home = environment.get("HOME").map(Path::new);
     let command = parse(command_text, home, Some(&root))?;
     let mut operation = parse_github_workflow_operation(&command, Some(&repository), &gh_text);
@@ -154,7 +157,7 @@ fn collect_descriptor(
                 "-f".to_owned(),
                 format!("threadId={}", candidate.resource_id),
             ];
-            let payload = parse_json(&run_bounded(&arguments, &root, environment)?)?;
+            let payload = parse_json(&run_bounded(&arguments, &root, environment, deadline)?)?;
             let (located, viewer) =
                 review_thread_location(&payload, &candidate.resource_id, &repository)?;
             operation = parse_github_workflow_operation(&command, Some(&located), &gh_text);
@@ -162,7 +165,12 @@ fn collect_descriptor(
         } else {
             operation.as_ref()?;
             let arguments = vec![gh_text.clone(), "api".to_owned(), "user".to_owned()];
-            viewer_from_user_payload(&parse_json(&run_bounded(&arguments, &root, environment)?)?)?
+            viewer_from_user_payload(&parse_json(&run_bounded(
+                &arguments,
+                &root,
+                environment,
+                deadline,
+            )?)?)?
         };
     let operation = operation?;
     if operation.repository != repository || viewer.is_empty() {
@@ -211,6 +219,7 @@ fn workspace_repository(
     root: &Path,
     environment: &BTreeMap<String, String>,
     path_value: Option<&str>,
+    deadline: Instant,
 ) -> Option<String> {
     let git_path = resolve_executable("git", path_value)?;
     let arguments = vec![
@@ -221,7 +230,7 @@ fn workspace_repository(
         "--get".to_owned(),
         "remote.origin.url".to_owned(),
     ];
-    let raw = run_bounded(&arguments, root, environment)?;
+    let raw = run_bounded(&arguments, root, environment, deadline)?;
     repository_from_remote(std::str::from_utf8(&raw).ok()?)
 }
 
@@ -264,3 +273,7 @@ fn persisted_matches(command_text: &str, record: &GitHubWorkflowApprovalRecord) 
 #[cfg(test)]
 #[path = "github_workflow_prepare_op_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "github_workflow_prepare_op_stub_tests.rs"]
+mod stub_tests;

@@ -8,6 +8,7 @@ use std::fs::{self, File, Metadata};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
@@ -15,6 +16,9 @@ use sha2::{Digest, Sha256};
 const OUTPUT_LIMIT: u64 = 64 * 1024;
 const WORKSPACE_FILE_LIMIT: u64 = 8 * 1024 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(5);
+/// Whole-request wall clock for one descriptor collection; stays under the
+/// nine-second resident client deadline.
+pub(crate) const REQUEST_BUDGET: Duration = Duration::from_secs(8);
 const ALLOWED_ENVIRONMENT: [&str; 6] = [
     "GH_CONFIG_DIR",
     "GH_HOST",
@@ -76,11 +80,14 @@ pub(crate) fn canonical_path(path: &Path) -> Option<PathBuf> {
 }
 
 /// `_run_bounded`: no shell, stdin/stderr null, allowlisted environment, 5 s
-/// wall clock, and 64 KiB of output; a non-zero exit or overflow is a failure.
+/// wall clock (also capped by the caller's shared `request_deadline`), and
+/// 64 KiB of output; a non-zero exit, overflow or output that outlives the
+/// deadline is a failure.
 pub(crate) fn run_bounded(
     arguments: &[String],
     cwd: &Path,
     environment: &BTreeMap<String, String>,
+    request_deadline: Instant,
 ) -> Option<Vec<u8>> {
     let (program, rest) = arguments.split_first()?;
     let mut command = Command::new(program);
@@ -96,17 +103,18 @@ pub(crate) fn run_bounded(
             command.env(key, value);
         }
     }
-    let deadline = Instant::now() + TIMEOUT;
+    let deadline = request_deadline.min(Instant::now() + TIMEOUT);
     let mut child = command.spawn().ok()?;
     let Some(stdout) = child.stdout.take() else {
         let _ = child.kill();
         let _ = child.wait();
         return None;
     };
-    let reader = std::thread::spawn(move || {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
         let mut bytes = Vec::new();
         let _ = stdout.take(OUTPUT_LIMIT + 1).read_to_end(&mut bytes);
-        bytes
+        let _ = sender.send(bytes);
     });
     let status = loop {
         match child.try_wait() {
@@ -122,7 +130,11 @@ pub(crate) fn run_bounded(
             }
         }
     };
-    let bytes = reader.join().ok()?;
+    // A descendant may keep stdout open after the direct child exits; wait only
+    // for the remaining budget and detach the reader on timeout.
+    let bytes = receiver
+        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        .ok()?;
     (status.success() && bytes.len() as u64 <= OUTPUT_LIMIT).then_some(bytes)
 }
 
