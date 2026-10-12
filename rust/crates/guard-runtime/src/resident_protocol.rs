@@ -25,7 +25,7 @@ use guard_contracts::{
     PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
     PromptAnalyzeRequestV1, ProtectRequestRequestV1, RequestContextRequestV1,
     RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1,
-    ShimAdminRequestV1, SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1,
+    ShimAdminRequestV2, SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1,
     WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
     NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
@@ -168,7 +168,7 @@ pub(crate) enum ResidentOperationV1 {
     ContainedWorkspaceWriteExecute(ContainedWorkspaceWriteExecuteRequestV1),
     #[allow(dead_code)]
     ContainedExecute(ContainedExecuteRequestV1),
-    ShimAdmin(ShimAdminRequestV1),
+    ShimAdmin(ShimAdminRequestV2),
     McpStdioProbe(McpStdioProbeRequestV1),
     McpStdioCancel(McpStdioCancelRequest),
     McpStdioSessionOpen(McpStdioSessionOpenRequestV1),

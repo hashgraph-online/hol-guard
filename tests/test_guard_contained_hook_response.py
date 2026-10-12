@@ -110,12 +110,12 @@ def test_missing_or_independent_extension_control_decisions_cannot_delegate(brok
 
 
 def test_unsupported_harness_never_receives_a_delegation_hint() -> None:
-    for harness in ("pi", "codex"):
+    for harness in ("pi", "cursor"):
         assert "required_execution_profile" not in render_pre_tool(harness, result())
 
 
 def test_hook_rewrite_receipts_stay_denied_until_bridge_rewrites_input() -> None:
-    for harness in ("zcode", "claude-code"):
+    for harness in ("zcode", "claude-code", "codex"):
         response = render_pre_tool(harness, result())
         assert response["decision"] == "deny"
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"

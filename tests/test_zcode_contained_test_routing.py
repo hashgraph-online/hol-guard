@@ -88,7 +88,7 @@ def test_zcode_does_not_rewrite_unproven_or_denied_requests(tmp_path, monkeypatc
     assert contained_zcode_response(receipt, input_text="{}", config={"harness": "zcode"}, cli_args=[]) is None
 
 
-@pytest.mark.parametrize("harness", ["codex", "cursor", "omp", None])
+@pytest.mark.parametrize("harness", ["cursor", "omp", None])
 def test_harnesses_without_updated_input_are_never_rewritten(monkeypatch, harness):
     monkeypatch.setattr(sys, "platform", "darwin")
     receipt = {

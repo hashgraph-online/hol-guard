@@ -17,7 +17,11 @@ from .approval_context import (
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
 from .command_tokens import executable_name
-from .custom_extension_suggestion import common_utility_reject_message, is_common_shell_utility
+from .custom_extension_suggestion import (
+    NATIVE_UNAVAILABLE_MESSAGE,
+    common_utility_verdict,
+    is_common_shell_utility,
+)
 from .local_cli_runner import runner_name, unwrap_local_runner
 
 LocalCliKind = Literal["executable", "script"]
@@ -221,8 +225,12 @@ def recognize_operator_cli(
         if identity is not None:
             return identity, "", ""
         exe = _first_executable_name(candidate, cwd=cwd, home_dir=home_dir)
-        if exe is not None and is_common_shell_utility(exe):
-            return None, "common_shell_utility", common_utility_reject_message(exe)
+        if exe is not None:
+            verdict = common_utility_verdict(exe)
+            if verdict is None:
+                return None, "native_unavailable", NATIVE_UNAVAILABLE_MESSAGE
+            if verdict["common_utility"]:
+                return None, "common_shell_utility", verdict["reject_message"]
         if exe is not None and is_reserved_tool_name(exe):
             return None, "reserved_tool", "Guard itself is not added as a custom extension."
         if exe is not None and exe in owned and not _is_interpreter_name(exe):

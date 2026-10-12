@@ -243,6 +243,13 @@ class TestDaemonLifecycle:
         assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
 
 
+def _warm_native_runtime_status() -> None:
+    """Probe the native runtime before the fake Popen goes in; the probe shares the subprocess module."""
+    from codex_plugin_scanner.guard.native_runtime import native_runtime_status
+
+    native_runtime_status()
+
+
 class _FakeSpawnedDaemonProcess:
     """Popen-compatible fake that records termination attempts."""
 
@@ -445,6 +452,7 @@ class TestSpawnedDaemonStartClassification:
         monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: None)
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
+        _warm_native_runtime_status()
         monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", lambda *a, **k: process)
         monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "posix:token")
         monkeypatch.setattr(
@@ -549,6 +557,7 @@ class TestStillStartingAdoption:
         monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: None)
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
+        _warm_native_runtime_status()
         monkeypatch.setattr(
             daemon_manager_module.subprocess,
             "Popen",

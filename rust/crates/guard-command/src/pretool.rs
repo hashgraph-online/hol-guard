@@ -38,6 +38,7 @@ mod pure_expression;
 mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
+mod recursive_copy;
 mod restricted_tests;
 mod rust_toolchain;
 mod safe_reads;

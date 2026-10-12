@@ -1,6 +1,6 @@
 """Route native containment receipts through the PreToolUse updatedInput contract.
 
-ZCode and Claude Code both apply a hook's ``updatedInput``, so a contained test run is
+ZCode, Claude Code and Codex 0.131+ apply a hook's ``updatedInput``, so a contained test run is
 rewritten into Guard's execution sink instead of stopping for review.
 """
 
@@ -31,6 +31,8 @@ _PROFILES = {
     "native_node_build_output_containment_required": "node-build-output-v1",
 }
 _ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
+# Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
+_SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
 
 
 def cleanup_stale_zcode_requests() -> None:
@@ -114,7 +116,7 @@ def contained_zcode_response(
     reason = response.get("reason_code")
     if (
         sys.platform != "darwin"
-        or config.get("harness") not in _ROUTED_HARNESSES
+        or config.get("harness") not in _SINK_HARNESSES
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
         or response.get("observe_mode") is True

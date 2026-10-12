@@ -9,7 +9,8 @@ fn python_runtime_name(name: &str) -> bool {
     })
 }
 
-fn python_inline_eval_args(arguments: &[String]) -> bool {
+/// Strip capability-reducing isolation flags; anything else ends the prefix.
+fn python_after_isolation_flags(arguments: &[String]) -> Option<&[String]> {
     let mut rest = arguments;
     let mut flags = 0_u8;
     while let Some(flag) = rest.first() {
@@ -20,12 +21,38 @@ fn python_inline_eval_args(arguments: &[String]) -> bool {
             _ => break,
         };
         if flags & bits != 0 {
-            return false;
+            return None;
         }
         flags |= bits;
         rest = &rest[1..];
     }
-    matches!(rest, [flag, _program] if flag == "-c")
+    Some(rest)
+}
+
+fn python_inline_eval_args(arguments: &[String]) -> bool {
+    python_after_isolation_flags(arguments)
+        .is_some_and(|rest| matches!(rest, [flag, _program] if flag == "-c"))
+}
+
+/// `python3 test_calc.py`: a test-named workspace script. Run read-only it is
+/// no more capable than inline evaluation of the same file, so it shares that
+/// boundary. Other scripts usually write, so they stay reviewed.
+fn python_test_script_args(arguments: &[String]) -> bool {
+    python_after_isolation_flags(arguments).is_some_and(|rest| {
+        matches!(rest, [script, ..] if workspace_relative(script) && test_script_name(script))
+    })
+}
+
+fn test_script_name(script: &str) -> bool {
+    let name = script.rsplit('/').next().unwrap_or(script);
+    let Some(stem) = name.strip_suffix(".py") else {
+        return false;
+    };
+    stem.bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        && (stem.starts_with("test_")
+            || stem.ends_with("_test")
+            || matches!(stem, "test" | "tests" | "runtests" | "run_tests"))
 }
 
 /// Classify a direct pytest invocation for delegation, never direct allowance.
@@ -119,7 +146,10 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         arguments
     };
     match (super::executable_basename(executable), arguments) {
-        (name, args) if python_runtime_name(name) && python_inline_eval_args(args) => {
+        (name, args)
+            if python_runtime_name(name)
+                && (python_inline_eval_args(args) || python_test_script_args(args)) =>
+        {
             return Some("native_python_eval_readonly_containment_required");
         }
         ("node" | "nodejs", [flag, _program]) if matches!(flag.as_str(), "-e" | "--eval") => {

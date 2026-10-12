@@ -19,6 +19,15 @@ pub(super) fn bounded_native_file_write_target(
     bounded_write_target(value, home_dir, cwd, false, true)
 }
 
+/// A new directory path inside the workspace, screened like `mkdir`.
+pub(super) fn bounded_new_directory_write_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    bounded_write_target(value, home_dir, cwd, true, false)
+}
+
 /// A single absolute file write into a temporary directory the user owns.
 /// It never widens the workspace or home boundaries; see the copy carve-out.
 pub(super) fn bounded_native_temporary_write_target(

@@ -29,6 +29,7 @@ use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
+use crate::guard_store_native_review_consume as native_review_consume;
 use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
     count_recoverable_unbound, load_binding, normalized_binding, reassign_quarantined,
@@ -39,6 +40,7 @@ use crate::guard_store_outbox_queries as queries;
 use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
+use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_receipt_reads as receipt_reads;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 use crate::guard_store_receipt_writes as receipt_writes;
@@ -264,7 +266,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_latest_receipt"
         | "receipt_decision_counts"
         | "run_storage_housekeeping"
-        | "count_receipts" => Kind::Read,
+        | "count_receipts"
+        | "policy_source_contexts" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -273,7 +276,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "observed_mcp_tool_actions"
         | "workflow_capability_plan" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
-        "refresh_review_event_outbox_binding_for_identity"
+        "consume_native_review_approval"
+        | "refresh_review_event_outbox_binding_for_identity"
         | "refresh_review_event_outbox_binding"
         | "reassign_quarantined_review_events"
         | "acknowledge_review_events"
@@ -409,6 +413,7 @@ fn dispatch(
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
         "observed_mcp_tool_actions" => observed_mcp::observed_mcp_tool_actions(connection),
+        "consume_native_review_approval" => native_review_consume::consume(connection, args),
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
         "upsert_guard_session" => sessions::upsert_session(connection, args),
@@ -463,6 +468,7 @@ fn dispatch(
         }
         "get_latest_receipt" => receipt_reads::get_latest(connection, args),
         "count_receipts" => receipt_reads::count(connection, args),
+        "policy_source_contexts" => policy_source_contexts(connection, args),
         "receipt_summary_between" => receipt_reads::summary_between(connection, args),
         "receipt_analytics" => receipt_reads::analytics(connection, args),
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),

@@ -328,7 +328,11 @@ pub(super) fn exact_safe_segment_with_context(
                 && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
         "cp" => {
             model.segments.len() == 1
-                && safe_reads::safe_copy_arguments(&segment.arguments, context)
+                && (safe_reads::safe_copy_arguments(&segment.arguments, context)
+                    || super::recursive_copy::safe_recursive_copy_arguments(
+                        &segment.arguments,
+                        context,
+                    ))
         }
         "mkdir" | "touch" | "mv" => {
             model.segments.len() == 1
