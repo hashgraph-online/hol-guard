@@ -447,8 +447,20 @@ def _unbound_mcp_digests(request: Mapping[str, object]) -> dict[str, object]:
 
 # One resident outage should not cost a full deadline per configured server:
 # after the first failure the remaining enrichments fall back to unbound
-# digests until the retry window passes.
+# digests until the retry window passes. Only outage-class errors open the
+# latch — per-request failures (oversized or unencodable envelopes) and bound
+# refusals either precede resident contact or prove the resident answered, so
+# they must not suppress the next server's enrichment.
 _MCP_NATIVE_RETRY_SECONDS = 30.0
+_MCP_OUTAGE_CODES = frozenset(
+    {
+        "native_runner_authority_unavailable",
+        "native_runner_authority_prerequisite_unavailable",
+        "native_runner_authority_resident_unavailable",
+        "native_runner_authority_result_invalid",
+        "native_overloaded",
+    }
+)
 _mcp_native_backoff_until = 0.0
 
 
@@ -485,7 +497,8 @@ def enrich_mcp_server_metadata(
         except NativeRunnerAuthorityError as error:
             if str(error).startswith("native_runner_authority_aibom_"):
                 raise NativeAibomError(str(error)) from error
-            _mcp_native_backoff_until = time.monotonic() + _MCP_NATIVE_RETRY_SECONDS
+            if str(error).split(":", 1)[0] in _MCP_OUTAGE_CODES:
+                _mcp_native_backoff_until = time.monotonic() + _MCP_NATIVE_RETRY_SECONDS
     if answer is None:
         answer = _unbound_mcp_digests(request)
     enriched = dict(metadata)
