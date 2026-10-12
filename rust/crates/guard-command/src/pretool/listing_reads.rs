@@ -157,6 +157,20 @@ fn is_recursive_flag(argument: &str) -> bool {
     argument.strip_prefix("--").is_some_and(|name| {
         name.len() >= 2 && "recursive".starts_with(name.split('=').next().unwrap_or(name))
     }) || (argument.starts_with('-') && !argument.starts_with("--") && argument.contains('R'))
+        || (crate::powershell_reads::windows_powershell_host() && powershell_recursion(argument))
+}
+
+/// On Windows `ls` can be PowerShell's Get-ChildItem, which accepts any
+/// case-insensitive prefix of `-Recurse` or `-Depth` (`-rec`, `-depth:2`).
+fn powershell_recursion(argument: &str) -> bool {
+    let Some(name) = argument
+        .strip_prefix('-')
+        .filter(|name| !name.starts_with('-'))
+    else {
+        return false;
+    };
+    let name = name.split(':').next().unwrap_or(name).to_ascii_lowercase();
+    name.len() >= 2 && ("recurse".starts_with(&name) || "depth".starts_with(&name))
 }
 
 fn follows_links(argument: &str) -> bool {

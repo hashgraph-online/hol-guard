@@ -481,3 +481,20 @@ fn rg_glob_operands_are_proven_by_their_expansion() {
     assert!(!allowed_in(&fixture, ws, "rg -n main */main.ts"));
     assert!(!allowed_in(&fixture, ws, "rg -n main **/main.ts"));
 }
+
+#[test]
+fn powershell_recurse_prefixes_take_the_recursive_proof_on_windows() {
+    let fixture = fixture();
+    let ws = fixture.workspace.as_str();
+    let windows = |command: &str| {
+        crate::powershell_reads::with_windows_powershell_reads(|| allowed_in(&fixture, ws, command))
+    };
+    // On Windows `ls` can be PowerShell's Get-ChildItem, which accepts any
+    // case-insensitive prefix of `-Recurse` or `-Depth`.
+    for command in ["ls -rec bad", "ls -recurse -Force bad", "ls -Depth:1 bad"] {
+        assert!(!windows(command), "{command}");
+    }
+    for command in ["ls -la bad", "ls -rec src", "ls -Force bad"] {
+        assert!(windows(command), "{command}");
+    }
+}

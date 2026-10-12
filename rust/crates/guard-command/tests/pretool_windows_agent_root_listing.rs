@@ -65,4 +65,7 @@ fn windows_agent_root_listings_accept_backslash_home_spellings() {
     let hidden = home.join(".agent/artifacts/.hidden/report.md");
     write(hidden, "synthetic sensitive fixture\n");
     assert!(!allowed(format!("ls -R '{home_spelling}\\.agent'")));
+    assert!(!allowed(format!(
+        "ls -rec -Force '{home_spelling}\\.agent'"
+    )));
 }
