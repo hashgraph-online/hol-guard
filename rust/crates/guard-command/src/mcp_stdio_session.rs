@@ -433,6 +433,11 @@ impl LiveMcpSession {
                 return Ok(QuietEdge::Event(event));
             }
             if !self.partial.load(Ordering::Acquire) {
+                // The pump can finish and enqueue a frame between the read
+                // timing out and this load — drain it before calling silence.
+                if let Some(event) = self.next_event(Duration::ZERO)? {
+                    return Ok(QuietEdge::Event(event));
+                }
                 return Ok(QuietEdge::Silent);
             }
             if Instant::now() >= limit {
