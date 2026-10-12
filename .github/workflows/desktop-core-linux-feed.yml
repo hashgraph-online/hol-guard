@@ -27,8 +27,6 @@ on:
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/verify_*.py
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       core_version:

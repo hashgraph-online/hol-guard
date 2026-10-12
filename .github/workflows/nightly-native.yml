@@ -5,8 +5,6 @@ name: Nightly native qualification
 # workflow_dispatch on the branch after it lands, or by temporarily adding a
 # pull_request trigger to the change.
 on:
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:

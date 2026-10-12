@@ -2,8 +2,6 @@ name: OpenSSF Scorecard
 on:
   # Not on every push: each analysis spends a few hundred calls of the
   # repository GITHUB_TOKEN quota that release and feed workflows share.
-  schedule:
-    - cron: '17 3 * * *'
   branch_protection_rule:
   workflow_dispatch:
 permissions: {}

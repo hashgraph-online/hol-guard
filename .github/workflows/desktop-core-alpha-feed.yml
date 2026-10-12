@@ -43,8 +43,6 @@ on:
       - scripts/release/fix_pyinstaller_macos_exe_headers.py
       - scripts/release/verify_pyinstaller_macos_signing.py
       - scripts/release/verify_*.py
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       core_version:

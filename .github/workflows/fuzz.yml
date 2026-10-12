@@ -12,8 +12,6 @@ on:
       - ".github/workflows/fuzz.yml"
   push:
     branches: [main]
-  schedule:
-    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 permissions:
