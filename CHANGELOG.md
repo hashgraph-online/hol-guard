@@ -92,6 +92,14 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.43.1](https://github.com/hashgraph-online/hol-guard/compare/v3.43.0...v3.43.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **ci:** stage external contribution trust before native builds ([#3604](https://github.com/hashgraph-online/hol-guard/issues/3604)) ([a1215d2](https://github.com/hashgraph-online/hol-guard/commit/a1215d2766d66f3d5c3c4a1d6279b0d08fd8fdf0))
+* **release:** raise native wheel size budgets so 3.43 can publish ([#4273](https://github.com/hashgraph-online/hol-guard/issues/4273)) ([91d4838](https://github.com/hashgraph-online/hol-guard/commit/91d483808db35766673c52d905a5687dcf2d6017))
+
 ## [3.43.0](https://github.com/hashgraph-online/hol-guard/compare/v3.42.0...v3.43.0) (2026-10-12)
 
 
