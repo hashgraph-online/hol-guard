@@ -13,6 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = {
+    "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py": (
+        "cf9143df681b5db68cd5f03f12028dda0ad4e88ad9a9f7c9e09c330af7f2dd68"
+    ),
     "src/codex_plugin_scanner/guard/runtime/env_wrapper.py": (
         "e4f46e49ca92b342d9449245eb67064b749d13a844934dcc68b83a383cfe4bcd"
     ),
@@ -46,7 +49,14 @@ def record() -> None:
     legacy_digest = hashlib.sha256(legacy).hexdigest()
     if legacy_digest != "478f2f9c313000563d8326fa43c8af6e4b87a22a77a21d5f3239c3576e391082":
         raise RuntimeError("Recording requires the original interpreter tests")
-    for name in ("env_wrapper", "interpreter_options", "shell_structure", "data_flow", "shell_command_wrappers"):
+    for name in (
+        "env_wrapper",
+        "interpreter_options",
+        "shell_structure",
+        "data_flow",
+        "shell_command_wrappers",
+        "command_option_parsing",
+    ):
         path = f"src/codex_plugin_scanner/guard/runtime/{name}.py"
         code = subprocess.run(
             ["git", "show", f"da723a48b221c135cbce3bade1bab3ddb4959044:{path}"],
@@ -160,6 +170,7 @@ def record() -> None:
         "cat <<EOF\n" + "x" * 190_000 + "\nEOF\necho done",
         "cat <<EOF\n" + "\u001c" * 140_000 + "\nEOF",
         "cat <<EOF\n" + "x" * 512_000 + "\nEOF",
+        "cat <<EOF\n" + "x" * 2_200_000 + "\nEOF",
     ):
         heredocs = shell_structure.extract_heredocs(command)
         vectors.append(
@@ -173,15 +184,15 @@ def record() -> None:
                 },
             }
         )
-    command = "bash -c '" + "é" * 4100 + "'"
-    vectors.append(
-        {
-            "command": command,
-            "expected": {
-                "normalization": asdict(shell_command_wrappers.normalize_transparent_shell_command(command)),
-            },
-        }
-    )
+    for command in ("bash -c '" + "é" * 4100 + "'", "  " + "x" * 1_500_000 + "  "):
+        vectors.append(
+            {
+                "command": command,
+                "expected": {
+                    "normalization": asdict(shell_command_wrappers.normalize_transparent_shell_command(command)),
+                },
+            }
+        )
     command = ":<<E\nE\n" * 20_000
     heredocs = shell_structure.extract_heredocs(command)
     vectors.append(
@@ -221,6 +232,120 @@ def record() -> None:
         result = interpreter.shell_interpreter_command_payload(parts, 0)
         interpreter_vectors.append({"parts": parts, "command_index": 0, "expected": asdict(result) if result else None})
     target = ROOT / "tests/fixtures/shell-helper-python.v1.json"
+    options = originals["command_option_parsing"]
+    option_vectors = []
+    values, flags = frozenset({"-a", "--body"}), frozenset({"-f", "-j", "--force", "--no-force"})
+    arguments_cases = [()]
+    for count in range(1, 4):
+        arguments_cases.extend(itertools.product(("-a", "-ja", "--future", "--", "value", "-f"), repeat=count))
+    arguments_cases.extend(
+        (
+            ("--force", "--no-force=false"),
+            ("--force=false", "--force=YES"),
+            ("-é", "--body=value"),
+            ("-a",),
+            ("--body", "-a"),
+            ("--body=value", "-ja", "value"),
+        )
+    )
+    for arguments in arguments_cases:
+        common = {"arguments": list(arguments), "options_with_values": sorted(values), "known_flags": sorted(flags)}
+        semantics = options.argument_semantics(
+            arguments, options_with_values=values, inverse_flag_pairs=frozenset({("--force", "--no-force")})
+        )
+        option_vectors.extend(
+            (
+                {
+                    "action": "argument_semantics",
+                    "input": {**common, "inverse_flag_pairs": [["--force", "--no-force"]]},
+                    "expected": {
+                        "present_flags": sorted(semantics.present_flags),
+                        "effective_options": semantics.effective_options,
+                    },
+                },
+                {
+                    "action": "matches_subcommands",
+                    "input": {**common, "subcommands": ["value"]},
+                    "expected": options.matches_subcommands_conservatively(
+                        arguments, ("value",), options_with_values=values, known_flags=flags
+                    ),
+                },
+                {
+                    "action": "flags_all",
+                    "input": {**common, "required_flags": ["-a"]},
+                    "expected": options.flags_present_in_all_option_parses(
+                        arguments, frozenset({"-a"}), options_with_values=values, known_flags=flags
+                    ),
+                },
+            )
+        )
+    for argument in (
+        "-a",
+        "-ja",
+        "-aVALUE",
+        "--body=value",
+        "--body",
+        "--force",
+        "--future",
+        "value",
+        "--force=false",
+        "--force=YES",
+    ):
+        common = {"argument": argument, "options_with_values": sorted(values), "known_flags": sorted(flags)}
+        option_vectors.extend(
+            (
+                {
+                    "action": "option_advance",
+                    "input": common,
+                    "expected": options.known_option_advance(argument, options_with_values=values, known_flags=flags),
+                },
+                {
+                    "action": "long_flag",
+                    "input": {"argument": argument},
+                    "expected": options.long_flag_assignment_is_enabled(argument),
+                },
+            )
+        )
+    option_test = "tests/test_command_option_parsing_reference.py"
+    for arguments in (
+        ("-a", "synthetic"),
+        ("-asynthetic",),
+        ("-ja", "synthetic"),
+        ("-a",),
+        ("-ja",),
+        ("-a", "synthetic", "--body"),
+        ("--body", "-a"),
+        ("--", "-a", "synthetic"),
+        ("--future", "-a", "synthetic"),
+    ):
+        option_vectors.append(
+            {
+                "action": "flags_all",
+                "input": {
+                    "arguments": list(arguments),
+                    "required_flags": ["-a"],
+                    "options_with_values": ["-a", "--body"],
+                    "known_flags": ["-j"],
+                },
+                "expected": options.flags_present_in_all_option_parses(
+                    arguments,
+                    frozenset({"-a"}),
+                    options_with_values=frozenset({"-a", "--body"}),
+                    known_flags=frozenset({"-j"}),
+                ),
+            }
+        )
+    option_test_bytes = subprocess.run(
+        ["git", "show", f"da723a48b221c135cbce3bade1bab3ddb4959044:{option_test}"],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    ).stdout
+    if (
+        hashlib.sha256(option_test_bytes).hexdigest()
+        != "f67d36beecd254159e14b44090ab9cda1123bf744ee23c40d4461083a34083e5"
+    ):
+        raise RuntimeError("Original option test digest mismatch")
     target.write_text(
         json.dumps(
             {
@@ -228,7 +353,11 @@ def record() -> None:
                 "sources": sources,
                 "vectors": vectors,
                 "interpreter_vectors": interpreter_vectors,
-                "legacy_test_sources": {legacy_path: legacy_digest},
+                "option_vectors": option_vectors,
+                "legacy_test_sources": {
+                    legacy_path: legacy_digest,
+                    option_test: hashlib.sha256(option_test_bytes).hexdigest(),
+                },
             },
             ensure_ascii=True,
             indent=2,

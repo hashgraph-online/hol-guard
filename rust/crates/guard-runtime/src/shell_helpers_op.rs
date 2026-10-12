@@ -1,4 +1,5 @@
 //! Request-bound resident access to the shared shell helper kernels.
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -37,7 +38,7 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
       Ok(input) if request.action == "heredocs_page" => {
         match input.as_object() {
             Some(fields) if fields.len() == 2 && fields.contains_key("command") && fields.contains_key("offset") => {
-                guard_command::shell_helpers::evaluate("heredocs", &json!({"command":input["command"]})).and_then(|value| {
+                guard_command::shell_helpers::evaluate_with_deadline("heredocs", &json!({"command":input["command"]}), Some(deadline)).and_then(|value| {
                     let rows = value.as_array().ok_or("shell_helpers_invalid")?;
                     let offset = usize::try_from(input["offset"].as_u64().ok_or("shell_helpers_invalid")?).map_err(|_| "shell_helpers_invalid")?;
                     if offset > rows.len() { return Err("shell_helpers_invalid"); }
@@ -48,11 +49,26 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
             _ => Err("shell_helpers_invalid"),
         }
       }
-      Ok(input) => guard_command::shell_helpers::evaluate(&request.action, &input),
+      Ok(input) => guard_command::shell_helpers::evaluate_with_deadline(&request.action, &input, Some(deadline)),
     };
     let (code, result) = match observed {
         Ok(value) => ("ok", value),
         Err(code) => (code, Value::Null),
+    };
+    let result_offset = request
+        .input
+        .get("result_offset")
+        .map_or(Some(0), Value::as_u64);
+    let result = if code == "ok" {
+        match result_offset.and_then(|offset| usize::try_from(offset).ok()) {
+            Some(offset) => match page_result(result, offset) {
+                Ok(value) => value,
+                Err(code) => return reply(request, &canonical, code, Value::Null),
+            },
+            None => return reply(request, &canonical, "shell_helpers_invalid", Value::Null),
+        }
+    } else {
+        result
     };
     if Instant::now() >= deadline {
         return reply(request, &canonical, "shell_helpers_deadline", Value::Null);
@@ -70,6 +86,7 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
 
 fn unpack_claims(input: &Value) -> Result<Value, &'static str> {
     let mut fields = input.as_object().ok_or("shell_helpers_invalid")?.clone();
+    fields.remove("result_offset");
     for (packed, plain) in [
         ("command_chunks", "command"),
         ("spans_chunks", "spans_json"),
@@ -96,6 +113,28 @@ fn unpack_claims(input: &Value) -> Result<Value, &'static str> {
         }
     }
     Ok(Value::Object(fields))
+}
+
+fn page_result(result: Value, offset: usize) -> Result<Value, &'static str> {
+    const PAGE_BYTES: usize = 256 * 1024;
+    const MAX_BYTES: usize = 64 * 1024 * 1024;
+    let bytes = serde_json::to_vec(&result).map_err(|_| "shell_helpers_invalid")?;
+    if bytes.len() > MAX_BYTES || offset > bytes.len() {
+        return Err("shell_helpers_response_bounds");
+    }
+    if bytes.len() <= PAGE_BYTES {
+        if offset != 0 {
+            return Err("shell_helpers_invalid");
+        }
+        return Ok(result);
+    }
+    let end = offset.saturating_add(PAGE_BYTES).min(bytes.len());
+    Ok(json!({
+        "fragment_b64":base64::engine::general_purpose::STANDARD.encode(&bytes[offset..end]),
+        "byte_offset":offset,"total_bytes":bytes.len(),
+        "next_offset":if end < bytes.len() {Some(end)} else {None},
+        "result_sha256":guard_policy_snapshot::digest_bytes(&bytes),
+    }))
 }
 
 fn reply(

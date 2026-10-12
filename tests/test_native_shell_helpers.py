@@ -83,6 +83,39 @@ def test_unrepresentable_wire_claims_never_reach_or_fault_the_resident(monkeypat
     assert sent == []
 
 
+def test_bad_binding_records_failures_without_success_resets(monkeypatch, tmp_path):
+    from codex_plugin_scanner.guard import native_context
+
+    failed, successful = [], []
+    monkeypatch.setattr(native_context, "_resolve_digest_home", lambda _: tmp_path)
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _: True)
+    monkeypatch.setattr(
+        native_context,
+        "_native_runtime_status_memo",
+        lambda: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64)),
+    )
+    monkeypatch.setattr(native_execution, "native_record_resident_failure", lambda *a, **kw: failed.append(kw))
+    monkeypatch.setattr(native_execution, "native_record_resident_success", lambda *a, **kw: successful.append(kw))
+
+    def bad_reply(**kwargs):
+        assert kwargs["record_success"] is False
+        return {
+            "schema": "guard-shell-helpers-result.v1",
+            "request_id": kwargs["request"]["request_id"],
+            "request_sha256": "b" * 64,
+            "status": "ok",
+            "code": "ok",
+            "result": ["echo"],
+        }
+
+    monkeypatch.setattr(native_execution, "_resident_request", bad_reply)
+    for _ in range(3):
+        with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="binding"):
+            native_shell_helpers.call("segments", "echo")
+    assert len(failed) == 3
+    assert successful == []
+
+
 def test_public_helpers_replay_original_python_vectors(native_hook_force, monkeypatch, tmp_path):
     monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / "guard"))
     fixture = json.loads((Path(__file__).parent / "fixtures/shell-helper-python.v1.json").read_text())
@@ -231,7 +264,17 @@ def test_rejected_inputs_do_not_poison_shared_native_health(native_hook_force, m
     for _ in range(3):
         with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="shell_helpers_invalid"):
             native_shell_helpers.call("masked_bodies", "echo", heredocs=[{}])
-    with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="shell_helpers_response_bounds"):
-        native_shell_helpers.call("normalization", "x" * 1_100_000)
+    text = "x" * 1_500_000
+    assert native_shell_helpers.call("normalization", text)["normalized_command"] == text
     assert data_flow.extract_command_segments("echo healthy") == ("echo healthy",)
     assert failures == []
+
+
+def test_large_heredoc_and_mask_results_replay_across_byte_pages(native_hook_force):
+    fixture = json.loads((Path(__file__).parent / "fixtures/shell-helper-python.v1.json").read_text())
+    vector = next(v for v in fixture["vectors"] if len(v["command"]) > 2_000_000)
+    command, expected = vector["command"], vector["expected"]
+    heredocs = shell_structure.extract_heredocs(command)
+    assert [asdict(h) for h in heredocs] == expected["heredocs"]
+    assert shell_structure.mask_heredoc_bodies(command, heredocs) == expected["masked_bodies"]
+    assert shell_structure.mask_complete_heredocs(command, heredocs) == expected["masked_complete"]

@@ -1,6 +1,36 @@
 use super::*;
 use serde_json::{json, Value};
 
+#[test]
+fn original_python_option_helpers_replay() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/shell-helper-python.v1.json"
+    ))
+    .unwrap();
+    for (index, vector) in fixture["option_vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let mut input = vector["input"].clone();
+        input["command"] = json!("");
+        let request = ShellHelpersRequest {
+            schema: "guard-shell-helpers-request.v1".into(),
+            request_id: "option-parity".into(),
+            action: vector["action"].as_str().unwrap().into(),
+            input,
+            timeout_ms: 10_000,
+        };
+        let reply = resident_reply(&request);
+        assert_eq!(reply["code"], json!("ok"));
+        assert_eq!(
+            &reply["result"], &vector["expected"],
+            "original option vector {index}"
+        );
+    }
+}
+
 fn chunks(text: &str) -> Value {
     let chars: Vec<char> = text.chars().collect();
     json!(chars
@@ -10,10 +40,45 @@ fn chunks(text: &str) -> Value {
 }
 
 fn resident_reply(request: &ShellHelpersRequest) -> Value {
-    let frame = json!({"operation":"shell_helpers", "request":request,"deadline_budget_ms":10_000});
-    let encoded = serde_json::to_vec(&frame).unwrap();
-    serde_json::from_slice(&crate::resident_ops::evaluate_resident_bytes(&encoded, None).unwrap())
-        .unwrap()
+    use base64::Engine;
+    let mut material = serde_json::to_value(request).unwrap();
+    let mut bytes = Vec::new();
+    let mut digest = None;
+    for _ in 0..256 {
+        let frame =
+            json!({"operation":"shell_helpers", "request":material,"deadline_budget_ms":10_000});
+        let encoded = serde_json::to_vec(&frame).unwrap();
+        let mut answer: Value = serde_json::from_slice(
+            &crate::resident_ops::evaluate_resident_bytes(&encoded, None).unwrap(),
+        )
+        .unwrap();
+        let result = &answer["result"];
+        let Some(fragment) = result["fragment_b64"].as_str() else {
+            assert!(bytes.is_empty());
+            return answer;
+        };
+        assert_eq!(result["byte_offset"], json!(bytes.len()));
+        if let Some(previous) = &digest {
+            assert_eq!(previous, &result["result_sha256"]);
+        }
+        digest = Some(result["result_sha256"].clone());
+        bytes.extend(
+            base64::engine::general_purpose::STANDARD
+                .decode(fragment)
+                .unwrap(),
+        );
+        if result["next_offset"].is_null() {
+            assert_eq!(result["total_bytes"], json!(bytes.len()));
+            assert_eq!(
+                result["result_sha256"],
+                json!(guard_policy_snapshot::digest_bytes(&bytes))
+            );
+            answer["result"] = serde_json::from_slice(&bytes).unwrap();
+            return answer;
+        }
+        material["input"]["result_offset"] = result["next_offset"].clone();
+    }
+    panic!("native result did not finish within the fragment limit");
 }
 
 #[cfg(unix)]
@@ -157,11 +222,6 @@ fn input_rejections_are_bound_replies_and_large_results_are_bounded() {
             "masked_bodies",
             json!({"command":"echo","heredocs":[{}]}),
             "shell_helpers_invalid",
-        ),
-        (
-            "normalization",
-            json!({"command_chunks":chunks(&"x".repeat(1_100_000))}),
-            "shell_helpers_response_bounds",
         ),
     ] {
         let request = ShellHelpersRequest {

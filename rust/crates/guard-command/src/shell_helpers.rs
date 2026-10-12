@@ -4,6 +4,20 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
+    evaluate_with_deadline(action, input, None)
+}
+
+pub fn evaluate_with_deadline(
+    action: &str,
+    input: &Value,
+    deadline: Option<std::time::Instant>,
+) -> Result<Value, &'static str> {
+    if matches!(
+        action,
+        "argument_semantics" | "matches_subcommands" | "flags_all" | "option_advance" | "long_flag"
+    ) {
+        return evaluate_options(action, input, deadline);
+    }
     let allowed: &[&str] = match action {
         "masked_bodies" | "masked_complete" => &["command", "heredocs", "spans_json"],
         "normalization" | "trusted_path" => &["command", "cwd", "home_dir"],
@@ -158,4 +172,65 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
         }
         _ => Err("shell_helpers_invalid_operation"),
     }
+}
+
+fn evaluate_options(
+    action: &str,
+    input: &Value,
+    deadline: Option<std::time::Instant>,
+) -> Result<Value, &'static str> {
+    use crate::command_option_parsing as options;
+    use std::collections::BTreeSet;
+    let object = input.as_object().ok_or("shell_helpers_invalid")?;
+    let allowed = [
+        "command",
+        "arguments",
+        "argument",
+        "options_with_values",
+        "known_flags",
+        "inverse_flag_pairs",
+        "subcommands",
+        "required_flags",
+    ];
+    if object.keys().any(|key| !allowed.contains(&key.as_str())) {
+        return Err("shell_helpers_invalid");
+    }
+    let strings = |name: &str| -> Result<Vec<String>, &'static str> {
+        serde_json::from_value(input.get(name).cloned().unwrap_or(json!([])))
+            .map_err(|_| "shell_helpers_invalid")
+    };
+    let values: BTreeSet<String> = strings("options_with_values")?.into_iter().collect();
+    let flags: BTreeSet<String> = strings("known_flags")?.into_iter().collect();
+    let arguments = strings("arguments")?;
+    let argument = input.get("argument").and_then(Value::as_str).unwrap_or("");
+    Ok(match action {
+        "argument_semantics" => {
+            let pairs: BTreeSet<(String, String)> = serde_json::from_value(
+                input
+                    .get("inverse_flag_pairs")
+                    .cloned()
+                    .unwrap_or(json!([])),
+            )
+            .map_err(|_| "shell_helpers_invalid")?;
+            let semantics = options::argument_semantics(&arguments, &values, &pairs);
+            json!({"present_flags":semantics.present_flags,"effective_options":semantics.effective_options})
+        }
+        "matches_subcommands" => json!(options::matches_subcommands_conservatively_with_deadline(
+            &arguments,
+            &strings("subcommands")?,
+            &values,
+            &flags,
+            deadline
+        )),
+        "flags_all" => json!(options::flags_present_in_all_option_parses_with_deadline(
+            &arguments,
+            &strings("required_flags")?.into_iter().collect(),
+            &values,
+            &flags,
+            deadline
+        )),
+        "option_advance" => json!(options::known_option_advance(argument, &values, &flags)),
+        "long_flag" => json!(options::long_flag_assignment_is_enabled(argument)),
+        _ => return Err("shell_helpers_invalid_operation"),
+    })
 }
