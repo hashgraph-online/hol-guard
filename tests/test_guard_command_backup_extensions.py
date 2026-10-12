@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 from tests.native_command_test_support import (
