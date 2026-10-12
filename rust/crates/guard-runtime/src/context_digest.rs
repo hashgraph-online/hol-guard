@@ -652,6 +652,23 @@ fn evaluate_request(
             result.local_cli_identity =
                 super::context_digest_local_cli::local_cli_identity(source)?;
         }
+        ContextDigestKindV1::PackageJsonScripts {
+            command_text,
+            cwd,
+            home_dir,
+        } => {
+            result.package_json_scripts =
+                super::context_digest_package_scripts::package_json_scripts(
+                    command_text,
+                    cwd,
+                    home_dir,
+                )?;
+        }
+        ContextDigestKindV1::CustomExtensionSuggestion { tools } => {
+            result.custom_extension_suggestion = Some(
+                super::custom_extension_suggestion::suggestion_verdicts(tools)?,
+            );
+        }
         ContextDigestKindV1::PackageLauncherToken { command_name, args } => {
             result.package_launcher = Some(guard_contracts::PackageLauncherResultV1 {
                 package: guard_command::mcp_decision::package_token(command_name, args),
@@ -836,6 +853,8 @@ fn evaluate_context_digest_request_inner(
         runtime_resolved_argv: None,
         tool_catalog: None,
         local_cli_identity: None,
+        package_json_scripts: None,
+        custom_extension_suggestion: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

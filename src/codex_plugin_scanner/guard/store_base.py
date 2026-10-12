@@ -141,11 +141,6 @@ from .store_evidence import (
 from .store_evidence import (
     store_evidence as _store_evidence_impl,
 )
-from .store_policy_source_context import (
-    PolicySourceContextIndex,
-    build_policy_source_context_index,
-    lookup_policy_source_context,
-)
 from .store_receipt_rollup_schema import receipt_rollup_index_statements, receipt_rollup_schema_statements
 from .store_resume import (
     delete_request_resumes as purge_request_resumes,

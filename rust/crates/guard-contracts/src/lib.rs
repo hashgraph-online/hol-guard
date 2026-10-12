@@ -128,6 +128,8 @@ mod daemon_handler;
 pub use daemon_handler::*;
 mod daemon_route;
 pub use daemon_route::*;
+mod native_exact_action;
+pub use native_exact_action::*;
 
 mod workflow_capability;
 pub use workflow_capability::*;
@@ -154,6 +156,8 @@ pub use supply_chain_egress::*;
 
 mod contained_execution;
 pub use contained_execution::*;
+mod shim_admin;
+pub use shim_admin::*;
 mod data_flow_analyze;
 pub use data_flow_analyze::*;
 mod prompt_requests;

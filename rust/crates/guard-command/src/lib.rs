@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod action_lattice;
 pub mod approval_reuse;
+pub mod benign_request_api;
 pub mod browser_mcp_intent;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
@@ -25,7 +26,7 @@ mod command_candidate_common;
 mod command_common_cli_matchers;
 pub mod cursor_shell_command;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
-pub use codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+pub use codex_output_env::{Ctx, GitCheck, GitProbe, GitRun, InspectionHost};
 mod codex_output_fnmatch;
 mod codex_output_fs;
 mod codex_output_git_conditions;
@@ -142,56 +143,116 @@ mod runtime_read_paths;
 pub mod secret_path_probe;
 mod sfrs_agent_guidance;
 mod sfrs_benign_reads;
-mod sfrs_constants;
 #[cfg(unix)]
+mod sfrs_benign_tool_action;
+mod sfrs_constants;
 mod sfrs_developer_graph;
 #[cfg(all(test, unix))]
 mod sfrs_developer_graph_vectors;
 mod sfrs_developer_inspection;
+#[cfg(unix)]
+mod sfrs_developer_routines;
 #[cfg(test)]
 mod sfrs_developer_vectors;
 mod sfrs_docker_args;
 #[cfg(test)]
 mod sfrs_docker_vectors;
+mod sfrs_environment_secret;
+mod sfrs_file_identity;
 #[cfg(all(test, unix))]
 mod sfrs_fs_vectors;
+mod sfrs_gh_actions_env;
+mod sfrs_gh_actions_filters;
+mod sfrs_gh_actions_read;
 mod sfrs_gh_bindings;
+mod sfrs_gh_body_file;
+mod sfrs_gh_body_file_check;
 mod sfrs_gh_control_flow;
 mod sfrs_gh_definitions;
 mod sfrs_gh_environment;
+mod sfrs_gh_ephemeral_body;
+mod sfrs_gh_pr_expansion;
+mod sfrs_gh_pyshim;
 mod sfrs_gh_redirections;
 mod sfrs_gh_service;
 mod sfrs_gh_shell;
 #[cfg(test)]
 mod sfrs_gh_shell_vectors;
+mod sfrs_git_audit;
 mod sfrs_git_cached_diff;
-#[cfg(unix)]
+mod sfrs_git_fetch;
 mod sfrs_git_index;
+#[cfg(unix)]
+mod sfrs_git_routines;
+#[cfg(all(test, unix))]
+mod sfrs_github_body_vectors;
 #[cfg(test)]
 mod sfrs_github_vectors;
 #[cfg(all(test, unix))]
+mod sfrs_host_divergence;
+#[cfg(all(test, unix))]
 mod sfrs_index_vectors;
+mod sfrs_interpreter_heredoc;
+mod sfrs_interpreter_identity;
+mod sfrs_interpreter_launch;
+mod sfrs_interpreter_observers;
 mod sfrs_interpreter_scripts;
+mod sfrs_interpreter_trust;
+#[cfg(all(test, unix))]
+mod sfrs_interpreter_vectors;
 mod sfrs_jq;
 mod sfrs_json;
+mod sfrs_kubernetes_commands;
+mod sfrs_kubernetes_cp;
+mod sfrs_kubernetes_heredoc;
+mod sfrs_kubernetes_heredoc_scan;
+mod sfrs_kubernetes_options;
+mod sfrs_kubernetes_support;
+#[cfg(test)]
+mod sfrs_kubernetes_vectors;
+#[cfg(all(test, unix))]
+mod sfrs_leaf_vectors;
 mod sfrs_patterns;
+mod sfrs_perl_read_only;
+#[cfg(all(test, unix))]
+mod sfrs_pr_expansion_vectors;
+mod sfrs_pytest_binary;
+mod sfrs_pytest_config;
+mod sfrs_pytest_config_ini;
+mod sfrs_pytest_config_read;
+mod sfrs_pytest_config_safety;
+mod sfrs_pytest_config_search;
+mod sfrs_pytest_config_toml;
+mod sfrs_pytest_config_value;
+mod sfrs_pytest_env;
+mod sfrs_pytest_target;
+#[cfg(all(test, unix))]
+mod sfrs_pytest_vectors;
+mod sfrs_pytest_wrappers;
 mod sfrs_python_imports;
-#[cfg(unix)]
 mod sfrs_quote_parsing;
 mod sfrs_quote_tokens;
 #[cfg(all(test, unix))]
 mod sfrs_quote_vectors;
 mod sfrs_read_only_filters;
 pub mod sfrs_replay;
+mod sfrs_replay_context;
 mod sfrs_request_data;
 mod sfrs_requests;
 mod sfrs_routine_dirs;
+mod sfrs_routine_move;
+#[cfg(unix)]
+mod sfrs_routine_setup;
+#[cfg(unix)]
+mod sfrs_routines_support;
+#[cfg(all(test, unix))]
+mod sfrs_routines_vectors;
 mod sfrs_search_filters;
 mod sfrs_selectors;
+mod sfrs_self_approval;
 mod sfrs_shell_tokens;
 mod sfrs_shlex;
 mod sfrs_source_edit;
-#[cfg(unix)]
 mod sfrs_source_edit_context;
 mod sfrs_static_safety;
 #[cfg(test)]

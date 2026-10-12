@@ -8,11 +8,12 @@
 
 use std::path::{Path, PathBuf};
 
+use guard_contracts::CompoundGitSegmentV1;
 use serde_json::{json, Map, Value};
 
+use crate::benign_request_api::ovalue_from_json;
 use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
-use crate::hook_adapter_value::{OMap, OValue};
-use crate::sfrs_benign_reads::is_explicitly_benign_native_file_read_request;
+use crate::hook_adapter_value::OValue;
 use crate::sfrs_read_only_filters::read_only_lookup_target_is_safe;
 use crate::sfrs_requests::{
     build_file_read_request_artifact, build_file_write_request_artifact, classify_sensitive_path,
@@ -24,18 +25,20 @@ use crate::sfrs_requests::{
 /// Whether the classifier has an implementation for `entry`.
 #[must_use]
 pub fn implements(entry: &str) -> bool {
-    matches!(
-        entry,
-        "classify_sensitive_path"
-            | "command_list_candidate_texts"
-            | "extract_sensitive_file_read_request"
-            | "extract_sensitive_file_read_request_from_action"
-            | "extract_sensitive_file_write_request"
-            | "build_file_read_request_artifact"
-            | "build_file_write_request_artifact"
-            | "is_explicitly_benign_native_file_read_request"
-            | "read_only_lookup_target_is_safe"
-    )
+    crate::sfrs_replay_context::ENTRIES.contains(&entry)
+        || matches!(
+            entry,
+            "classify_sensitive_path"
+                | "command_list_candidate_texts"
+                | "extract_sensitive_file_read_request"
+                | "extract_sensitive_file_read_request_from_action"
+                | "extract_sensitive_file_write_request"
+                | "build_file_read_request_artifact"
+                | "build_file_write_request_artifact"
+                | "is_explicitly_benign_native_file_read_request"
+                | "is_explicitly_benign_tool_action_request"
+                | "read_only_lookup_target_is_safe"
+        )
 }
 
 /// Run the classifier for `entry` over one recorded call.
@@ -125,45 +128,159 @@ pub fn replay_entry(
                 .get("HOME")
                 .and_then(Value::as_str)
                 .map_or_else(|| process_cwd.clone(), str::to_owned);
-            let host = ReplayHost { home: home.clone() };
+            let host = ReplayHost::new(&home);
             let ctx = Ctx::new(&host, &process_cwd, &home);
-            Ok(json!(is_explicitly_benign_native_file_read_request(
-                &ovalue_arg(args, "tool_name"),
-                &ovalue_arg(args, "arguments"),
+            // The public entry point the resident composes with, so the
+            // recorded Python vectors prove the exact production path.
+            let null = Value::Null;
+            Ok(json!(
+                crate::benign_request_api::is_benign_native_file_read(
+                    args.get("tool_name").unwrap_or(&null),
+                    args.get("arguments").unwrap_or(&null),
+                    path_arg(args, "cwd").as_deref(),
+                    path_arg(args, "home_dir").as_deref(),
+                    &ctx,
+                )
+            ))
+        }
+        "is_explicitly_benign_tool_action_request" => {
+            let process_cwd = dir.to_string_lossy().into_owned();
+            let home = env
+                .get("HOME")
+                .and_then(Value::as_str)
+                .map_or_else(|| process_cwd.clone(), str::to_owned);
+            let host = ReplayHost::new(&home)
+                .with_recorded_env(env.as_object().unwrap_or(&serde_json::Map::new()));
+            let ctx = Ctx::new(&host, &process_cwd, &home);
+            let null = Value::Null;
+            // No control snapshot: the vectors were recorded without one.
+            let benign = crate::benign_request_api::is_benign_tool_action(
+                args.get("tool_name").unwrap_or(&null),
+                args.get("arguments").unwrap_or(&null),
                 path_arg(args, "cwd").as_deref(),
                 path_arg(args, "home_dir").as_deref(),
                 &ctx,
-            )))
+                None,
+            );
+            if !benign && host.resident_requested.get() {
+                return Ok(json!({ RESIDENT_HOST_REQUIRED: true }));
+            }
+            Ok(json!(benign))
         }
         "read_only_lookup_target_is_safe" => Ok(json!(read_only_lookup_target_is_safe(
             str_arg(args, "target").unwrap_or_default(),
             args["allow_dirs"].as_bool().unwrap_or(false),
             path_arg(args, "home_dir").as_deref(),
         ))),
-        other => Err(format!("entry {other} is not implemented")),
+        other => {
+            let process_cwd = dir.to_string_lossy().into_owned();
+            let home = env
+                .get("HOME")
+                .and_then(Value::as_str)
+                .map_or_else(|| process_cwd.clone(), str::to_owned);
+            let host = ReplayHost::new(&home);
+            let ctx = Ctx::new(&host, &process_cwd, &home);
+            let result = crate::sfrs_replay_context::replay(other, args, &ctx, Path::new(&home))
+                .unwrap_or_else(|| Err(format!("entry {other} is not implemented")))?;
+            if result.is_null() && host.resident_requested.get() {
+                return Ok(json!({ RESIDENT_HOST_REQUIRED: true }));
+            }
+            Ok(result)
+        }
     }
 }
 
 /// Host for classifiers that never run a process.
 struct ReplayHost {
     home: String,
+    /// Recorded variables besides `HOME` (`PATH`, `RIPGREP_CONFIG_PATH`).
+    extra_env: Vec<(String, String)>,
+    resident_requested: std::cell::Cell<bool>,
 }
+
+impl ReplayHost {
+    fn with_recorded_env(mut self, env: &serde_json::Map<String, Value>) -> Self {
+        self.extra_env = env
+            .iter()
+            .filter(|(key, _)| matches!(key.as_str(), "PATH" | "RIPGREP_CONFIG_PATH"))
+            .filter_map(|(key, value)| Some((key.clone(), value.as_str()?.to_owned())))
+            .collect();
+        self
+    }
+
+    fn new(home: &str) -> Self {
+        Self {
+            home: home.to_owned(),
+            extra_env: Vec::new(),
+            resident_requested: std::cell::Cell::new(false),
+        }
+    }
+}
+
+/// Marker for a call that needed a resident service and failed closed.
+///
+/// Replay never runs git or asks the resident for path trust, so the harness
+/// counts these vectors as deferred to the resident host instead of comparing
+/// them.
+pub const RESIDENT_HOST_REQUIRED: &str = "resident_host_required";
 
 impl InspectionHost for ReplayHost {
     fn env(&self, name: &str) -> Option<String> {
-        (name == "HOME").then(|| self.home.clone())
+        if name == "HOME" {
+            return Some(self.home.clone());
+        }
+        self.extra_env
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.clone())
     }
     fn git_executable(&self) -> Option<String> {
+        self.resident_requested.set(true);
         None
     }
     fn git_safety(&self, _: GitCheck, _: Option<&str>, _: &[String]) -> bool {
+        self.resident_requested.set(true);
         false
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
+        self.resident_requested.set(true);
         false
     }
     fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
+        self.resident_requested.set(true);
         GitRun::Failed("replay host does not run git")
+    }
+    fn compound_git_chain(&self, _: &[CompoundGitSegmentV1], _: bool) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn git_inspection_segment(&self, _: &CompoundGitSegmentV1, _: Option<&str>) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn cached_diff_pathspecs(&self, _: &[String]) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn git_show_config(&self, _: &CompoundGitSegmentV1, _: Option<&str>) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn standalone_git_routine(&self, _: &[CompoundGitSegmentV1], _: bool, _: Option<&str>) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn trusted_path_command(&self, _: &str, _: &str, _: &str) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn bun_script_evidence_complete(&self, _: &[String], _: &str) -> bool {
+        self.resident_requested.set(true);
+        false
+    }
+    fn direct_tool_authority(&self) -> Option<&dyn crate::direct_vitest::DirectToolAuthority> {
+        self.resident_requested.set(true);
+        None
     }
 }
 
@@ -195,31 +312,6 @@ fn protected_paths(value: &Value) -> Vec<(String, String)> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-/// Plain JSON to a Python-faithful value, keeping number spelling.
-fn ovalue_from_json(value: &Value) -> OValue {
-    match value {
-        Value::Null => OValue::Null,
-        Value::Bool(flag) => OValue::Bool(*flag),
-        Value::Number(number) => {
-            let token = number.to_string();
-            if token.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E')) {
-                OValue::Float(token)
-            } else {
-                OValue::Int(token)
-            }
-        }
-        Value::String(text) => OValue::Str(text.clone()),
-        Value::Array(items) => OValue::List(items.iter().map(ovalue_from_json).collect()),
-        Value::Object(map) => {
-            let mut converted = OMap::new();
-            for (key, item) in map {
-                converted.insert(key, ovalue_from_json(item));
-            }
-            OValue::Map(converted)
-        }
-    }
 }
 
 fn text(value: &Value, key: &str) -> String {

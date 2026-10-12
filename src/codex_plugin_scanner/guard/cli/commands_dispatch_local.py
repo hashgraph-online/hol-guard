@@ -153,7 +153,7 @@ def _run_guard_execute_contained_test_command(
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
     finally:
-        if request_validated and getattr(args, "harness", "omp") in {"zcode", "claude-code"}:
+        if request_validated and getattr(args, "harness", "omp") in {"zcode", "claude-code", "codex"}:
             with suppress(OSError):
                 request_file = Path(args.request_file)
                 request_file.unlink(missing_ok=True)

@@ -156,11 +156,6 @@ class StorePolicyMixin:
         user-writable marker cannot preserve a replacement local anchor.
         """
 
-        state_keys = (
-            "managed_policy_bundle_keyring_provenance",
-            "managed_policy_bundle_keyring_mirror",
-            "policy_bundle_keyring",
-        )
         normalized_now = _canonical_utc_timestamp(now)
         configured = managed_keyring is not None and quarantined_local_keyring is not None and provenance is not None
         if (
@@ -168,43 +163,14 @@ class StorePolicyMixin:
             and not configured
         ):
             raise ValueError("managed_policy_bundle_keyring_reconcile_incomplete")
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            if not configured:
-                marker = connection.execute(
-                    "select 1 from sync_state where state_key = ?",
-                    (state_keys[0],),
-                ).fetchone()
-                if marker is None and not force_clear:
-                    connection.rollback()
-                    return False
-                placeholders = ",".join("?" for _ in state_keys)
-                connection.execute(
-                    f"delete from sync_state where state_key in ({placeholders})",
-                    state_keys,
-                )
-                return True
-            assert managed_keyring is not None
-            assert quarantined_local_keyring is not None
-            assert provenance is not None
-            payloads = {
-                state_keys[0]: dict(provenance),
-                state_keys[1]: dict(managed_keyring),
-                state_keys[2]: dict(quarantined_local_keyring),
-            }
-            encoded = {state_key: json.dumps(payload, allow_nan=False) for state_key, payload in payloads.items()}
-            for state_key, payload_json in encoded.items():
-                connection.execute(
-                    """
-                    insert into sync_state (state_key, payload_json, updated_at)
-                    values (?, ?, ?)
-                    on conflict(state_key) do update set
-                      payload_json = excluded.payload_json,
-                      updated_at = excluded.updated_at
-                    """,
-                    (state_key, payload_json, normalized_now),
-                )
-        return True
+        arguments: dict[str, object] = {"configured": configured, "force_clear": force_clear, "now": normalized_now}
+        if provenance is not None and managed_keyring is not None and quarantined_local_keyring is not None:
+            arguments.update(
+                provenance_json=json.dumps(dict(provenance), allow_nan=False),
+                managed_keyring_json=json.dumps(dict(managed_keyring), allow_nan=False),
+                local_keyring_json=json.dumps(dict(quarantined_local_keyring), allow_nan=False),
+            )
+        return bool(self._native_store_call("managed_keyring_reconcile", arguments))
 
     def _cached_policy_bundle_decision_identities(
         self,

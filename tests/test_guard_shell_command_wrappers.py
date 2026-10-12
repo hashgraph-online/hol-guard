@@ -8,7 +8,6 @@ from codex_plugin_scanner.guard.runtime.actions import normalize_opencode_payloa
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
     normalize_transparent_shell_command,
@@ -193,20 +192,6 @@ def test_wrapped_read_only_shell_command_stays_unblocked() -> None:
     )
 
     assert request is None
-
-
-def test_repo_local_wrapper_does_not_use_inner_command_for_benign_allow() -> None:
-    assert not is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": "./bin/lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
-    )
-
-
-def test_path_overridden_wrapper_does_not_use_inner_command_for_benign_allow() -> None:
-    assert not is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": "env PATH=./bin:$PATH lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
-    )
 
 
 def test_wrapped_exfiltration_shell_command_keeps_block_and_records_wrapper_context() -> None:

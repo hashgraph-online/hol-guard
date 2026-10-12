@@ -21,9 +21,23 @@ from .restricted_pytest_model import (
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
 from .restricted_pytest_validation import _normalized_command
 
+_TEST_SCRIPT_NAME = re.compile(r"(?:test_[A-Za-z0-9_-]*|[A-Za-z0-9_-]*_test|test|tests|runtests|run_tests)\.py")
+
+
+def _test_script(script: str) -> bool:
+    """A lexical workspace-relative, test-named script; the plan resolves it."""
+    parts = script.rstrip("/").split("/")
+    return (
+        bool(script)
+        and not script.startswith(("-", "/", "~", "$"))
+        and not any(character in script for character in "\\$`")
+        and all(part and part != ".." for part in parts)
+        and _TEST_SCRIPT_NAME.fullmatch(script.rsplit("/", 1)[-1]) is not None
+    )
+
 
 def _python_runtime_args(command: Sequence[str]) -> tuple[str, ...] | None:
-    """Accept only capability-reducing isolation flags before direct inline code."""
+    """Accept only capability-reducing isolation flags before inline code or a test script."""
     flags = 0
     index = 1
     bits_by_flag = {"-I": 1, "-S": 2, "-IS": 3, "-SI": 3}
@@ -33,7 +47,8 @@ def _python_runtime_args(command: Sequence[str]) -> tuple[str, ...] | None:
             return None
         flags |= bits
         index += 1
-    if len(command) != index + 2 or command[index] != "-c":
+    inline = len(command) == index + 2 and command[index] == "-c"
+    if not inline and not (len(command) > index and _test_script(command[index])):
         return None
     return tuple(command[1:index])
 
@@ -59,6 +74,15 @@ def prepare_restricted_inline_eval(
     node = Path(argv[0]).name in {"node", "nodejs"}
     runtime_args = _node_runtime_args(argv) if node else _python_runtime_args(argv) or ()
     eval_index = 1 + len(runtime_args)
+    if not node and argv[eval_index] != "-c":
+        # A test script runs from the workspace, never from a link out of it.
+        outside = RestrictedPytestError("inline_eval_invalid_command", "Test script is not in the workspace.")
+        try:
+            script = ((cwd or workspace) / argv[eval_index]).resolve(strict=True)
+        except OSError as error:
+            raise outside from error
+        if not script.is_relative_to(workspace.resolve()) or not script.is_file():
+            raise outside
     # Reuse runtime/backend validation only; neither preparation executes tests
     # or requires pytest installed. Launch the resolved native image, not PATH.
     base = (

@@ -47,6 +47,49 @@ fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
 }
 
 #[test]
+fn test_named_python_scripts_share_the_inline_eval_boundary() {
+    for command in [
+        "python3 test_calc.py",
+        "python test_calc.py -v",
+        "python3 -I tests/test_parser.py",
+        "/usr/bin/python3.12 src/calc_test.py",
+        "python3 run_tests.py",
+        "python3 tests.py",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+            assert_eq!(
+                result.reason_code, "native_python_eval_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "python3 deploy.py",
+        "python3 testing.py",
+        "python3 test_calc.sh",
+        "python3 ../test_calc.py",
+        "python3 /tmp/test_calc.py",
+        "python3 ~/test_calc.py",
+        "python3 -m test_calc",
+        "python3 -W ignore test_calc.py",
+        "python3 'test calc.py'",
+        "python3 test_calc.py > out.txt",
+        "python3 test_calc.py && rm -rf /",
+        "PYTHONPATH=/tmp python3 test_calc.py",
+        "sudo python3 test_calc.py",
+    ] {
+        assert_ne!(
+            classify("omp", command).reason_code,
+            "native_python_eval_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn local_transform_service_is_containment_only_and_argv_bounded() {
     let command = "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping";
     let result = classify("omp", command);
@@ -78,7 +121,7 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
         "./.venv/bin/python3 -m pytest -q",
         "/usr/bin/python3 -m pytest tests/unit -q",
     ] {
-        for harness in ["omp", "claude-code"] {
+        for harness in ["omp", "claude-code", "codex"] {
             let result = classify(harness, command);
             let expected = if cfg!(target_os = "macos") {
                 "sandbox-required"
@@ -124,7 +167,7 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         assert_ne!(result.decision, "allow", "{command}");
     }
     assert_ne!(
-        classify("codex", "pytest -q").reason_code,
+        classify("cursor", "pytest -q").reason_code,
         "native_pytest_readonly_containment_required"
     );
     let without_cwd = evaluate_pre_tool_envelope_with_context(

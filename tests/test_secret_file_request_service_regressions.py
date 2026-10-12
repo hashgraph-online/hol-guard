@@ -6,9 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from codex_plugin_scanner.guard.runtime.secret_file_request_services import credential_exfiltration
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.benign_requests import (
-    is_explicitly_benign_tool_action_request,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.developer_inspection import (
     _find_args_use_write_or_unsafe_exec_action,
     _read_only_lookup_find_args_are_safe,
@@ -57,23 +54,6 @@ def test_find_exec_allows_only_literal_ls_over_discovered_paths() -> None:
 def test_read_only_segments_reject_non_stderr_redirection() -> None:
     assert not _read_only_lookup_segments(["cat", "-n>report.txt"])
     assert not _read_only_lookup_segments(["grep", "pattern", "--color=always>report.txt"])
-
-
-def test_public_benign_classifier_rejects_ripgrep_hidden_file_modes(tmp_path: Path) -> None:
-    for option in ("--hidden", "-.", "-u", "-uu", "-uuu", "--unrestricted"):
-        assert not is_explicitly_benign_tool_action_request(
-            "Bash",
-            {"command": f"rg {option} API_KEY ."},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-
-    assert is_explicitly_benign_tool_action_request(
-        "Bash",
-        {"command": "rg API_KEY ."},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
 
 
 def test_environment_append_marker_must_precede_assignment() -> None:

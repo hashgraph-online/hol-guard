@@ -76,6 +76,8 @@ _RESULT_OPTIONAL_KEYS = {
     "runtime_resolved_argv",
     "tool_catalog",
     "local_cli_identity",
+    "package_json_scripts",
+    "custom_extension_suggestion",
 }
 _RESULT_CODES = {
     "ok",
@@ -90,7 +92,8 @@ _RESULT_CODES = {
 
 # Filesystem authority: launch/executable identities hash on-disk bytes and
 # stat metadata, so the same request legitimately produces a different result
-# after entrypoint/executable bytes change.  `mcp_launch_environment` is also
+# after entrypoint/executable bytes change; `package_json_scripts` reads the
+# project's package.json and lockfiles.  `mcp_launch_environment` is also
 # uncacheable because it carries granted credentials (see the transport
 # comment below).  Every other kind is a pure function of request content.
 _UNCACHEABLE_DIGEST_KINDS = frozenset(
@@ -100,6 +103,7 @@ _UNCACHEABLE_DIGEST_KINDS = frozenset(
         "runtime_launch_identity",
         "runtime_launch_identity_matches",
         "runtime_launch_identity_projection",
+        "package_json_scripts",
     }
 )
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
@@ -641,6 +645,12 @@ def _decode_result(
         return None
     # Shape is checked by ``native_local_cli_identity``; absent means not applicable.
     if "local_cli_identity" in payload and kind != "local_cli_identity":
+        return None
+    # Shape is checked by ``package_json_scripts``; absent means not applicable.
+    if "package_json_scripts" in payload and kind != "package_json_scripts":
+        return None
+    # Shape is checked by ``custom_extension_suggestion``; absent means not applicable.
+    if "custom_extension_suggestion" in payload and kind != "custom_extension_suggestion":
         return None
     if payload.get("status") == "ok":
         required_output = _OK_OUTPUT_FIELD.get(kind)

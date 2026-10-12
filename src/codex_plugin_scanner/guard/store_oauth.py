@@ -105,34 +105,7 @@ class StoreOAuthConnectMixin:
         Returns a list of dicts with 'source', 'issuer', and 'workspace_id'
         fields for each source that has OAuth credentials.
         """
-        sources: list[dict[str, object]] = []
-        prefix = _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
-        with self._connect() as connection:
-            rows = connection.execute(
-                "select state_key, payload_json from sync_state where state_key = ? or state_key like ?",
-                (_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, prefix + "%"),
-            ).fetchall()
-        for row in rows:
-            key = str(row["state_key"])
-            if key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
-                source_name = "default"
-            elif key.startswith(prefix):
-                source_name = key[len(prefix) :]
-            else:
-                continue
-            payload = json.loads(str(row["payload_json"]))
-            if not isinstance(payload, dict):
-                continue
-            issuer = payload.get("issuer")
-            workspace_id = payload.get("workspace_id")
-            sources.append(
-                {
-                    "source": source_name,
-                    "issuer": issuer if isinstance(issuer, str) else None,
-                    "workspace_id": workspace_id if isinstance(workspace_id, str) else None,
-                }
-            )
-        return sources
+        return [dict(source) for source in self._native_store_call("oauth_sources_list", {})]
 
     def clear_cloud_sync_state_for_reconnect(
         self,

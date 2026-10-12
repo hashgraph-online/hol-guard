@@ -10,8 +10,8 @@ mod sibling;
 mod tree;
 use options::unsafe_search_value;
 pub(super) use tree::{
-    safe_glob_operand, safe_literal_bracket_tree, safe_recursive_target,
-    safe_unmatched_bracket_operand, SECRET_EXTENSIONS,
+    safe_glob_operand, safe_literal_bracket_tree, safe_recursive_search_target,
+    safe_recursive_target, safe_unmatched_bracket_operand, SECRET_EXTENSIONS,
 };
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];

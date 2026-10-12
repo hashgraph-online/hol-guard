@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_comma
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
 from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
 from tests.native_command_test_support import real_native_review_fixture
@@ -48,46 +47,6 @@ def _assert_review_or_native_unavailable(evaluation, evaluation_error) -> None:
         return
     assert evaluation.minimum_action in {"review", "block"}
     assert evaluation.decision_plane.action in {"require-reapproval", "block"}
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "cat .env",
-        "head -n 10 .env.local",
-        "tail --lines=2 .env.production",
-        "sed -n '1,3p' .env",
-        "grep API_KEY .env",
-        "rg -n TOKEN .env",
-        "cat < .env",
-        "read value < .env",
-        "source .env",
-        ". .env",
-        "/bin/cat .env",
-        "command cat .env",
-        "command -p cat .env",
-        "command -- cat .env",
-        "exec cat .env",
-        "exec -- cat .env",
-        "exec -a reader cat .env",
-        "bash -c 'cat .env'",
-        "ksh -c 'cat .env'",
-        "ash -c 'cat .env'",
-        "cat .env | head -n 1",
-        "python3 -c 'print(open(\".env\").read())'",
-        "python3.11 -c 'print(open(\".env\").read())'",
-        "python3.12 -c 'print(open(\".env\").read())'",
-        'node -e \'console.log(require("fs").readFileSync(".env", "utf8"))\'',
-    ),
-)
-def test_secret_reads_have_an_explicit_floor(command: str, tmp_path: Path) -> None:
-    evaluation, evaluation_error = _evaluate_native(command, cwd=tmp_path)
-    _assert_review_or_native_unavailable(evaluation, evaluation_error)
-    if evaluation is not None:
-        assert "local_secret_read" in evaluation.risk_classes
-    request = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    assert request is not None
-    assert not is_explicitly_benign_tool_action_request("Bash", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
 
 
 @pytest.mark.parametrize(

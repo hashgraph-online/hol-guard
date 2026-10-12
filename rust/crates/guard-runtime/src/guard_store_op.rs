@@ -29,6 +29,7 @@ use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
+use crate::guard_store_native_review_consume as native_review_consume;
 use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
     count_recoverable_unbound, load_binding, normalized_binding, reassign_quarantined,
@@ -39,10 +40,12 @@ use crate::guard_store_outbox_queries as queries;
 use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
+use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_receipt_reads as receipt_reads;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 use crate::guard_store_receipt_writes as receipt_writes;
 use crate::guard_store_sessions as sessions;
+use crate::guard_store_state_ops as state_ops;
 use crate::guard_store_storage_maintenance as storage_maintenance;
 use crate::guard_store_wfcap_wire as wfcap;
 
@@ -264,7 +267,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_latest_receipt"
         | "receipt_decision_counts"
         | "run_storage_housekeeping"
-        | "count_receipts" => Kind::Read,
+        | "count_receipts"
+        | "artifact_latest_diff"
+        | "oauth_sources_list"
+        | "policy_source_contexts" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -273,7 +279,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "observed_mcp_tool_actions"
         | "workflow_capability_plan" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
-        "refresh_review_event_outbox_binding_for_identity"
+        "consume_native_review_approval"
+        | "refresh_review_event_outbox_binding_for_identity"
         | "refresh_review_event_outbox_binding"
         | "reassign_quarantined_review_events"
         | "acknowledge_review_events"
@@ -314,7 +321,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_summary_between"
         | "receipt_analytics"
         | "reconcile_receipt_events"
-        | "maintain_storage" => Kind::Write,
+        | "maintain_storage"
+        | "managed_keyring_reconcile" => Kind::Write,
         _ => return None,
     })
 }
@@ -409,6 +417,7 @@ fn dispatch(
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
         "observed_mcp_tool_actions" => observed_mcp::observed_mcp_tool_actions(connection),
+        "consume_native_review_approval" => native_review_consume::consume(connection, args),
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
         "upsert_guard_session" => sessions::upsert_session(connection, args),
@@ -463,12 +472,14 @@ fn dispatch(
         }
         "get_latest_receipt" => receipt_reads::get_latest(connection, args),
         "count_receipts" => receipt_reads::count(connection, args),
+        "policy_source_contexts" => policy_source_contexts(connection, args),
         "receipt_summary_between" => receipt_reads::summary_between(connection, args),
         "receipt_analytics" => receipt_reads::analytics(connection, args),
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
+        _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }
