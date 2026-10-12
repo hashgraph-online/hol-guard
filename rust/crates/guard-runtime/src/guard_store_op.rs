@@ -27,6 +27,7 @@ use crate::guard_store_cmd_feedback as feedback;
 use crate::guard_store_cmd_lifecycle as lifecycle;
 use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
+use crate::guard_store_connect as connect;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_native_review_consume as native_review_consume;
@@ -45,7 +46,9 @@ use crate::guard_store_receipt_reads as receipt_reads;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 use crate::guard_store_receipt_writes as receipt_writes;
 use crate::guard_store_sessions as sessions;
+use crate::guard_store_state_ops as state_ops;
 use crate::guard_store_storage_maintenance as storage_maintenance;
+use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
 
 const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
@@ -108,9 +111,12 @@ fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> 
     apply_pragmas(&connection)?;
     // A total read only writes for the one-time rebuild a migration requests;
     // every other call stays lock-free.
-    let kind = if request.method == "count_receipts"
+    let args = Args(&request.args);
+    let kind = if (request.method == "count_receipts"
         && kind == Kind::Read
-        && receipt_rollups::rebuild_pending(&connection)?
+        && receipt_rollups::rebuild_pending(&connection)?)
+        || (connect::is_state_read(&request.method)
+            && connect::read_persists_expiry(&connection, &args)?)
     {
         Kind::Write
     } else {
@@ -123,7 +129,6 @@ fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> 
         Kind::Snapshot => connection.execute_batch("BEGIN")?,
         Kind::Read => {}
     }
-    let args = Args(&request.args);
     let outcome = dispatch(&connection, &request.source, &request.method, &args);
     let payload = match outcome {
         Ok(payload) => payload,
@@ -267,6 +272,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_decision_counts"
         | "run_storage_housekeeping"
         | "count_receipts"
+        | "artifact_latest_diff"
+        | "oauth_sources_list"
         | "policy_source_contexts" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
@@ -311,6 +318,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "upsert_provenance_cache"
         | "next_aibom_trust_attestation_sequence"
         | "add_receipt"
+        | "record_tool_call_evidence"
         | "set_receipt_action_envelope"
         | "update_receipt_policy_decision"
         | "update_receipt_approval_context"
@@ -318,7 +326,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_summary_between"
         | "receipt_analytics"
         | "reconcile_receipt_events"
-        | "maintain_storage" => Kind::Write,
+        | "maintain_storage"
+        | "managed_keyring_reconcile" => Kind::Write,
+        _ if connect::is_state_read(method) => Kind::Read,
+        _ if connect::handles(method) => Kind::Write,
         _ => return None,
     })
 }
@@ -449,6 +460,9 @@ fn dispatch(
             inventory::next_attestation_sequence(connection, args)
         }
         "add_receipt" => receipt_writes::add_receipt(connection, args),
+        "record_tool_call_evidence" => {
+            tool_call_evidence::record_tool_call_evidence(connection, args)
+        }
         "set_receipt_action_envelope" => receipt_writes::set_action_envelope(connection, args),
         "update_receipt_policy_decision" => {
             receipt_writes::update_policy_decision(connection, args)
@@ -475,6 +489,8 @@ fn dispatch(
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
+        _ if connect::handles(method) => connect::dispatch(connection, method, args),
+        _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

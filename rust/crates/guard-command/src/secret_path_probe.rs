@@ -2,11 +2,18 @@
 
 use std::path::Path;
 
-use crate::shell_secret_read_support::classify_secret_path;
+use crate::shell_secret_read_support::{classify_request_secret_path, classify_secret_path};
 
 /// Whether `path` names a sensitive secret location (`classify_secret_path`
 /// returns a match). `cwd` anchors relative paths and `home_dir` expands `~`.
 #[must_use]
 pub fn is_secret_path(path: &str, cwd: Option<&Path>, home_dir: Option<&Path>) -> bool {
     classify_secret_path(path, cwd, home_dir).is_some()
+}
+
+/// Whether `path` is sensitive under the file-request tables of
+/// `secret_sensitivity.py` (bare key basenames only count below `.ssh`).
+#[must_use]
+pub fn is_request_secret_path(path: &str, cwd: Option<&Path>, home_dir: Option<&Path>) -> bool {
+    classify_request_secret_path(path, cwd, home_dir).is_some()
 }

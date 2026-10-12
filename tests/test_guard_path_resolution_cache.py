@@ -99,3 +99,50 @@ def test_remembered_spelling_expires(tmp_path: Path, monkeypatch: pytest.MonkeyP
     now[0] += cache._RESOLUTION_LIFETIME_SECONDS + 0.1
     cache.cached_realpath(os.fspath(directory))
     assert len(calls) == 2
+
+
+def _legacy_prefixes(path: str) -> tuple[str, ...]:
+    """The prefix spellings the pre-refactor component walk produced."""
+
+    absolute = os.path.abspath(path)
+    drive, tail = os.path.splitdrive(absolute)
+    pieces = [piece for piece in tail.split(os.sep) if piece]
+    current = f"{drive}{os.sep}" if drive else os.sep
+    return (current, *[os.path.join(current, *pieces[: index + 1]) for index in range(len(pieces))])
+
+
+def test_component_prefixes_match_the_targets_the_old_walk_produced(tmp_path: Path) -> None:
+    nested = tmp_path / "a" / "b" / "c"
+    nested.mkdir(parents=True)
+    assert cache._component_prefixes(os.fspath(nested)) == _legacy_prefixes(os.fspath(nested))
+    drive, _ = os.path.splitdrive(os.path.abspath(os.sep))
+    expected_root = f"{drive}{os.sep}" if drive else os.sep
+    assert cache._component_prefixes(os.sep) == _legacy_prefixes(os.sep) == (expected_root,)
+
+
+def test_swapped_component_directory_with_fresh_inode_is_resolved_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    directory = parent / "workspace"
+    directory.mkdir()
+    calls: list[str] = []
+    real = os.path.realpath
+
+    def counting(path: str, *, strict: bool = False) -> str:
+        calls.append(path)
+        return real(path, strict=strict)
+
+    monkeypatch.setattr(cache.os.path, "realpath", counting)
+    assert cache.cached_realpath(os.fspath(directory)) == real(directory)
+    parent.rename(tmp_path / "old-parent")
+    parent.mkdir()
+    directory.mkdir()
+
+    resolved = cache.cached_realpath(os.fspath(directory))
+
+    assert resolved == real(directory)
+    assert len(calls) == 2
+    cache.cached_realpath(os.fspath(directory))
+    assert len(calls) == 2

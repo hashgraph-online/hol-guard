@@ -90,7 +90,7 @@ fn observed_mcp_tool(harness: &str, tool_name: &str) -> Option<ObservedTool> {
 }
 
 /// `is_local_cli_id`: `local-cli.[a-z0-9]+(-[a-z0-9]+){0,8}`.
-fn is_local_cli_id(value: &str) -> bool {
+pub(crate) fn is_local_cli_id(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("local-cli.") else {
         return false;
     };

@@ -75,7 +75,7 @@ from ..native_daemon_route import (
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
-from ..native_runtime_request_scope import native_status_request_scope
+from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..path_resolution_cache import cached_realpath
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
@@ -1345,6 +1345,7 @@ class _GuardDaemonHandler(
             return
         self._write_json({"error": "not_found"}, status=404)
 
+    @scoped_hook_post
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
@@ -1440,10 +1441,7 @@ class _GuardDaemonHandler(
             )
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
-            # One hook request shares a single native-binary validation across
-            # its decision, approval/review, queue, and response handling.
-            with native_status_request_scope():
-                self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
             self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])

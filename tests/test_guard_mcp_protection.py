@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_mcp_tool_policy
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
@@ -454,6 +455,7 @@ def test_evaluate_tool_call_unknown_stored_action_requires_review(
         transport="stdio",
     )
     store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         store,
         "resolve_policy_decision_lookup_with_memory_pattern",

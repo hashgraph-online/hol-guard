@@ -132,21 +132,19 @@
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_eval.py",
         "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
         "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py",
+        "rust/crates/guard-command/src/github_workflow_operations.rs",
+        "rust/crates/guard-runtime/src/github_workflow_prepare_op.rs",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_operations.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
         "tests/test_guard_approval_scope_contract.py",
         "tests/test_guard_github_workflow_authorization.py",
-        "tests/test_guard_github_workflow_context_binding.py",
         "tests/test_guard_github_workflow_privacy.py",
         "tests/test_guard_github_workflow_runtime.py"
       ],
       "acceptance": "a bounded capability permits at most 10 exact repeated uses while binding the operation, repository, resource, actor, request, and execution context",
       "evidence_paths": [
         "tests/test_guard_github_workflow_authorization.py",
-        "tests/test_guard_github_workflow_context_binding.py",
         "tests/test_guard_github_workflow_privacy.py"
       ]
     },
@@ -399,7 +397,7 @@
     }
   },
   "verification": [
-    "uv run --no-sync pytest -q tests/test_guard_github_workflow_authorization.py tests/test_guard_github_workflow_context_binding.py tests/test_guard_github_workflow_privacy.py tests/test_guard_github_workflow_runtime.py tests/test_guard_command_critical_floors.py tests/test_guard_command_corpus.py tests/test_guard_command_decision_diff.py --tb=short",
+    "uv run --no-sync pytest -q tests/test_guard_github_workflow_authorization.py tests/test_guard_github_workflow_privacy.py tests/test_guard_github_workflow_runtime.py tests/test_guard_command_critical_floors.py tests/test_guard_command_corpus.py tests/test_guard_command_decision_diff.py --tb=short",
     "bun test tests/dockerlabs/installed-guard-package-proof.test.mjs",
     "uv run --no-sync pytest -q tests/test_installed_guard_package_origin.py --tb=short",
     "cd tests/dockerlabs/command-extension-analytics && bun run guard:test:command-extension-analytics",

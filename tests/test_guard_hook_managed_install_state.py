@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -34,8 +35,10 @@ class _Store:
 @pytest.fixture(autouse=True)
 def _clear_remembered_answers() -> Iterator[None]:
     state._protected_until.clear()
+    state._refresh_locks.clear()
     yield
     state._protected_until.clear()
+    state._refresh_locks.clear()
 
 
 def _server(store: _Store) -> SimpleNamespace:
@@ -95,3 +98,43 @@ def test_store_failure_stays_protected_and_is_not_remembered() -> None:
     server = _server(store)
     assert state._hook_harness_is_unmanaged(server, "pi") is False
     assert not state._protected_until
+
+
+def test_concurrent_hooks_share_one_store_read_when_the_remembered_answer_expires() -> None:
+    store = _Store({"pi": True})
+    server = _server(store)
+    workers = 16
+    barrier = threading.Barrier(workers)
+    answers: list[bool] = []
+
+    def hook() -> None:
+        barrier.wait()
+        answers.append(state._hook_harness_is_unmanaged(server, "pi"))
+
+    threads = [threading.Thread(target=hook) for _ in range(workers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert answers == [False] * workers
+    assert store.reads == 1
+
+
+def test_concurrent_hooks_each_read_the_store_for_an_unmanaged_harness() -> None:
+    store = _Store({"pi": False})
+    server = _server(store)
+    workers = 8
+    barrier = threading.Barrier(workers)
+    answers: list[bool] = []
+
+    def hook() -> None:
+        barrier.wait()
+        answers.append(state._hook_harness_is_unmanaged(server, "pi"))
+
+    threads = [threading.Thread(target=hook) for _ in range(workers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert answers == [True] * workers
+    assert store.reads == workers

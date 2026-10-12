@@ -24,10 +24,14 @@ use guard_policy_snapshot::digest_bytes;
 
 use crate::resident_diagnostics::{observe, observe_value, Phase};
 
+#[path = "context_digest_mcp_approval.rs"]
+mod mcp_approval;
+pub(crate) use mcp_approval::build_mcp_tool_approval;
+
 const TOKEN_VERSION: u64 = 1;
 const TOKEN_DOMAIN: &str = "hol.guard.approval-context";
-const CONFIGURED_ENV_HASH_DOMAIN: &[u8] = b"hol.guard.configured-environment:v1\0";
-const CONFIGURED_HEADER_HASH_DOMAIN: &[u8] = b"hol.guard.configured-headers:v1\0";
+pub(crate) const CONFIGURED_ENV_HASH_DOMAIN: &[u8] = b"hol.guard.configured-environment:v1\0";
+pub(crate) const CONFIGURED_HEADER_HASH_DOMAIN: &[u8] = b"hol.guard.configured-headers:v1\0";
 const TOKEN_HASH_FIELDS: [&str; 5] = ["identity", "content", "capabilities", "policy", "sandbox"];
 
 pub(super) const ERR_COMPONENT: &str = "native_context_component_invalid";
@@ -194,7 +198,7 @@ pub(crate) fn build_context_token(
     )
 }
 
-fn build_context_token_fields(
+pub(super) fn build_context_token_fields(
     identity: &Value,
     content: &Value,
     capabilities: &Value,
@@ -310,7 +314,7 @@ pub(crate) fn python_strip(text: &str) -> &str {
     text.trim_matches(|ch: char| is_python_space(ch))
 }
 
-fn configured_values_hash(
+pub(crate) fn configured_values_hash(
     values: Option<&Value>,
     configured_keys: Option<&[String]>,
     domain: &[u8],
@@ -603,50 +607,27 @@ fn evaluate_request(
                 request,
             )?);
         }
-        ContextDigestKindV1::BuildMcpToolApprovalHash { request } => match &request.config {
-            None => {
-                let hash = guard_command::mcp_tool_approval::build_tool_approval_digest(request)?;
-                result.digest = Some(hash.token_or_digest);
-                result.mcp_tool_risk = Some(hash.risk_categories);
+        ContextDigestKindV1::BuildMcpToolApprovalHash { request } => {
+            let built = build_mcp_tool_approval(request)?;
+            if request.config.is_some() {
+                result.token = Some(built.token_or_digest);
+            } else {
+                result.digest = Some(built.token_or_digest);
             }
-            Some(config) => {
-                let material = guard_command::mcp_tool_approval::tool_approval_token_material(
-                    request, config,
-                )?;
-                let extension_control_digest = request
-                    .extension_control_digest
-                    .as_deref()
-                    .ok_or("native_context_component_invalid")?;
-                result.token = Some(build_context_token_fields(
-                    &material.identity,
-                    &Value::String(material.content_digest.clone()),
-                    &material.capabilities,
-                    &material.sandbox,
-                    extension_control_digest,
-                    |out| {
-                        guard_command::mcp_tool_policy::write_tool_policy_context(
-                            &guard_contracts::McpToolApprovalContextRequestV1 {
-                                config: config.clone(),
-                                harness: request.harness.clone(),
-                                artifact_id: request.artifact_id.clone(),
-                                publisher: request.publisher.clone(),
-                                identity: material.identity.clone(),
-                                content: Value::String(material.content_digest.clone()),
-                                capabilities: material.capabilities.clone(),
-                                sandbox: material.sandbox.clone(),
-                                extension_control_digest: extension_control_digest.to_owned(),
-                            },
-                            out,
-                        )
-                    },
-                )?);
-                result.mcp_tool_risk = Some(material.risk_categories);
-            }
-        },
+            result.mcp_tool_risk = Some(built.risk_categories);
+        }
         ContextDigestKindV1::McpToolApprovalDigest { request } => {
             result.digest = Some(guard_command::mcp_decision::mcp_tool_approval_digest(
                 request,
             )?);
+        }
+        ContextDigestKindV1::CustomExtensionContinuity { request } => {
+            result.custom_extension_continuity =
+                Some(super::custom_extension_continuity::evaluate(request)?);
+        }
+        ContextDigestKindV1::ManagedControlsPolicyFields { request } => {
+            result.managed_controls_policy_fields =
+                Some(super::managed_controls_policy_fields::evaluate(request)?);
         }
         ContextDigestKindV1::LocalCliIdentity { source } => {
             result.local_cli_identity =
@@ -776,6 +757,12 @@ fn evaluate_request(
             result.digest = digest;
             result.tool_catalog = canonical;
         }
+        ContextDigestKindV1::RuntimeHookApprovalContext { inputs } => {
+            result.token = Some(crate::hook_approval_context::runtime_hook_token(inputs)?);
+        }
+        ContextDigestKindV1::GenericHookApprovalContext { inputs } => {
+            result.token = Some(crate::hook_approval_context::generic_hook_token(inputs)?);
+        }
     }
     Ok(())
 }
@@ -853,6 +840,8 @@ fn evaluate_context_digest_request_inner(
         runtime_resolved_argv: None,
         tool_catalog: None,
         local_cli_identity: None,
+        custom_extension_continuity: None,
+        managed_controls_policy_fields: None,
         package_json_scripts: None,
         custom_extension_suggestion: None,
     };

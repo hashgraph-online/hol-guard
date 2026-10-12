@@ -210,8 +210,10 @@ def test_approval_rows_name_the_tool_from_the_stored_action_envelope(monkeypatch
     from ci.gauntlet.approval_rows import always_gap, approval_rows
     from codex_plugin_scanner.guard import approval_scope_support
 
-    contract = SimpleNamespace(allow_scopes=["once"], exact_action_persistence_eligible=False)
-    monkeypatch.setattr(approval_scope_support, "request_scope_contract", lambda row: contract)
+    contract = SimpleNamespace(
+        allow_scopes=["once"], exact_action_persistence_eligible=False, once_only_reason="unproven_launch"
+    )
+    monkeypatch.setattr(approval_scope_support, "request_scope_observation", lambda row: (contract, None))
     stored = {
         "request_id": "r1",
         "action_envelope_json": {"tool_name": "read", "native_origin_receipt": {"reason_code": "native_x_review"}},
@@ -220,3 +222,4 @@ def test_approval_rows_name_the_tool_from_the_stored_action_envelope(monkeypatch
     rows = approval_rows(store, set())
     assert rows[0]["tool_name"] == "read" and rows[0]["reason_code"] == "native_x_review"
     assert always_gap(rows) == ["read"]
+    assert rows[0]["once_only_reason"] == "unproven_launch" and rows[0]["exact_context_token_present"] is False

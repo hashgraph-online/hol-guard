@@ -40,6 +40,7 @@ def test_connect_status_reports_unavailable_outbox_instead_of_falling_back(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _unavailable_native(monkeypatch)
+    monkeypatch.setattr(store, "get_effective_guard_connect_state", lambda *, now: None)
     payload = build_connect_status_payload(
         store=store,
         sync_url="https://hol.org/api/guard/receipts/sync",

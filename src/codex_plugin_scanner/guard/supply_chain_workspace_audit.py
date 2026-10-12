@@ -14,10 +14,13 @@ from . import local_supply_chain as _lsc
 from . import supply_chain_cloud_audit as _cloud_audit
 from .config import GuardConfig
 from .native_package_audit_projection import (
+    NativePackageAuditProjectionError,
     native_advisory_aliases,
     native_audit_receipt_metadata,
     native_ci_gate_result,
+    native_cloud_audit_payload,
     native_empty_audit_outcome,
+    native_normalize_cloud_audit_response,
 )
 from .native_workspace_inventory import NativeWorkspaceInventoryError, native_workspace_inventory
 from .runtime.package_intent_common import (
@@ -182,21 +185,23 @@ def build_workspace_audit_payload(
             auth_context = _lsc._resolve_guard_sync_auth_context(store)
             workspace_id = store.get_cloud_workspace_id()
             assert workspace_id is not None
-            request_payload = _lsc._build_cloud_audit_payload(
+            request_payload = native_cloud_audit_payload(
+                store,
                 workspace_dir=target_workspace_dir,
                 workspace_id=workspace_id,
-                store=store,
-                manifest_paths=manifest_paths,
-                lockfile_paths=lockfile_paths,
-                inventory=inventory,
+                inventory_digest=workspace_inventory.inventory_digest,
+                sbom_paths=sbom_paths,
+                before_workspace_dir=effective_before_dir,
+                include_lockfile_warnings=True,
             )
             cloud_response, fallback_reason = _cloud_audit._run_cloud_workspace_audit(
+                store=store,
                 request_payload=request_payload,
                 auth_context=auth_context,
                 workspace_id=workspace_id,
             )
             if cloud_response is not None:
-                evaluation = _cloud_audit._normalize_cloud_audit_response(cloud_response)
+                evaluation = native_normalize_cloud_audit_response(store, cloud_response)
                 source = "cloud"
             else:
                 evaluation = _workspace_local_evaluation(
@@ -210,11 +215,18 @@ def build_workspace_audit_payload(
                     inventory_digest=workspace_inventory.inventory_digest,
                     now=now,
                 )
-        except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncNotConfiguredError, RuntimeError):
-            fallback_reason = {
-                "code": "cloud_auth_error",
-                "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
-            }
+        except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncNotConfiguredError, RuntimeError) as error:
+            fallback_reason = (
+                {
+                    "code": "native_projection_unavailable",
+                    "message": "Guard could not build or read the Cloud audit natively, so Guard fell back locally.",
+                }
+                if isinstance(error, NativePackageAuditProjectionError)
+                else {
+                    "code": "cloud_auth_error",
+                    "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
+                }
+            )
             evaluation = _workspace_local_evaluation(
                 store=store,
                 workspace_dir=target_workspace_dir,

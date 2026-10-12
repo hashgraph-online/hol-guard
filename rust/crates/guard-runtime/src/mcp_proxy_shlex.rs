@@ -26,12 +26,22 @@ fn is_whitespace(character: char) -> bool {
     matches!(character, ' ' | '\t' | '\r' | '\n')
 }
 
-fn is_punctuation(character: char) -> bool {
-    PUNCTUATION.contains(character)
-}
-
 /// Every token of `command`, or `None` when Python would raise `ValueError`.
 pub(crate) fn split(command: &str) -> Option<Vec<String>> {
+    split_with(command, PUNCTUATION, "")
+}
+
+/// `shlex.shlex(command, posix=True, punctuation_chars=punctuation)` with
+/// `whitespace_split=True` and `commenters` as the comment characters (Python's
+/// default is `"#"`: a comment character in a word or between words discards
+/// the rest of its line).
+pub(crate) fn split_with(
+    command: &str,
+    punctuation: &str,
+    commenters: &str,
+) -> Option<Vec<String>> {
+    let is_punctuation = |character: char| punctuation.contains(character);
+    let is_comment = |character: char| commenters.contains(character);
     let characters: Vec<char> = command.chars().collect();
     let mut index = 0usize;
     let mut tokens = Vec::new();
@@ -54,6 +64,7 @@ pub(crate) fn split(command: &str) -> Option<Vec<String>> {
                             break;
                         }
                     }
+                    Some(c) if is_comment(c) => skip_line(&characters, &mut index),
                     Some('\\') => state = State::Escape(Resume::Word),
                     Some(c) if is_punctuation(c) => {
                         token.push(c);
@@ -76,6 +87,13 @@ pub(crate) fn split(command: &str) -> Option<Vec<String>> {
                             break;
                         }
                     }
+                    Some(c) if is_comment(c) => {
+                        skip_line(&characters, &mut index);
+                        state = State::Space;
+                        if !token.is_empty() || quoted {
+                            break;
+                        }
+                    }
                     Some(c @ ('\'' | '"')) => state = State::Quote(c),
                     Some('\\') => state = State::Escape(Resume::Word),
                     Some(c) if is_punctuation(c) => {
@@ -93,6 +111,13 @@ pub(crate) fn split(command: &str) -> Option<Vec<String>> {
                         break;
                     }
                     Some(c) if is_whitespace(c) => {
+                        state = State::Space;
+                        if !token.is_empty() || quoted {
+                            break;
+                        }
+                    }
+                    Some(c) if is_comment(c) => {
+                        skip_line(&characters, &mut index);
                         state = State::Space;
                         if !token.is_empty() || quoted {
                             break;
@@ -137,6 +162,16 @@ pub(crate) fn split(command: &str) -> Option<Vec<String>> {
     }
 }
 
+/// `instream.readline()`: consume through the next newline.
+fn skip_line(characters: &[char], index: &mut usize) {
+    while let Some(&character) = characters.get(*index) {
+        *index += 1;
+        if character == '\n' {
+            break;
+        }
+    }
+}
+
 /// `shlex.quote`.
 pub(crate) fn quote(value: &str) -> String {
     if value.is_empty() {
@@ -160,5 +195,5 @@ pub(crate) fn join(tokens: &[String]) -> String {
 
 /// Whether `token` is nothing but shell control punctuation.
 pub(crate) fn is_control(token: &str) -> bool {
-    !token.is_empty() && token.chars().all(is_punctuation)
+    !token.is_empty() && token.chars().all(|c| PUNCTUATION.contains(c))
 }

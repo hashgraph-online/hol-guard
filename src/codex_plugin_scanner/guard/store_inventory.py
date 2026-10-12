@@ -17,6 +17,37 @@ from .models import GuardAction
 from .store_base import *
 
 
+def inventory_artifact_wire(
+    *,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    policy_action: GuardAction,
+    changed: bool,
+    now: str,
+    approved: bool,
+) -> dict[str, object]:
+    launch_command = None
+    if artifact.command:
+        launch_command = " ".join([artifact.command, *artifact.args]).strip()
+    return {
+        "artifact_id": artifact.artifact_id,
+        "harness": artifact.harness,
+        "artifact_name": artifact.name,
+        "artifact_type": artifact.artifact_type,
+        "source_scope": artifact.source_scope,
+        "config_path": artifact.config_path,
+        "publisher": artifact.publisher,
+        "origin_url": artifact.url,
+        "launch_command": launch_command,
+        "transport": artifact.transport,
+        "artifact_hash": artifact_hash,
+        "policy_action": policy_action,
+        "changed": changed,
+        "approved": approved,
+        "now": now,
+    }
+
+
 class StoreInventoryMixin:
     def save_snapshot(
         self,
@@ -81,28 +112,16 @@ class StoreInventoryMixin:
         now: str,
         approved: bool,
     ) -> None:
-        launch_command = None
-        if artifact.command:
-            launch_command = " ".join([artifact.command, *artifact.args]).strip()
         self._native_store_call(
             "record_inventory_artifact",
-            {
-                "artifact_id": artifact.artifact_id,
-                "harness": artifact.harness,
-                "artifact_name": artifact.name,
-                "artifact_type": artifact.artifact_type,
-                "source_scope": artifact.source_scope,
-                "config_path": artifact.config_path,
-                "publisher": artifact.publisher,
-                "origin_url": artifact.url,
-                "launch_command": launch_command,
-                "transport": artifact.transport,
-                "artifact_hash": artifact_hash,
-                "policy_action": policy_action,
-                "changed": changed,
-                "approved": approved,
-                "now": now,
-            },
+            inventory_artifact_wire(
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                policy_action=policy_action,
+                changed=changed,
+                now=now,
+                approved=approved,
+            ),
         )
 
     def mark_inventory_removed(

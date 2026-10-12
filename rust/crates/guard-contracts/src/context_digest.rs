@@ -260,6 +260,18 @@ pub enum ContextDigestKindV1 {
     PackageExecutionContextFromScannerEvidence {
         material: Value,
     },
+    /// Plan signed custom-Extension continuity, record a local override, or
+    /// project stored continuity state. The request carries the store
+    /// snapshot; the answer is in `custom_extension_continuity`.
+    CustomExtensionContinuity {
+        request: Value,
+    },
+    /// Parse signed Managed Controls policy fields. The request carries the
+    /// policy document, negotiated capabilities and a catalog projection; the
+    /// answer is in `managed_controls_policy_fields`.
+    ManagedControlsPolicyFields {
+        request: Value,
+    },
     /// Derive the grant identity of an unlisted local CLI.
     LocalCliIdentity {
         source: LocalCliIdentitySourceV1,
@@ -375,6 +387,17 @@ pub enum ContextDigestKindV1 {
         state: String,
         /// Catalog schema/version token baked into the fingerprint.
         version: String,
+    },
+    /// Compose a runtime hook's saved-approval context (paths, shell
+    /// execution context, configured environment, launch identity, nonces)
+    /// and return its token. `inputs` is the transport projection of one
+    /// evaluation; the worker owns every derived component.
+    RuntimeHookApprovalContext {
+        inputs: Value,
+    },
+    /// The generic fallback hook's saved-approval context and token.
+    GenericHookApprovalContext {
+        inputs: Value,
     },
 }
 
@@ -494,6 +517,14 @@ pub struct ContextDigestResultV1 {
     /// an identifiable CLI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_cli_identity: Option<LocalCliIdentityV1>,
+    /// `custom_extension_continuity` answer: a plan, a refusal
+    /// (`{"error": message}`), a local override, or public state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_extension_continuity: Option<Value>,
+    /// `managed_controls_policy_fields` answer: `{"ok": projection}` or
+    /// `{"error": {"code", "message"}}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_controls_policy_fields: Option<Value>,
     /// `package_json_scripts` output; absent when nothing is recognized.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_json_scripts: Option<PackageJsonScriptsV1>,

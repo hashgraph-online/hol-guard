@@ -160,10 +160,10 @@ fn host_gate_off_keeps_posix_results() {
         let off = posix_host(command, "posix");
         assert_eq!(off.dialect, "posix", "{command}");
         assert_ne!(off.parser_profile, "powershell-subset-v1", "{command}");
-        assert_eq!(
-            with_posix_powershell_host(|| parse_posix_command(&request(command, "posix")).unwrap()),
-            off
-        );
+        let mut expected =
+            with_posix_powershell_host(|| parse_posix_command(&request(command, "posix")).unwrap());
+        expected.security_identity = crate::canonical_command::command_security_identity(&expected);
+        assert_eq!(expected, off);
         // With the gate on, a rejected command that names a cmdlet becomes
         // uncertain; anything else the subset rejects keeps the POSIX model.
         let on = windows(command);

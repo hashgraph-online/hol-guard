@@ -30,6 +30,9 @@ from typing import Any
 
 _OUT = Path(os.environ.get("SFRS_VECTOR_OUT", "/tmp/sfrs-vectors-raw.jsonl"))
 _ROOT = os.environ.get("SFRS_VECTOR_ROOT", "")
+# The recording shell's own ripgrep config is not a case input; only a value a
+# test sets is recorded.
+_AMBIENT_RIPGREP_CONFIG = os.environ.get("RIPGREP_CONFIG_PATH")
 _MAX_ENTRIES = 400
 _MAX_FILE_BYTES = 65536
 _MAX_DEPTH = 5
@@ -48,7 +51,6 @@ _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SERVICES}.request_artifacts", "command_list_candidate_texts", 0),
     (f"{_SERVICES}.tool_action_requests", "extract_sensitive_tool_action_request", 0),
     (f"{_SERVICES}.benign_requests", "is_explicitly_benign_native_file_read_request", 0),
-    (f"{_SERVICES}.benign_requests", "is_explicitly_benign_tool_action_request", 0),
     (f"{_SERVICES}.benign_requests", "build_tool_action_request_artifact", 0),
     (f"{_SERVICES}.github_shell_capabilities", "classify_github_shell_capabilities", 0),
     (f"{_SERVICES}.source_edit_context", "low_risk_compound_developer_execution_context", 0),
@@ -58,7 +60,12 @@ _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SRC}.cli.commands_support_runtime_artifacts", "_hook_runtime_artifact", 1),
 )
 _OVERRIDE_GUARDS: tuple[tuple[str, str, str, str], ...] = (
-    (f"{_SRC}.runtime.secret_file_requests", "evaluate_command", f"{_SRC}.runtime.command_evaluation", "evaluate_command"),
+    (
+        f"{_SRC}.runtime.secret_file_requests",
+        "evaluate_command",
+        f"{_SRC}.runtime.command_evaluation",
+        "evaluate_command",
+    ),
     (
         f"{_SRC}.runtime.secret_file_requests",
         "model_shell_execution_context",
@@ -154,7 +161,9 @@ def _serialize(value: Any, *, depth: int = 0) -> Any:
     if isinstance(value, (list, tuple)):
         return [_serialize(item, depth=depth + 1) for item in value]
     if isinstance(value, (set, frozenset)):
-        return sorted((_serialize(item, depth=depth + 1) for item in value), key=lambda item: json.dumps(item, sort_keys=True))
+        return sorted(
+            (_serialize(item, depth=depth + 1) for item in value), key=lambda item: json.dumps(item, sort_keys=True)
+        )
     to_dict = getattr(value, "to_dict", None)
     if callable(to_dict):
         try:
@@ -217,7 +226,15 @@ def _snapshot(directory: Path) -> dict[str, Any] | None:
 
 def _env_snapshot() -> dict[str, str | None]:
     home = os.environ.get("HOME")
-    return {"HOME": home if home is not None and _under_root(home) else None}
+    snapshot: dict[str, str | None] = {"HOME": home if home is not None and _under_root(home) else None}
+    ripgrep_config = os.environ.get("RIPGREP_CONFIG_PATH")
+    if ripgrep_config and ripgrep_config != _AMBIENT_RIPGREP_CONFIG:
+        snapshot["RIPGREP_CONFIG_PATH"] = ripgrep_config
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if any(entry and _under_root(entry) for entry in path_entries):
+        snapshot["PATH"] = os.pathsep.join(entry for entry in path_entries if entry and _under_root(entry))
+        snapshot["PATH"] += os.pathsep + "/usr/bin" + os.pathsep + "/bin"
+    return snapshot
 
 
 def _overridden() -> bool:
@@ -255,7 +272,9 @@ def _relevant_sha(text: str) -> dict[str, list[Any]]:
     return selected
 
 
-def _record(entry: str, signature: inspect.Signature, args: tuple[Any, ...], kwargs: dict[str, Any], result: Any) -> None:
+def _record(
+    entry: str, signature: inspect.Signature, args: tuple[Any, ...], kwargs: dict[str, Any], result: Any
+) -> None:
     try:
         bound = signature.bind(*args, **kwargs)
     except TypeError:
@@ -306,7 +325,7 @@ def _wrap(entry: str, function: Callable[..., Any], layer: int) -> Callable[...,
         if not _overridden():
             try:
                 _record(entry, signature, args, kwargs, result)
-            except Exception as error:  # noqa: BLE001 - recording must never alter test behaviour
+            except Exception as error:
                 sys.stderr.write(f"sfrs-recorder: {entry}: {error!r}\n")
         return result
 
@@ -346,7 +365,7 @@ def install() -> None:
         _originals[f"{module_name}.{function_name}"] = original
         replacements[id(original)] = _wrap(function_name, original, layer)
     benign = importlib.import_module(f"{_SERVICES}.benign_requests")
-    evaluate = getattr(benign, "evaluate_command")
+    evaluate = benign.evaluate_command
     if getattr(evaluate, "__sfrs_original__", None) is None:
         replacements[id(evaluate)] = _wrap_evaluation(evaluate)
     hashlib.sha256 = _RecordingHash  # type: ignore[assignment]

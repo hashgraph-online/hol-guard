@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .action_lattice import normalize_guard_action
 from .approval_gate import ApprovalGateGrant
@@ -242,6 +243,8 @@ def evaluate_tool_call(
     arguments: object,
     claim_saved_approval: bool = True,
     fresh_authority_provider: (Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None) = None,
+    proxy_input: Mapping[str, object] | None = None,
+    proxy_out: MutableMapping[str, Any] | None = None,
 ) -> ToolCallDecision:
     from .mcp_tool_call_evaluation import evaluate_tool_call as evaluate
 
@@ -253,6 +256,8 @@ def evaluate_tool_call(
         arguments=arguments,
         claim_saved_approval=claim_saved_approval,
         fresh_authority_provider=fresh_authority_provider,
+        proxy_input=proxy_input,
+        proxy_out=proxy_out,
     )
 
 
@@ -330,15 +335,6 @@ def allow_tool_call(
             now,
             approval_gate_grant=approval_gate_grant,
         )
-    if emit_runtime_evidence:
-        store.record_inventory_artifact(
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            policy_action=policy_action,
-            changed=False,
-            now=now,
-            approved=policy_action in {"allow", "warn"},
-        )
     # Display-only evidence; failure degrades it, never the receipt or event.
     raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
         artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
@@ -359,10 +355,14 @@ def allow_tool_call(
         raw_command_text=raw_command_text,
     )
     if emit_runtime_evidence:
-        store.add_receipt(receipt)
-        store.add_event(
-            "runtime_tool_call_allowed",
-            {
+        store.record_tool_call_evidence(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            policy_action=policy_action,
+            approved=policy_action in {"allow", "warn"},
+            receipt=receipt,
+            event_name="runtime_tool_call_allowed",
+            event_payload={
                 "artifact_id": artifact.artifact_id,
                 "artifact_hash": artifact_hash,
                 "decision_source": decision_source,
@@ -370,7 +370,7 @@ def allow_tool_call(
                 "risk_categories": list(risk_categories),
                 "signals": list(signals),
             },
-            now,
+            now=now,
         )
     return receipt
 
@@ -392,14 +392,6 @@ def block_tool_call(
         event_name, provenance_action = _NON_EXECUTED_TOOL_CALL_TAXONOMY[policy_action]
     except KeyError as exc:
         raise ValueError(f"block_tool_call cannot record executing action {policy_action!r}.") from exc
-    store.record_inventory_artifact(
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        policy_action=policy_action,
-        changed=False,
-        now=now,
-        approved=False,
-    )
     raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
         artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
     )
@@ -418,10 +410,14 @@ def block_tool_call(
         scanner_evidence=(firewall_evidence, *additional_scanner_evidence),
         raw_command_text=raw_command_text,
     )
-    store.add_receipt(receipt)
-    store.add_event(
-        event_name,
-        {
+    store.record_tool_call_evidence(
+        artifact=artifact,
+        artifact_hash=artifact_hash,
+        policy_action=policy_action,
+        approved=False,
+        receipt=receipt,
+        event_name=event_name,
+        event_payload={
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
             "decision_source": decision_source,
@@ -430,7 +426,7 @@ def block_tool_call(
             "risk_categories": list(risk_categories),
             "signals": list(signals),
         },
-        now,
+        now=now,
     )
     return receipt
 

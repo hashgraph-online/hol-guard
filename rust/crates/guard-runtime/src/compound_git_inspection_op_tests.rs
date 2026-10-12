@@ -56,9 +56,11 @@ impl GitFacts for StubFacts {
         self.safe
     }
     fn probe(&self, _git: &Path, _cwd: &Path, _arguments: &[&str]) -> Option<ProbeOutput> {
-        self.probe
-            .clone()
-            .map(|(code, stdout)| ProbeOutput { code, stdout })
+        self.probe.clone().map(|(code, stdout)| ProbeOutput {
+            code,
+            stdout,
+            stderr: Vec::new(),
+        })
     }
 }
 

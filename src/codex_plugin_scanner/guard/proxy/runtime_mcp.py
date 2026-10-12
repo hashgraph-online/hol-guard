@@ -462,6 +462,8 @@ class _ToolCallAuthority:
     catalog_generation: int
     catalog_state: _ToolCatalogState
     catalog_fingerprint: str
+    # The resident's route for ``decision`` when it was folded into evaluation.
+    route: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -913,16 +915,21 @@ class RuntimeMcpGuardProxy:
 
         return dict(self._native_decide({"check": "evidence_item", "kind": kind})["item"])
 
-    def _apply_saved_allow_gate(self, decision: ToolCallDecision) -> ToolCallDecision:
+    def _apply_saved_allow_gate(
+        self,
+        decision: ToolCallDecision,
+        gate: Mapping[str, Any] | None = None,
+    ) -> ToolCallDecision:
         """Present the resident's saved-allow gate verdict on a decision."""
 
-        gate = self._native_decide(
-            {
-                "check": "saved_allow_gate",
-                "catalog_state": self._tool_catalog_state,
-                "decision": tool_facts(decision),
-            }
-        )
+        if gate is None:
+            gate = self._native_decide(
+                {
+                    "check": "saved_allow_gate",
+                    "catalog_state": self._tool_catalog_state,
+                    "decision": tool_facts(decision),
+                }
+            )
         if not gate["disable"]:
             return decision
         return replace(
@@ -942,8 +949,13 @@ class RuntimeMcpGuardProxy:
         tool_name: str,
         arguments: object,
         config: GuardConfig | None = None,
+        route_inputs: Mapping[str, object] | None = None,
     ) -> _ToolCallAuthority:
-        """Rebuild the complete current tool-call identity and policy result."""
+        """Rebuild the complete current tool-call identity and policy result.
+
+        With ``route_inputs`` the resident also answers the saved-allow gate and
+        the route for the decision in the same call.
+        """
 
         authority_config = config or self.config
         tool_definition = self._tool_catalog.get(tool_name, {})
@@ -1005,16 +1017,26 @@ class RuntimeMcpGuardProxy:
             workspace=self.context.workspace_dir or Path.cwd(),
             config=authority_config,
         )
-        decision = self._apply_saved_allow_gate(
-            evaluate_tool_call(
-                store=self.store,
-                config=authority_config,
-                artifact=artifact,
-                artifact_hash=artifact_hash,
-                arguments=arguments,
-                claim_saved_approval=False,
-            )
+        gate_state = self._tool_catalog_state
+        folded: dict[str, Any] = {}
+        evaluated = evaluate_tool_call(
+            store=self.store,
+            config=authority_config,
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            arguments=arguments,
+            claim_saved_approval=False,
+            proxy_input=None if route_inputs is None else {**route_inputs, "catalog_state": gate_state},
+            proxy_out=None if route_inputs is None else folded,
         )
+        route: Mapping[str, Any] | None = None
+        verdict = folded.get("proxy")
+        # The folded gate is valid only for the catalog state it was asked under.
+        if verdict is not None and self._tool_catalog_state == gate_state:
+            decision = self._apply_saved_allow_gate(evaluated, verdict["gate"])
+            route = verdict["route"]
+        else:
+            decision = self._apply_saved_allow_gate(evaluated)
         return _ToolCallAuthority(
             artifact=artifact,
             artifact_hash=artifact_hash,
@@ -1022,6 +1044,7 @@ class RuntimeMcpGuardProxy:
             catalog_generation=catalog_generation,
             catalog_state=catalog_state,
             catalog_fingerprint=catalog_fingerprint,
+            route=route,
         )
 
     def _handle_message(
@@ -1235,6 +1258,23 @@ class RuntimeMcpGuardProxy:
             approval_reuse_claim_disposition=None,
         )
 
+    def _route_inputs(
+        self,
+        *,
+        tool_name: str,
+        package_artifact: Any | None,
+        approval_callback: Any | None,
+    ) -> dict[str, object]:
+        """The non-decision facts the resident routes a tool call on."""
+
+        return {
+            "mode": self.config.mode,
+            "package_present": package_artifact is not None,
+            "asks_for_approval": bool(asks_for_approval(self.config)),
+            "inline_available": bool(self._inline_prompt_available and approval_callback is not None),
+            "tool_name": tool_name,
+        }
+
     def _route_tool_call(
         self,
         *,
@@ -1243,8 +1283,16 @@ class RuntimeMcpGuardProxy:
         package_artifact: Any | None,
         approval_callback: Any | None,
         held: dict[str, Any],
+        folded_route: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Ask the resident how one tool call routes, supplying facts on demand."""
+        """Ask the resident how one tool call routes, supplying facts on demand.
+
+        A route the resident already folded into the decision (one that needs no
+        caller-supplied fact) is used as is.
+        """
+
+        if folded_route is not None and folded_route.get("need") is None:
+            return dict(folded_route)
 
         def effective(need: Mapping[str, Any]) -> ToolCallDecision:
             return self._apply_decision_override(decision, need.get("decision_override"))
@@ -1267,11 +1315,11 @@ class RuntimeMcpGuardProxy:
         return self._native_decide(
             {
                 "check": "route_tool_call",
-                "mode": self.config.mode,
-                "package_present": package_artifact is not None,
-                "asks_for_approval": bool(asks_for_approval(self.config)),
-                "inline_available": bool(self._inline_prompt_available and approval_callback is not None),
-                "tool_name": tool_name,
+                **self._route_inputs(
+                    tool_name=tool_name,
+                    package_artifact=package_artifact,
+                    approval_callback=approval_callback,
+                ),
                 "decision": tool_facts(decision),
             },
             supply={
@@ -1295,10 +1343,18 @@ class RuntimeMcpGuardProxy:
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         tool_name = str(params.get("name") or "unknown")
         arguments = params.get("arguments")
-        authority = self._resolve_tool_call_authority(tool_name=tool_name, arguments=arguments)
+        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
+        authority = self._resolve_tool_call_authority(
+            tool_name=tool_name,
+            arguments=arguments,
+            route_inputs=self._route_inputs(
+                tool_name=tool_name,
+                package_artifact=package_artifact,
+                approval_callback=approval_callback,
+            ),
+        )
         artifact = authority.artifact
         tool_artifact_hash = authority.artifact_hash
-        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
         held: dict[str, Any] = {}
         routed = self._route_tool_call(
             decision=authority.decision,
@@ -1306,6 +1362,7 @@ class RuntimeMcpGuardProxy:
             package_artifact=package_artifact,
             approval_callback=approval_callback,
             held=held,
+            folded_route=authority.route,
         )
         decision = self._apply_decision_override(authority.decision, routed["decision_override"])
         decision_scanner_evidence = _tool_decision_scanner_evidence(decision)

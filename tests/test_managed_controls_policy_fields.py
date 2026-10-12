@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -99,7 +100,9 @@ def test_legacy_aliases_parse_but_policy_without_fields_needs_no_capabilities() 
     assert not _parse(document, capabilities=frozenset()).has_extension_semantics
 
 
-def test_daemon_skips_managed_activation_for_v2_without_extension_semantics(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_daemon_skips_managed_activation_for_v2_without_extension_semantics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     document = _document()
     document.pop("x-hol-extension-controls")
     document["spec"]["rules"][0].pop("x-hol-extension-targets")
@@ -110,7 +113,7 @@ def test_daemon_skips_managed_activation_for_v2_without_extension_semantics(monk
     )
 
     candidate, capabilities, delivery, error = daemon_policy_delivery.daemon_managed_controls_candidate(
-        store=cast(Any, object()),
+        store=cast(Any, SimpleNamespace(guard_home=tmp_path)),
         payload={},
         policy_bundle={"contractVersion": "guard-policy-bundle.v2", "payload": document},
         device_id="device-without-extension-semantics",
@@ -449,3 +452,66 @@ def test_rotation_rollback_and_downgrade_fixtures_are_monotonic() -> None:
         )
         is None
     )
+
+
+def test_native_outage_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import managed_controls_policy_fields as fields
+
+    monkeypatch.setattr(fields, "native_context_digest", lambda *_args, **_kwargs: None)
+    assert _code(_document()) == "native_unavailable"
+    monkeypatch.setattr(
+        fields,
+        "native_context_digest",
+        lambda *_args, **_kwargs: {"status": "ok", "managed_controls_policy_fields": {"ok": {}}},
+    )
+    assert _code(_document()) == "native_unavailable"
+
+
+def test_documents_without_extension_fields_skip_the_native_parser(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import managed_controls_policy_fields as fields
+
+    monkeypatch.setattr(fields, "native_context_digest", lambda *_args, **_kwargs: None)
+    parsed = _parse({"spec": {"rules": [{"id": "plain", "action": "block"}]}})
+    assert not parsed.has_extension_semantics
+    assert _code({"spec": {"rules": "x"}}) == "native_unavailable"
+
+
+def test_native_request_carries_only_the_fields_the_parser_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import managed_controls_policy_fields as fields
+
+    captured: list[object] = []
+
+    def capture(_kind: str, payload: dict[str, Any], **_kwargs: object) -> None:
+        captured.append(payload["request"]["document"])
+
+    monkeypatch.setattr(fields, "native_context_digest", capture)
+    document = _document()
+    document["metadata"] = {"padding": "x" * 4096}
+    document["spec"]["rules"].append("not-a-rule")
+    assert _code(document) == "native_unavailable"
+    projected = cast(dict[str, Any], captured[0])
+    assert set(projected) <= {HOL_EXTENSION_CONTROLS_FIELD, "spec"}
+    assert set(projected["spec"]) == {"rules"}
+    for rule in projected["spec"]["rules"]:
+        assert not isinstance(rule, dict) or set(rule) <= {"id", HOL_EXTENSION_TARGETS_FIELD}
+    assert projected["spec"]["rules"][-1] == "not-a-rule"
+
+
+def test_native_parser_uses_the_callers_guard_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import managed_controls_policy_fields as fields
+
+    homes: list[object] = []
+
+    def capture(_kind: str, _payload: dict[str, Any], **kwargs: object) -> None:
+        homes.append(kwargs.get("guard_home"))
+
+    monkeypatch.setattr(fields, "native_context_digest", capture)
+    with pytest.raises(ManagedControlsPolicyError):
+        parse_managed_controls_policy_fields(
+            _document(),
+            registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+            negotiated_capabilities=_CAPABILITIES,
+            package_firewall_supported=False,
+            guard_home=tmp_path,
+        )
+    assert homes == [tmp_path]

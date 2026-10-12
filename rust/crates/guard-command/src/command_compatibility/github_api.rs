@@ -5,6 +5,16 @@ fn field_is_static(value: &str) -> bool {
     !value.contains(['$', '`', '@', '\0', '\n', '\r'])
 }
 
+/// `-f`/`--raw-field` values are always literal strings, and a typed `-F`/`--field`
+/// value reads a file only when it starts with `@`. Either may mention an `@user`.
+fn literal_field_is_static(name: &str, value: &str) -> bool {
+    let Some((key, text)) = value.split_once('=') else {
+        return false;
+    };
+    let reads_file = matches!(name, "--field" | "-F") && text.starts_with('@');
+    !reads_file && field_is_static(key) && !text.contains(['$', '`', '\0', '\r'])
+}
+
 /// GraphQL documents may span lines and declare `$variables`. Every `$name` must be
 /// declared in the document itself, so a shell-expanded `$HOME` never qualifies.
 pub(super) fn graphql_text_is_static(value: &str) -> bool {
@@ -25,6 +35,19 @@ pub(super) fn graphql_text_is_static(value: &str) -> bool {
         }
     }
     true
+}
+
+/// gojq can print the process environment (`env`) or load modules from disk
+/// (`import`, `include`). A response filter needs none of them.
+pub(super) fn jq_is_static(value: &str) -> bool {
+    !value
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|word| {
+            matches!(
+                word,
+                "env" | "import" | "include" | "input_filename" | "get_search_list"
+            )
+        })
 }
 
 fn safe_header(value: &str) -> bool {
@@ -153,6 +176,10 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                     return None;
                 }
                 relaxed_query |= !field_is_static(text);
+            } else if matches!(name, "--field" | "--raw-field" | "-f" | "-F") {
+                if !literal_field_is_static(name, value) {
+                    return None;
+                }
             } else if !field_is_static(value) {
                 return None;
             }
@@ -166,6 +193,7 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                     fields.push((key, value));
                 }
                 "--header" | "-H" if !safe_header(value) => return None,
+                "--jq" if !jq_is_static(value) => return None,
                 "--input" => return None,
                 _ => {}
             }
@@ -201,10 +229,12 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
     Some(mutation_capabilities(endpoint, &method, &fields))
 }
 
-/// A single static `query` field against the GraphQL endpoint reads only when the
-/// shared GraphQL classifier proves it is one static query. That classifier ignores
-/// strings and comments, so a field argument that mentions "mutation" stays a read.
+/// A single static `query` field against the GraphQL endpoint is attributed by the
+/// shared GraphQL classifier. That classifier ignores strings and comments, so a field
+/// argument that mentions "mutation" stays a read, and every mutation root field maps
+/// to its own capability owner. Unclassifiable documents stay unsupported.
 fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
+    use crate::github_capability_contract::GitHubCommandCapability as Cap;
     if !method.is_none_or(|value| value.eq_ignore_ascii_case("POST")) {
         return None;
     }
@@ -213,11 +243,31 @@ fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
     if queries.next().is_some() {
         return None;
     }
+    let owned: Vec<(String, String)> = fields
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect();
+    if crate::github_command_capabilities::is_routine_review_thread_resolution(document, &owned) {
+        return one("routine_review_thread_remote");
+    }
     let assessment = crate::github_command_capabilities::classify_graphql_document(document);
-    if assessment.reason_code != "github.graphql.proven-query" {
+    if assessment.capabilities.contains(&Cap::Unknown)
+        || (assessment
+            .capabilities
+            .iter()
+            .any(|capability| *capability != Cap::ReadRemote)
+            && !crate::github_command_capabilities::graphql_mutation_fields_proven(document))
+    {
         return None;
     }
-    one("read_remote")
+    let mut capabilities: Vec<&'static str> = assessment
+        .capabilities
+        .iter()
+        .map(|capability| capability.as_str())
+        .collect();
+    capabilities.sort_unstable();
+    capabilities.dedup();
+    (!capabilities.is_empty()).then_some(capabilities)
 }
 
 fn mutation_capabilities(

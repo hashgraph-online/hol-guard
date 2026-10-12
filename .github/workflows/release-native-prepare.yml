@@ -55,6 +55,11 @@ jobs:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       VERSION: ${{ inputs.version }}
       FAST_CODEGEN: ${{ inputs.fast_codegen == true }}
+      # Only the Windows alpha build lowers workspace opt-level: it is the
+      # slowest target and its opt-level 0 binaries stay inside the alpha
+      # size ceiling, while macOS/Linux opt-level 0 binaries exceed it.
+      # Dependencies keep the release profile either way.
+      ALPHA_WORKSPACE_OPT_LEVEL: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '0' || '' }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}
@@ -142,10 +147,15 @@ jobs:
           # prereleases (GitHub release assets, never PyPI); refuse any other version.
           [[ "$FAST_CODEGEN" != "true" ]] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+a[1-9][0-9]*$ ]]
           [[ "$FAST_CODEGEN" != "true" ]] || export CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+          cargo_config=()
+          if [[ "$FAST_CODEGEN" == "true" && -n "$ALPHA_WORKSPACE_OPT_LEVEL" ]]; then
+            python scripts/release/workspace_opt_profile.py --opt-level "$ALPHA_WORKSPACE_OPT_LEVEL" --output "$RUNNER_TEMP/alpha-workspace-profile.toml"
+            cargo_config=(--config "$RUNNER_TEMP/alpha-workspace-profile.toml")
+          fi
           # One invocation keeps nix feature unification identical for both binaries,
           # so shared workspace crates compile once. The generator only writes files
           # that no build script reads, so it can verify the finished compiler.
-          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source ${cargo_config[@]+"${cargo_config[@]}"}
           if [[ "$CROSS_COMPILED" != "true" ]]; then
             python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
             "$RUNTIME" self-test --json

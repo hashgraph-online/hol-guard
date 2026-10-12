@@ -63,6 +63,18 @@ pub(crate) fn verify(
     verify_with_key(receipt, &store.verifier_key)
 }
 
+/// Bootstrap residents verify existing native evidence without loading or
+/// mutating the policy store. Missing or non-private keys remain unavailable.
+pub(crate) fn verify_at_guard_home(
+    guard_home: &std::path::Path,
+    receipt: &NativeHookDecisionReceiptV1,
+) -> Result<(), String> {
+    let state_base = guard_home.join("native-runtime");
+    super::policy_store_validation::validate_private_directory(&state_base)?;
+    let key = super::policy_store_validation::read_verifier_key(&state_base)?;
+    verify_with_key(receipt, &key)
+}
+
 #[cfg(test)]
 #[path = "native_review_origin_tests.rs"]
 mod tests;

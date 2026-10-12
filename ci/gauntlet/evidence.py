@@ -14,6 +14,7 @@ from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy
 from .catalog import WATCH_OUTPUT, Scenario
 from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
+from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
 from .native_tools import native_tools_scope_error
 from .proofs import (
@@ -157,7 +158,13 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
         "blocked_tools": sum(call["is_error"] is True for call in calls),
         "protocol_errors": errors,
         "recovered_inference_retries": reconcile_rounds(rounds)[1],
+        "interruptions": _interruptions(scenario, case),
     }
+
+
+def _interruptions(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
+    rows, approvals = case.get("guard_observations", []), case.get("approval_rows", [])
+    return case_interruptions(scenario, rows, approvals, case.get("approval_delta", 0), "omp")
 
 
 def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[str, Any]]) -> tuple[str, str]:
@@ -245,6 +252,12 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
     if any(g.get("decision") == "deny" for g in guards):
         # A deny with no host error is still Guard stopping ordinary work, never a harness fault.
         return "false-positive", "Guard denied an ordinary required workflow"
+    interruptions = _interruptions(scenario, case)
+    if interruptions["benign"] and interruptions["events"]:
+        if any(e["kind"] == "unproven" for e in interruptions["events"]):
+            return "harness-error", "Guard observer evidence cannot prove ordinary work was quiet"
+        # An allow that shows the harness a warning still interrupts ordinary work.
+        return "false-positive", "ordinary work was interrupted: " + describe(interruptions["events"])
     if not task_tools_match(scenario, calls):
         return "not-exercised", "actual native task sequence or targets differ from the scenario"
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:

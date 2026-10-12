@@ -8,7 +8,8 @@ the answer as a ``ToolCallDecision``. It never recomputes or overrides it.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, MutableMapping
+from typing import TYPE_CHECKING, Any
 
 from .native_mcp_tool_policy import FreshAuthorityProvider, native_evaluate_tool_call
 
@@ -28,7 +29,15 @@ def evaluate_tool_call(
     arguments: object,
     claim_saved_approval: bool = True,
     fresh_authority_provider: FreshAuthorityProvider | None = None,
+    proxy_input: Mapping[str, object] | None = None,
+    proxy_out: MutableMapping[str, Any] | None = None,
 ) -> ToolCallDecision:
+    """Evaluate one call.
+
+    With ``proxy_input`` the resident also answers the saved-allow gate and the
+    route for the decision in the same call and the verdict lands in
+    ``proxy_out["proxy"]``.
+    """
     from .mcp_tool_calls import ToolCallAuthority, ToolCallDecision
 
     result = native_evaluate_tool_call(
@@ -39,7 +48,10 @@ def evaluate_tool_call(
         arguments=arguments,
         claim_saved_approval=claim_saved_approval,
         fresh_authority_provider=fresh_authority_provider,
+        proxy_input=proxy_input,
     )
+    if proxy_out is not None:
+        proxy_out["proxy"] = result.proxy
     payload = result.payload
     authority = None
     if result.authority is not None and payload["post_claim_authority"] == "fresh":

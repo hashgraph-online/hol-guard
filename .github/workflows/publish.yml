@@ -2539,16 +2539,19 @@ jobs:
   release-alpha:
     name: Create alpha GitHub prerelease
     if: >-
-      always() && !cancelled() && needs.build.result == 'success' && needs.publish-alpha-pypi.result == 'success' &&
+      always() && !cancelled() && needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
+      needs.reserve-alpha-tag.result == 'success' &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
         (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
-    needs: [build, publish-alpha-pypi]
+    needs: [build, assemble-native-guard-distributions, reserve-alpha-tag]
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       attestations: write
       contents: write
       id-token: write
@@ -2601,7 +2604,7 @@ jobs:
           private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: read
-          # Runs after registry publication, so a broken App config must not strand the release.
+          # Release notes overlap PyPI. The prerelease step mints a fresh token after the wait.
           fallback-on-error: "true"
       - name: Generate release notes
         env:
@@ -2610,9 +2613,25 @@ jobs:
           CHANNEL: ${{ needs.build.outputs.channel }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
+      - name: Wait for the PyPI publication to succeed
+        # Attestation and release notes overlap PyPI publication; the prerelease is
+        # still created only after "Publish alpha to PyPI" succeeds in this run attempt.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release/wait_for_run_job.py --job-name "Publish alpha to PyPI"
+      - name: Refresh release API token
+        id: release-token-after-pypi
+        uses: ./.release-api-token/.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: read
+          # Minted after the PyPI wait, so an hour-long publication cannot expire this token first.
+          fallback-on-error: "true"
       - name: Create discoverable alpha prerelease
         env:
-          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          GH_TOKEN: ${{ steps.release-token-after-pypi.outputs.token }}
           WORKFLOW_GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}

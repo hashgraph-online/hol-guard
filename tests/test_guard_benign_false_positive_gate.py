@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture
+from tests.gauntlet_replay import cursor_hook_fields
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
@@ -40,8 +41,8 @@ _CASES_PATH = Path(__file__).parent / "fixtures" / "benign_false_positive_gate.j
 _DOCUMENT = json.loads(_CASES_PATH.read_text(encoding="utf-8"))
 _PENDING_FIX: dict[str, str] = _DOCUMENT["pending_fix"]
 
-_SHELL_TOOL = {"codex": "Bash", "zcode": "Bash", "claude-code": "Bash", "omp": "bash"}
-_READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read"}
+_SHELL_TOOL = {"codex": "Bash", "zcode": "Bash", "claude-code": "Bash", "omp": "bash", "cursor": "Shell"}
+_READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
 _GREP_TOOL = {"claude-code": "Grep", "omp": "grep"}
 _WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write"}
@@ -59,7 +60,8 @@ _FIXED_TOOLS = {
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
 # lands the case either passes or needs a new owner.
 _ALLOWED_PR = {"unassigned"}
-_PENDING_CEILING = 10
+# Cursor coverage mirrors two existing pending claude-code entries.
+_PENDING_CEILING = 12
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
@@ -127,6 +129,8 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
         resolved = {**resolved, "description": "Synthetic benign probe"}
     if case.harness in {"claude-code", "zcode"} and case.tool == "read":
         resolved = {"file_path": resolved["path"]}
+    if case.harness == "cursor" and case.tool == "read":
+        resolved = {"file_path": resolved["path"], "path": resolved["path"]}
     if case.harness in {"claude-code", "zcode"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
@@ -174,6 +178,8 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
         "cwd": str(fixture.cwd(case.cwd)),
         "guard_execution_environment": collect_hook_execution_environment(),
     }
+    if case.harness == "cursor":
+        payload.update(cursor_hook_fields(case.tool, payload))
     result = worker.review_http_payload(
         payload=payload,
         params={},
@@ -292,7 +298,7 @@ def test_pending_fix_entries_name_real_benign_cases() -> None:
 
 
 def test_every_harness_and_tool_family_is_exercised() -> None:
-    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp"}
+    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "cursor"}
     omp_tools = {_tool_name(case) for case in _CASES if case.harness == "omp"}
     assert {"bash", "read", "glob", "grep", "eval", "task", "wait"} <= omp_tools
     assert sum(case.expect == "not_allow" for case in _CASES) >= 6

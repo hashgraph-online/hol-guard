@@ -1,6 +1,17 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "512"]
 
+mod aibom_artifact;
+mod aibom_discovery;
+mod aibom_extend;
+mod aibom_marketplace;
+mod aibom_mcp_metadata;
+mod aibom_op;
+mod aibom_paths;
+mod aibom_skill_rules;
+mod aibom_skills;
+#[cfg(all(test, unix))]
+mod aibom_vectors_tests;
 mod approval;
 mod approval_bulk_eligibility_op;
 mod approval_gate_consumers;
@@ -81,6 +92,7 @@ mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 #[cfg(unix)]
 mod contained_op;
+mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
@@ -88,6 +100,7 @@ mod context_digest_package_scripts;
 mod contributed_mcp_decision_op;
 mod critical_floor_op;
 mod cursor_observer_proof_op;
+mod custom_extension_continuity;
 mod custom_extension_suggestion;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
@@ -130,6 +143,8 @@ mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;
 mod github_cli_classify_op;
+mod github_workflow_context_io;
+mod github_workflow_prepare_op;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -149,6 +164,10 @@ mod guard_store_cmd_rollups;
 #[cfg(test)]
 mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
+mod guard_store_connect;
+mod guard_store_connect_effective;
+#[cfg(test)]
+mod guard_store_connect_vectors_tests;
 mod guard_store_db;
 mod guard_store_inventory;
 #[cfg(test)]
@@ -190,9 +209,15 @@ mod guard_store_receipts_vectors_tests;
 mod guard_store_sessions;
 #[cfg(test)]
 mod guard_store_sessions_vectors_tests;
+mod guard_store_state_ops;
+#[cfg(test)]
+mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_tool_call_evidence;
+#[cfg(test)]
+mod guard_store_tool_call_evidence_tests;
 #[cfg(test)]
 mod guard_store_vectors_tests;
 mod guard_store_wfcap_authority;
@@ -212,13 +237,20 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod hardening;
 mod hook_adapter_op;
+mod hook_approval_context;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
+#[cfg(all(test, unix))]
+mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
 mod hook_decision_directive;
 mod hook_decision_finalize;
+mod hook_decision_native_facts;
+#[cfg(all(test, unix))]
+mod hook_decision_native_facts_tests;
 mod hook_decision_op;
+mod hook_decision_settle;
 mod hook_process_spawn;
 mod hook_render_op;
 mod local_cli_grant_op;
@@ -227,6 +259,7 @@ mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
 mod local_store_read;
+mod managed_controls_policy_fields;
 mod managed_resident;
 mod mcp_probe_op;
 mod mcp_proxy_actions;
@@ -249,6 +282,8 @@ mod mcp_sensitive_read;
 #[cfg(test)]
 mod mcp_sensitive_read_vectors_tests;
 mod mcp_stdio_session_op;
+mod mcp_tool_call_identity_build;
+mod mcp_tool_call_identity_op;
 mod mcp_tool_evidence_op;
 mod mcp_tool_policy_composio;
 mod mcp_tool_policy_decide_op;
@@ -256,7 +291,10 @@ mod mcp_tool_policy_decision;
 mod mcp_tool_policy_extension;
 mod mcp_tool_policy_flow;
 mod mcp_tool_policy_grants;
+mod mcp_tool_policy_lookup;
+mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
+mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_runtime_admission;
 mod native_runtime_resilience;
@@ -277,6 +315,7 @@ mod package_authority_op;
 mod package_evaluation_compose_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
+mod package_protect_projection_op;
 mod policy_bundle_crypto;
 mod policy_bundle_decisions;
 mod policy_bundle_delivery;
@@ -317,6 +356,7 @@ mod request_context_shell;
 mod resident_client;
 mod resident_diagnostics;
 mod resident_endpoint;
+mod resident_inspection_services;
 mod resident_op_features;
 mod resident_ops;
 #[allow(dead_code)] // Worker enrollment is not enabled by this OS identity input.
@@ -328,6 +368,8 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod restricted_pytest_op;
+mod rich_command_model_op;
 mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
@@ -338,6 +380,11 @@ mod runner_sync_url;
 mod runtime_cli;
 mod runtime_detector_run_op;
 mod secrets_cli;
+#[cfg(all(test, unix))]
+#[allow(dead_code, clippy::pedantic)]
+#[path = "../../guard-command/tests/sfrs_support/mod.rs"]
+mod sfrs_support;
+mod shell_helpers_op;
 mod shim_op;
 #[cfg(unix)]
 mod skill_directory_identity_op;

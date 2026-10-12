@@ -287,7 +287,15 @@ APP_TOKEN_STEPS = [
         "release-token",
         "write",
         "read",
-        ["Generate release notes", "Create discoverable alpha prerelease"],
+        ["Generate release notes"],
+    ),
+    (
+        PUBLISH_WORKFLOW,
+        "release-alpha",
+        "release-token-after-pypi",
+        "write",
+        "read",
+        ["Create discoverable alpha prerelease"],
     ),
     (
         DELETE_ALPHA_WORKFLOW,

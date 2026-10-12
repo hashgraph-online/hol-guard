@@ -15,7 +15,7 @@ guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 regex.workspace = true
 fancy-regex.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 hex.workspace = true
 idna.workspace = true
@@ -33,7 +33,7 @@ url = "=2.5.8"
 unicode-normalization = "0.1.25"
 
 [target.'cfg(unix)'.dependencies]
-nix.workspace = true
+nix = { workspace = true, features = ["user"] }
 
 [build-dependencies]
 guard-command-build = { path = "../guard-command-build" }

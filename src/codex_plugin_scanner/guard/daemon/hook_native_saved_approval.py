@@ -13,44 +13,15 @@ import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..runtime.approval_context import build_approval_context_token, parse_approval_context_token
 from ..store_policy_decision import policy_decision_hash_exists
 from .hook_fail_closed import render_accepted_allow, render_pre_tool
-from .hook_native_exact_identity import (
-    GUARD_CONTROL,
-    GUARD_CONTROL_ACTION_TYPES,
-    NO_COMMAND_IDENTITY,
-    NON_OVERRIDABLE,
-    PACKAGE_ACTION,
-    UNPROVEN_LAUNCH,
-    OnceOnlyError,
-    tool_target_identity,
-)
-from .hook_native_launch_identity import launch_cwd, launch_identity
-from .hook_native_review_binding import native_review_policy_binding
-from .hook_request_parsing import pre_tool_command
+from .hook_native_exact_action import GUARD_CONTROL_ACTION_TYPES, native_exact_action
 
 _LOGGER = logging.getLogger(__name__)
 
 EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
 EXACT_ACTION_IDENTITY_KIND_KEY = "exact_identity_kind"
 ONCE_ONLY_REASON_KEY = "once_only_reason"
-_NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
-# A review raised for one of these signals is a risk finding, not a first-seen
-# prompt: it never carries a persistent allow, whatever the command looks like.
-_RISK_REASON_MARKERS = (
-    "secret",
-    "sensitive",
-    "credential",
-    "exfil",
-    "injection",
-    "destructive",
-    "malware",
-    "obfuscat",
-    "encoded",
-    "poison",
-    "dangerous",
-)
 
 
 class TokenUnset:
@@ -58,139 +29,6 @@ class TokenUnset:
 
 
 TOKEN_UNSET = TokenUnset()
-
-
-def native_exact_action_token(
-    *,
-    harness: str,
-    tool_name: str,
-    payload: Mapping[str, object],
-    native_result: Mapping[str, object],
-    native_receipt: Mapping[str, object] | None,
-    workspace: Path | None,
-    home_dir: Path | None,
-) -> str | None:
-    """Return a persistent exact-action token, or ``None`` when only once is safe."""
-
-    return native_exact_action_decision(
-        harness=harness,
-        tool_name=tool_name,
-        payload=payload,
-        native_result=native_result,
-        native_receipt=native_receipt,
-        workspace=workspace,
-        home_dir=home_dir,
-    )[0]
-
-
-def native_exact_action_decision(
-    *,
-    harness: str,
-    tool_name: str,
-    payload: Mapping[str, object],
-    native_result: Mapping[str, object],
-    native_receipt: Mapping[str, object] | None,
-    workspace: Path | None,
-    home_dir: Path | None,
-) -> tuple[str | None, str | None]:
-    """Return ``(token, once_only_reason)``; exactly one of them is set."""
-
-    try:
-        return _exact_action_token(
-            harness=harness,
-            tool_name=tool_name,
-            payload=payload,
-            native_result=native_result,
-            native_receipt=native_receipt,
-            workspace=workspace,
-            home_dir=home_dir,
-        ), None
-    except OnceOnlyError as once_only:
-        return None, once_only.reason
-
-
-def _exact_action_token(
-    *,
-    harness: str,
-    tool_name: str,
-    payload: Mapping[str, object],
-    native_result: Mapping[str, object],
-    native_receipt: Mapping[str, object] | None,
-    workspace: Path | None,
-    home_dir: Path | None,
-) -> str:
-    if not _native_review_is_overridable(native_result):
-        raise OnceOnlyError(_non_overridable_reason(native_result))
-    if _review_carries_risk_signal(native_result):
-        raise OnceOnlyError(NON_OVERRIDABLE)
-    command = pre_tool_command(payload)
-    has_command = command is not None and bool(command.strip())
-    try:
-        policy_binding = native_review_policy_binding(
-            harness=harness, native_result=native_result, verified_receipt=native_receipt
-        )
-    except ValueError as error:
-        raise OnceOnlyError(UNPROVEN_LAUNCH if has_command else NO_COMMAND_IDENTITY) from error
-    cwd = launch_cwd(payload, workspace)
-    if not has_command:
-        if cwd is None:
-            raise OnceOnlyError(NO_COMMAND_IDENTITY)
-        launch, content = tool_target_identity(tool_name, payload, cwd=cwd, workspace=workspace, home_dir=home_dir)
-    else:
-        if cwd is None:
-            raise OnceOnlyError(UNPROVEN_LAUNCH)
-        try:
-            launch = launch_identity(str(command), cwd=cwd, home_dir=home_dir)
-        except (OSError, RuntimeError, TypeError, ValueError) as error:
-            raise OnceOnlyError(UNPROVEN_LAUNCH) from error
-        content = {"command": command}
-    if policy_binding is None:
-        raise OnceOnlyError(UNPROVEN_LAUNCH)
-    action = native_result.get("action")
-    action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    try:
-        token = build_approval_context_token(
-            identity={
-                "harness": harness,
-                "tool_name": tool_name,
-                "workspace": str(workspace.resolve()) if workspace is not None else None,
-                "cwd": str(cwd),
-                "launch": launch,
-            },
-            content=content,
-            capabilities={
-                "action_type": action_type if isinstance(action_type, str) else None,
-                "minimum_action": str(native_result.get("minimum_action") or ""),
-                "policy_action": str(native_result.get("policy_action") or ""),
-                "reason_code": str(native_result.get("reason_code") or ""),
-            },
-            policy={
-                "version": _NATIVE_EXACT_ACTION_POLICY_VERSION,
-                "rule_digest": policy_binding["rule_digest"],
-                "command_extensions": policy_binding["command_extensions"],
-            },
-            sandbox={"required": native_result.get("minimum_action") == "sandbox-required"},
-        )
-    except (OSError, RuntimeError, TypeError, ValueError) as error:
-        raise OnceOnlyError(UNPROVEN_LAUNCH) from error
-    if parse_approval_context_token(token) is None:
-        raise OnceOnlyError(UNPROVEN_LAUNCH)
-    return token
-
-
-def _review_carries_risk_signal(native_result: Mapping[str, object]) -> bool:
-    reason_code = str(native_result.get("reason_code") or "").lower()
-    return any(marker in reason_code for marker in _RISK_REASON_MARKERS)
-
-
-def _non_overridable_reason(native_result: Mapping[str, object]) -> str:
-    action = native_result.get("action")
-    action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    if action_type in GUARD_CONTROL_ACTION_TYPES:
-        return GUARD_CONTROL
-    if action_type == "package":
-        return PACKAGE_ACTION
-    return NON_OVERRIDABLE
 
 
 def native_saved_decision_response(
@@ -277,6 +115,7 @@ def native_saved_review_response(
     workspace: Path | None,
     home_dir: Path | None,
     precomputed_token: str | None | TokenUnset = TOKEN_UNSET,
+    guard_home: Path | None = None,
 ) -> dict[str, object] | None:
     """Return the saved exact-action outcome for a paused native review.
 
@@ -285,7 +124,7 @@ def native_saved_review_response(
     """
 
     token = (
-        native_exact_action_token(
+        native_exact_action(
             harness=harness,
             tool_name=tool_name,
             payload=payload,
@@ -293,7 +132,8 @@ def native_saved_review_response(
             native_receipt=native_receipt,
             workspace=workspace,
             home_dir=home_dir,
-        )
+            guard_home=guard_home,
+        )[0]
         if isinstance(precomputed_token, TokenUnset)
         else precomputed_token
     )
@@ -351,8 +191,6 @@ __all__ = [
     "ONCE_ONLY_REASON_KEY",
     "TOKEN_UNSET",
     "TokenUnset",
-    "native_exact_action_decision",
-    "native_exact_action_token",
     "native_saved_decision_response",
     "native_saved_review_response",
 ]

@@ -43,6 +43,7 @@ from scripts.ci.rust_io_ownership_policy import (
     _STRUCTURED_OUTPUT_MEDIATION_PATHS,
     _TRANSPORT_AUTHORITY_PATHS,
     _TRANSPORT_DECODE_PATHS,
+    _TRANSPORT_ENCODE_OPERATIONS,
     _TRANSPORT_IDENTITY_PATHS,
     _TRANSPORT_INTEGRITY_PATHS,
     COMPATIBILITY_MODES,
@@ -172,6 +173,8 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 
 
 def _category(path: str, kind: str) -> str:
+    if kind == "transport_encode":
+        return "transport_encode"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
     if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
@@ -211,7 +214,9 @@ def _observations(record: FunctionRecord) -> Iterable[IoObservation]:
             chain = _attribute_chain(node.func)
             kind: str | None = None
             operation: str | None = None
-            if chain and chain[0] in _ARCHIVE_MODULES:
+            if (path, chain) in _TRANSPORT_ENCODE_OPERATIONS:
+                kind, operation = "transport_encode", name
+            elif chain and chain[0] in _ARCHIVE_MODULES:
                 kind, operation = "archive", name
             elif name in _FS_FUNCTIONS or name in _FS_METHODS:
                 kind, operation = "filesystem", name

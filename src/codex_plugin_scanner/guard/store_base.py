@@ -119,16 +119,8 @@ from .store_approvals import (
     resolve_request_with_queue_result as persist_queue_resolution,
 )
 from .store_connect import (
-    build_connect_state_response,
     connect_request_schema_statement,
     connect_state_schema_statement,
-    load_connect_state,
-)
-from .store_connect import (
-    get_latest_connect_state as load_latest_connect_state,
-)
-from .store_connect import (
-    mark_connect_result as persist_connect_result,
 )
 from .store_review_event_outbox_binding import bind_review_events_for_request
 from .store_evidence import (
