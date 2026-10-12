@@ -197,7 +197,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                         artifact_type="hook",
                         source_scope=scope,
                         config_path=str(settings_path),
-                        command=self._hook_command(entry),
+                        command=self._entry_hook_command(entry),
                         metadata={"hook_config": entry},
                     )
                 )
@@ -249,7 +249,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
             )
 
     @staticmethod
-    def _hook_command(entry: dict[str, object]) -> str | None:
+    def _entry_hook_command(entry: dict[str, object]) -> str | None:
         commands: list[str] = []
         direct_command = entry.get("command")
         if isinstance(direct_command, str):

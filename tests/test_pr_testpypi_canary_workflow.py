@@ -1,10 +1,93 @@
 """Contract checks for the pull-request TestPyPI canary workflow."""
 
+import ast
+import fnmatch
 from pathlib import Path
 
+import tomllib
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLISH_PR_PATHS = [
+    "**",
+    "!tests/**",
+    "!docs/**",
+    "!fuzzers/**",
+    "!**/*.md",
+    "!.github/workflows/**",
+    ".github/workflows/publish.yml",
+    "README.md",
+    "src/**",
+    "scripts/**",
+    "rust/**",
+    "contracts/**",
+    "contributions/**",
+    "docs/guard/contracts/guard-cloud-review.md",
+    "tests/__init__.py",
+    "tests/guard_command_corpus*.py",
+    "tests/harness_attribution_env.py",
+    "tests/native_command_test_support.py",
+    "tests/native_github_offline.py",
+    "tests/fixtures/guard-command-corpus/**",
+    "tests/dockerlabs/**",
+]
+
+
+def _publish_runs_for(path: str) -> bool:
+    """Evaluate GitHub's ordered include/exclude path filter for one file."""
+    selected = False
+    for pattern in PUBLISH_PR_PATHS:
+        negated = pattern.startswith("!")
+        glob = pattern[1:] if negated else pattern
+        if glob.endswith("/**"):
+            matched = path.startswith(glob[:-2])
+        elif glob.startswith("**/"):
+            matched = fnmatch.fnmatch(path.rsplit("/", 1)[-1], glob[3:])
+        else:
+            matched = glob == "**" or fnmatch.fnmatch(path, glob)
+        if matched:
+            selected = not negated
+    return selected
+
+
+def _canary_test_modules() -> set[str]:
+    pending = ["tests.guard_command_corpus_runner"]
+    for script in ("scripts/run_installed_canary.py", "scripts/run_installed_native_corpus.py"):
+        for node in ast.walk(ast.parse((ROOT / script).read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("tests"):
+                pending.append(node.module)
+    seen: set[str] = set()
+    while pending:
+        module = pending.pop()
+        path = ROOT / (module.replace(".", "/") + ".py")
+        if module in seen or not path.exists():
+            continue
+        seen.add(module)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("tests"):
+                pending.append(node.module)
+            elif isinstance(node, ast.Import):
+                pending.extend(alias.name for alias in node.names if alias.name.startswith("tests"))
+    return {module.replace(".", "/") + ".py" for module in seen}
+
+
+def test_publish_path_filter_keeps_every_shipped_and_canary_input() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    hatch = pyproject["tool"]["hatch"]["build"]
+    shipped = [*hatch["targets"]["sdist"]["only-include"], *hatch["targets"]["wheel"]["force-include"]]
+    probes = {
+        "src/codex_plugin_scanner/guard/agent-safety-guidance.md",
+        "tests/__init__.py",
+        "tests/fixtures/guard-command-corpus/seed-manifest.json",
+        "tests/dockerlabs/command-extension-analytics/package.json",
+        *_canary_test_modules(),
+    }
+    for entry in shipped:
+        probes.add(entry if (ROOT / entry).is_file() else f"{entry}/README.md")
+    missing = sorted(path for path in probes if not _publish_runs_for(path))
+    assert missing == []
+    for skipped in ("tests/test_cli.py", "docs/guard/overview.md", "fuzzers/fuzz_policy.py", "CHANGELOG.md"):
+        assert not _publish_runs_for(skipped)
 
 
 def test_native_pr_base_wheel_rebuild_has_uv_available() -> None:
@@ -30,6 +113,7 @@ def test_pr_canary_requires_maintainer_opt_in_for_same_repository_prs() -> None:
     assert workflow[True]["pull_request"] == {
         "branches": ["main", "release/3.0", "release/3.2"],
         "types": ["opened", "synchronize", "reopened", "labeled"],
+        "paths": PUBLISH_PR_PATHS,
     }
     assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
     job = workflow["jobs"]["publish-testpypi"]

@@ -145,7 +145,7 @@ commands to satisfy a test.
 
 ## Installed-wheel matrix
 
-The [Extension Builder workflow](../../../.github/workflows/extension-builder-ci.yml)
+The [Extension Builder workflow](../../../.github/workflows/nightly-native.yml)
 builds and installs a wheel on Linux with Python 3.10 and 3.13, macOS ARM64
 with Python 3.13, and Windows with Python 3.13. The
 [installed verifier](../../../scripts/ci/verify_extension_builder_install.py)

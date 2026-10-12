@@ -455,6 +455,8 @@ def run_approval_resume_command(
             item = store.get_approval_request(request_id)
             status = str(item.get("status", "")) if item is not None else ""
             return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
+        if error_code == "resume_unavailable":
+            return {"error": "resume_unavailable", "request_id": request_id}, 1
         return {"error": "resume_not_supported", "request_id": request_id}, 1
     return payload, 0
 

@@ -1,4 +1,4 @@
-"""Tests for GuardBypassDetector and composition_rules."""
+"""Tests for the native Guard bypass detector and composition_rules."""
 
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
-from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, GuardBypassDetector
+from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
+from tests.native_detector_support import NativeDetector
 
 
 def _make_signal(
@@ -70,8 +71,9 @@ def _detector_context(tmp_path: Path) -> DetectorContext:
     )
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 class TestGuardBypassDetector:
-    detector = GuardBypassDetector()
+    detector = NativeDetector("bypass.shell")
 
     def _detect(self, command: str, tmp_path: Path) -> tuple:
         ctx = _detector_context(tmp_path)

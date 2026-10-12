@@ -26,7 +26,14 @@ runs:
     - name: Stage external contribution trust defaults
       shell: bash
       # Compile and package the same conservative defaults as builder CI.
-      run: python scripts/refresh_extension_artifacts.py --trust-only
+      # ubuntu-latest exposes python3. setup-python jobs expose python.
+      run: |
+        if command -v python3 >/dev/null 2>&1; then
+          py=python3
+        else
+          py=python
+        fi
+        "$py" scripts/refresh_extension_artifacts.py --trust-only
     - name: Install pinned Rust toolchain
       shell: bash
       env:

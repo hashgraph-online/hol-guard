@@ -38,14 +38,6 @@ class RecoveryPhase(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
-# Mapping between RecoveryPhase and ProviderHealthState variants
-_RECOVERY_TO_HEALTH: dict[RecoveryPhase, ProviderHealthState] = {
-    RecoveryPhase.HEALTHY: ProviderHealthState.HEALTHY,
-    RecoveryPhase.DEGRADED: ProviderHealthState.DEGRADED,
-    RecoveryPhase.RECOVERING: ProviderHealthState.DEGRADED,
-    RecoveryPhase.UNAVAILABLE: ProviderHealthState.UNAVAILABLE,
-}
-
 _HEALTH_TO_RECOVERY: dict[ProviderHealthState, RecoveryPhase] = {
     ProviderHealthState.HEALTHY: RecoveryPhase.HEALTHY,
     ProviderHealthState.DEGRADED: RecoveryPhase.DEGRADED,
@@ -269,11 +261,6 @@ def _build_notice(state: RecoveryState) -> str:
     return f"[{state.phase.value.upper()}] {label} (attempt {state.attempt}/{_MAX_ATTEMPTS})"
 
 
-def to_provider_health_state(phase: RecoveryPhase) -> ProviderHealthState:
-    """Map a RecoveryPhase to the corresponding ProviderHealthState."""
-    return _RECOVERY_TO_HEALTH[phase]
-
-
 def from_provider_health_state(
     health: ProviderHealthState,
 ) -> RecoveryPhase:
@@ -288,5 +275,4 @@ __all__ = [
     "from_provider_health_state",
     "next_recovery_state",
     "recovery_notice",
-    "to_provider_health_state",
 ]

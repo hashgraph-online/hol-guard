@@ -33,6 +33,7 @@ pub(super) fn exact_safe_command(
     let proof_context = super::PathContext {
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
+        rustup_override_absent: context.rustup_override_absent,
         cwd: cwd_proof
             .as_ref()
             .map(|proof| proof.cwd.as_str())

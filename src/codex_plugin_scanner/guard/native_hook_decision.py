@@ -4,32 +4,28 @@ The hook transport gathers facts (payload fields, store lookups, classifier
 verdicts) and renders host output. The resident decides everything between:
 event and action normalization, composition of the current action, which
 grant lookups are permitted, the final action after approval reuse and Watch
-mode, receipt and activity dispositions, and the response directive. There is
+mode, receipt and activity dispositions, and the response directive. It also
+settles Copilot tool calls and names the effects the transport runs. There is
 no Python evaluator: a reply that is not a bound, strictly decoded ``ok``
 raises ``NativeHookDecisionError`` and callers fail closed.
 """
 
 from __future__ import annotations
 
-import re
+import functools
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
-from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
-from .native_runtime import native_runtime_status
-from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
+from .native_resident_decision import ResidentOperation, resident_decide, shape_fields
 
 HOOK_DECISION_FEATURE = "hook-decision-v1"
-_REQUEST_SCHEMA = "guard-hook-decision-request.v1"
-_RESULT_SCHEMA = "guard-hook-decision-result.v1"
-_RESIDENT_CODE = re.compile(r"^native_hook_decision_[a-z_]{1,64}$")
 _UNAVAILABLE = "native_hook_decision_unavailable"
 _INVALID = "native_hook_decision_payload_invalid"
 _TIMEOUT_SECONDS = 5.0
 _MAX_FACT_ROUNDS = 12
+_MAX_REQUEST_BYTES = 6 * 1024 * 1024
 
 _ACTION_NAMES = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _OPT_STR = (str, type(None))
@@ -44,6 +40,7 @@ _COMPOSITION_FIELDS: dict[str, Any] = {
     "permission_decision_reason": _OPT_STR,
     "daemon_failure_reason": _OPT_STR,
     "token": dict,
+    "verified_benign": bool,
 }
 _TOKEN_FIELDS: dict[str, Any] = {
     "current_config_action": str,
@@ -82,6 +79,33 @@ _DIRECTIVE_FIELDS: dict[str, Any] = {
     "after_json": str,
     "envelope_decision": str,
 }
+_PLAN_FIELDS: dict[str, Any] = {
+    "policy_action": str,
+    "approval_reuse": (dict, type(None)),
+    "scanner_evidence": list,
+    "effects": list,
+    "exit_code": (int, type(None)),
+}
+_EFFECT_FIELDS: dict[str, dict[str, Any]] = {
+    "silent_review": {"artifact": dict},
+    "observe_queue": {"executable_action": str, "observed_policy_action": str, "changed_fields": list},
+    "receipt": {"verdict": str, "decision_source": str, "policy_action": str},
+    "activity": {"event": str, "policy_action": str, "prompted": bool, "reuse_status": str},
+    "usage": {"policy_action": str},
+    "pretool_response": {"permission_decision": str, "reason": str},
+    "permission_response": {"behavior": str, "message": _OPT_STR, "interrupt": (bool, type(None))},
+    "queue_approval": {"evaluation_artifact": dict, "response_payload": dict, "deny_reason": str},
+}
+# Effect values the transport dispatches on; anything else is malformed.
+_EFFECT_VALUES: dict[str, frozenset[str]] = {
+    "verdict": frozenset({"allow", "block"}),
+    "reuse_status": frozenset({"accepted", "rejected", "not-applicable"}),
+    "permission_decision": frozenset({"allow", "deny"}),
+    "behavior": frozenset({"allow", "deny"}),
+    "event": frozenset({"preToolUse", "copilotPermissionRequest"}),
+}
+_ACKED_FACT = "acked_recording_only"
+_EDGE_KEYS = ("policy_action", "minimum_action", "decision")
 
 
 class NativeHookDecisionError(RuntimeError):
@@ -93,16 +117,7 @@ class NativeHookDecisionError(RuntimeError):
 
 
 def _shape(value: object, fields: Mapping[str, Any]) -> dict[str, Any]:
-    if not isinstance(value, dict) or set(value) != set(fields):
-        raise NativeHookDecisionError(_INVALID)
-    for key, kinds in fields.items():
-        item = value[key]
-        allowed = kinds if isinstance(kinds, tuple) else (kinds,)
-        if isinstance(item, bool) and bool not in allowed:
-            raise NativeHookDecisionError(_INVALID)
-        if not isinstance(item, allowed):
-            raise NativeHookDecisionError(_INVALID)
-    return value
+    return shape_fields(value, fields, lambda: NativeHookDecisionError(_INVALID))
 
 
 def _action(value: object) -> str:
@@ -111,21 +126,16 @@ def _action(value: object) -> str:
     return value
 
 
-def _record_resident(guard_home: Path, *, success: bool, reason: str = "") -> None:
-    """Record resident health only once a reply has passed binding and validation.
-
-    The shared transport would otherwise reset the failure streak on every
-    reply that parses, so a resident that keeps sending unusable replies would
-    never open the circuit.
-    """
-
-    status = native_runtime_status()
-    if status.identity is None:
-        return
-    if success:
-        native_record_resident_success(status.identity.sha256, guard_home)
-    else:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=reason)
+_OPERATION = ResidentOperation(
+    operation="hook_decide",
+    feature=HOOK_DECISION_FEATURE,
+    prefix="native_hook_decision",
+    request_schema="guard-hook-decision-request.v1",
+    result_schema="guard-hook-decision-result.v1",
+    request_id_prefix="hook-decision",
+    timeout_seconds=_TIMEOUT_SECONDS,
+    error=NativeHookDecisionError,
+)
 
 
 def _decide(
@@ -133,63 +143,15 @@ def _decide(
     guard_home: Path | None,
     validate: Callable[[dict[str, Any]], None],
 ) -> dict[str, Any]:
-    """Ask the resident and return its payload once ``validate`` accepts it.
-
-    Resident health is recorded only after binding and payload validation, so
-    a resident that keeps sending well-bound but malformed payloads opens the
-    circuit instead of resetting the failure streak on every reply.
-    """
-
-    try:
-        home = _resolve_digest_home(guard_home)
-    except (OSError, RuntimeError, ValueError):
-        raise NativeHookDecisionError("native_hook_decision_home_unbound") from None
-    request: dict[str, object] = {
-        "schema": _REQUEST_SCHEMA,
-        "request_id": f"hook-decision-{uuid4().hex}",
-        "query": dict(query),
-    }
-    try:
-        if not ensure_resident_prerequisite(home):
-            raise NativeHookDecisionError(_UNAVAILABLE)
-        digest = "sha256:" + _canonical_request_sha256(request)
-    except (OSError, TypeError, ValueError):
-        raise NativeHookDecisionError("native_hook_decision_request_invalid") from None
-    response = _resident_request(
-        operation="hook_decide",
-        request=request,
-        guard_home=home,
-        timeout_seconds=_TIMEOUT_SECONDS,
-        required_feature=HOOK_DECISION_FEATURE,
-        response_schema=_RESULT_SCHEMA,
-        record_success=False,
+    # Copilot settlement carries the serialized tool arguments, so the request
+    # gets the same budget as the hook edge that already accepted them.
+    return resident_decide(
+        _OPERATION,
+        functools.partial(_resident_request, max_request_bytes=_MAX_REQUEST_BYTES),
+        query,
+        guard_home,
+        validate,
     )
-    if response is None:
-        raise NativeHookDecisionError(_UNAVAILABLE)
-    if (
-        response.get("schema") != _RESULT_SCHEMA
-        or response.get("request_id") != request["request_id"]
-        or response.get("request_sha256") != digest
-    ):
-        _record_resident(home, success=False, reason="native_hook_decision_unbound")
-        raise NativeHookDecisionError(_UNAVAILABLE)
-    status, code = response.get("status"), response.get("code")
-    if status == "error":
-        _record_resident(home, success=True)
-        raise NativeHookDecisionError(
-            code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
-        )
-    payload = response.get("payload")
-    if status != "ok" or code != "ok" or not isinstance(payload, dict) or payload.get("kind") != query.get("kind"):
-        _record_resident(home, success=False, reason="native_hook_decision_bad_status")
-        raise NativeHookDecisionError(_UNAVAILABLE)
-    try:
-        validate(payload)
-    except NativeHookDecisionError:
-        _record_resident(home, success=False, reason="native_hook_decision_invalid")
-        raise
-    _record_resident(home, success=True)
-    return payload
 
 
 def native_compose_current(
@@ -278,10 +240,63 @@ def native_finalize(
     return {key: payload[key] for key in _FINAL_FIELDS}
 
 
+def native_copilot_settle(
+    inputs: Mapping[str, object],
+    acked_recording_only: Callable[[], bool],
+    *,
+    guard_home: Path | None = None,
+) -> dict[str, Any]:
+    """Settle a Copilot tool call: the final action and the effects to run, in order.
+
+    ``acked_recording_only`` runs only when the resident asks for it.
+    """
+
+    def validate(payload: dict[str, Any]) -> None:
+        if set(payload) != {"kind", "needs_facts", "plan"}:
+            raise NativeHookDecisionError(_INVALID)
+        needs = payload["needs_facts"]
+        if not isinstance(needs, list):
+            raise NativeHookDecisionError(_INVALID)
+        if needs:
+            if needs != [_ACKED_FACT] or inputs[_ACKED_FACT] is not None or payload["plan"] is not None:
+                raise NativeHookDecisionError(_INVALID)
+            return
+        plan = _shape(payload["plan"], _PLAN_FIELDS)
+        _action(plan["policy_action"])
+        if not all(isinstance(entry, dict) for entry in plan["scanner_evidence"]):
+            raise NativeHookDecisionError(_INVALID)
+        for effect in plan["effects"]:
+            kind = effect.get("effect") if isinstance(effect, dict) else None
+            if kind not in _EFFECT_FIELDS:
+                raise NativeHookDecisionError(_INVALID)
+            fields = _shape({key: value for key, value in effect.items() if key != "effect"}, _EFFECT_FIELDS[kind])
+            for key, allowed in _EFFECT_VALUES.items():
+                if key in fields and fields[key] not in allowed:
+                    raise NativeHookDecisionError(_INVALID)
+            for key in ("policy_action", "executable_action", "observed_policy_action"):
+                if key in fields:
+                    _action(fields[key])
+
+    # The resident binds the reply to its typed request, so every optional
+    # field travels explicitly.
+    edge = inputs.get("native_edge")
+    inputs = {
+        **inputs,
+        _ACKED_FACT: inputs.get(_ACKED_FACT),
+        "native_edge": {key: edge.get(key) for key in _EDGE_KEYS} if isinstance(edge, Mapping) else None,
+    }
+    payload = _decide({"kind": "copilot_settle", "inputs": dict(inputs)}, guard_home, validate)
+    if payload["needs_facts"]:
+        inputs = {**inputs, _ACKED_FACT: bool(acked_recording_only())}
+        payload = _decide({"kind": "copilot_settle", "inputs": dict(inputs)}, guard_home, validate)
+    return payload["plan"]
+
+
 __all__ = [
     "HOOK_DECISION_FEATURE",
     "NativeHookDecisionError",
     "native_compose_current",
+    "native_copilot_settle",
     "native_finalize",
     "native_post_claim_reuse",
 ]

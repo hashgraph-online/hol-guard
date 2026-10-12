@@ -17,8 +17,6 @@ from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentP
 from codex_plugin_scanner.guard.runtime.containment_executor import execute_contained, file_sha256
 from codex_plugin_scanner.guard.runtime.containment_health import probe_containment_health
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
-from codex_plugin_scanner.guard.runtime.local_node_runner_evidence import build_local_node_runner_evidence
-from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.workspace_snapshot_inputs import complete_workspace_snapshot
 
 
@@ -97,15 +95,11 @@ test('contained runtime boundaries', async () => {
         .replace("HOST_PORT", str(port))
     )
     (workspace / "boundary.test.ts").write_text(script, encoding="utf-8")
-    args = ("--no-install", "vitest", "run", "boundary.test.ts", "--reporter=dot")
-    intent = parse_package_intent("npx " + " ".join(args), workspace=workspace)
-    assert intent is not None and len(intent.local_executions) == 1
-    evidence = build_local_node_runner_evidence("npx", args, intent.local_executions[0], workspace=workspace)
-    assert evidence is not None and evidence.status == "complete"
+    runner_args = ("run", "boundary.test.ts", "--reporter=dot")
     node = str(Path(shutil.which("node") or "node").resolve(strict=True))
     request = _request(
         workspace.resolve(),
-        (node, "node_modules/vitest/vitest.mjs", *evidence.runner_args),
+        (node, "node_modules/vitest/vitest.mjs", *runner_args),
         include_inputs=True,
     )
     fingerprint = current_guard_daemon_runtime_fingerprint()

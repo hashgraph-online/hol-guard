@@ -29,6 +29,7 @@ import {
   resetSettings,
   type ApprovalGateWriteProof,
   type GuardApprovalGateTotpEnrollment,
+  type GuardSettingsUpdate,
   updateSettings,
   clearPolicy,
   repairApprovalCenter,
@@ -37,12 +38,21 @@ import {
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { GuardHookRemovalPanel } from "./guard-hook-removal-panel";
+import { GuardRepairControl } from "./guard-repair-control";
 import { humanizeList } from "./approval-center-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch } from "./apps/app-catalog";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { ProtectionPosturePanel } from "./protection-posture-panel";
 import { WatchProtectionBanner } from "./watch-protection-banner";
+import { HarnessPostureManager, HarnessPostureSummaryCard } from "./harness-posture-card";
+import {
+  clearHarnessWatchOverrides,
+  normalizeHarnessPostures,
+  settingsWatchBannerModel,
+  withHarnessPosturePatch,
+} from "./harness-posture-ui";
 import {
   deriveProtectionPosture,
   isProtectionPosture,
@@ -354,7 +364,8 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
     security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
-    harness_risk_actions: settings.harness_risk_actions ?? {}
+    harness_risk_actions: settings.harness_risk_actions ?? {},
+    harness_postures: normalizeHarnessPostures(settings.harness_postures)
   };
 }
 
@@ -671,6 +682,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setSaveError(null);
   }, []);
 
+  const setDraftSettings = useCallback((settings: GuardSettings) => {
+    setDraft(settings);
+    setSaveError(null);
+  }, []);
+
   const handleProtectionPostureChange = useCallback((posture: ProtectionPosture) => {
     if (posture === "watch") {
       setPendingPosture(posture);
@@ -680,8 +696,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [applyDraftPosture]);
 
   const handleTurnProtectionOn = useCallback(() => {
-    applyDraftPosture("protected");
-  }, [applyDraftPosture]);
+    setDraft((value) => {
+      if (value === null) return value;
+      const cleared = clearHarnessWatchOverrides(value);
+      return currentProtectionPosture(cleared) === "watch" ? applyProtectionPosture(cleared, "protected") : cleared;
+    });
+    setSaveError(null);
+  }, []);
 
   const handleWatchAutoRevertToggle = useCallback((checked: boolean) => {
     setDraft((value) => value === null ? value : { ...value, watch_auto_revert_hours: checked ? 24 : 0 });
@@ -869,7 +890,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      let settingsToSave: Partial<GuardSettings>;
+      let settingsToSave: GuardSettingsUpdate;
       if (scope === "approval-gate") {
         settingsToSave = { approval_gate: approvalGateUpdate };
       } else {
@@ -881,7 +902,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           settingsToSave = presentationOnlyPayload;
         } else {
           settingsToSave = {
-            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            ...withHarnessPosturePatch(
+              buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+              draft,
+              savedSettingsRef.current,
+            ),
             risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
             approval_gate: approvalGateUpdate,
           };
@@ -1449,6 +1474,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const protectionCapabilities: GuardProtectionCapability[] = state.kind === "ready"
     ? (state.payload.protection_capabilities ?? [])
     : [];
+  const watchBanner = settingsWatchBannerModel(draft, protectionCapabilities);
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
   const riskSearchMatches = searchMatches.filter((m) => m.section === "risk");
@@ -1463,8 +1489,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         title="Protection"
         description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
-      {selectedPosture === "watch" ? (
-        <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
+      {watchBanner !== null ? (
+        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
       ) : null}
 
       <div className="relative">
@@ -1484,6 +1510,21 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       {hasSearch && searchMatches.length === 0 && (
         <p className="text-sm text-slate-500">No settings match your search.</p>
       )}
+
+      {hasSearch && searchMatches.some((match) => match.key === "harness_postures") ? (
+        <button
+          type="button"
+          onClick={() => {
+            setSearchQuery("");
+            handleTabChange("apps");
+          }}
+          data-testid="settings-search-open-apps"
+          className="flex min-h-11 w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-left text-sm font-medium text-brand-dark hover:border-brand-blue/30"
+        >
+          Protection by app
+          <span className="text-xs font-semibold text-brand-blue">Open the Apps tab</span>
+        </button>
+      ) : null}
 
       {hasSearch && riskSearchMatches.length > 0 && (
         <div className="rounded-xl border border-slate-100 p-4">
@@ -1544,6 +1585,19 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 onPostureChange={handleProtectionPostureChange}
               />
             </SettingsFormSection>
+
+            {protectionCapabilities.length > 0 ? (
+              <SettingsFormSection
+                title="Protection by app"
+                description="Apps follow the machine setting unless you choose otherwise."
+              >
+                <HarnessPostureSummaryCard
+                  settings={draft}
+                  capabilities={protectionCapabilities}
+                  onOpenApps={() => handleTabChange("apps")}
+                />
+              </SettingsFormSection>
+            ) : null}
 
             <SettingsFormSection title="Timing and features">
               <div className="space-y-4 py-3">
@@ -1612,6 +1666,30 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 ) : null}
               </div>
             </SettingsFormSection>
+          </div>
+        )}
+
+        {activeTab === "apps" && (
+          <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            {protectionCapabilities.length > 0 ? (
+              <SettingsFormSection
+                title="Protection by app"
+                description="Choose the level each app runs at. Watch records instead of stopping, so use it only while debugging one app."
+              >
+                <HarnessPostureManager
+                  settings={draft}
+                  capabilities={protectionCapabilities}
+                  onSettingsChange={setDraftSettings}
+                  onChangeTab={handleTabChange}
+                />
+              </SettingsFormSection>
+            ) : (
+              <EmptyState
+                title="No apps to protect yet"
+                body="Guard lists your apps here once it detects them. Run an app such as Codex, Claude Code, or Cursor and come back."
+                tone="teach"
+              />
+            )}
           </div>
         )}
 
@@ -1891,6 +1969,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                           {repairing ? "Repairing…" : "Repair"}
                         </ActionButton>
                       </div>
+                    </div>
+                    <div id="guard-repair">
+                      <p className="text-sm font-semibold text-brand-dark">Repair Guard</p>
+                      <GuardRepairControl description="Fixes the background service, app hooks, and stale local state when hooks time out or an app stays blocked." />
+                    </div>
+                    <div id="guard-hook-removal">
+                      <GuardHookRemovalPanel />
                     </div>
                   </div>
                 </div>

@@ -7,35 +7,27 @@ from __future__ import annotations
 
 from functools import partial
 
-from ..runtime.env_wrapper import parse_env_wrapper
+from ..native_codex_tool_output import codex_tool_output_native
 from ..runtime.shell_execution_context import model_shell_execution_context, validate_shell_execution_segment
 from ._commands_shared import *
 from .codex_output_safety import output_uses_placeholder_private_key_fixture
 from .commands_parser_helpers import *
 from .commands_support_codex_paths import _PROMPT_PATH_TOKEN_PATTERN
-from .commands_support_codex_reads import (
-    codex_scan_targets_secret_like_source_name,
-)
 
 _CODEX_PRIVATE_KEY_FIXTURE_PATTERN = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?P<body>.*?)-----END [A-Z ]*PRIVATE KEY-----",
     re.DOTALL,
 )
 
+
 _CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN = re.compile(
     r"(?i)\b(?:secret-key-material|fixture|fake|example|sample|dummy|test-key|placeholder)\b"
 )
 
-_CODEX_PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-x", "-v", "-vv", "-vvv", "-ra", "--lf", "--ff"})
-_CODEX_PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb", "--color", "--durations"})
-_CODEX_PYTEST_SAFE_FLAG_PREFIXES = (
-    "--maxfail=",
-    "--tb=",
-    "--color=",
-    "--durations=",
-)
-_CODEX_SAFE_SHELL_REDIRECTION_TOKENS = frozenset({"1>&2", "2>&1", ">/dev/null", "1>/dev/null", "2>/dev/null"})
+
 _CODEX_PYTEST_PROGRESS_LINE_PATTERN = re.compile(r"^[.FEsxXrR]+$")
+
+
 _CODEX_PYTEST_SUMMARY_LINE_PATTERN = re.compile(
     r"(?ix)^"
     r"(?:=+\s.*\s=+"
@@ -43,74 +35,6 @@ _CODEX_PYTEST_SUMMARY_LINE_PATTERN = re.compile(
     r"|(?:\d+\s+\w+(?:,\s*\d+\s+\w+)*)\s+in\s+\d+(?:\.\d+)?s"
     r"|.+::.+\s+(?:PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS))$"
 )
-
-
-def _codex_command_start_indexes(parts: list[str]) -> list[int]:
-    starts = [0] if parts else []
-    for index, part in enumerate(parts[:-1]):
-        if part in {"&&", "||", ";", "&", "|", "|&"}:
-            starts.append(index + 1)
-    return starts
-
-
-def _codex_command_segment_parts(parts: list[str], start: int) -> list[str]:
-    end = start
-    while end < len(parts) and parts[end] not in {"&&", "||", ";", "&", "|", "|&"}:
-        end += 1
-    return parts[start:end]
-
-
-def _codex_unwrapped_command_parts(parts: list[str]) -> list[str]:
-    remaining = parts
-    while remaining:
-        executable = Path(remaining[0]).name.lower()
-        if executable == "command":
-            remaining = _codex_strip_command_wrapper(remaining[1:])
-            continue
-        if executable == "env":
-            remaining = _codex_strip_env_wrapper(remaining[1:])
-            continue
-        return remaining
-    return []
-
-
-def _codex_strip_command_wrapper(parts: list[str]) -> list[str]:
-    index = 0
-    while index < len(parts) and parts[index] in {"-p", "-v", "-V"}:
-        index += 1
-    if index < len(parts) and parts[index] == "--":
-        index += 1
-    return parts[index:]
-
-
-def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
-    parsed = parse_env_wrapper(parts)
-    return list(parsed.executable_argv) if parsed.complete else []
-
-
-def _codex_env_args_clear_environment(parts: list[str]) -> bool:
-    parsed = parse_env_wrapper(parts)
-    return (
-        parsed.complete
-        and parsed.option_effects.ignore_environment
-        and not parsed.executable_argv
-        and not any(
-            _codex_env_assignment_uses_shell_expansion(f"{name}={value}")
-            for name, value in parsed.environment_delta.assignments
-        )
-    )
-
-
-def _codex_env_assignment_uses_shell_expansion(part: str) -> bool:
-    _, _, value = part.partition("=")
-    return "$" in value or "`" in value
-
-
-def _codex_shell_split(command_text: str) -> list[str]:
-    lexer = shlex.shlex(command_text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    return list(lexer)
 
 
 _codex_output_uses_placeholder_private_key_fixture = partial(
@@ -125,33 +49,11 @@ def _codex_command_targets_secret_like_source_name(
     *,
     cwd: Path | None = None,
     home_dir: Path | None = None,
-    _execution_context_applied: bool = False,
 ) -> bool:
-    if not _execution_context_applied:
-        execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-        if execution_context.directory_change_present:
-            if not execution_context.complete:
-                return True
-            for segment in execution_context.segments:
-                if segment.directory_operation is not None:
-                    continue
-                segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
-                if segment_cwd is None or reason is not None:
-                    return True
-                if _codex_command_targets_secret_like_source_name(
-                    segment.command_text,
-                    cwd=segment_cwd,
-                    home_dir=home_dir,
-                    _execution_context_applied=True,
-                ):
-                    return True
-            return False
-    return codex_scan_targets_secret_like_source_name(
-        command_text,
-        cwd=cwd,
-        home_dir=home_dir,
-        recurse=lambda segment: _codex_command_targets_secret_like_source_name(segment, cwd=cwd, home_dir=home_dir),
+    answer = codex_tool_output_native(
+        "secret_like_source_name", command=command_text, cwd=cwd, home_dir=home_dir, exec_context=True
     )
+    return answer.error_code is not None or answer.allowed
 
 
 def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
@@ -267,98 +169,7 @@ def _codex_focused_pytest_status_line_is_benign(line: str) -> bool:
 
 
 def _codex_command_is_focused_pytest_verification(command_text: str) -> bool:
-    try:
-        parts = _codex_shell_split(command_text)
-    except ValueError:
-        return False
-    if not parts:
-        return False
-    saw_pytest = False
-    for start in _codex_command_start_indexes(parts):
-        segment_parts = _codex_command_segment_parts(parts, start)
-        if not segment_parts:
-            return False
-        separator = parts[start - 1] if start > 0 else None
-        if separator in {"|", "|&", "||", "&"}:
-            return False
-        if _codex_command_segment_is_safe_directory_change(segment_parts):
-            continue
-        if _codex_command_segment_is_exit_code_echo(segment_parts):
-            continue
-        if _codex_command_segment_is_focused_pytest(segment_parts):
-            saw_pytest = True
-            continue
-        return False
-    return saw_pytest
-
-
-def _codex_command_segment_is_safe_directory_change(parts: list[str]) -> bool:
-    command_parts = _codex_unwrapped_command_parts(parts)
-    return len(command_parts) == 2 and Path(command_parts[0]).name.lower() == "cd"
-
-
-def _codex_command_segment_is_exit_code_echo(parts: list[str]) -> bool:
-    command_parts = _codex_unwrapped_command_parts(parts)
-    if len(command_parts) != 2:
-        return False
-    return Path(command_parts[0]).name.lower() == "echo" and command_parts[1].startswith("__EXIT_CODE__:$?")
-
-
-def _codex_command_segment_is_focused_pytest(parts: list[str]) -> bool:
-    command_parts = [part for part in parts if part not in _CODEX_SAFE_SHELL_REDIRECTION_TOKENS]
-    command_parts = _codex_unwrapped_command_parts(command_parts)
-    if not command_parts:
-        return False
-    executable = Path(command_parts[0]).name.lower()
-    args: list[str]
-    if executable == "pytest":
-        args = command_parts[1:]
-    elif (
-        executable.startswith("python")
-        and len(command_parts) >= 3
-        and command_parts[1] == "-m"
-        and command_parts[2] == "pytest"
-    ):
-        args = command_parts[3:]
-    else:
-        return False
-    saw_target = False
-    index = 0
-    while index < len(args):
-        arg = args[index]
-        if arg in _CODEX_PYTEST_SAFE_FLAGS:
-            index += 1
-            continue
-        if any(arg.startswith(prefix) for prefix in _CODEX_PYTEST_SAFE_FLAG_PREFIXES):
-            index += 1
-            continue
-        if arg in _CODEX_PYTEST_SAFE_FLAGS_WITH_VALUES:
-            if index + 1 >= len(args):
-                return False
-            index += 2
-            continue
-        if arg.startswith("-"):
-            return False
-        if _codex_pytest_target_arg(arg):
-            saw_target = True
-            index += 1
-            continue
-        return False
-    return saw_target
-
-
-def _codex_pytest_target_arg(value: str) -> bool:
-    stripped = value.strip()
-    if not stripped:
-        return False
-    return (
-        "::" in stripped
-        or stripped.endswith(".py")
-        or stripped == "tests"
-        or stripped.startswith("tests/")
-        or "/tests/" in stripped
-        or stripped.startswith("test_")
-    )
+    return codex_tool_output_native("focused_pytest", command=command_text).allowed
 
 
 def _codex_token_is_url(token: str) -> bool:

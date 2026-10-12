@@ -297,7 +297,15 @@ pub(crate) fn apply_pre_tool_policy(
             && intrinsic_rank <= action_rank("warn").unwrap_or(1)
             && output.decision == "allow";
         if policy_only_warning {
-            output.reason_code = "native_policy_warning".to_owned();
+            // Only a warn floor over a proven allow is the silent policy
+            // warning. A stronger floor, or one over an intrinsic warning,
+            // keeps a rendered code so the harness still sees it.
+            output.reason_code = if output.minimum_action == "allow" && effective == "warn" {
+                "native_policy_warning"
+            } else {
+                "native_policy_observed_floor"
+            }
+            .to_owned();
             output.reason =
                 "HOL Guard observed a stricter installed native policy floor.".to_owned();
             output.policy_action = "warn".to_owned();
@@ -336,46 +344,11 @@ pub(crate) fn apply_pre_tool_policy(
     Ok(output)
 }
 
-fn post_action_type(
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-) -> Result<PreToolActionTypeV1, String> {
-    if payload_kind == GuardHookPayloadKindV2::SourceFileRef {
-        return Ok(PreToolActionTypeV1::FileRead);
-    }
-    let mut maps = Vec::new();
-    let mut nodes = 0usize;
-    collect_fact_maps(&request.payload, 0, &mut nodes, &mut maps)?;
-    if let Some(tool) = preferred_tool_name(&maps)? {
-        return Ok(classify_tool_name(&tool));
-    }
-    for record in maps {
-        if record.keys().any(|key| {
-            matches!(
-                key.as_str(),
-                "command" | "cmd" | "shell_command" | "shellCommand"
-            )
-        }) {
-            return Ok(PreToolActionTypeV1::Command);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "package" | "package_name" | "packageName"))
-        {
-            return Ok(PreToolActionTypeV1::Package);
-        }
-        if record.keys().any(|key| PATH_KEYS.contains(&key.as_str())) {
-            return Ok(PreToolActionTypeV1::FileRead);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "url" | "uri" | "href" | "endpoint"))
-        {
-            return Ok(PreToolActionTypeV1::Network);
-        }
-    }
-    Ok(PreToolActionTypeV1::Unknown)
-}
+#[path = "policy_enforcement_post_action.rs"]
+mod post_action;
+use post_action::post_action_type;
+#[path = "policy_enforcement_omp_eval.rs"]
+mod eval_output;
 
 /// Apply the authenticated policy to a Rust-owned PostTool result. The
 /// source/content decision is intrinsic and therefore remains strongest even
@@ -390,10 +363,17 @@ pub(crate) fn apply_post_tool_policy(
         return Err("native_policy_mode_invalid".to_owned());
     }
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
-        && guard_command::pretool::bounded_task_metadata_output(&request.payload);
+        && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
+    let omp_output_action = (payload_kind == GuardHookPayloadKindV2::Inline)
+        .then(|| eval_output::bounded_output_action(request))
+        .flatten();
     let classified_action = post_action_type(request, payload_kind)?;
     let action_type = if task_metadata {
         PreToolActionTypeV1::Harness
+    } else if let Some(action) = omp_output_action {
+        // The complete input was re-proved as reads or a report. The output
+        // scan result and every applicable installed policy floor still join below.
+        action
     } else {
         classified_action
     };
@@ -426,7 +406,8 @@ pub(crate) fn apply_post_tool_policy(
         action_type,
         &FloorInput {
             facts: &facts,
-            reason_code: if task_metadata
+            reason_code: if (task_metadata
+                || omp_output_action == Some(PreToolActionTypeV1::Harness))
                 && matches!(
                     response.reason_code.as_str(),
                     "output_scan_allow" | "source_full_scan_allow"
@@ -466,12 +447,11 @@ pub(crate) fn apply_post_tool_policy(
     }
     if effective == "warn" && response.decision == "allow" {
         if intrinsic != "warn" {
+            // A warn floor over a proven allow is the silent policy warning,
+            // as on PreToolUse: the receipt keeps the warn and its code, and
+            // the harness renders nothing.
             response.reason_code = "native_policy_warning".to_owned();
-            response.reason = Some(
-                "HOL Guard raised a non-blocking warning under the installed native policy."
-                    .to_owned(),
-            );
-            response.notice = "warning".to_owned();
+            response.reason = None;
         }
         return Ok(response);
     }

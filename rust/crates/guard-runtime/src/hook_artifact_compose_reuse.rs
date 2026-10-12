@@ -6,8 +6,8 @@ use guard_command::approval_reuse::{
     evaluate_approval_reuse, ApprovalReuseDecision, APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
 };
 use guard_contracts::{
-    ClaimedReuseQueryV1, DecisionCopyQueryV1, GuardAction, SavedReuseQueryV1,
-    TrustedOverrideQueryV1,
+    ClaimedReuseQueryV1, DecisionBuildCopyQueryV1, DecisionCopyQueryV1, GuardAction,
+    SavedReuseQueryV1, TrustedOverrideQueryV1,
 };
 use serde_json::{json, Map, Value};
 
@@ -235,6 +235,32 @@ pub(crate) fn claimed_reuse(query: &ClaimedReuseQueryV1) -> Value {
         },
         "evidence": evidence,
     })
+}
+
+pub(crate) fn decision_build_copy(query: &DecisionBuildCopyQueryV1) -> Result<Value, String> {
+    use guard_command::decisions::{decision_from_legacy_policy_action, parse_signals};
+
+    let invalid = || "native_hook_artifact_compose_payload_invalid".to_owned();
+    let action = query
+        .copy
+        .policy_action
+        .as_str()
+        .and_then(GuardAction::from_canonical)
+        .ok_or_else(invalid)?;
+    let signals = parse_signals(&query.signals).map_err(|error| error.to_string())?;
+    let mut decision =
+        decision_from_legacy_policy_action(action, &query.reason, &signals).to_value();
+    let mut copy = query.copy.clone();
+    copy.base_user_body = decision["user_body"].clone();
+    copy.base_harness_message = decision["harness_message"].clone();
+    copy.base_dashboard_primary_detail = decision["dashboard_primary_detail"].clone();
+    let overlay = decision_copy(&copy);
+    let fields = decision.as_object_mut().ok_or_else(invalid)?;
+    let overrides = overlay["decision_overrides"]
+        .as_object()
+        .ok_or_else(invalid)?;
+    fields.extend(overrides.clone());
+    Ok(json!({"decision_v2": decision, "risk_headline": overlay["risk_headline"]}))
 }
 
 pub(crate) fn decision_copy(query: &DecisionCopyQueryV1) -> Value {

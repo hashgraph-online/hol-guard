@@ -46,6 +46,13 @@ EXTENSION_ADAPTERS = {
             "command.salesforce.sf.permission.delete",
             "Salesforce delete",
         ),
+        ExtensionAdapter(
+            "gh",
+            "command.github",
+            "command.github.delete",
+            "command.github.permission.delete-remote",
+            "GitHub delete",
+        ),
     )
 }
 
@@ -62,12 +69,13 @@ def extension_adapter(command: str) -> ExtensionAdapter:
     return adapter
 
 
-def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:
-    """Install a signed synthetic extension control for one denial case."""
+def _commit_extension_controls(
+    daemon: Any, guard_home: Path, extension_id: str, permissions: tuple[tuple[str, bool], ...]
+) -> int:
+    """Install one signed local-admin layer enabling an extension and setting each permission."""
     from ci.native_runtime.probe_installed_native_extensions import commit_controls, control, provision
     from codex_plugin_scanner.guard.approval_gate import update_settings
     from codex_plugin_scanner.guard.config import update_guard_settings
-    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
     from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
 
     password = secrets.token_urlsafe(32)
@@ -78,14 +86,32 @@ def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter
     )
     store = daemon._server.store
     provision(store)
+    controls = [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
+    controls += [
+        control(ControlTargetKind.PERMISSION, permission, ControlState.ENABLED if enabled else ControlState.DISABLED)
+        for permission, enabled in permissions
+    ]
+    return commit_controls(store, password, tuple(controls))
+
+
+def configure_extension_controls(
+    daemon: Any, guard_home: Path, extension_id: str, *, enabled_permissions: list[str]
+) -> int:
+    """Enable an extension with every listed permission explicitly allowed."""
+    return _commit_extension_controls(
+        daemon, guard_home, extension_id, tuple((permission, True) for permission in enabled_permissions)
+    )
+
+
+def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:
+    """Install a signed synthetic extension control for one denial case."""
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+
     permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id(adapter.rule_id)
     if permission is None or permission.permission_id != adapter.permission_id:
         raise RuntimeError(f"installed extension catalog lacks the reviewed {adapter.rule_id} permission")
-    enabled = control(ControlTargetKind.EXTENSION, adapter.extension_id, ControlState.ENABLED)
-    revision = commit_controls(
-        store,
-        password,
-        (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
+    revision = _commit_extension_controls(
+        daemon, guard_home, adapter.extension_id, ((permission.permission_id, False),)
     )
     return {
         "extension_id": adapter.extension_id,

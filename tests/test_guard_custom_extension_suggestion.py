@@ -7,9 +7,9 @@ from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import (
     common_utility_reject_message,
     is_common_shell_utility,
-    is_suggestable_custom_tool,
     observation_path_class,
-    suggestion_score,
+    suggestion_tool,
+    suggestion_verdicts,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     UnlistedCliIdentity,
@@ -19,6 +19,20 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 _SCREENSHOT_JUNK = ("script", "rg", "whoami", "vitest.mjs")
+
+
+def _verdict(**fields: object):
+    verdicts = suggestion_verdicts([suggestion_tool(**fields)])  # type: ignore[arg-type]
+    assert verdicts is not None
+    return verdicts[0]
+
+
+def is_suggestable_custom_tool(**fields: object) -> bool:
+    return _verdict(**fields)["suggestable"]
+
+
+def suggestion_score(**fields: object) -> int:
+    return _verdict(**fields)["score"]
 
 
 def test_screenshot_names_are_not_suggestable() -> None:
@@ -152,3 +166,31 @@ def test_recognize_explains_screenshot_utilities(tmp_path: Path) -> None:
     _, whoami_code, whoami_message = recognize_operator_cli("whoami", cwd=tmp_path, home_dir=tmp_path)
     assert whoami_code == "common_shell_utility"
     assert "identity" in whoami_message
+
+
+def test_native_failure_hides_suggestions_and_fails_identity_closed(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
+    from codex_plugin_scanner.guard.runtime import custom_extension_suggestion
+
+    monkeypatch.setattr(custom_extension_suggestion, "native_context_digest", lambda *_args, **_kwargs: None)
+    assert suggestion_verdicts([suggestion_tool(name="internal-deploy")]) is None
+    assert observation_path_class("/usr/bin/tool") == "unknown"
+    with track_local_cli_identity_failures() as failures:
+        assert is_common_shell_utility("internal-deploy")
+    assert failures == ["native_custom_extension_suggestion_unavailable"]
+    monkeypatch.setattr(
+        custom_extension_suggestion,
+        "native_context_digest",
+        lambda *_args, **_kwargs: {"status": "ok", "custom_extension_suggestion": [{"score": -1}]},
+    )
+    assert suggestion_verdicts([suggestion_tool(name="internal-deploy")]) is None
+
+
+def test_recognize_operator_cli_reports_native_outage_not_common_utility(tmp_path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.runtime import custom_extension_suggestion, local_cli_identity
+
+    monkeypatch.setattr(local_cli_identity, "identify_unlisted_cli", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(custom_extension_suggestion, "native_context_digest", lambda *_args, **_kwargs: None)
+    _, code, message = recognize_operator_cli("internal-deploy run", cwd=tmp_path, home_dir=tmp_path)
+    assert code == "native_unavailable"
+    assert message == custom_extension_suggestion.NATIVE_UNAVAILABLE_MESSAGE

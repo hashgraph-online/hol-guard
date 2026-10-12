@@ -134,6 +134,63 @@ pub(crate) fn drive_targets_quoted(segment: &crate::CommandSegmentV1) -> bool {
         || !shell_alters_backslash(&segment.text)
 }
 
+/// Whether every argument that begins with `~` reaches the program after the
+/// shell expands it to home, as the path proofs assume. A quoted or escaped
+/// `~` stays a literal relative path that names a different directory, so a
+/// segment that spells one is refused rather than proved against home.
+pub(crate) fn home_targets_unquoted(segment: &crate::CommandSegmentV1) -> bool {
+    !segment
+        .arguments
+        .iter()
+        .any(|argument| argument.starts_with('~'))
+        || !shell_keeps_tilde_literal(&segment.text)
+}
+
+/// Search reads also accept a quoted `~` when the working directory has no
+/// `~` entry: the literal relative path then names nothing, so the search
+/// reads nothing, and the home spelling has already cleared the read screens.
+pub(crate) fn search_home_targets_safe(
+    segment: &crate::CommandSegmentV1,
+    cwd: Option<&str>,
+    home_dir: Option<&str>,
+) -> bool {
+    home_targets_unquoted(segment)
+        || cwd
+            .map(|cwd| {
+                super::read_paths::expand_home_read_path(cwd, home_dir)
+                    .unwrap_or_else(|| cwd.to_owned())
+            })
+            .filter(|cwd| std::path::Path::new(cwd).is_absolute())
+            .is_some_and(|cwd| {
+                matches!(
+                    std::fs::symlink_metadata(std::path::Path::new(&cwd).join("~")),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound
+                )
+            })
+}
+
+fn shell_keeps_tilde_literal(text: &str) -> bool {
+    let mut quote = None;
+    let mut escaped = false;
+    for character in text.chars() {
+        if escaped {
+            escaped = false;
+            if character == '~' {
+                return true;
+            }
+            continue;
+        }
+        match (quote, character) {
+            (Some(_), '~') => return true,
+            (None | Some('"'), '\\') => escaped = true,
+            (None, '\'' | '"') => quote = Some(character),
+            (Some(open), _) if character == open => quote = None,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// A backslash the shell would remove or reinterpret: any unquoted backslash,
 /// or one inside double quotes that escapes the next character.
 fn shell_alters_backslash(text: &str) -> bool {
@@ -161,29 +218,29 @@ pub(crate) fn exact_drive_spelling(text: &str, canonical: &std::path::Path) -> b
     bytes.len() >= 3
         && bytes[1] == b':'
         && matches!(bytes[2], b'/' | b'\\')
-        && canonical.as_os_str() == format!(r"\\?\{}", text.replace('/', "\\")).as_str()
+        && canonical.as_os_str() == format!(r"\\?\{}", drive_separators(text)).as_str()
+}
+
+/// A drive path with each run of separators written as one backslash.
+/// Windows resolves `C:\\a\\b` and `C:/a//b` to `C:\a\b`, so this changes
+/// only the spelling of a separator, never which directory is named.
+#[cfg(any(windows, test))]
+fn drive_separators(text: &str) -> String {
+    let mut spelled = String::with_capacity(text.len());
+    for character in text.chars() {
+        if !matches!(character, '/' | '\\') {
+            spelled.push(character);
+        } else if !spelled.ends_with('\\') {
+            spelled.push('\\');
+        }
+    }
+    spelled
 }
 
 /// `exact_drive_spelling` for a drive-absolute target that must exist.
 #[cfg(windows)]
 pub(crate) fn exact_existing_drive_target(target: &str) -> bool {
     std::fs::canonicalize(target).is_ok_and(|canonical| exact_drive_spelling(target, &canonical))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::shell_alters_backslash;
-
-    #[test]
-    fn only_backslashes_the_shell_keeps_are_accepted() {
-        assert!(!shell_alters_backslash(r"cd 'C:\Users\a b' && mkdir out"));
-        assert!(!shell_alters_backslash(r#"cd "C:\Users\a" && mkdir out"#));
-        assert!(!shell_alters_backslash(r#"cd 'C:\a"b'"#));
-        assert!(shell_alters_backslash(r"cd C:\Users\a && mkdir out"));
-        assert!(shell_alters_backslash(r#"cd "C:\\Users""#));
-        assert!(shell_alters_backslash(r#"cd "C:\Users\$HOME""#));
-        assert!(shell_alters_backslash(r"cd 'C:\a' && echo \x"));
-    }
 }
 
 impl<'a> super::PathContext<'a> {
@@ -202,11 +259,65 @@ impl<'a> super::PathContext<'a> {
                     .iter()
                     .any(|name| name == "CDPATH")
         });
+        // rustup reads these before any toolchain file, and either one can
+        // name a toolchain directory. Without a stamped environment, the
+        // runtime's own environment is what a probe would inherit.
+        let rustup_override_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| rustup_selector(name))
+            }
+            None => !std::env::vars_os()
+                .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
+        };
         Self {
             home_dir,
             cwd,
             cdpath_unset,
+            rustup_override_absent,
         }
+    }
+}
+
+fn rustup_selector(name: &str) -> bool {
+    name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{drive_separators, shell_alters_backslash};
+
+    #[test]
+    fn repeated_drive_separators_spell_one_backslash() {
+        assert_eq!(
+            drive_separators(r"C:\\Users\\a\\project"),
+            r"C:\Users\a\project"
+        );
+        assert_eq!(
+            drive_separators("C:/Users//a/project"),
+            r"C:\Users\a\project"
+        );
+        assert_eq!(drive_separators(r"C:\Users\a"), r"C:\Users\a");
+        // Case, dot components and short names are untouched, so they still
+        // fail the exact comparison against the canonical path.
+        assert_eq!(
+            drive_separators(r"c:\\users\\..\\PROGRA~1"),
+            r"c:\users\..\PROGRA~1"
+        );
+    }
+
+    #[test]
+    fn only_backslashes_the_shell_keeps_are_accepted() {
+        assert!(!shell_alters_backslash(r"cd 'C:\Users\a b' && mkdir out"));
+        assert!(!shell_alters_backslash(r#"cd "C:\Users\a" && mkdir out"#));
+        assert!(!shell_alters_backslash(r#"cd 'C:\a"b'"#));
+        assert!(shell_alters_backslash(r"cd C:\Users\a && mkdir out"));
+        assert!(shell_alters_backslash(r#"cd "C:\\Users""#));
+        assert!(shell_alters_backslash(r#"cd "C:\Users\$HOME""#));
+        assert!(shell_alters_backslash(r"cd 'C:\a' && echo \x"));
     }
 }
 

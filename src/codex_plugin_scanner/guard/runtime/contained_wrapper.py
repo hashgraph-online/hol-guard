@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import re
 import shlex
 import sys
@@ -112,10 +113,41 @@ def _bounded_filter(arguments: list[tuple[str, bool]]) -> int | None:
     return None
 
 
-def peel_contained_wrapper(command: str, *, workspace: Path) -> tuple[str, Path, OutputFilter | None] | None:
+def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
+    """The repository holding a cd target outside the hook workspace, as native authority finds it.
+
+    The nearest ancestor with a `.git` entry, strictly below home or the system
+    temporary directory and owned by this user. The sink rebases its approved
+    root there, so the run is contained to that repository exactly as it would
+    be from a session started in it.
+    """
+    if home is None:
+        return None
+    directory = directory.resolve(strict=True)
+    for base in (home, Path("/tmp")):
+        try:
+            base = base.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if directory == base or not _path_is_within(directory, base):
+            continue
+        candidate = directory
+        while candidate != base:
+            if os.path.lexists(candidate / ".git"):
+                return candidate if candidate.stat().st_uid == os.getuid() else None
+            candidate = candidate.parent
+        return None
+    return None
+
+
+def peel_contained_wrapper(
+    command: str, *, workspace: Path, home: Path | None = None
+) -> tuple[str, Path, OutputFilter | None] | None:
     """Return the core command, its directory, and output filter, or None when nothing is wrapped.
 
-    Raises ValueError (or OSError for a missing cd target) for shapes native authority never upgrades.
+    A cd target must lie in the workspace or, given `home`, in a sibling
+    repository (see `sibling_project_root`). Raises ValueError (or OSError for
+    a missing cd target) for shapes native authority never upgrades.
     """
     tokens, exact = _lex(command)
     directory = workspace
@@ -128,7 +160,10 @@ def peel_contained_wrapper(command: str, *, workspace: Path) -> tuple[str, Path,
         if not exact or not target.is_absolute():
             raise ValueError("relative cd target")
         directory = target.resolve(strict=True)
-        if not directory.is_dir() or not _path_is_within(directory, workspace.resolve(strict=True)):
+        if not directory.is_dir() or not (
+            _path_is_within(directory, workspace.resolve(strict=True))
+            or sibling_project_root(directory, home=home) is not None
+        ):
             raise ValueError("cd target outside the workspace")
         tokens, wrapped = tokens[3:], True
     if ("|", True) in tokens:

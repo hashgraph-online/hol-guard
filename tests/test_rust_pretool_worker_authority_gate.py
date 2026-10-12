@@ -74,3 +74,61 @@ def test_missing_native_authority_link_fails_closed(
     assert call in source
     path.write_text(source.replace(call, replacement, 1), encoding="utf-8")
     assert expected in GATE["_worker_failures"](worker_checkout)
+
+
+@pytest.mark.parametrize(
+    ("call", "replacement", "expected"),
+    [
+        (
+            "_edge_harness_response(edge)",
+            "unavailable_render(edge)",
+            "does not return the native edge harness response",
+        ),
+        (
+            "        response = _edge_harness_response(edge)\n        mediation =",
+            "        response = harness_json_from_native_post_tool(native_harness, native_result)\n        mediation =",
+            "renders PostToolUse in Python",
+        ),
+    ],
+)
+def test_responses_must_come_from_the_native_edge_rendering(
+    worker_checkout: Path,
+    call: str,
+    replacement: str,
+    expected: str,
+) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    assert call in source
+    path.write_text(source.replace(call, replacement), encoding="utf-8")
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_aliased_and_uncalled_post_tool_review_references_are_detected(worker_checkout: Path) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    expected = "worker decides PostToolUse in Python instead of the native edge"
+    path.write_text(
+        source + "\n\nfrom native_edge import review_post_tool as rpt\n\ndef run(payload):\n    return rpt(payload)\n",
+        encoding="utf-8",
+    )
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+    path.write_text(
+        source + "\n\ndef remember(edge):\n    fn = edge.review_post_tool\n    return fn\n",
+        encoding="utf-8",
+    )
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_python_post_tool_review_is_detected_in_code_not_comments(worker_checkout: Path) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    expected = "worker decides PostToolUse in Python instead of the native edge"
+    path.write_text(source + "\n# review_post_tool moved to the native edge.\n", encoding="utf-8")
+    assert not any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+    path.write_text(source + "\n\ndef review_post_tool(payload):\n    return payload\n", encoding="utf-8")
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_native_pre_and_post_tool_contract_tokens_present() -> None:
+    assert GATE["_contract_failures"](ROOT) == []

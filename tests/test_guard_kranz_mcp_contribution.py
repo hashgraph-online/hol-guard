@@ -7,20 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
-    mcp_tool_state,
     validate_mcp_contribution,
 )
 
+from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_extension_driver import apply_local_mcp_extension_decision
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical
@@ -124,21 +123,6 @@ def test_canonical_native_compilation_contains_mcp_coverage(compiled: dict) -> N
     assert registry.get("command.kranz") is not None
 
 
-@pytest.mark.parametrize("tool", (*MUTATIONS, "future_mutation"))
-def test_locally_enabled_mutations_require_review(kranz_payload: dict, tool: str) -> None:
-    assert mcp_tool_state(kranz_payload, tool) == "review"
-    decision = mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
-    assert decision is not None
-    assert decision[0:2] == ("review", "catalog-mcp-extension")
-
-
-@pytest.mark.parametrize("tool", OBSERVATIONS)
-def test_observation_tools_inherit_without_allow_grants(kranz_payload: dict, tool: str) -> None:
-    assert mcp_tool_state(kranz_payload, tool) == "inherit"
-    for current in ("allow", "review", "block"):
-        assert mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
-
-
 @pytest.mark.parametrize(
     "layers",
     [
@@ -154,12 +138,12 @@ def test_observation_tools_inherit_without_allow_grants(kranz_payload: dict, too
 def test_contribution_stays_inert_without_effective_local_enable(kranz_payload: dict, layers) -> None:
     store = _AuthorityStore(tuple(_layer(kind, CATALOG_ID, state) for kind, state in layers))
     for tool in MUTATIONS:
-        assert mcp_server_grants.apply_contributed_mcp_decision(store, artifact(tool), "allow") is None
+        assert extension_driver.apply_contributed_mcp_decision(store, artifact(tool), "allow") is None
 
 
 @pytest.mark.parametrize("current", ["block", "require-reapproval", "review", "sandbox-required"])
 def test_review_default_preserves_stronger_floors(kranz_payload: dict, current: str) -> None:
-    assert mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact("action_run"), current) is None
+    assert extension_driver.apply_contributed_mcp_decision(enabled_store(), artifact("action_run"), current) is None
 
 
 def matched(candidate) -> bool:
@@ -168,7 +152,7 @@ def matched(candidate) -> bool:
     ``action_run`` carries the review default, so a match strengthens an allow to
     review while a non-match decides nothing.
     """
-    decision = mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), candidate, "allow")
+    decision = extension_driver.apply_contributed_mcp_decision(enabled_store(), candidate, "allow")
     if decision is None:
         return False
     assert decision[0:2] == ("review", "catalog-mcp-extension")
@@ -221,10 +205,6 @@ def test_this_device_grant_precedes_catalog_defaults(monkeypatch, tmp_path: Path
         commands=(LocalCliCommand("action_run", "Run action", "action_run", "Run action"),),
     )
 
-    def unexpected_contributed_decision(**_kwargs):
-        pytest.fail("A this-device grant must take precedence over contributed defaults")
-
-    monkeypatch.setattr(mcp_server_grants, "native_contributed_mcp_decision", unexpected_contributed_decision)
     decision = apply_local_mcp_extension_decision(store, tool, "review")
     assert decision is not None
     assert decision[0:2] == (expected, "local-mcp-extension")

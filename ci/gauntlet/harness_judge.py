@@ -14,8 +14,9 @@ import shlex
 from typing import Any
 
 from .catalog import Scenario
+from .interruptions import case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
-from .proofs import BLOCK_REASONS, required_checks
+from .proofs import BLOCK_REASONS, block_reasons, required_checks
 
 _PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
@@ -150,7 +151,26 @@ def _observed_lifecycle_answers(rows: list[dict[str, Any]]) -> int:
 def assess_harness_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
     """Return outcome, reason and the facts the outcome rests on."""
     outcome, reason = _outcome(scenario, case)
-    return {"outcome": outcome, "reason": reason, "harness": case.get("harness")}
+    return {
+        "outcome": outcome,
+        "reason": reason,
+        "harness": case.get("harness"),
+        "interruptions": _interruptions(scenario, case),
+    }
+
+
+def _interruptions(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
+    """Every hook row (pre, post, prompt and lifecycle) plus approval rows, judged as interruptions.
+
+    A row whose event cannot be resolved is unproven rather than skipped.
+    """
+    return case_interruptions(
+        scenario,
+        case.get("guard_rows", []),
+        case.get("approval_rows", []),
+        case.get("approval_delta", 0),
+        str(case.get("harness")),
+    )
 
 
 def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
@@ -210,6 +230,13 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
         return "fail", f"Guard stopped ordinary work ({stops[0]['reason_code']})"
     if case.get("approval_delta"):
         return "fail", "ordinary work created an approval request"
+    interruptions = _interruptions(scenario, case)
+    if interruptions["benign"] and interruptions["events"]:
+        if any(e["kind"] == "unproven" for e in interruptions["events"]):
+            return "harness-error", "Guard evidence cannot prove ordinary work was quiet: " + describe(
+                [e for e in interruptions["events"] if e["kind"] == "unproven"]
+            )
+        return "fail", "ordinary work was interrupted: " + describe(interruptions["events"])
     if scenario.oracle == "watch-command":
         watch_error = _watch_error(case, decisions)
         if watch_error:
@@ -256,7 +283,7 @@ def _targets_scenario(case: dict[str, Any], scenario: Scenario, decision: dict[s
 def _block_outcome(
     scenario: Scenario, case: dict[str, Any], decisions: list[dict[str, Any]], calls: list[Any]
 ) -> tuple[str, str]:
-    expected = {_EXTENSION_REASON} if scenario.oracle == "blocked-extension" else BLOCK_REASONS
+    expected = {_EXTENSION_REASON} if scenario.oracle == "blocked-extension" else block_reasons(scenario)
     matching = [d for d in decisions if _targets_scenario(case, scenario, d)]
     if not matching:
         if not calls:

@@ -282,7 +282,6 @@ def test_ledger_accepts_parametrized_node_references(ledger_repository, referenc
         "tests/test_native.py::",
         "tests/test_native.py::TestNative::::test_roundtrip",
         "tests/test_native.py::test_roundtrip[",
-        "tests/test_native.py::test_roundtrip[]",
         "tests/test_native.py::test_roundtrip[param",
         "tests/test_native.py::test_roundtrip]",
         "tests/test_native.py::not-a-node",
@@ -303,6 +302,7 @@ def test_ledger_rejects_malformed_node_identity(ledger_repository, reference: st
     [
         # Parametrized base, but pytest never generated this suffix.
         "tests/test_native.py::TestNative::test_roundtrip[invented]",
+        "tests/test_native.py::TestNative::test_roundtrip[]",
         # Bracketed reference to a non-parametrized test is not collectible.
         "tests/test_native.py::test_plain[param]",
     ],
@@ -316,6 +316,18 @@ def test_ledger_rejects_noncollectible_parametrized_nodes(ledger_repository, ref
     ledger["retired_tests"][0]["replacement_nodes"] = [reference]
     with pytest.raises(RuntimeError, match="replacement test node is missing"):
         _check(ledger_repository)
+
+
+def test_ledger_accepts_real_empty_string_parameter_identity(ledger_repository) -> None:
+    root, _, ledger = ledger_repository
+    (root / "tests/test_native.py").write_text(
+        "import pytest\n@pytest.mark.parametrize('value', [''])\ndef test_blank(value):\n    pass\n",
+        encoding="utf-8",
+    )
+    ledger["retired_tests"][0]["old_node"] = "tests/test_old.py::test_blank[]"
+    ledger["retired_tests"][0]["replacement_nodes"] = ["tests/test_native.py::test_blank[]"]
+    ledger["preserved_tests"] = []
+    assert _check(ledger_repository)["replacement_tests"] == 1
 
 
 def test_ledger_resolves_current_repository_mappings() -> None:

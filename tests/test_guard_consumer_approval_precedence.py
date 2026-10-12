@@ -26,7 +26,11 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.consumer.service import _consumer_execution_identity
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
+from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.approval_context import (
     build_approval_context_token,
     parse_approval_context_token,
@@ -51,7 +55,7 @@ def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
         ) -> dict[str, str]:
             return dict(inherited)
 
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: LaunchAdapter())
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
 
 
 def test_consumer_execution_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
@@ -195,9 +199,9 @@ def _install_codex_native_hooks(context: HarnessContext) -> None:
 
 
 def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() -> None:
-    first = guard_runner_module._guard_run_launch_environment_hash({"B": "two", "A": "one"})
-    reordered = guard_runner_module._guard_run_launch_environment_hash({"A": "one", "B": "two"})
-    changed = guard_runner_module._guard_run_launch_environment_hash({"A": "one", "B": "changed"})
+    first = guard_run_launch._guard_run_launch_environment_hash({"B": "two", "A": "one"})
+    reordered = guard_run_launch._guard_run_launch_environment_hash({"A": "one", "B": "two"})
+    changed = guard_run_launch._guard_run_launch_environment_hash({"A": "one", "B": "changed"})
 
     assert first == reordered
     assert first != changed
@@ -377,16 +381,16 @@ def test_guard_run_claims_exact_saved_review_allow_only_at_real_launch(
     context_hash = str(initial["artifacts"][0]["approval_context_hash"])
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=tmp_path / "workspace")
     launch_calls: list[object] = []
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *args, **kwargs: (
             launch_calls.append((args, kwargs)) or subprocess.CompletedProcess(args=[], returncode=0)
         ),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -491,12 +495,12 @@ def test_guard_run_executes_canonical_launch_argv_pinned_after_saved_claim(
         authority_events.append("claim")
         return original_claim(decisions, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: LaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", launch)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", launch)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -560,16 +564,16 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
             )
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: OpenCodeHarnessAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: OpenCodeHarnessAdapter())
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate_overlay)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("a changed prepared launch environment must not execute"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         store,
@@ -618,15 +622,15 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
             executable_alias.symlink_to(attacker_codex)
             return super().launch_command_from_authorized_plan(*args, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module,
+        guard_run_launch,
         "get_adapter",
         lambda _harness: SwapAtAuthorizedSetupAdapter(),
     )
     monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: False)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         store,
@@ -673,15 +677,15 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
             executable_alias.symlink_to(attacker_codex)
             return super().launch_command_from_authorized_plan(*args, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module,
+        guard_run_launch,
         "get_adapter",
         lambda _harness: SwapAtAuthorizedSetupAdapter(),
     )
     monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: False)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         store,
@@ -745,10 +749,10 @@ def test_guard_run_executes_in_previewed_canonical_cwd_after_workspace_symlink_r
         ) -> dict[str, str]:
             return dict(inherited)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: RetargetingAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RetargetingAdapter())
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -799,11 +803,11 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
         executions.append((list(command), cwd))
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: adapter)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", execute)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: adapter)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=config.guard_home),
         store,
@@ -874,12 +878,12 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
 
     monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
     monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: RecordingGrokAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", execute)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "grok",
         context,
         store,
@@ -944,11 +948,11 @@ def test_no_saved_grok_preview_registers_once_only_in_authorized_finalizer(
 
     monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
     monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: RecordingGrokAdapter())
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", execute)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "grok",
         context,
         store,
@@ -1000,16 +1004,16 @@ def test_guard_run_rejects_launch_plan_changed_after_saved_claim(
             executable_alias.symlink_to("/bin/echo")
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: LaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_replace_executable)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("a changed post-claim executable must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1061,15 +1065,15 @@ def test_guard_run_reloads_local_config_after_claim_before_launch(
         config_refreshes.append(fresh)
         return fresh
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_block)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("a stronger refreshed config must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1120,14 +1124,14 @@ def test_guard_run_reloads_current_config_after_unpersisted_interactive_allow_on
         config_refreshes.append(current_config)
         return current_config
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("an allow-once approved under stale policy must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1198,15 +1202,15 @@ def test_guard_run_redetects_interpreted_entrypoint_after_claim_before_launch(
             entrypoint.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", detect_current)
+    monkeypatch.setattr(wrapper_run, "detect_harness", detect_current)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("changed post-claim entrypoint must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1317,15 +1321,15 @@ def test_guard_run_redetects_changed_mcp_command_immediately_after_claim(
         claim_completed = claimed
         return claimed
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", detect_current)
+    monkeypatch.setattr(wrapper_run, "detect_harness", detect_current)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_expose_changed_config)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("changed post-claim MCP command must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / "guard-home"),
         store,
@@ -1374,16 +1378,16 @@ def test_guard_run_successful_persistent_exact_claim_finalizes_safe_persistence(
         "2026-07-17T00:00:00+00:00",
     )
     launch_calls: list[object] = []
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *args, **kwargs: (
             launch_calls.append((args, kwargs)) or subprocess.CompletedProcess(args=[], returncode=0)
         ),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1452,15 +1456,15 @@ def test_guard_run_retained_claim_disappearing_after_claim_fails_closed(
                     connection.execute("delete from policy_decisions where decision_id = ?", (decision_id,))
         return True
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_delete_retained_row)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("missing retained approval must not be treated as consumed proof"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1509,14 +1513,14 @@ def test_guard_run_successful_reusable_exact_claim_finalizes_safe_persistence(
         workspace=tmp_path / "workspace",
         request_id="consumer-reusable-exact",
     )
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *args, **_kwargs: subprocess.CompletedProcess(args=args, returncode=0),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1558,9 +1562,9 @@ def test_guard_run_dry_run_never_claims_exact_saved_review_allow(
     initial = evaluate_detection(detection, store, config, persist=False)
     context_hash = str(initial["artifacts"][0]["approval_context_hash"])
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=tmp_path / "workspace")
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1624,14 +1628,14 @@ def test_guard_run_blocked_sibling_leaves_saved_review_allow_unclaimed(
         context_hash=context_hash,
         workspace=tmp_path / "workspace",
     )
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("blocked aggregate must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1683,20 +1687,20 @@ def test_guard_run_unverified_preclaim_launch_identity_is_persisted_separately_f
         ) -> dict[str, str]:
             return dict(inherited)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "get_adapter", lambda _harness: MissingLaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: MissingLaunchAdapter())
     monkeypatch.setattr(
         store,
         "claim_approval_reuse_decisions",
         lambda *_args, **_kwargs: claim_calls.append(object()) or True,
     )
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("an unverified launch identity must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1758,15 +1762,15 @@ def test_guard_run_atomic_claim_exception_is_persisted_without_error_disclosure_
     def raise_claim_error(*_args, **_kwargs) -> bool:
         raise sqlite3.OperationalError(raw_database_error)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", raise_claim_error)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("an exceptional approval claim must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -1825,14 +1829,14 @@ def test_guard_run_batch_claim_failure_consumes_no_saved_review_allow(
         return False
 
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", fail_batch_claim)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("failed approval claim must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -2294,15 +2298,15 @@ def test_runtime_detector_telemetry_status_change_after_claim_prevents_launch(
             error_type=error_type,
         )
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "_evaluation_with_detector_registry", detector_evaluation)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "_evaluation_with_detector_registry", detector_evaluation)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("changed detector execution status must prevent launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -2362,11 +2366,11 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
         launches.append(list(command))
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "_evaluation_with_detector_registry", detector_evaluation)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", launch)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "_evaluation_with_detector_registry", detector_evaluation)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", launch)
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,

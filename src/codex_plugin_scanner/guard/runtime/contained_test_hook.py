@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
-from .contained_wrapper import bounded_output, peel_contained_wrapper
+from .contained_wrapper import bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import is_inline_eval, prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
@@ -27,6 +27,7 @@ from .restricted_pytest_model import (
     PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
 )
+from .restricted_pytest_validation import _path_is_within
 
 _MAX_REQUEST_BYTES = 1_048_576
 _FAILURE = "contained_test_authorization_failed"
@@ -114,11 +115,13 @@ def run_authorized_contained_test(
     authorize: Callable[[dict[str, object]], object],
     timeout_seconds: int,
     cwd: Path | None = None,
+    home_dir: Path | None = None,
 ) -> int:
     """Recheck native authority for the original input before protected execution.
 
     `workspace` stays the approved root for dependency and profile resolution;
-    `cwd` is only the directory a peeled `cd` selected to run in.
+    `cwd` is only the directory a peeled `cd` selected to run in. A `cd` into a
+    sibling repository moves the approved root to that repository.
     """
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
@@ -126,7 +129,7 @@ def run_authorized_contained_test(
     if cwd is None:
         cwd = workspace
     try:
-        peeled = peel_contained_wrapper(tool_input["command"], workspace=workspace)
+        peeled = peel_contained_wrapper(tool_input["command"], workspace=workspace, home=home_dir)
     except (OSError, RuntimeError, ValueError) as error:
         raise _reject() from error
     if peeled is not None:
@@ -142,6 +145,11 @@ def run_authorized_contained_test(
         ):
             raise _reject()
         core, directory, output = peeled
+        if not _path_is_within(directory, workspace.resolve(strict=True)):
+            sibling = sibling_project_root(directory, home=home_dir)
+            if sibling is None:
+                raise _reject()
+            workspace = sibling
         with bounded_output(output):
             return run_authorized_contained_test(
                 {**payload, "cwd": str(directory), "tool_input": {**tool_input, "command": core}},
@@ -149,6 +157,7 @@ def run_authorized_contained_test(
                 authorize=authorize,
                 timeout_seconds=timeout_seconds,
                 cwd=directory,
+                home_dir=home_dir,
             )
     try:
         command = shlex.split(tool_input["command"], posix=True)
@@ -173,6 +182,7 @@ def run_authorized_contained_test(
     vitest = bool(command) and (
         Path(command[0]).name in {"bunx", "npx", "vitest"}
         or restricted_vitest.bun_vitest_invocation(command) is not None
+        or restricted_vitest.tsx_test_invocation(command) is not None
         or (
             len(command) > 1
             and Path(command[0]).name in {"node", "nodejs"}

@@ -25,6 +25,17 @@ pub(crate) fn remote_mcp_endpoint_identity(value: &str) -> Option<String> {
     normalized_endpoint(value)
 }
 
+/// Normalize a configured URL, retaining its validated query for launch identity.
+pub fn normalized_remote_mcp_url(value: &str) -> Option<String> {
+    let endpoint = normalized_endpoint(value)?;
+    let query = normalized_component(split_https(value)?.query, true, "")?;
+    Some(if query.is_empty() {
+        endpoint
+    } else {
+        format!("{endpoint}?{query}")
+    })
+}
+
 fn is_unreserved(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~')
 }

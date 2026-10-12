@@ -6,6 +6,10 @@ use evaluate::evaluate_signals;
 mod command_rewrite;
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "generic_omp.rs"]
+mod omp;
+#[path = "generic_pure_eval.rs"]
+mod pure_eval;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
@@ -47,7 +51,7 @@ mod agent_metadata;
 
 /// Reuse the exact host-input proof after execution; output content still
 /// requires its independent native scan and installed policy enforcement.
-pub fn bounded_task_metadata_output(payload: &serde_json::Value) -> bool {
+pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) -> bool {
     let Some(root) = payload.as_object() else {
         return false;
     };
@@ -70,7 +74,11 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value) -> bool {
         })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
-    agent_metadata::bounded_task_list(&serde_json::Value::Object(input), Some(tool))
+    let input = serde_json::Value::Object(input);
+    if harness == "omp" && omp::bounded_delegation_metadata(&input) {
+        return true;
+    }
+    agent_metadata::bounded_task_list(&input, Some(tool))
 }
 #[path = "generic_tools.rs"]
 mod tools;
@@ -114,6 +122,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             home_dir,
             cwd,
             cdpath_unset: false,
+            rustup_override_absent: false,
         },
         None,
     )
@@ -128,16 +137,18 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
-    evaluate_envelope(
-        harness,
-        event,
-        payload,
-        controls,
-        deadline,
-        context,
-        execution_environment,
-        true,
-    )
+    super::git_probe::with_memo(|| {
+        evaluate_envelope(
+            harness,
+            event,
+            payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            true,
+        )
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -154,7 +165,10 @@ fn evaluate_envelope(
     let context =
         super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let super::PathContext { home_dir, cwd, .. } = context;
-    let mut signals = match extract_generic_signals(payload) {
+    let yield_payload = (harness == "omp")
+        .then(|| omp::yield_signal_payload(payload))
+        .flatten();
+    let mut signals = match extract_generic_signals(yield_payload.as_ref().unwrap_or(payload)) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
@@ -162,9 +176,14 @@ fn evaluate_envelope(
     // skips the command authority but still passes the command controls below.
     let search_scope_proven = event == "PreToolUse"
         && harness == "claude-code"
-        && signals.tool_name.as_deref() == Some("Grep")
         && signals.url_values.is_empty()
-        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
+        && match signals.tool_name.as_deref() {
+            Some("Grep") => {
+                super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd)
+            }
+            Some("Glob") => super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd),
+            _ => false,
+        };
     // Codex sends an edit as `apply_patch` with the patch body in `command`.
     // That body is an edit description, not shell, so it has its own proof.
     let apply_patch_proven = event == "PreToolUse"
@@ -217,6 +236,19 @@ fn evaluate_envelope(
         && !signals.package_present
         && signals.path_values.is_empty()
         && signals.url_values.is_empty();
+    let omp_result = omp::evaluate(
+        payload,
+        &signals,
+        &omp::OmpContext {
+            yield_report_verified: yield_payload.is_some(),
+            harness,
+            event,
+            controls,
+            deadline,
+            path: context,
+            execution_environment,
+        },
+    );
     let command_decision = signals
         .command
         .as_deref()
@@ -272,6 +304,10 @@ fn evaluate_envelope(
             "native_exact_safe_file_write",
             "The Rust authority proved every file this patch adds or updates is an ordinary workspace file that clears sensitive-path checks.",
         )
+    } else if let Some(omp_result) = omp_result {
+        omp_result
+    } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
+        pure_result
     } else if task_metadata {
         generic_result(
             generic_action(harness, event, PreToolActionTypeV1::Harness,
@@ -400,11 +436,14 @@ fn evaluate_envelope(
             .filter(|reason| *reason != "native_git_readonly_containment_required")
         })
     });
-    // The read-only credential-filtering backend currently exists on macOS.
-    // Other platforms retain review until they can enforce the same profile.
+    // macOS only (the credential-filtering profile); only harnesses that rewrite
+    // into the contained sink get the receipt, others would see a bare deny.
     if cfg!(target_os = "macos")
         && event == "PreToolUse"
-        && matches!(harness, "omp" | "oh-my-pi" | "zcode")
+        && matches!(
+            harness,
+            "omp" | "oh-my-pi" | "zcode" | "claude-code" | "codex"
+        )
         && cwd.is_some()
         && (result.action.action_type == PreToolActionTypeV1::Command
             || (matches!(

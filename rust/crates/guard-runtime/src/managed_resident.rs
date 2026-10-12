@@ -191,6 +191,15 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     Err("native_resident_stop_unavailable".to_owned())
 }
 
+/// Forget the crash-loop history of this runtime's resident so the next
+/// request may start it immediately.  This only lifts the restart pacing; the
+/// resident itself is still started by the normal authenticated client path.
+pub(crate) fn reset_restart_budget(state_base: &Path) -> Result<(), String> {
+    let digest = runtime_digest()?;
+    let scope = state_scope(state_base, &digest)?;
+    restart_budget::clear(&scope)
+}
+
 pub(crate) fn serve_managed(
     state_base: &Path,
     generation: u64,
@@ -389,6 +398,19 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
 /// legitimately read hundreds of megabytes and is granted a longer ceiling.
 const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
 const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
+/// Contained local runners honour the caller's process timeout (up to ten
+/// minutes) plus a minute of transport slack for the probe and snapshot, so their budget must not be clamped to the
+/// nine-second ceiling that would abort a legitimate test run mid-flight. The
+/// package-shim admin op shares it: a probe runs each installed shim under its
+/// own per-shim timeout.
+const CONTAINED_RUNNER_TIMEOUT_CEILING_MS: u64 = 670_000;
+/// A Codex resume retry waits up to a minute for the app server to accept
+/// the turn and up to its busy timeout for the store; the caller adds five
+/// seconds of transport grace.
+const CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS: u64 =
+    guard_contracts::CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS
+        + guard_contracts::CODEX_REQUEST_RESUME_MAX_BUSY_TIMEOUT_MS
+        + 5_000;
 
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -396,7 +418,14 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
         .as_ref()
         .and_then(|value| value.get("operation")?.as_str())
     {
-        Some("skill_directory_identity") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        Some("skill_directory_identity" | "package_context_build") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        Some(
+            "contained_node_execute"
+            | "contained_typescript_execute"
+            | "contained_package_script_execute"
+            | "shim_admin",
+        ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
+        Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
         _ => CLIENT_TIMEOUT_CEILING_MS,
     };
     let budget = value

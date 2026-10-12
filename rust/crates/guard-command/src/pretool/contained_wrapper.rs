@@ -29,8 +29,38 @@ fn text(model: &CanonicalCommandV1, start: usize, end: usize) -> Option<String> 
     Some(text.trim().to_owned())
 }
 
-/// Peel a verified `cd <workspace dir> &&` prefix and a final bounded
-/// `| tail -N`/`| head -N` filter, returning the sole core invocation.
+/// The repository holding a `cd` target outside the hook workspace: the
+/// nearest ancestor with a `.git` entry, strictly below home or the system
+/// temporary directory, and owned by the agent's user. Agents step into a
+/// sibling checkout or worktree this way; the execution sink rebases its
+/// approved root to the same directory, so the run is contained to that
+/// repository exactly as it would be from a session started there.
+#[cfg(unix)]
+fn sibling_project_root(target: &std::path::Path, home: &str) -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let uid = nix::unistd::getuid().as_raw();
+    [std::path::Path::new(home), std::path::Path::new("/tmp")]
+        .iter()
+        .filter_map(|base| std::fs::canonicalize(base).ok())
+        .find(|base| target.starts_with(base) && target != base.as_path())
+        .and_then(|base| {
+            target
+                .ancestors()
+                .take_while(|directory| *directory != base)
+                .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+                .filter(|root| std::fs::metadata(root).is_ok_and(|meta| meta.uid() == uid))
+                .map(std::path::Path::to_path_buf)
+        })
+}
+
+#[cfg(not(unix))]
+fn sibling_project_root(_target: &std::path::Path, _home: &str) -> Option<std::path::PathBuf> {
+    None
+}
+
+/// Peel a verified `cd <workspace or sibling repository dir> &&` prefix and
+/// a final bounded `| tail -N`/`| head -N` filter, returning the sole core
+/// invocation.
 /// Classification only: the execution sink peels the same shape and
 /// re-authorizes the core in the resolved directory before running it.
 pub(super) fn contained_core(
@@ -45,7 +75,10 @@ pub(super) fn contained_core(
     if segments.first()?.executable.as_deref() == Some("cd") {
         let target = super::segment_proof::verified_cwd_compound_context(model, context)?;
         let workspace = std::fs::canonicalize(context.cwd?).ok()?;
-        if !std::path::Path::new(&target).starts_with(&workspace) {
+        let target = std::path::Path::new(&target);
+        if !target.starts_with(&workspace)
+            && sibling_project_root(target, context.home_dir?).is_none()
+        {
             return None;
         }
         start = 1;

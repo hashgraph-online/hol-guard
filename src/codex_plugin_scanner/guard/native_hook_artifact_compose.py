@@ -31,8 +31,10 @@ _TIMEOUT_SECONDS = 5.0
 _FIELDS: dict[str, frozenset[str]] = {
     "policy_stack": frozenset(
         {
-            "config_action",
-            "approval_context_config_action",
+            "policy_config",
+            "runtime",
+            "approval_context",
+            "data_flow_strong",
             "cli_action",
             "payload_action_present",
             "payload_action",
@@ -42,7 +44,6 @@ _FIELDS: dict[str, frozenset[str]] = {
             "has_package",
             "package_policy_action",
             "has_data_flow",
-            "data_flow_configured_action",
             "has_scanner",
             "scanner_action",
             "has_compound_findings",
@@ -55,6 +56,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "scanner_risk_signals",
         }
     ),
+    "config_action": frozenset({"policy_config", "artifact"}),
     "tool_grant_apply": frozenset(),
     "grant_settle": frozenset(
         {"current_action", "policy_action", "approval_context_action", "granted_action", "native_floor"}
@@ -120,6 +122,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "remembered_rule_reason",
         }
     ),
+    "decision_build_copy": frozenset({"copy", "reason", "signals"}),
 }
 
 # The exact answer shape of each query kind. Spec letters: a action,
@@ -128,6 +131,7 @@ _FIELDS: dict[str, frozenset[str]] = {
 _ANSWERS: dict[str, dict[str, str]] = {
     "policy_stack": {
         "approval_context_config_action": "a",
+        "auto_stop_events": "l",
         "approval_context_data_flow_action": "A",
         "approval_context_policy_action": "a",
         "current_config_action": "a",
@@ -145,6 +149,7 @@ _ANSWERS: dict[str, dict[str, str]] = {
         "trusted_cli_action": "A",
         "untrusted_payload_action": "A",
     },
+    "config_action": {"action": "a", "auto_stop_events": "l"},
     "tool_grant_apply": {"approval_context_policy_action": "a", "current_policy_action": "a", "policy_action": "a"},
     "grant_settle": {"approval_context_policy_action": "a", "current_policy_action": "a", "policy_action": "a"},
     "saved_reuse": {"approval_reuse": "d", "approval_reuse_source": "S", "policy_action": "a"},
@@ -159,6 +164,7 @@ _ANSWERS: dict[str, dict[str, str]] = {
         "trusted_request_override_reason": "S",
     },
     "decision_copy": {"decision_overrides": "d", "risk_headline": "S"},
+    "decision_build_copy": {"decision_v2": "d", "risk_headline": "S"},
 }
 
 
@@ -190,6 +196,10 @@ class NativeHookComposeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+class NativeHookComposeValidationError(ValueError):
+    """The bound healthy owner refused invalid decision-copy facts."""
 
 
 def native_hook_compose(kind: str, fields: Mapping[str, object], *, guard_home: Path | None) -> dict[str, object]:
@@ -230,6 +240,15 @@ def native_hook_compose(kind: str, fields: Mapping[str, object], *, guard_home: 
         raise NativeHookComposeError(_UNAVAILABLE)
     status, code = response.get("status"), response.get("code")
     if status == "error":
+        payload = response.get("payload")
+        if (
+            code == "native_hook_artifact_compose_validation_refused"
+            and isinstance(payload, dict)
+            and payload.get("error_type") == "ValueError"
+            and isinstance(payload.get("message"), str)
+            and len(payload["message"].encode("utf-8")) <= 4096
+        ):
+            raise NativeHookComposeValidationError(payload["message"])
         reason = code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
         raise NativeHookComposeError(reason)
     payload = response.get("payload")
@@ -240,4 +259,9 @@ def native_hook_compose(kind: str, fields: Mapping[str, object], *, guard_home: 
     return payload
 
 
-__all__ = ["HOOK_ARTIFACT_COMPOSE_FEATURE", "NativeHookComposeError", "native_hook_compose"]
+__all__ = [
+    "HOOK_ARTIFACT_COMPOSE_FEATURE",
+    "NativeHookComposeError",
+    "NativeHookComposeValidationError",
+    "native_hook_compose",
+]

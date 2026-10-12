@@ -167,6 +167,13 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
             return docker_config_request
+        destructive_execution_context = model_shell_execution_context(
+            command_text,
+            cwd=cwd,
+            workspace_root=cwd,
+            home_dir=home_dir,
+            classify_environment_secrets=True,
+        )
         secret_request = _kubernetes_or_environment_secret_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
@@ -175,15 +182,10 @@ def extract_sensitive_tool_action_request(
             home_dir=home_dir,
             raw_command_text=raw_command_text,
             wrapper_chain=wrapper_chain,
+            execution_context=destructive_execution_context,
         )
         if secret_request is not None:
             return secret_request
-        destructive_execution_context = model_shell_execution_context(
-            command_text,
-            cwd=cwd,
-            workspace_root=cwd,
-            home_dir=home_dir,
-        )
         raw_destructive_execution_context = (
             model_shell_execution_context(
                 raw_command_text,
@@ -291,6 +293,7 @@ def _kubernetes_or_environment_secret_request(
     home_dir: Path | None,
     raw_command_text: str,
     wrapper_chain: tuple[str, ...],
+    execution_context: ShellExecutionContext,
 ) -> ToolActionRequestMatch | None:
     kubernetes_secret_source = kubernetes_secret_read_source(command_text)
     if kubernetes_secret_source is not None:
@@ -310,6 +313,7 @@ def _kubernetes_or_environment_secret_request(
             cwd=cwd,
             raw_command_text=raw_command_text,
             wrapper_chain=wrapper_chain,
+            execution_context=execution_context,
         )
     env_dump_request = environment_secret_dump_request(
         tool_name=tool_name,
@@ -317,6 +321,7 @@ def _kubernetes_or_environment_secret_request(
         command_text=command_text,
         cwd=cwd,
         home_dir=home_dir,
+        execution_context=execution_context,
     )
     if env_dump_request is None:
         return None
@@ -326,6 +331,7 @@ def _kubernetes_or_environment_secret_request(
         cwd=cwd,
         raw_command_text=raw_command_text,
         wrapper_chain=wrapper_chain,
+        execution_context=execution_context,
     )
 
 
@@ -336,8 +342,11 @@ def _finalize_shell_match(
     cwd: Path | None,
     raw_command_text: str,
     wrapper_chain: tuple[str, ...],
+    execution_context: ShellExecutionContext,
 ) -> ToolActionRequestMatch:
-    request = _request_with_shell_execution_context(request, command_text=command_text, cwd=cwd)
+    request = _request_with_shell_execution_context(
+        request, command_text=command_text, cwd=cwd, context=execution_context
+    )
     if wrapper_chain:
         request = _request_with_wrapper_context(
             request,
@@ -476,26 +485,9 @@ def _request_with_wrapper_context(
     raw_command_text: str,
     wrapper_chain: tuple[str, ...],
 ) -> ToolActionRequestMatch:
-    return ToolActionRequestMatch(
-        tool_name=request.tool_name,
-        normalized_tool_name=request.normalized_tool_name,
-        command_text=request.command_text,
-        action_class=request.action_class,
-        reason=request.reason,
-        raw_command_text=raw_command_text,
-        wrapper_chain=wrapper_chain,
-        canonical_command=request.canonical_command,
-        shell_execution_context_hash=request.shell_execution_context_hash,
-        shell_execution_context_reason_code=request.shell_execution_context_reason_code,
-        shell_execution_effective_cwds=request.shell_execution_effective_cwds,
-        guard_default_action=request.guard_default_action,
-        reason_code=request.reason_code,
-        restricted_profile_version=request.restricted_profile_version,
-        pytest_config_identity_sha256=request.pytest_config_identity_sha256,
-        pytest_config_sources=request.pytest_config_sources,
-        pytest_config_reason_codes=request.pytest_config_reason_codes,
-        interpreter_executable_identities=request.interpreter_executable_identities,
-    )
+    # Keep every field, including the script-read identity that binds a wrapped
+    # script's approval to its content.
+    return replace(request, raw_command_text=raw_command_text, wrapper_chain=wrapper_chain)
 
 
 def _request_with_shell_execution_context(

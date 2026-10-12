@@ -141,6 +141,16 @@ pub(super) fn optional_identity(
     Ok(selected)
 }
 
+fn identity_metadata_supplied(maps: &[&Map<String, Value>], keys: &[&str]) -> bool {
+    maps.iter().any(|record| {
+        keys.iter().any(|key| {
+            record
+                .get(*key)
+                .is_some_and(|value| !value.is_null() && !value.is_string())
+        })
+    })
+}
+
 pub(super) fn path_values_sensitive(maps: &[&Map<String, Value>]) -> Result<bool, String> {
     let mut sensitive = false;
     for record in maps {
@@ -424,6 +434,10 @@ pub(super) fn payload_facts(
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
     let publisher = optional_identity(&maps, PUBLISHER_KEYS)?;
     let artifact = optional_identity(&maps, ARTIFACT_KEYS)?;
+    // An object is not a selector, but it is still publisher metadata. A
+    // proven constant eval may skip the floor only when no identity was sent.
+    let unusable_identity = identity_metadata_supplied(&maps, PUBLISHER_KEYS)
+        || identity_metadata_supplied(&maps, ARTIFACT_KEYS);
     let budget_input = codex_command_budget_input(payload, harness, action_type);
     // Only an exact root-level, syntactically bounded process start identity
     // is timing metadata. Nested copies, extra keys, credentials and command
@@ -433,12 +447,14 @@ pub(super) fn payload_facts(
         || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");
+    // A harness code tool proven to run only a constant has no effect a
+    // publisher could make worse; a declared publisher still counts.
     let publisher_relevant = publisher.is_some()
         || artifact.is_some()
-        || matches!(
-            action_type,
-            PreToolActionTypeV1::Package | PreToolActionTypeV1::McpTool
-        );
+        || unusable_identity
+        || action_type == PreToolActionTypeV1::Package
+        || (action_type == PreToolActionTypeV1::McpTool
+            && reason_code != "native_pure_constant_eval");
     Ok(PolicyFacts {
         publisher,
         artifact,

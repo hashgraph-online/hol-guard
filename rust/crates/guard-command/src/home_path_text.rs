@@ -88,8 +88,7 @@ fn normpath_nt(path: &str) -> String {
 }
 
 /// `ntpath.splitroot` on a backslash-only text: `(drive, root, tail)`.
-#[cfg(any(windows, test))]
-fn split_root_nt(text: &str) -> (&str, &str, &str) {
+pub(crate) fn split_root_nt(text: &str) -> (&str, &str, &str) {
     let bytes = text.as_bytes();
     if bytes.first() != Some(&b'\\') {
         if bytes.get(1) == Some(&b':') {
@@ -106,7 +105,8 @@ fn split_root_nt(text: &str) -> (&str, &str, &str) {
     if bytes.get(1) != Some(&b'\\') {
         return ("", "\\", &text[1..]);
     }
-    let start = if text.len() >= 8 && text[..8].eq_ignore_ascii_case("\\\\?\\UNC\\") {
+    // Compare bytes: a character may straddle byte 8, and `text[..8]` would panic.
+    let start = if bytes.len() >= 8 && bytes[..8].eq_ignore_ascii_case(b"\\\\?\\UNC\\") {
         8
     } else {
         2
@@ -195,6 +195,23 @@ mod tests {
         assert_eq!(normpath("/a//b/./c/../d"), "/a/b/d");
         assert_eq!(normpath("a/../b"), "b");
         assert_eq!(normpath(""), ".");
+    }
+
+    #[test]
+    fn split_root_nt_never_panics_on_multibyte_unc_prefix() {
+        // Vector from `ntpath.splitroot` on the old Python implementation.
+        assert_eq!(
+            split_root_nt("\\\\s\\a\u{e9}\u{e9}\\file.txt"),
+            ("\\\\s\\a\u{e9}\u{e9}", "\\", "file.txt")
+        );
+        assert_eq!(
+            split_root_nt("\\\\?\\UNC\\h\\s\\f"),
+            ("\\\\?\\UNC\\h\\s", "\\", "f")
+        );
+        assert_eq!(
+            split_root_nt("\\\\\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}"),
+            ("\\\\\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}", "", "")
+        );
     }
 
     #[test]

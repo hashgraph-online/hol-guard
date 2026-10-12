@@ -53,13 +53,8 @@ def _authority_snapshot_v3(
         )
     ):
         raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
-    api._validate_snapshot_v3(snapshot)
     if not business_binding_matches_floor(snapshot, value.get("business_policy_floor")):
         raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
-    integrity = snapshot.get("integrity")
-    if not isinstance(integrity, Mapping) or not hmac.compare_digest(
-        cast(str, integrity.get("mac")),
-        api._snapshot_integrity_mac_v3(snapshot, verifier_key),
-    ):
+    if not api.snapshot_mac_matches_v3(snapshot, verifier_key):
         raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
     return cast(dict[str, object], snapshot)

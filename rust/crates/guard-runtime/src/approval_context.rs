@@ -269,6 +269,7 @@ pub(super) fn derive_context_with_snapshot(
             home_dir: Some(envelope.source.home_dir.as_str()),
             cwd: envelope.source.cwd.as_deref(),
             cdpath_unset: false,
+            rustup_override_absent: false,
         },
         Some(
             envelope
@@ -278,6 +279,11 @@ pub(super) fn derive_context_with_snapshot(
                 .unwrap_or(&unavailable_environment),
         ),
     );
+    let intrinsic = crate::omp_yield_input_scan::scan(
+        &envelope.raw_payload,
+        envelope.deadline_budget_ms,
+        intrinsic,
+    )?;
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()
         || action_rank(&result.minimum_action).is_none()

@@ -98,9 +98,9 @@ def test_ask_once_shown_records_on_enqueue(tmp_path: Path) -> None:
     assert "guard.protection.ask_once_remembered" not in names
 
 
-def test_known_bad_auto_stop_records_timeline_event(tmp_path: Path) -> None:
+def test_known_bad_auto_stop_records_timeline_event(tmp_path: Path, native_approval_reuse_runtime: Path) -> None:
     from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-        _apply_explicit_posture_action,
+        _runtime_artifact_policy_action,
     )
     from codex_plugin_scanner.guard.models import GuardArtifact
 
@@ -113,9 +113,9 @@ def test_known_bad_auto_stop_records_timeline_event(tmp_path: Path) -> None:
         artifact_type="tool_action_request",
         source_scope="project",
         config_path="/workspace/repo/.guard/config.toml",
-        metadata={"risk_confidence": "strong"},
+        metadata={"risk_classes": ["credential_exfiltration"], "risk_confidence": "strong"},
     )
-    action = _apply_explicit_posture_action(config, artifact, "credential_exfiltration", "require-reapproval")
+    action = _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
     assert action == "block"
     names = [str(item.get("event_name") or "") for item in GuardStore(guard_home).list_events()]
     assert "guard.protection.auto_stop" in names

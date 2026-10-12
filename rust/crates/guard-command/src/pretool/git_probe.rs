@@ -1,7 +1,62 @@
 //! Bounded, non-interactive Git metadata probes.
+use std::cell::RefCell;
 use std::io::Read;
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
+
+/// Wall-clock budget for one configuration probe. A loaded host can need more
+/// than a second for the config, attribute and index queries together; the
+/// caller's overall deadline still caps it and an expired probe still reviews.
+pub(super) const PROBE_BUDGET: Duration = Duration::from_secs(5);
+
+/// Index and path listings stay bounded, but large enough for repositories
+/// with a few hundred thousand tracked files.
+pub(super) const LISTING_LIMIT: u64 = 16 * 1024 * 1024;
+
+type MemoKey = (String, Vec<String>, Option<String>, Option<String>, bool);
+type Memo = Option<Vec<(MemoKey, Option<bool>)>>;
+
+thread_local! {
+    static MEMO: RefCell<Memo> = const { RefCell::new(None) };
+}
+
+/// Lets every proof within one evaluation share a single probe of each Git
+/// segment. The memo is dropped when `evaluate` returns, so the next
+/// evaluation inspects the repository again.
+pub(crate) fn with_memo<T>(evaluate: impl FnOnce() -> T) -> T {
+    struct Restore(Memo);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            MEMO.with(|memo| *memo.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(MEMO.with(|memo| memo.replace(Some(Vec::new()))));
+    evaluate()
+}
+
+pub(super) fn memoized(key: MemoKey, probe: impl FnOnce() -> Option<bool>) -> Option<bool> {
+    let cached = MEMO.with(|memo| {
+        memo.borrow().as_ref().map(|entries| {
+            entries
+                .iter()
+                .find(|(entry, _)| *entry == key)
+                .map(|(_, value)| *value)
+        })
+    });
+    match cached {
+        Some(Some(value)) => value,
+        Some(None) => {
+            let value = probe();
+            MEMO.with(|memo| {
+                if let Some(entries) = memo.borrow_mut().as_mut() {
+                    entries.push((key, value));
+                }
+            });
+            value
+        }
+        None => probe(),
+    }
+}
 
 pub(super) fn output(
     command: &mut Command,
@@ -72,7 +127,7 @@ pub(super) fn submodules_are_inert(
         "--",
         ":/",
     ]);
-    let (status, bytes) = output(&mut index, deadline, 2 * 1024 * 1024)?;
+    let (status, bytes) = output(&mut index, deadline, LISTING_LIMIT)?;
     if !status.success() {
         return None;
     }
@@ -100,4 +155,65 @@ pub(super) fn copy_command(base: &Command) -> Option<Command> {
     }
     command.current_dir(base.get_current_dir()?);
     Some(command)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{memoized, with_memo};
+    use std::cell::Cell;
+
+    fn key(argument: &str) -> super::MemoKey {
+        (
+            "git".into(),
+            vec!["status".into(), argument.into()],
+            Some("/home".into()),
+            Some("/home/repo".into()),
+            false,
+        )
+    }
+
+    #[test]
+    fn one_evaluation_probes_each_segment_once() {
+        let runs = Cell::new(0);
+        let probe = |value| {
+            runs.set(runs.get() + 1);
+            value
+        };
+        with_memo(|| {
+            assert_eq!(memoized(key("--short"), || probe(Some(true))), Some(true));
+            assert_eq!(memoized(key("--short"), || probe(Some(false))), Some(true));
+            assert_eq!(memoized(key("--long"), || probe(None)), None);
+            assert_eq!(memoized(key("--long"), || probe(Some(true))), None);
+        });
+        assert_eq!(runs.get(), 2);
+    }
+
+    #[test]
+    fn later_evaluations_probe_again() {
+        let runs = Cell::new(0);
+        let probe = || {
+            runs.set(runs.get() + 1);
+            Some(true)
+        };
+        with_memo(|| memoized(key("--short"), probe));
+        with_memo(|| memoized(key("--short"), probe));
+        memoized(key("--short"), probe);
+        memoized(key("--short"), probe);
+        assert_eq!(runs.get(), 4);
+    }
+
+    #[test]
+    fn nested_scope_restores_the_outer_memo() {
+        let runs = Cell::new(0);
+        let probe = || {
+            runs.set(runs.get() + 1);
+            Some(true)
+        };
+        with_memo(|| {
+            memoized(key("--short"), probe);
+            with_memo(|| memoized(key("--short"), probe));
+            memoized(key("--short"), probe);
+        });
+        assert_eq!(runs.get(), 2);
+    }
 }

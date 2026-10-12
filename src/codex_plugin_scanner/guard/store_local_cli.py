@@ -31,7 +31,7 @@ from .store_local_cli_rows import (
     _row_int,
     _row_text,
     _row_values,
-    _with_suggestable,
+    _with_suggestions,
     local_cli_rules_exist,
 )
 from .store_local_cli_schema import ensure_local_cli_schema
@@ -158,32 +158,31 @@ class StoreLocalCliMixin:
             cli_id = str(item["cli_id"])
             seen.add(cli_id)
             grant = grants.get(cli_id)
-            items.append(_with_suggestable(_merge_item(item, grant)))
+            items.append(_merge_item(item, grant))
         for cli_id, grant in sorted(grants.items()):
             if cli_id in seen:
                 continue
             items.append(
-                _with_suggestable(
-                    {
-                        "cli_id": cli_id,
-                        "name": cli_id.removeprefix("local-cli."),
-                        "kind": "executable",
-                        "identity_hash": grant["identity_hash"],
-                        "example_label": cli_id.removeprefix("local-cli."),
-                        "interpreter_name": None,
-                        "observed_count": 0,
-                        "last_seen_at": None,
-                        "source_path": None,
-                        "help_status": None,
-                        "surface": "cli",
-                        "server_identity_hash": None,
-                        "source_label": None,
-                        "state": grant["state"],
-                        "stale": False,
-                        "grant_revision": grant["revision"],
-                    }
-                )
+                {
+                    "cli_id": cli_id,
+                    "name": cli_id.removeprefix("local-cli."),
+                    "kind": "executable",
+                    "identity_hash": grant["identity_hash"],
+                    "example_label": cli_id.removeprefix("local-cli."),
+                    "interpreter_name": None,
+                    "observed_count": 0,
+                    "last_seen_at": None,
+                    "source_path": None,
+                    "help_status": None,
+                    "surface": "cli",
+                    "server_identity_hash": None,
+                    "source_label": None,
+                    "state": grant["state"],
+                    "stale": False,
+                    "grant_revision": grant["revision"],
+                }
             )
+        _with_suggestions(items)
         mark_shared_enrolled_servers(items, grants)
         authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
         for item in items:

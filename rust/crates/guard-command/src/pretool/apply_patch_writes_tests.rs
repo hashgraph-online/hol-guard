@@ -14,6 +14,14 @@ fn fixture() -> Fixture {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")
         .join(format!("guard-apply-patch-{}-{nonce}", std::process::id()));
+    // The target directory survives between CI runs through the build cache,
+    // and process ids repeat, so an earlier run's fixture (including its
+    // symlinks) can already sit at this path.
+    match std::fs::remove_dir_all(&root) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("failed to clear stale fixture {}: {error}", root.display()),
+    }
     let workspace = root.join("home/project");
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::create_dir_all(workspace.join(".git")).unwrap();
@@ -22,6 +30,8 @@ fn fixture() -> Fixture {
     std::fs::write(workspace.join("AGENTS.md"), "rules\n").unwrap();
     std::fs::write(workspace.join(".git/config"), "[core]\n").unwrap();
     let root = std::fs::canonicalize(root).unwrap();
+    // Windows canonicalize yields `\\?\D:\...`; hosts hand Guard plain drive paths.
+    let root = PathBuf::from(root.to_str().unwrap().trim_start_matches(r"\\?\"));
     Fixture {
         home: root.join("home"),
         workspace: root.join("home/project"),

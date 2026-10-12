@@ -14,12 +14,11 @@ from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import 
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
-    mcp_tool_state,
     validate_mcp_contribution,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_extension_driver import apply_contributed_mcp_decision
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical
@@ -100,21 +99,6 @@ def test_canonical_native_compilation_contains_gmail_mcp_coverage(compiled: dict
     assert value["trust_class"] == "external"
     assert value["activation"] == "opt-in"
     assert value["enabled"] is False
-
-
-@pytest.mark.parametrize("tool", (*MUTATIONS, "send_message", "future_tool"))
-def test_locally_enabled_mailbox_changes_and_unknown_tools_require_review(gmail_payload: dict, tool: str) -> None:
-    assert mcp_tool_state(gmail_payload, tool) == "review"
-    decision = apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
-    assert decision is not None
-    assert decision[0:2] == ("review", "catalog-mcp-extension")
-
-
-@pytest.mark.parametrize("tool", OBSERVATIONS)
-def test_read_tools_inherit_without_allow_grants(gmail_payload: dict, tool: str) -> None:
-    assert mcp_tool_state(gmail_payload, tool) == "inherit"
-    for current in ("allow", "review", "block"):
-        assert apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
 
 
 @pytest.mark.parametrize(

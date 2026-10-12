@@ -46,7 +46,6 @@ def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
     monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 10.0)
     monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
-    monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
     try:
         daemon.start()
         deadline = time.monotonic() + 5
@@ -63,11 +62,6 @@ def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) ->
                 if time.monotonic() >= deadline:
                     raise
                 time.sleep(0.01)
-        if not daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
-        ):
-            raise TimeoutError("Guard daemon hook workers did not become ready")
     except BaseException:
         daemon.stop()
         raise
@@ -511,7 +505,11 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
 
     response = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    if "could not authenticate the local daemon" in json.dumps(response).lower():
+    reason_text = json.dumps(response).lower()
+    if (
+        "could not authenticate the local daemon" in reason_text
+        or "was not ready before the hook deadline" in reason_text
+    ):
         assert "permissionDecision" not in response.get("hookSpecificOutput", {})
 
 

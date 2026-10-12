@@ -6,10 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import test_guard_js_supply_chain_phase11 as support
+from tests.native_workspace import bind_workspace
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 pytestmark = pytest.mark.usefixtures("package_intent_native")
@@ -49,7 +50,7 @@ def test_policy_range_matches_resolved_npm_version(
         ),
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: support.WORKSPACE_ID)
+    bind_workspace(store, support.WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         support.WORKSPACE_ID,
         support._bundle_response(

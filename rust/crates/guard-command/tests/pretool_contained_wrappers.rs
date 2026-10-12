@@ -150,3 +150,57 @@ fn other_wrappers_stay_out_of_containment() {
         }
     }
 }
+
+/// Agents step from one checkout into a sibling repository or worktree by
+/// absolute path. The run is contained to that repository, as it would be
+/// from a session started there; a directory outside any repository is not.
+#[test]
+fn verified_cd_into_a_sibling_repository_reaches_containment() {
+    let root = fixture();
+    let sibling = root.join("sibling-worktree");
+    std::fs::create_dir_all(sibling.join("dashboard")).unwrap();
+    // A linked worktree marks its root with a `.git` file.
+    std::fs::write(sibling.join(".git"), "gitdir: /nonexistent\n").unwrap();
+    let sibling = sibling.to_str().unwrap();
+    let outside = root.join("outside");
+    let outside = outside.to_str().unwrap();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for (command, reason) in [
+            (
+                format!("cd {sibling}/dashboard && ./node_modules/.bin/vite build 2>&1 | tail -15"),
+                "native_node_build_output_containment_required",
+            ),
+            (
+                format!("cd {sibling}/dashboard && bunx vitest run x"),
+                "native_vitest_readonly_containment_required",
+            ),
+            (
+                format!("cd {sibling} && bun run typecheck | tail -n 20"),
+                "native_node_tool_readonly_containment_required",
+            ),
+        ] {
+            let result = classify(&root, harness, &command);
+            assert_eq!(result.decision, "deny", "{harness}: {command}");
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    result.minimum_action, "sandbox-required",
+                    "{harness}: {command}"
+                );
+                assert_eq!(result.reason_code, reason, "{harness}: {command}");
+            }
+        }
+        for command in [
+            format!("cd {outside} && ./node_modules/.bin/vite build 2>&1 | tail -15"),
+            format!("cd {sibling}/dashboard && ./node_modules/.bin/vite build && rm -rf /"),
+            format!("cd {sibling}/dashboard && ./node_modules/.bin/vite build | sh"),
+            format!("cd {sibling}/dashboard && git commit -m wip"),
+        ] {
+            let result = classify(&root, harness, &command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_ne!(
+                result.minimum_action, "sandbox-required",
+                "{harness}: {command}"
+            );
+        }
+    }
+}

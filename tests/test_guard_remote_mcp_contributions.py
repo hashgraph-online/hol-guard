@@ -17,12 +17,10 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from codex_plugin_scanner.guard.runtime import mcp_server_grants
 from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityView
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
-    mcp_server_identity_metadata,
 )
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     load_mcp_contribution_payloads,
@@ -31,6 +29,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_recorded_expectations import instapods_matches
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
@@ -87,13 +86,13 @@ def test_remote_instapods_matches_exact_endpoint_even_with_custom_server_name() 
 def test_remote_instapods_sse_transport_receives_review_default() -> None:
     artifact = _remote_artifact("change_plan", transport="sse")
     assert instapods_matches(artifact)
-    decision = mcp_server_grants.apply_contributed_mcp_decision(_instapods_store(), artifact, "allow")
+    decision = extension_driver.apply_contributed_mcp_decision(_instapods_store(), artifact, "allow")
     assert decision is not None
     assert decision[0] == "review"
 
 
 def test_remote_instapods_review_default_strengthens_allow() -> None:
-    decision = mcp_server_grants.apply_contributed_mcp_decision(
+    decision = extension_driver.apply_contributed_mcp_decision(
         _instapods_store(), _remote_artifact("change_plan"), "allow"
     )
     assert decision is not None
@@ -122,7 +121,7 @@ def test_remote_instapods_review_default_strengthens_allow_in_runtime_path(tmp_p
 
 def test_remote_instapods_manage_pod_inherits() -> None:
     assert (
-        mcp_server_grants.apply_contributed_mcp_decision(_instapods_store(), _remote_artifact("manage_pod"), "allow")
+        extension_driver.apply_contributed_mcp_decision(_instapods_store(), _remote_artifact("manage_pod"), "allow")
         is None
     )
 
@@ -267,9 +266,6 @@ def test_copilot_remote_identity_redacts_query_credentials_and_still_matches(tmp
         server_config={"url": f"https://app.instapods.com/api/mcp?token={secret}"},
     )
     identity, fingerprint, transport = _copilot_runtime_server_identity(server, launch_cwd=tmp_path)
-    serialized_identity = mcp_server_identity_metadata(identity)
-    assert serialized_identity["command"] == "https://app.instapods.com/api/mcp"
-    assert secret not in str(serialized_identity)
     artifact = build_tool_call_artifact(
         harness="copilot",
         server_name="instapods",
@@ -280,6 +276,7 @@ def test_copilot_remote_identity_redacts_query_credentials_and_still_matches(tmp
         server_fingerprint=fingerprint,
         server_identity=identity,
     )
+    assert artifact.metadata["mcp_server_identity"]["command"] == "https://app.instapods.com/api/mcp"
     assert secret not in str(artifact.to_dict())
     assert instapods_matches(artifact)
 

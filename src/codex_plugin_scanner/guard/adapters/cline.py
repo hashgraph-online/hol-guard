@@ -8,22 +8,14 @@ from pathlib import Path
 
 from ..frozen_runtime_commands import is_frozen_guard_runtime
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext
 from .cline_contract import register_cline_contract
 from .cline_detection import ClineHostDetection, detect_cline_hosts
-from .cline_hook_payload import register_cline_action_normalizer
-from .cline_hooks import cline_native_hook_state, install_cline_hooks, uninstall_cline_hooks
-from .cline_mcp import (
-    cline_mcp_proxy_state,
-    detect_cline_mcp,
-    install_cline_mcp_proxies,
-    restore_cline_mcp_proxies,
-)
-from .cline_plugin import cline_plugin_state, cline_plugin_syntax_probe, install_cline_plugin, uninstall_cline_plugin
+from .cline_hooks import cline_native_hook_state
+from .cline_mcp import cline_mcp_proxy_state, detect_cline_mcp
+from .cline_plugin import cline_plugin_state
 
 register_cline_contract()
-register_cline_action_normalizer()
 
 _CLINE_SURFACES = frozenset({"auto", "hooks", "plugin", "cli", "all"})
 _STATE_SCHEMA = 1
@@ -166,6 +158,9 @@ class ClineHarnessAdapter(HarnessAdapter):
         return "hooks"
 
     def _install_transport(self, context: HarnessContext, transport: str) -> dict[str, object]:
+        from .cline_hooks import install_cline_hooks, uninstall_cline_hooks
+        from .cline_plugin import cline_plugin_syntax_probe, install_cline_plugin, uninstall_cline_plugin
+
         if transport == "plugin":
             manifest = install_cline_plugin(context)
             syntax = cline_plugin_syntax_probe(context)
@@ -186,6 +181,9 @@ class ClineHarnessAdapter(HarnessAdapter):
         raise ValueError(f"Unsupported Cline enforcement transport: {transport}")
 
     def _reconcile_transport(self, context: HarnessContext, transport: str) -> dict[str, object]:
+        from .cline_hooks import uninstall_cline_hooks
+        from .cline_plugin import uninstall_cline_plugin
+
         previous = _load_adapter_state(context).get("active_transport")
         manifest = self._install_transport(context, transport)
         target_state = cline_plugin_state(context) if transport == "plugin" else cline_native_hook_state(context)
@@ -204,6 +202,9 @@ class ClineHarnessAdapter(HarnessAdapter):
         }
 
     def install(self, context: HarnessContext, *, surface: str = "auto") -> dict[str, object]:
+        from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim
+        from .cline_mcp import install_cline_mcp_proxies
+
         selected_surface = _surface(surface, default="auto")
         hosts = detect_cline_hosts(context)
         requested_transport = (
@@ -262,6 +263,11 @@ class ClineHarnessAdapter(HarnessAdapter):
         return manifest
 
     def uninstall(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
+        from ..shims import remove_guard_shim
+        from .cline_hooks import uninstall_cline_hooks
+        from .cline_mcp import restore_cline_mcp_proxies
+        from .cline_plugin import uninstall_cline_plugin
+
         selected_surface = _surface(surface, default="all")
         hook_result: dict[str, object] | None = None
         plugin_result: dict[str, object] | None = None

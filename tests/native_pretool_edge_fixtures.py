@@ -14,6 +14,7 @@ def _edge(harness: str, event: str, action_type: str = "unknown") -> dict[str, o
         "harness": harness,
         "event_name": "PreToolUse",
         "payload_kind": "inline",
+        "harness_response": {"decision": "block", "reason": "HOL Guard requires review for this bounded action."},
         "result": {
             "schema": "guard-pre-tool-result.v1",
             "version": 1,

@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.runtime.command_extension_interaction import (
     CommandExtensionInteraction,
     CommandExtensionInteractionMatch,
@@ -18,7 +15,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_initi
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
 
 
@@ -45,49 +41,6 @@ echo "pr_body=$pr_body"
 gh pr create --repo example/project --base main --head fix/proposal \
   --title "fix(app): focused change" --body-file "$pr_body"
 echo "PR_BODY_FILE=$pr_body"'''
-
-
-def test_static_ephemeral_pr_body_workflow_is_prompt_free(tmp_path: Path) -> None:
-    command = _workflow(
-        """## Summary
-- Static proposal text.
-
-## Testing
-- `bunx vitest run tests/focused.test.ts`.
-"""
-    )
-
-    assert gh_pr_create_uses_safe_ephemeral_body(command)
-    assert is_explicitly_benign_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-    assert (
-        extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-    assert (
-        _hook_runtime_artifact(
-            harness="cursor",
-            payload={
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Shell",
-                "tool_input": {"command": command, "working_directory": str(tmp_path)},
-            },
-            action_envelope=None,
-            home_dir=tmp_path,
-            guard_home=tmp_path / ".guard",
-            workspace=tmp_path,
-        )
-        is None
-    )
 
 
 @pytest.mark.parametrize(

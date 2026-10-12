@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import subprocess
@@ -14,7 +15,9 @@ from codex_plugin_scanner.guard import shims as shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES
+from codex_plugin_scanner.guard.native_shim_admin import probe_package_shim_intercepts as _probe_entry
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
+from codex_plugin_scanner.guard.sqlite_tuning import SQLITE_CONNECT_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import (
     manager_probe_args,
@@ -144,6 +147,15 @@ def test_package_shim_intercept_probe_records_evaluator_evidence(
     assert not (tmp_path / "npm-never-runs.json").exists()
 
 
+def _hold_probe_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the shim interpreter from reaching the evaluator inside a short probe."""
+
+    startup = tmp_path / "probe-startup"
+    startup.mkdir()
+    (startup / "sitecustomize.py").write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(startup))
+
+
 def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -154,13 +166,14 @@ def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
     install_package_shims(context, managers=("npm",))
     shim_dir = context.guard_home / "package-shims" / "bin"
     monkeypatch.setenv("PATH", str(shim_dir))
+    _hold_probe_open(tmp_path, monkeypatch)
 
-    def raise_timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired(cmd=["npm"], timeout=15)
-
-    monkeypatch.setattr(shims_module.subprocess, "run", raise_timeout)
-
-    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
+    result = probe_package_shim_intercepts(
+        context,
+        managers=("npm",),
+        workspace_dir=workspace_dir,
+        timeout_seconds=1,
+    )
 
     assert result["intercept_proved"] is False
     assert result["manager_results"] == [
@@ -182,29 +195,23 @@ def test_package_shim_intercept_probe_timeout_covers_store_busy_wait(
     context = _harness_context(tmp_path, workspace_dir=workspace_dir)
     install_package_shims(context, managers=("npm",))
     shim_dir = context.guard_home / "package-shims" / "bin"
-    fake_bin = tmp_path / "fake-bin"
-    fake_bin.mkdir(parents=True)
-    write_fake_manager_script(
-        fake_bin=fake_bin,
-        manager="npm",
-        marker_path=tmp_path / "npm-never-runs.json",
-        exit_code=0,
+    monkeypatch.setenv("PATH", str(shim_dir))
+    _hold_probe_open(tmp_path, monkeypatch)
+    # The default probe budget has to outlast the shim's store-lock retry.
+    # A one-second budget still classifies a probe that does not finish.
+    default_timeout = inspect.signature(_probe_entry).parameters["timeout_seconds"].default
+
+    result = probe_package_shim_intercepts(
+        context,
+        managers=("npm",),
+        workspace_dir=workspace_dir,
+        timeout_seconds=1,
     )
-    monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
-    captured_timeout: dict[str, int] = {}
 
-    def raise_timeout(*_args, **kwargs):
-        captured_timeout["value"] = kwargs["timeout"]
-        raise subprocess.TimeoutExpired(cmd=["npm"], timeout=kwargs["timeout"])
-
-    monkeypatch.setattr(shims_module.subprocess, "run", raise_timeout)
-
-    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
-
+    assert default_timeout == int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
+    assert default_timeout > 15
     assert result["intercept_proved"] is False
     assert result["manager_results"][0]["skipped_reason"] == "probe_failed"
-    assert captured_timeout["value"] == shims_module._PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS
-    assert captured_timeout["value"] > 15
 
 
 def test_package_shim_intercept_probe_omits_manager_stdout_secrets(

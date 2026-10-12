@@ -76,13 +76,13 @@ Evidence:
 
 ## Archived receipt-rollup reconstruction
 
-The blocker requiring migration evidence for archived receipt-rollup reconstruction is resolved by existing proof. `backfill_receipt_rollups()` in `store_receipt_rollups.py` rebuilds rollup state from the `runtime_receipts` table (whose schema is byte-identical to 2.2), and `test_store_upgrade_rebuilds_historical_warn_rollup_bucket` proves that a store upgrade reconstructs the historical rollup bucket from archived receipts. `test_guard_storage_maintenance.py` proves `receipt_rollups_need_backfill`/`backfill_receipt_rollups` reconcile dirty and deleted rollup rows.
+The blocker requiring migration evidence for archived receipt-rollup reconstruction is resolved by existing proof. The resident rebuild in `guard_store_receipt_rollups.rs` rebuilds rollup state from the `runtime_receipts` table (whose schema is byte-identical to 2.2), and `test_store_upgrade_rebuilds_historical_warn_rollup_bucket` proves that a store upgrade reconstructs the historical rollup bucket from archived receipts. `test_guard_storage_maintenance.py` proves the rebuild reconciles dirty and deleted rollup rows.
 
 Evidence:
 
-- `store_receipt_rollups.py` — `backfill_receipt_rollups()`, byte-identical to 2.2.
+- `guard_store_receipt_rollups.rs` — the rebuild and reconcile paths, replayed against vectors recorded from the original Python implementation (`store_receipt_rollups.py`, byte-identical to 2.2 in behavior) before it was removed. Payloads and table state are compared exactly, and `*_json` columns are compared by decoded value.
 - Tests: `tests/test_guard_receipt_persistence.py::test_store_upgrade_rebuilds_historical_warn_rollup_bucket`, `tests/test_guard_storage_maintenance.py` — passed.
-- Characterization tests `tests/test_guard_release_3_0_compatibility.py::TestLegacyReceiptRollupReconstruction` simulate a 2.x-era store (migrations 10 and 16 applied, stale rollup bucket) and prove `backfill_receipt_rollups` reconstructs archived rollups idempotently.
+- Characterization tests `tests/test_guard_release_3_0_compatibility.py::TestLegacyReceiptRollupReconstruction` simulate a 2.x-era store (migrations 10 and 16 applied, stale rollup bucket) and prove the resident rebuild reconstructs archived rollups idempotently.
 
 ## Harness coverage (degraded/unsupported)
 

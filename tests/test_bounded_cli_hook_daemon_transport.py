@@ -4,13 +4,13 @@ import json
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon as daemon
+from codex_plugin_scanner.guard.daemon import auth_token as auth_token_module
 
 
 @pytest.mark.parametrize("url", ["https://127.0.0.1:4781/hook", "http://example.com/hook"])
@@ -23,7 +23,7 @@ def test_loopback_opener_disables_proxies_and_installs_redirect_guard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     handlers: list[object] = []
-    sentinel = cast(urllib.request.OpenerDirector, object())
+    sentinel = cast(Any, object())
 
     def build(*items: object) -> urllib.request.OpenerDirector:
         handlers.extend(items)
@@ -33,12 +33,12 @@ def test_loopback_opener_disables_proxies_and_installs_redirect_guard(
 
     assert daemon._build_loopback_opener() is sentinel
     proxy = next(item for item in handlers if isinstance(item, urllib.request.ProxyHandler))
-    assert proxy.proxies == {}
+    assert cast(Any, proxy).proxies == {}
     assert any(isinstance(item, daemon._LoopbackOnlyRedirectHandler) for item in handlers)
 
 
 def test_redirect_guard_rejects_remote_target_before_following() -> None:
-    handler = daemon._LoopbackOnlyRedirectHandler()
+    handler: Any = daemon._LoopbackOnlyRedirectHandler()
     request = urllib.request.Request("http://127.0.0.1:4781/start")
 
     with pytest.raises(ValueError, match="loopback"):
@@ -62,7 +62,7 @@ def test_daemon_auth_token_preserves_only_nonempty_private_text(
         seen.update(path=path, **kwargs)
         return stored
 
-    monkeypatch.setattr(daemon, "read_private_regular_text", read)
+    monkeypatch.setattr(auth_token_module, "read_private_regular_text", read)
     guard_home = tmp_path / "guard-home"
 
     assert daemon._read_daemon_auth_token(guard_home) == expected
@@ -114,7 +114,7 @@ def test_ipv6_daemon_endpoint_is_parseable_and_accepted_by_transport() -> None:
         timeout_seconds=2,
         _endpoint_loader=lambda *_args: endpoint,
         _token_loader=lambda _path: "token",
-        _opener_builder=lambda: cast(urllib.request.OpenerDirector, _Opener(response)),
+        _opener_builder=lambda: cast(Any, _Opener(response)),
     )
 
     assert result is not None
@@ -161,7 +161,7 @@ def _try_with(outcome: _Response | Exception) -> tuple[str, str, int] | None:
         timeout_seconds=20,
         _endpoint_loader=lambda *_args: "http://127.0.0.1:4781/v1/hooks/grok",
         _token_loader=lambda _path: "token",
-        _opener_builder=lambda: cast(urllib.request.OpenerDirector, _Opener(outcome)),
+        _opener_builder=lambda: cast(Any, _Opener(outcome)),
     )
 
 
@@ -184,7 +184,7 @@ def test_daemon_transport_rejects_invalid_or_untrusted_responses(outcome: _Respo
 
 
 def test_daemon_transport_requires_endpoint_and_token() -> None:
-    common = {
+    common: dict[str, Any] = {
         "guard_home": Path("/private/unused"),
         "harness": "grok",
         "input_text": "{}",
@@ -221,7 +221,7 @@ def test_hermes_daemon_response_uses_harness_native_translation(monkeypatch: pyt
         timeout_seconds=2,
         _endpoint_loader=lambda *_args: "http://127.0.0.1:4781/v1/hooks/hermes",
         _token_loader=lambda _path: "token",
-        _opener_builder=lambda: cast(urllib.request.OpenerDirector, _Opener(_Response(body=b'{"x":1}'))),
+        _opener_builder=lambda: cast(Any, _Opener(_Response(body=b'{"x":1}'))),
     )
     assert result == expected
 
@@ -275,38 +275,6 @@ def test_grok_wait_ignores_malformed_native_output(tmp_path: Path) -> None:
     )
 
 
-def test_bridge_compatibility_wrappers_delegate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    opener = cast(urllib.request.OpenerDirector, object())
-    monkeypatch.setattr(daemon, "_daemon_hook_endpoint", lambda home, harness: f"{home}/{harness}")
-    monkeypatch.setattr(daemon, "_read_daemon_auth_token", lambda home: home.name)
-    monkeypatch.setattr(daemon, "_build_loopback_opener", lambda: opener)
-    monkeypatch.setattr(
-        daemon,
-        "_daemon_response_to_native",
-        lambda response, **kwargs: (json.dumps(response), str(kwargs["harness"]), 7),
-    )
-
-    assert bridge._daemon_hook_endpoint(tmp_path, "grok") == f"{tmp_path}/grok"
-    assert bridge._read_daemon_auth_token(tmp_path) == tmp_path.name
-    assert bridge._build_loopback_opener() is opener
-    assert bridge._daemon_response_to_native({"x": 1}, harness="grok", event_name="PreToolUse") == (
-        '{"x": 1}',
-        "grok",
-        7,
-    )
-
-    captured: dict[str, object] = {}
-
-    def try_hook(**kwargs: object) -> None:
-        captured.update(kwargs)
-
-    monkeypatch.setattr(daemon, "try_daemon_hook", try_hook)
-    assert bridge._try_daemon_hook(guard_home=tmp_path, harness="grok", input_text="{}", timeout_seconds=3) is None
-    assert captured["_endpoint_loader"] is bridge._daemon_hook_endpoint
-    assert captured["_token_loader"] is bridge._read_daemon_auth_token
-    assert captured["_opener_builder"] is bridge._build_loopback_opener
-
-
 @pytest.mark.parametrize(
     ("harness", "event_name", "minimum", "maximum"),
     [
@@ -332,7 +300,7 @@ def test_prompt_transport_waits_for_cold_workspace_publication(
         timeout_seconds=25,
         _endpoint_loader=lambda *_args: f"http://127.0.0.1:4781/v1/hooks/{harness}",
         _token_loader=lambda _path: "token",
-        _opener_builder=lambda: cast(urllib.request.OpenerDirector, _RecordingOpener()),
+        _opener_builder=lambda: cast(Any, _RecordingOpener()),
     )
     assert len(timeouts) == 1
     assert minimum < timeouts[0] <= maximum

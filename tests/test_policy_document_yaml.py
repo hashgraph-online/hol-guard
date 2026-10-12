@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
 from codex_plugin_scanner.guard.policy_document import (
     canonical_policy_document_bytes,
     policy_document_digest,
-    validate_effective_rule_ids,
 )
 from codex_plugin_scanner.guard.policy_document_yaml import (
     MAX_POLICY_BYTES,
@@ -158,13 +157,6 @@ def test_extensions_are_preserved_and_signed() -> None:
 
     assert "x-document-note" in document.to_mapping()
     assert policy_document_digest(changed) != policy_document_digest(document)
-
-
-def test_duplicate_rule_ids_fail_across_explicit_document_set() -> None:
-    document = parse_policy_document_yaml((FIXTURES / "valid" / "basic.yaml").read_bytes())
-
-    with pytest.raises(ValueError, match="duplicate_effective_rule_id"):
-        validate_effective_rule_ids((document, document))
 
 
 @pytest.mark.parametrize("name", ("basic", "business-selector"))

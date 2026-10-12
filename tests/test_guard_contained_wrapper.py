@@ -6,7 +6,12 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_vitest
-from codex_plugin_scanner.guard.runtime.contained_wrapper import OutputFilter, bounded_output, peel_contained_wrapper
+from codex_plugin_scanner.guard.runtime.contained_wrapper import (
+    OutputFilter,
+    bounded_output,
+    peel_contained_wrapper,
+    sibling_project_root,
+)
 from codex_plugin_scanner.guard.runtime.restricted_node_test import nearest_project_root
 from codex_plugin_scanner.guard.runtime.restricted_package_test import resolve_package_test
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
@@ -244,4 +249,85 @@ def test_bunx_cwd_selects_a_directory_inside_the_workspace(tmp_path: Path) -> No
     with pytest.raises(RestrictedPytestError, match="working directory"):
         restricted_vitest.prepare_restricted_vitest(
             ["bunx", "--cwd", "../other", "vitest", "run"], workspace=workspace, cwd=workspace
+        )
+
+
+def sibling_home(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A home holding the hook workspace and a sibling linked worktree."""
+    home = tmp_path / "home"
+    workspace = home / "project"
+    sibling = home / "sibling-worktree"
+    (workspace / "web").mkdir(parents=True)
+    (sibling / "dashboard").mkdir(parents=True)
+    (sibling / ".git").write_text("gitdir: /nonexistent\n")
+    (home / "loose").mkdir()
+    return home, workspace, sibling
+
+
+def test_cd_into_a_sibling_repository_is_peeled_with_home(tmp_path: Path) -> None:
+    home, workspace, sibling = sibling_home(tmp_path)
+    dashboard = sibling / "dashboard"
+    command = f"cd {dashboard} && ./node_modules/.bin/vite build 2>&1 | tail -15"
+    assert peel_contained_wrapper(command, workspace=workspace, home=home) == (
+        "./node_modules/.bin/vite build",
+        dashboard.resolve(),
+        OutputFilter("tail", 15, merge_stderr=True),
+    )
+    assert sibling_project_root(dashboard, home=home) == sibling.resolve()
+    # Without home, or outside any repository below it, the target stays outside the workspace.
+    with pytest.raises(ValueError):
+        peel_contained_wrapper(command, workspace=workspace)
+    for target in (home / "loose", home, tmp_path):
+        assert sibling_project_root(target, home=home) is None
+        with pytest.raises(ValueError):
+            peel_contained_wrapper(f"cd {target} && pytest -q", workspace=workspace, home=home)
+
+
+def test_home_itself_is_never_a_sibling_repository(tmp_path: Path) -> None:
+    home, workspace, _sibling = sibling_home(tmp_path)
+    (home / ".git").mkdir()
+    assert sibling_project_root(home / "loose", home=home) is None
+    with pytest.raises(ValueError):
+        peel_contained_wrapper(f"cd {home / 'loose'} && pytest -q", workspace=workspace, home=home)
+
+
+def test_sink_moves_the_approved_root_to_the_sibling_repository(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home, workspace, sibling = sibling_home(tmp_path)
+    dashboard = sibling / "dashboard"
+    calls: list[tuple[str, object]] = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sink,
+        "run_restricted_pytest",
+        lambda *args, **kwargs: calls.append(("execute", (kwargs["workspace"], kwargs["cwd"]))) or 0,
+    )
+
+    def authorize(original):
+        calls.append(("authorize", (original["tool_input"]["command"], original.get("cwd"))))
+        return required_profile()
+
+    original = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": {"command": f"cd {dashboard} && pytest -q | tail -5"},
+        "cwd": str(workspace),
+    }
+    assert (
+        sink.run_authorized_contained_test(
+            original, workspace=workspace, timeout_seconds=20, authorize=authorize, home_dir=home
+        )
+        == 0
+    )
+    resolved = dashboard.resolve()
+    assert calls == [
+        ("authorize", (original["tool_input"]["command"], str(workspace))),
+        ("authorize", ("pytest -q", str(resolved))),
+        ("execute", (sibling.resolve(), resolved)),
+    ]
+    # The same command without a home to bound the sibling is refused before authority.
+    with pytest.raises(RestrictedPytestError):
+        sink.run_authorized_contained_test(
+            original, workspace=workspace, timeout_seconds=20, authorize=lambda value: pytest.fail("authorized")
         )

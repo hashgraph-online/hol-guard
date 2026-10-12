@@ -13,11 +13,11 @@ import pytest
 from codex_plugin_scanner.guard import store_connection_schema
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.daemon import protection_repair_retry
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.protection_repair_retry import containment_repair_outcome
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.runtime_registration_support import (
     CONTAINMENT_CHECK_IDS,
     T0,
@@ -175,11 +175,6 @@ def test_shutdown_winning_the_publish_race_never_registers(
     monkeypatch.setattr(daemon, "_publish_listen_state", lambda: published.append("published"))
     monkeypatch.setattr(daemon, "_reconcile_runtime_artifacts_best_effort", lambda: None)
     monkeypatch.setattr(daemon, "_maintain_command_activity_best_effort", lambda: None)
-    monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "require_initial_capacity",
-        lambda: None,
-    )
 
     def win_shutdown_race() -> None:
         # Shutdown completed between the outer generation checks and the
@@ -204,8 +199,8 @@ def test_protection_repair_all_restores_runtime_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stub_supported_repair(monkeypatch)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "_repair_command_activity_persistence_health",
         lambda _store: None,
     )
@@ -231,9 +226,9 @@ def test_protection_repair_all_reports_unavailable_native_probe_truthfully(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stub_supported_repair(monkeypatch, stub_evidence_health=False)
-    monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: None)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(monkeypatch, "current_extension_control_snapshot", lambda: None)
+    patch_daemon_global(
+        monkeypatch,
         "evaluate_command_native",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("native evaluation unavailable")),
     )

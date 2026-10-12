@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 import shutil
 import subprocess
 import sys
@@ -256,11 +255,11 @@ def test_trust_binding_parser_imports_without_installed_dependencies():
 
 
 def test_builder_stages_trust_before_dependency_install_and_native_build():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text())
+    workflow = yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text())
     events = workflow.get("on", workflow.get(True))
-    assert "pull_request" in events and "pull_request_target" not in events
+    assert "pull_request_target" not in events
     assert workflow["permissions"] == {"contents": "read"}
-    steps = workflow["jobs"]["authoring"]["steps"]
+    steps = workflow["jobs"]["extension-builder"]["steps"]
     checkout_step = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert "ref" not in checkout_step["with"]  # Use GitHub's merge checkout, not the stale PR head.
     trust = next(i for i, step in enumerate(steps) if "--trust-only" in step.get("run", ""))
@@ -281,9 +280,14 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
         "test_guard_extension_trust.py",
         "test_guard_extension_contribution.py",
         "test_guard_mcp_server_contribution.py",
-        "test_extension_builder_ci_preparation.py",
     ):
         assert path in steps[tests]["run"]
+    verifier = "scripts/ci/verify_extension_builder_install.py"
+    install_wheel = next(step for step in steps if verifier in step.get("run", ""))
+    assert (ROOT / verifier).is_file()
+    quality = next(step for step in steps if step.get("name") == "Check authoring source quality")
+    assert verifier in quality["run"]
+    assert verifier in install_wheel["run"]
 
 
 def test_shared_rust_setup_stages_trust_before_toolchain_installation():
@@ -294,13 +298,16 @@ def test_shared_rust_setup_stages_trust_before_toolchain_installation():
     install = next(i for i, step in enumerate(steps) if "rustup toolchain install" in step.get("run", ""))
     assert trust < install
     assert steps[trust]["shell"] == "bash"
-    assert steps[trust]["run"] == "python scripts/refresh_extension_artifacts.py --trust-only"
+    run = steps[trust]["run"]
+    assert "command -v python3" in run
+    assert "scripts/refresh_extension_artifacts.py --trust-only" in run
     assert "if" not in steps[trust]
     assert "continue-on-error" not in steps[trust]
 
 
 def test_shared_rust_setup_prepares_source_only_mcp_without_product_imports(checkout):
-    root, trust = checkout
+    root, _bindings = checkout
+    trust = root / "contracts/extensions/build-trust-class-map.v1.json"
     original = json.loads(trust.read_bytes())
     contribution = write_json(root, "contributions/mcp-servers/mcp.new-server.json", {"id": "mcp.new-server"})
     source_bytes = contribution.read_bytes()
@@ -310,11 +317,11 @@ def test_shared_rust_setup_prepares_source_only_mcp_without_product_imports(chec
         shutil.copyfile(ROOT / relative, target)
     action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text())
     step = next(step for step in action["runs"]["steps"] if "--trust-only" in step.get("run", ""))
-    command = shlex.split(step["run"])
-    assert command[0] == "python"
+    assert "scripts/refresh_extension_artifacts.py --trust-only" in step["run"]
+    assert "command -v python3" in step["run"]
     for changed in (True, False):
         completed = subprocess.run(
-            [sys.executable, *command[1:]],
+            [sys.executable, "scripts/refresh_extension_artifacts.py", "--trust-only"],
             cwd=root,
             capture_output=True,
             text=True,
@@ -337,9 +344,9 @@ def test_shared_rust_setup_prepares_source_only_mcp_without_product_imports(chec
     ("workflow_name", "job_name"),
     [
         ("ci.yml", "native-command-evaluators"),
-        ("native-wheel-ci.yml", "linux-build"),
-        ("native-wheel-ci.yml", "windows-build"),
-        ("native-wheel-ci.yml", "macos-build"),
+        ("nightly-native.yml", "linux-build"),
+        ("nightly-native.yml", "windows-build"),
+        ("nightly-native.yml", "macos-build"),
     ],
 )
 def test_native_builds_stage_shared_trust_before_compilation(workflow_name, job_name):

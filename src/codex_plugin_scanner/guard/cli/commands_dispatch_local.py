@@ -98,7 +98,7 @@ def _run_guard_pytest_contained_command(
     try:
         return run_restricted_pytest(
             command,
-            workspace=Path(str(args.workspace)),
+            workspace=Path(str(args.workspace)) if getattr(args, "workspace", None) else Path.cwd(),
             cwd=Path(str(args.cwd)) if getattr(args, "cwd", None) else Path.cwd(),
             timeout_seconds=int(args.timeout_seconds),
             read_only_workspace=bool(getattr(args, "read_only_workspace", False)),
@@ -141,6 +141,7 @@ def _run_guard_execute_contained_test_command(
         request_validated = True
         return run_authorized_contained_test(
             payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
+            home_dir=context.home_dir,
             authorize=lambda original: try_native_hook_authority(
                 payload={**original, "guard_containment_receipt_only": True},
                 harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
@@ -153,7 +154,7 @@ def _run_guard_execute_contained_test_command(
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
     finally:
-        if request_validated and getattr(args, "harness", "omp") == "zcode":
+        if request_validated and getattr(args, "harness", "omp") in {"zcode", "claude-code", "codex"}:
             with suppress(OSError):
                 request_file = Path(args.request_file)
                 request_file.unlink(missing_ok=True)
@@ -255,28 +256,6 @@ def _run_guard_scan_command(
     _emit("scan", payload, args.json or args.consumer_mode)
     return 0
 
-def _run_guard_preflight_command(
-    args: argparse.Namespace,
-    *,
-    guard_home: Path | None = None,
-    workspace: Path | None = None,
-    context: HarnessContext | None = None,
-    store: GuardStore | None = None,
-    config: GuardConfig | None = None,
-    input_text: str | None = None,
-    output_stream: TextIO | None = None,
-) -> int:
-    payload = _run_consumer_scan_with_mode(
-        Path(args.target).resolve(),
-        intended_harness=getattr(args, "harness", None),
-        cisco_mode=args.cisco_mode,
-    )
-    _emit("preflight", payload, getattr(args, "json", False))
-    if getattr(args, "enforce", False):
-        install_verdict = payload.get("install_verdict")
-        if isinstance(install_verdict, dict) and str(install_verdict.get("action")) != "allow":
-            return 2
-    return 0
 
 def _run_guard_update_command(
     args: argparse.Namespace,
@@ -370,21 +349,39 @@ def _run_guard_protect_command(
         _emit("protect", payload, getattr(args, "json", False))
         return 0
     protect_workspace = workspace or Path.cwd()
+    from ..native_protect_request import NativeProtectRequestError
+
+    def _emit_protect_resident_failure(error: NativeProtectRequestError) -> int:
+        code = str(error).strip() or "native_protect_request_unavailable"
+        _emit(
+            "protect",
+            {
+                "policy_action": "block",
+                "exit_code": 1,
+                "error": {"code": code, "status": "native_protect_request_failed"},
+                "verdict": {"action": "block", "blocking": True, "reason": code},
+            },
+            bool(getattr(args, "json", False)),
+        )
+        return 1
 
     def current_protect_config() -> GuardConfig:
         local_config = load_guard_config(guard_home, workspace=protect_workspace)
         return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
 
-    payload, exit_code = build_protect_payload(
-        command=protect_command,
-        store=store,
-        workspace_dir=protect_workspace,
-        dry_run=bool(getattr(args, "dry_run", False)),
-        now=_now(),
-        config=config,
-        current_config_provider=current_protect_config,
-        unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
-    )
+    try:
+        payload, exit_code = build_protect_payload(
+            command=protect_command,
+            store=store,
+            workspace_dir=protect_workspace,
+            dry_run=bool(getattr(args, "dry_run", False)),
+            now=_now(),
+            config=config,
+            current_config_provider=current_protect_config,
+            unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+        )
+    except NativeProtectRequestError as error:
+        return _emit_protect_resident_failure(error)
     _queue_local_protect_approvals(
         payload,
         store=store,
@@ -426,16 +423,19 @@ def _run_guard_protect_command(
                 str(item.get("resolution_action")) == "block" for item in resolved_items
             ):
                 initial_payload = payload
-                fresh_payload, fresh_exit_code = build_protect_payload(
-                    command=protect_command,
-                    store=store,
-                    workspace_dir=protect_workspace,
-                    dry_run=bool(getattr(args, "dry_run", False)),
-                    now=_now(),
-                    config=current_protect_config(),
-                    current_config_provider=current_protect_config,
-                    unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
-                )
+                try:
+                    fresh_payload, fresh_exit_code = build_protect_payload(
+                        command=protect_command,
+                        store=store,
+                        workspace_dir=protect_workspace,
+                        dry_run=bool(getattr(args, "dry_run", False)),
+                        now=_now(),
+                        config=current_protect_config(),
+                        current_config_provider=current_protect_config,
+                        unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+                    )
+                except NativeProtectRequestError as error:
+                    return _emit_protect_resident_failure(error)
                 if fresh_exit_code == 0:
                     payload, exit_code = fresh_payload, fresh_exit_code
                 elif _package_shim_approval_matches_fresh_request(initial_payload, fresh_payload):
@@ -705,14 +705,6 @@ def _run_guard_mcp_command(
     return server.run_stdio()
 
 
-def _guard_package_version() -> str:
-    """Return the installed guard package version, or empty string."""
-    try:
-        from importlib.metadata import version
-
-        return version("codex-plugin-scanner")
-    except Exception:
-        return ""
 
 __all__ = [
     "_run_guard_apps_command",
@@ -725,7 +717,6 @@ __all__ = [
     "_run_guard_install_command",
     "_run_guard_mcp_command",
     "_run_guard_network_command",
-    "_run_guard_preflight_command",
     "_run_guard_protect_command",
     "_run_guard_pytest_contained_command",
     "_run_guard_scan_command",

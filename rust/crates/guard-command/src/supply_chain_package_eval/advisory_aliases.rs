@@ -22,7 +22,7 @@ pub(super) fn primary_bundle_advisory_id(
     }
     let mut advisory_lookup: HashMap<String, String> = HashMap::new();
     let advisories = bundle_response
-        .signed_bundle
+        .bundle
         .get("advisories")
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice);
@@ -79,7 +79,7 @@ pub(super) fn bundle_advisory_aliases(
     }
     let mut advisory_lookup: HashMap<String, Vec<String>> = HashMap::new();
     let advisories = bundle_response
-        .signed_bundle
+        .bundle
         .get("advisories")
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice);

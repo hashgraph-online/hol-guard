@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import local_supply_chain as lsc
 from codex_plugin_scanner.guard import native_package_evaluation_compose as compose
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import SupplyChainUserCopy
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import SupplyChainUserCopy
 
 
 @dataclass(frozen=True)

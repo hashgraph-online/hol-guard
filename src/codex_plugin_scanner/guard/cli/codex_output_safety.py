@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Collection
 
 
 def output_uses_placeholder_private_key_fixture(
@@ -25,20 +24,4 @@ def output_uses_placeholder_private_key_fixture(
         )
         is not None
         for match in matches
-    )
-
-
-def source_name_stem_has_compound_secret_segment(
-    stem: str,
-    *,
-    split_compound: bool,
-    secret_like_stems: Collection[str],
-) -> bool:
-    """Classify compound source-name segments without matching the whole stem twice."""
-
-    lowered = stem.lower()
-    if not split_compound:
-        return False
-    return any(
-        segment in secret_like_stems for segment in re.split(r"[-_]+", lowered) if segment and segment != lowered
     )

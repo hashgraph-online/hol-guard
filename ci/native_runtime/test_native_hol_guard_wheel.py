@@ -201,46 +201,6 @@ def test_stop_native_resident_retries_one_transient_unavailable_result(
     assert result.diagnostic["status"] == "contained"
 
 
-def test_adapter_session_stops_before_broadcasting_worker_client_close(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[str] = []
-    runner = SimpleNamespace(close_native_resident_clients=lambda: events.append("close") or True)
-    daemon = _DaemonStub(SimpleNamespace(hook_process_runner=runner))
-    session = object.__new__(AdapterSession)
-    session.daemon = daemon
-    session.runtime = tmp_path / "runtime"
-    session.guard_home = tmp_path / "home"
-
-    monkeypatch.setattr(
-        native_slo_session,
-        "stop_native_resident",
-        lambda _runtime, _guard_home, *, preserve_clients=False: events.append("stop") or True,
-    )
-
-    assert session.stop_resident()
-    assert events == ["stop", "close"]
-
-
-def test_adapter_session_keeps_containment_when_worker_client_cleanup_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runner = SimpleNamespace(close_native_resident_clients=lambda: False)
-    daemon = _DaemonStub(SimpleNamespace(hook_process_runner=runner))
-    session = object.__new__(AdapterSession)
-    session.daemon = daemon
-    session.runtime = tmp_path / "runtime"
-    session.guard_home = tmp_path / "home"
-    contained = native_slo_session.NativeStopResult(True, {"status": "contained"})
-
-    monkeypatch.setattr(native_slo_session, "stop_native_resident", lambda *_args, preserve_clients=False: contained)
-
-    assert session.stop_resident()
-    assert session.last_stop_diagnostic["status"] == "contained_client_cleanup_failed"
-
-
 def test_adapter_session_close_stops_resident_before_daemon_shutdown(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

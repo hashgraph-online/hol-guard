@@ -15,6 +15,20 @@ export function setModel(value: any) { model = value; }
 const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
   totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
+export function convertTools(tools: any[]) {
+  return tools.map(tool => {
+    if (tool.type !== 'function' || !tool.function
+      || (tool.function.strict !== undefined && typeof tool.function.strict !== 'boolean'))
+      throw new Error('Unsupported tool schema');
+    return { name: tool.function.name, label: tool.function.name,
+      description: tool.function.description ?? '', parameters: tool.function.parameters,
+      // Chat Completions defaults to non-strict; Responses must receive that
+      // choice explicitly to preserve optional fields in the original schema.
+      strict: tool.function.strict ?? false,
+      execute: async () => { throw new Error('Transport adapter cannot execute tools'); } };
+  });
+}
+
 export function convertMessages(messages: any[]) {
   const converted: any[] = [];
   const toolNames = new Map<string, string>();
@@ -67,6 +81,29 @@ export function finishReason(stopReason: string) {
   if (stopReason === 'toolUse') return 'tool_calls';
   if (stopReason === 'length') return 'length';
   return 'stop';
+}
+
+// SSE comments keep the HTTP transport alive while native inference is silent.
+// They contain no completion, model selection, usage or tool arguments.
+export function keepStreamAlive(
+  enqueue: (chunk: Uint8Array) => void,
+  fail: (error: unknown) => void,
+  schedule: (tick: () => void) => () => void = tick => {
+    const timer = setInterval(tick, 15_000);
+    return () => clearInterval(timer);
+  },
+) {
+  let stopped = false;
+  let cancel = () => {};
+  const stop = () => { if (!stopped) { stopped = true; cancel(); } };
+  const tick = () => {
+    if (stopped) return;
+    try { enqueue(new TextEncoder().encode(': native-luna keepalive\n\n')); }
+    catch (error) { stop(); fail(error); }
+  };
+  tick();
+  if (!stopped) cancel = schedule(tick);
+  return stop;
 }
 
 // The relay presents a per-run bearer token, so no other local process can use
@@ -183,6 +220,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       body = JSON.parse(text);
       requireTransportSelection(body, thinking);
       requirePromptable(convertMessages(body.messages));
+      convertTools(body.tools ?? []);
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
     const wire = new WireArguments();
@@ -190,11 +228,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       initialState: { model, thinkingLevel: thinking, systemPrompt:
         body.messages.filter((m: any) => m.role === 'system' || m.role === 'developer')
           .map((m: any) => m.content).join('\n\n'),
-        tools: (body.tools ?? []).map((t: any) => ({ name: t.function.name,
-          label: t.function.name, description: t.function.description ?? '',
-          parameters: t.function.parameters, execute: async () => {
-            throw new Error('Transport adapter cannot execute tools');
-          } })), messages: [] },
+        tools: convertTools(body.tools ?? []), messages: [] },
       // The same normal authentication resolver used by native OMP sessions.
       // Credentials stay inside the pinned SDK; none are exported or logged.
       getApiKey: requestModel => registry.resolver(requestModel, 'guard-gauntlet-native-luna'),
@@ -207,12 +241,18 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       promptCacheKey: promptCacheKey(request.headers.get('x-opencode-session')),
     });
     active.add(agent);
-    const timer = setTimeout(() => agent.abort(), 240_000);
+    let stopKeepalive = () => {};
+    const timer = setTimeout(() => { stopKeepalive(); agent.abort(); }, 240_000);
     const stream = new ReadableStream<Uint8Array>({
       start(sink) {
         let finished = false;
         let bytes = 0;
         const indices = new Map<number, number>();
+        stopKeepalive = keepStreamAlive(chunk => {
+          bytes += chunk.byteLength;
+          if (bytes > 4_000_000) throw new Error('Transport response limit');
+          sink.enqueue(chunk);
+        }, () => agent.abort());
         const send = (delta: any, finish_reason: string | null = null, usage?: any) => {
           const data = `data: ${JSON.stringify({ id: 'native-luna', object: 'chat.completion.chunk',
             // The real backend identity, recorded by the relay as the response model.
@@ -236,6 +276,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
               send({}, finishReason(event.message.stopReason), usageChunk(event.message.usage));
               sink.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
               finished = true;
+              stopKeepalive();
               sink.close();
               // Stop the outer SDK before tool dispatch. The real Gauntlet
               // agent receives the untouched selection and owns execution.
@@ -243,6 +284,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
             }
           } catch {
             finished = true;
+            stopKeepalive();
             sink.error(new Error('Native transport failed'));
             agent.abort();
           }
@@ -252,13 +294,14 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
         Promise.resolve(agent.prompt(messages.slice(-1))).catch(() => {
           if (!finished) sink.error(new Error('Native inference failed'));
         }).finally(() => {
+          stopKeepalive();
           if (!finished) sink.error(new Error('Native inference ended without completion'));
           unsubscribe(); clearTimeout(timer); active.delete(agent);
         });
       },
-      cancel() { agent.abort(); controller.abort(); },
+      cancel() { stopKeepalive(); agent.abort(); controller.abort(); },
     });
-    request.signal.addEventListener('abort', () => agent.abort(), { once: true });
+    request.signal.addEventListener('abort', () => { stopKeepalive(); agent.abort(); }, { once: true });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } });
   },
 });
