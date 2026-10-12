@@ -336,6 +336,24 @@ fn exchange_waits_for_a_notification_that_is_still_arriving() {
 }
 
 #[test]
+fn exchange_refuses_when_a_partial_frame_outlives_the_extension() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-partial-busy";
+    // The child starts a notification then holds it open past the one second
+    // extension: the quiet edge never becomes genuine silence, so the guarded
+    // call must be refused rather than written.
+    let script = r#"printf '%s' '{"jsonrpc":"2.0","method":"notifications/tools/'; sleep 3; printf '%s\n' 'list_changed"}'; cat"#;
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/sh", "-c", script])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(id, json!({"jsonrpc":"2.0","id":3,"result":{}}), 200, 2000);
+    assert_eq!(reply["status"], "error", "{reply:?}");
+    assert_eq!(reply["payload"], "mcp_exchange_quiet_edge_busy");
+    close(id);
+}
+
+#[test]
 fn exchange_times_out_after_writing_when_the_child_stays_silent() {
     let _g = LOCK.lock().unwrap();
     let id = "exchange-timeout";

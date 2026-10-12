@@ -61,6 +61,16 @@ pub enum SessionReadError {
     Eof,
 }
 
+/// Outcome of a pre-write quiet edge.
+pub enum QuietEdge {
+    /// The child stayed silent for the whole quiet window.
+    Silent,
+    /// A complete child frame arrived before the write could proceed.
+    Event(SessionEvent),
+    /// The child still holds an unfinished frame past `QUIET_EXTENSION_LIMIT`.
+    Busy,
+}
+
 /// Persistent stdout pump for the session data plane. Unlike the probe
 /// `drain_stream`, a live session may stream arbitrarily many frames over its
 /// lifetime — the bound is per-frame size plus a bounded `sync_channel` for
@@ -413,18 +423,20 @@ impl LiveMcpSession {
     /// Pre-write quiet edge: like `next_event(quiet)`, but while the child has
     /// started a frame it has not finished, keep waiting (bounded by
     /// `QUIET_EXTENSION_LIMIT`) so a catalog-change notification that is
-    /// mid-flight is seen before a guarded call is written.
-    pub fn next_event_quiet(
-        &mut self,
-        quiet: Duration,
-    ) -> Result<Option<SessionEvent>, SessionReadError> {
+    /// mid-flight is seen before a guarded call is written. A child still
+    /// holding a frame open when the extension expires yields `Busy` — the
+    /// caller must not treat it as silence and write anyway.
+    pub fn next_event_quiet(&mut self, quiet: Duration) -> Result<QuietEdge, SessionReadError> {
         let limit = Instant::now() + quiet + QUIET_EXTENSION_LIMIT;
         loop {
             if let Some(event) = self.next_event(quiet)? {
-                return Ok(Some(event));
+                return Ok(QuietEdge::Event(event));
             }
-            if !self.partial.load(Ordering::Acquire) || Instant::now() >= limit {
-                return Ok(None);
+            if !self.partial.load(Ordering::Acquire) {
+                return Ok(QuietEdge::Silent);
+            }
+            if Instant::now() >= limit {
+                return Ok(QuietEdge::Busy);
             }
         }
     }

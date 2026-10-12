@@ -31,7 +31,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 #[cfg(unix)]
-use guard_command::mcp_stdio_session::{LiveMcpSession, SessionEvent};
+use guard_command::mcp_stdio_session::{LiveMcpSession, QuietEdge, SessionEvent};
 
 #[cfg(unix)]
 const MAX_SESSIONS: usize = 64;
@@ -354,10 +354,13 @@ fn exchange_locked(
     };
     let quiet = Duration::from_millis(exchange.quiet_ms.min(MAX_QUIET_MS));
     match entry.session.next_event_quiet(quiet) {
-        Ok(None) => {}
-        Ok(Some(event)) => {
+        Ok(QuietEdge::Silent) => {}
+        Ok(QuietEdge::Event(event)) => {
             let (kind, frame) = event_parts(event);
             return exchange_outcome("boundary", false, Some(kind), Some(frame), None);
+        }
+        Ok(QuietEdge::Busy) => {
+            return err_result("mcp_exchange_quiet_edge_busy");
         }
         Err(guard_command::mcp_stdio_session::SessionReadError::Eof) => {
             return exchange_eof(&mut entry.child, false);
