@@ -12,9 +12,12 @@ metadata — also runs once per request; nothing is reused across requests.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
+from functools import wraps
 from pathlib import Path
+from typing import Protocol, TypeVar
+from urllib.parse import urlparse
 
 from .native_runtime_values import NativeRuntimeStatus
 
@@ -22,6 +25,26 @@ from .native_runtime_values import NativeRuntimeStatus
 # binary a status was computed from.  A mode or candidate-list change inside
 # a request therefore always recomputes instead of reusing a stale status.
 _RequestKey = tuple[str, tuple[str, ...]]
+
+
+class _PostHandler(Protocol):
+    path: str
+
+
+_Handler = TypeVar("_Handler", bound=_PostHandler)
+
+
+def scoped_hook_post(method: Callable[[_Handler], None]) -> Callable[[_Handler], None]:
+    """Share native status for hook POSTs, including route classification."""
+
+    @wraps(method)
+    def dispatch(handler: _Handler) -> None:
+        parts = [part for part in urlparse(handler.path).path.split("/") if part]
+        hook_path = len(parts) == 3 and parts[:2] == ["v1", "hooks"]
+        with native_status_request_scope() if hook_path else nullcontext():
+            method(handler)
+
+    return dispatch
 
 
 def _status_binary_unchanged(status: NativeRuntimeStatus) -> bool:

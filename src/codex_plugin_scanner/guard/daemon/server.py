@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from contextlib import nullcontext, suppress
+from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -75,7 +75,7 @@ from ..native_daemon_route import (
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
-from ..native_runtime_request_scope import native_status_request_scope
+from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..path_resolution_cache import cached_realpath
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
@@ -1345,18 +1345,11 @@ class _GuardDaemonHandler(
             return
         self._write_json({"error": "not_found"}, status=404)
 
+    @scoped_hook_post
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        hook_path = len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]
-        # One hook request shares a single native-binary validation across
-        # route classification, its decision, approval/review, queue, and
-        # response handling.
-        with native_status_request_scope() if hook_path else nullcontext():
-            self._dispatch_post(parsed, path_parts)
-
-    def _dispatch_post(self, parsed: Any, path_parts: list[str]) -> None:
         if parsed.path in {"/v1/connect/requests", "/v1/connect/complete", "/v1/connect/result"}:
             self._write_legacy_pairing_disabled()
             return
