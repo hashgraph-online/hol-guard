@@ -109,7 +109,7 @@ def _valid(action: str, value: Any) -> bool:
             and set(value) == {"script_text", "tokens_consumed"}
             and type(value["script_text"]) is str
             and type(value["tokens_consumed"]) is int
-            and value["tokens_consumed"] >= 0
+            and cast(int, value["tokens_consumed"]) >= 0
         )
     if action in {"masked_bodies", "masked_complete"}:
         return type(value) is str
