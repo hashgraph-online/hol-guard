@@ -381,6 +381,7 @@
     "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",
+    "src/codex_plugin_scanner/guard/native_mcp_stdio_exchange.py",
     "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
     "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",
     "src/codex_plugin_scanner/guard/native_supply_chain_posture.py",
