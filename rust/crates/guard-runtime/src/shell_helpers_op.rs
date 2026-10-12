@@ -2,6 +2,8 @@
 use base64ct::{Base64, Encoding};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,42 +35,25 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
     )
     .map_err(|_| "shell_helpers_invalid_request")?;
     let decoded = unpack_claims(&request.input);
-    let observed = match decoded {
-      Err(code) => Err(code),
-      Ok(input) if request.action == "heredocs_page" => {
-        match input.as_object() {
-            Some(fields) if fields.len() == 2 && fields.contains_key("command") && fields.contains_key("offset") => {
-                guard_command::shell_helpers::evaluate_with_deadline("heredocs", &json!({"command":input["command"]}), Some(deadline)).and_then(|value| {
-                    let rows = value.as_array().ok_or("shell_helpers_invalid")?;
-                    let offset = usize::try_from(input["offset"].as_u64().ok_or("shell_helpers_invalid")?).map_err(|_| "shell_helpers_invalid")?;
-                    if offset > rows.len() { return Err("shell_helpers_invalid"); }
-                    let end = (offset + 1024).min(rows.len());
-                    Ok(json!({"items":rows[offset..end],"next_offset":if end < rows.len() {Some(end)} else {None}}))
-                })
-            }
-            _ => Err("shell_helpers_invalid"),
-        }
-      }
-      Ok(input) => guard_command::shell_helpers::evaluate_with_deadline(&request.action, &input, Some(deadline)),
-    };
+    let observed = decoded.and_then(|input| prepared_result(&request.action, &input, deadline));
     let (code, result) = match observed {
-        Ok(value) => ("ok", value),
-        Err(code) => (code, Value::Null),
+        Ok(value) => ("ok", Some(value)),
+        Err(code) => (code, None),
     };
     let result_offset = request
         .input
         .get("result_offset")
         .map_or(Some(0), Value::as_u64);
-    let result = if code == "ok" {
+    let result = if let Some(result) = result {
         match result_offset.and_then(|offset| usize::try_from(offset).ok()) {
-            Some(offset) => match page_result(result, offset) {
+            Some(offset) => match page_result(&result, offset) {
                 Ok(value) => value,
                 Err(code) => return reply(request, &canonical, code, Value::Null),
             },
             None => return reply(request, &canonical, "shell_helpers_invalid", Value::Null),
         }
     } else {
-        result
+        Value::Null
     };
     if Instant::now() >= deadline {
         return reply(request, &canonical, "shell_helpers_deadline", Value::Null);
@@ -115,10 +100,72 @@ fn unpack_claims(input: &Value) -> Result<Value, &'static str> {
     Ok(Value::Object(fields))
 }
 
-fn page_result(result: Value, offset: usize) -> Result<Value, &'static str> {
+struct PreparedResult {
+    value: Value,
+    bytes: Vec<u8>,
+    digest: String,
+}
+
+type PageCache = VecDeque<(String, Instant, Arc<PreparedResult>)>;
+static PAGE_CACHE: OnceLock<Mutex<PageCache>> = OnceLock::new();
+
+fn prepared_result(
+    action: &str,
+    input: &Value,
+    deadline: Instant,
+) -> Result<Arc<PreparedResult>, &'static str> {
+    let key = guard_policy_snapshot::digest_bytes(
+        &serde_json::to_vec(&json!([action, input])).map_err(|_| "shell_helpers_invalid")?,
+    );
+    let cache = PAGE_CACHE.get_or_init(|| Mutex::new(VecDeque::new()));
+    {
+        let mut entries = cache.lock().map_err(|_| "shell_helpers_invalid")?;
+        entries.retain(|entry| entry.1.elapsed() < Duration::from_secs(8));
+        if let Some(entry) = entries.iter().find(|entry| entry.0 == key) {
+            return Ok(Arc::clone(&entry.2));
+        }
+    }
+    let value = if action == "heredocs_page" {
+        let fields = input.as_object().ok_or("shell_helpers_invalid")?;
+        if fields.len() != 2 || !fields.contains_key("command") || !fields.contains_key("offset") {
+            return Err("shell_helpers_invalid");
+        }
+        let full = prepared_result("heredocs", &json!({"command": input["command"]}), deadline)?;
+        let rows = full.value.as_array().ok_or("shell_helpers_invalid")?;
+        let offset = usize::try_from(input["offset"].as_u64().ok_or("shell_helpers_invalid")?)
+            .map_err(|_| "shell_helpers_invalid")?;
+        if offset > rows.len() {
+            return Err("shell_helpers_invalid");
+        }
+        let end = offset.saturating_add(1024).min(rows.len());
+        json!({"items": rows[offset..end], "next_offset": if end < rows.len() {Some(end)} else {None}})
+    } else {
+        guard_command::shell_helpers::evaluate_with_deadline(action, input, Some(deadline))?
+    };
+    let bytes = serde_json::to_vec(&value).map_err(|_| "shell_helpers_invalid")?;
+    if bytes.len() > 64 * 1024 * 1024 {
+        return Err("shell_helpers_response_bounds");
+    }
+    let digest = guard_policy_snapshot::digest_bytes(&bytes);
+    let result = Arc::new(PreparedResult {
+        value,
+        bytes,
+        digest,
+    });
+    if action == "heredocs" || action == "heredocs_page" || result.bytes.len() > 256 * 1024 {
+        let mut entries = cache.lock().map_err(|_| "shell_helpers_invalid")?;
+        if entries.len() == 2 {
+            entries.pop_front();
+        }
+        entries.push_back((key, Instant::now(), Arc::clone(&result)));
+    }
+    Ok(result)
+}
+
+fn page_result(result: &PreparedResult, offset: usize) -> Result<Value, &'static str> {
     const PAGE_BYTES: usize = 256 * 1024;
     const MAX_BYTES: usize = 64 * 1024 * 1024;
-    let bytes = serde_json::to_vec(&result).map_err(|_| "shell_helpers_invalid")?;
+    let bytes = &result.bytes;
     if bytes.len() > MAX_BYTES || offset > bytes.len() {
         return Err("shell_helpers_response_bounds");
     }
@@ -126,14 +173,14 @@ fn page_result(result: Value, offset: usize) -> Result<Value, &'static str> {
         if offset != 0 {
             return Err("shell_helpers_invalid");
         }
-        return Ok(result);
+        return Ok(result.value.clone());
     }
     let end = offset.saturating_add(PAGE_BYTES).min(bytes.len());
     Ok(json!({
         "fragment_b64":Base64::encode_string(&bytes[offset..end]),
         "byte_offset":offset,"total_bytes":bytes.len(),
         "next_offset":if end < bytes.len() {Some(end)} else {None},
-        "result_sha256":guard_policy_snapshot::digest_bytes(&bytes),
+        "result_sha256":result.digest,
     }))
 }
 

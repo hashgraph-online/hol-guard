@@ -1,5 +1,5 @@
 //! Source-faithful interpreter option and operand admission.
-#[derive(serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct InterpreterFlagPayload {
     pub script_text: String,
     pub tokens_consumed: usize,
@@ -18,13 +18,34 @@ pub fn shell_interpreter_command_payload(
     parts: &[String],
     command_index: usize,
 ) -> Option<InterpreterFlagPayload> {
+    parse_payload(parts, command_index, false)
+}
+
+pub(crate) fn legacy_shell_interpreter_command_payload(
+    parts: &[String],
+    command_index: usize,
+) -> Option<InterpreterFlagPayload> {
+    parse_payload(parts, command_index, true)
+}
+
+fn parse_payload(
+    parts: &[String],
+    command_index: usize,
+    legacy: bool,
+) -> Option<InterpreterFlagPayload> {
     use crate::command_option_parsing::python_is_whitespace;
+    let trim = |text: &str| -> String {
+        if legacy {
+            text.trim()
+        } else {
+            text.trim_matches(python_is_whitespace)
+        }
+        .to_owned()
+    };
     let mut index = command_index.checked_add(1)?;
     while index < parts.len() {
-        let token = parts[index]
-            .trim_matches(python_is_whitespace)
-            .trim_start_matches('(')
-            .trim_end_matches(')');
+        let trimmed = trim(&parts[index]);
+        let token = trimmed.trim_start_matches('(').trim_end_matches(')');
         if token.is_empty() {
             index += 1;
             continue;
@@ -32,18 +53,18 @@ pub fn shell_interpreter_command_payload(
         if token == "-" || token == "--" {
             return None;
         }
-        if token == "--command" || token.starts_with("--command=") {
+        if !legacy && (token == "--command" || token.starts_with("--command=")) {
             let (script, consumed) = if let Some(script) = token.strip_prefix("--command=") {
                 (script, index - command_index)
             } else {
                 (parts.get(index + 1)?.as_str(), index + 1 - command_index)
             };
-            let script_text = script.trim_matches(python_is_whitespace);
+            let script_text = trim(script);
             if script_text.is_empty() {
                 return None;
             }
             return Some(InterpreterFlagPayload {
-                script_text: script_text.to_owned(),
+                script_text,
                 tokens_consumed: consumed,
             });
         }
@@ -62,29 +83,66 @@ pub fn shell_interpreter_command_payload(
         let flags: Vec<char> = token[1..].chars().collect();
         let mut has_command = false;
         let mut consumes_value = false;
-        if letter_run(&token[1..]) {
+        if if legacy {
+            flags.iter().all(char::is_ascii_alphabetic)
+        } else {
+            letter_run(&token[1..])
+        } {
             for (flag_index, flag) in flags.iter().enumerate() {
                 if matches!(*flag, 'O' | 'o') {
-                    consumes_value = flag_index == flags.len() - 1;
-                    break;
+                    consumes_value = legacy || flag_index == flags.len() - 1;
+                    if !legacy {
+                        break;
+                    }
                 }
-                if token.starts_with('-') && *flag == 'c' {
+                if (legacy || token.starts_with('-')) && *flag == 'c' {
                     has_command = true;
                 }
             }
         }
         let script_index = index + 1 + usize::from(consumes_value);
         if has_command {
-            let script_text = parts.get(script_index)?.trim_matches(python_is_whitespace);
+            let script_text = trim(parts.get(script_index)?);
             if script_text.is_empty() {
                 return None;
             }
             return Some(InterpreterFlagPayload {
-                script_text: script_text.to_owned(),
+                script_text,
                 tokens_consumed: script_index - command_index,
             });
         }
         index += 1 + usize::from(consumes_value);
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_parser_preserves_both_interpreter_profiles() {
+        let parts = |flags: &str| ["bash", flags, "pipefail", "echo hi"].map(str::to_owned);
+        assert!(shell_interpreter_command_payload(&parts("-oc"), 0).is_none());
+        assert_eq!(
+            legacy_shell_interpreter_command_payload(&parts("-oc"), 0)
+                .unwrap()
+                .script_text,
+            "echo hi"
+        );
+        let command = ["bash", "--command=echo hi"].map(str::to_owned);
+        assert_eq!(
+            shell_interpreter_command_payload(&command, 0)
+                .unwrap()
+                .script_text,
+            "echo hi"
+        );
+        assert!(legacy_shell_interpreter_command_payload(&command, 0).is_none());
+        for parser in [
+            shell_interpreter_command_payload,
+            legacy_shell_interpreter_command_payload,
+        ] {
+            assert_eq!(parser(&parts("-co"), 0).unwrap().tokens_consumed, 3);
+        }
+    }
 }

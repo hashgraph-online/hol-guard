@@ -283,3 +283,32 @@ fn malformed_and_out_of_range_spans_are_rejected() {
     )
     .is_err());
 }
+#[test]
+fn paged_results_reuse_prepared_values_and_serialized_fragments() {
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let input = json!({"command": "cat <<EOF\nvalue\nEOF\n"});
+    let first = prepared_result("heredocs", &input, deadline).unwrap();
+    let repeated = prepared_result("heredocs", &input, deadline).unwrap();
+    assert!(std::sync::Arc::ptr_eq(&first, &repeated));
+    let page_input = json!({"command": input["command"], "offset": 0});
+    let page = prepared_result("heredocs_page", &page_input, deadline).unwrap();
+    let same_page = prepared_result("heredocs_page", &page_input, deadline).unwrap();
+    assert!(std::sync::Arc::ptr_eq(&page, &same_page));
+    assert_eq!(
+        page_result(&page, 0).unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let large = json!({"command": "echo ".repeat(100_000), "spans": []});
+    let masked = prepared_result("masked_bodies", &large, deadline).unwrap();
+    assert_eq!(
+        page_result(&masked, 0).unwrap()["result_sha256"],
+        masked.digest
+    );
+    assert_eq!(
+        page_result(&masked, 256 * 1024).unwrap()["result_sha256"],
+        masked.digest
+    );
+}

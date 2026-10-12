@@ -4,6 +4,7 @@
 use std::path::Path;
 #[path = "shell_interpreter_options.rs"]
 mod interpreter_options;
+pub(crate) use interpreter_options::legacy_shell_interpreter_command_payload;
 pub use interpreter_options::shell_interpreter_command_payload;
 #[path = "shell_command_wrappers_paths.rs"]
 mod paths;

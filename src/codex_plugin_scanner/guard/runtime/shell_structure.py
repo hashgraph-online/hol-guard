@@ -74,18 +74,18 @@ class ShellScanState:
 
     @property
     def is_top_level(self) -> bool:
-        identity = runtime_key()
-        if self._top_level_runtime != identity or (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
+        if self._top_level is None or (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
+            identity = runtime_key()
             self._top_level = call("top_level", "", state=[self.quote, self.subshell_depth, self.in_backtick])
             self._top_level_runtime = identity
             self._expected = (self.quote, self.subshell_depth, self.in_backtick)
         return cast(bool, self._top_level)
 
     def advance(self, command: str, index: int) -> int:
-        key = (command, *runtime_key())
         state = (self.quote, self.subshell_depth, self.in_backtick)
         cached = self._rows.get(index)
-        if key != self._key or cached is None or cached[0] != state:
+        if self._key is None or command != self._key[0] or cached is None or cached[0] != state or index == 0:
+            key = (command, *runtime_key())
             rows = call("trace", command, state=list(state), index=index)
             self._rows = {}
             preceding = state
@@ -96,5 +96,5 @@ class ShellScanState:
         row = self._rows[index][1]
         self.quote, self.subshell_depth, self.in_backtick, self._top_level = row[2:]
         self._expected = (self.quote, self.subshell_depth, self.in_backtick)
-        self._top_level_runtime = key[1:]
+        self._top_level_runtime = self._key[1:]
         return row[1]

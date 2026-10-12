@@ -28,7 +28,7 @@ def call(action: str, command: str, **fields: Any) -> Any:
     from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
     from .native_context import _native_runtime_status_memo as native_runtime_status
 
-    deadline = time.monotonic() + 10.0
+    deadline = time.monotonic() + 8.0
     home = _resolve_digest_home(None)
     if not ensure_resident_prerequisite(home):
         raise NativeShellHelpersError("native_shell_helpers_unavailable")
@@ -57,7 +57,7 @@ def call(action: str, command: str, **fields: Any) -> Any:
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise NativeShellHelpersError("native_shell_helpers_deadline")
+            raise fault("native_shell_helpers_deadline")
         request: dict[str, object] = {
             "schema": "guard-shell-helpers-request.v1",
             "request_id": native_execution._request_id("shell_helpers"),
@@ -68,9 +68,9 @@ def call(action: str, command: str, **fields: Any) -> Any:
                 **({"offset": offset} if paged else {}),
                 **({"result_offset": result_offset} if result_offset else {}),
             },
-            "timeout_ms": max(1, int(remaining * 1000)),
+            "timeout_ms": max(1, int((remaining - 0.25) * 1000)),
         }
-        frame = {"operation": "shell_helpers", "request": request, "deadline_budget_ms": 10_000}
+        frame = {"operation": "shell_helpers", "request": request, "deadline_budget_ms": max(1, int(remaining * 1000))}
         try:
             json.dumps(frame, ensure_ascii=False, allow_nan=False).encode("utf-8")
             packet_bytes = len(json.dumps(frame).encode("utf-8"))
@@ -104,14 +104,14 @@ def call(action: str, command: str, **fields: Any) -> Any:
             raise fault("native_shell_helpers_rejected")
         result = answer["result"]
         if answer["code"] != "ok":
+            if result is None and answer["code"] in {"shell_helpers_deadline", "shell_helpers_response_bounds"}:
+                raise fault("native_" + answer["code"])
             if result is None and answer["code"] in {
                 "shell_helpers_bounds",
                 "shell_helpers_invalid",
                 "shell_helpers_invalid_state",
                 "shell_helpers_invalid_spans",
                 "shell_helpers_invalid_operation",
-                "shell_helpers_response_bounds",
-                "shell_helpers_deadline",
             }:
                 healthy()
                 raise NativeShellHelpersError(answer["code"])

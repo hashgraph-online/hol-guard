@@ -410,8 +410,6 @@ fn classify_secret_path_profile(
 // interpreter_options.py `shell_interpreter_command_payload` (:19-56).
 // ---------------------------------------------------------------------------
 
-const LONG_OPTIONS_WITH_VALUES: &[&str] = &["--init-file", "--rcfile"];
-
 /// `InterpreterFlagPayload` (:9-13).
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -420,74 +418,16 @@ pub(crate) struct InterpreterFlagPayload {
     pub tokens_consumed: usize,
 }
 
-/// `_short_shell_option_cluster` (:59-69). `(has_command_flag, consumes_next)`.
-fn short_shell_option_cluster(token: &str) -> (bool, bool) {
-    let flag_text = &token[1..];
-    if flag_text.is_empty() || !flag_text.chars().all(|c| c.is_ascii_alphabetic()) {
-        return (false, false);
-    }
-    let mut has_command = false;
-    let mut consumes_next = false;
-    for flag in flag_text.chars() {
-        if flag == 'c' {
-            has_command = true;
-        } else if flag == 'o' || flag == 'O' {
-            consumes_next = true;
-        }
-    }
-    (has_command, consumes_next)
-}
-
 /// `shell_interpreter_command_payload` (:19-56).
 pub(crate) fn shell_interpreter_command_payload(
     parts: &[String],
     command_index: usize,
 ) -> Option<InterpreterFlagPayload> {
-    let mut index = command_index + 1;
-    while index < parts.len() {
-        let token = parts[index]
-            .trim()
-            .trim_start_matches('(')
-            .trim_end_matches(')')
-            .to_owned();
-        if token.is_empty() {
-            index += 1;
-            continue;
-        }
-        if token == "-" || token == "--" {
-            return None;
-        }
-        if token.starts_with("--") {
-            let option_name = token.split('=').next().unwrap_or("");
-            let has_sep = token.contains('=');
-            if LONG_OPTIONS_WITH_VALUES.contains(&option_name) && !has_sep {
-                index += 2;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if !token.starts_with('-') && !token.starts_with('+') {
-            return None;
-        }
-        let (has_command_flag, consumes_next_value) = short_shell_option_cluster(&token);
-        let script_index = index + 1 + usize::from(consumes_next_value);
-        if has_command_flag {
-            if script_index >= parts.len() {
-                return None;
-            }
-            let script_text = parts[script_index].trim().to_owned();
-            if script_text.is_empty() {
-                return None;
-            }
-            return Some(InterpreterFlagPayload {
-                script_text,
-                tokens_consumed: script_index - command_index,
-            });
-        }
-        index += 1 + usize::from(consumes_next_value);
-    }
-    None
+    crate::shell_command_wrappers::legacy_shell_interpreter_command_payload(parts, command_index)
+        .map(|payload| InterpreterFlagPayload {
+            script_text: payload.script_text,
+            tokens_consumed: payload.tokens_consumed,
+        })
 }
 
 // ---------------------------------------------------------------------------
