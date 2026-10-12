@@ -31,14 +31,50 @@ pub(crate) fn evaluate(request: &ShellHelpersRequest) -> Result<Vec<u8>, String>
         guard_contracts::MAX_NATIVE_REQUEST_BYTES,
     )
     .map_err(|_| "shell_helpers_invalid_request")?;
-    let result = guard_command::shell_helpers::evaluate(&request.action, &request.input)
-        .map_err(str::to_owned)?;
+    let observed = if request.action == "heredocs_page" {
+        match request.input.as_object() {
+            Some(fields) if fields.len() == 2 && fields.contains_key("command") && fields.contains_key("offset") => {
+                guard_command::shell_helpers::evaluate("heredocs", &json!({"command":request.input["command"]})).and_then(|value| {
+                    let rows = value.as_array().ok_or("shell_helpers_invalid")?;
+                    let offset = usize::try_from(request.input["offset"].as_u64().ok_or("shell_helpers_invalid")?).map_err(|_| "shell_helpers_invalid")?;
+                    if offset > rows.len() { return Err("shell_helpers_invalid"); }
+                    let end = (offset + 1024).min(rows.len());
+                    Ok(json!({"items":rows[offset..end],"next_offset":if end < rows.len() {Some(end)} else {None}}))
+                })
+            }
+            _ => Err("shell_helpers_invalid"),
+        }
+    } else {
+        guard_command::shell_helpers::evaluate(&request.action, &request.input)
+    };
+    let (code, result) = match observed {
+        Ok(value) => ("ok", value),
+        Err(code) => (code, Value::Null),
+    };
     if Instant::now() >= deadline {
-        return Err("shell_helpers_deadline".into());
+        return reply(request, &canonical, "shell_helpers_deadline", Value::Null);
     }
-    crate::resident_protocol::encode_response(
-        &json!({"schema":"guard-shell-helpers-result.v1","request_id":request.request_id,"request_sha256":guard_policy_snapshot::digest_bytes(&canonical),"status":"ok","code":"ok","result":result}),
-    )
+    match reply(request, &canonical, code, result) {
+        Err(code) if code == "native_response_too_large" => reply(
+            request,
+            &canonical,
+            "shell_helpers_response_bounds",
+            Value::Null,
+        ),
+        answer => answer,
+    }
+}
+
+fn reply(
+    request: &ShellHelpersRequest,
+    canonical: &[u8],
+    code: &str,
+    result: Value,
+) -> Result<Vec<u8>, String> {
+    crate::resident_protocol::encode_response(&json!({
+        "schema":"guard-shell-helpers-result.v1", "request_id":request.request_id,
+        "request_sha256":guard_policy_snapshot::digest_bytes(canonical), "status":"ok", "code":code, "result":result,
+    }))
 }
 
 #[cfg(test)]

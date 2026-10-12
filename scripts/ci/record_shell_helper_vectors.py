@@ -36,6 +36,16 @@ def record() -> None:
     # Retrieve only the pinned original sources; tests consume frozen values.
     sources = {}
     originals = {}
+    legacy_path = "tests/test_interpreter_options.py"
+    legacy = subprocess.run(
+        ["git", "show", f"da723a48b221c135cbce3bade1bab3ddb4959044:{legacy_path}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
+    legacy_digest = hashlib.sha256(legacy).hexdigest()
+    if legacy_digest != "478f2f9c313000563d8326fa43c8af6e4b87a22a77a21d5f3239c3576e391082":
+        raise RuntimeError("Recording requires the original interpreter tests")
     for name in ("env_wrapper", "interpreter_options", "shell_structure", "data_flow", "shell_command_wrappers"):
         path = f"src/codex_plugin_scanner/guard/runtime/{name}.py"
         code = subprocess.run(
@@ -106,6 +116,13 @@ def record() -> None:
             "bash --rcfile=/dev/null +o nounset -c 'echo value'",
             "bash \u001c--norc\u001f -c '\u001cecho value\u001f'",
             "bash -c '\u001c\u001f'",
+            "bash --command 'echo value'",
+            "fish --command='echo value'",
+            "bash --rcfile /example/setup.rc -c 'echo value'",
+            "bash -co pipefail 'echo value'",
+            "bash -cOextglob 'echo value'",
+            "bash --command -c 'tail value'",
+            "bash --rcfile --command -c 'echo value'",
         ]
     )
     vectors = []
@@ -142,6 +159,7 @@ def record() -> None:
         "echo " + "x" * 65_536,
         "cat <<EOF\n" + "x" * 190_000 + "\nEOF\necho done",
         "cat <<EOF\n" + "\u001c" * 140_000 + "\nEOF",
+        "cat <<EOF\n" + "x" * 512_000 + "\nEOF",
     ):
         heredocs = shell_structure.extract_heredocs(command)
         vectors.append(
@@ -164,10 +182,56 @@ def record() -> None:
             },
         }
     )
+    command = ":<<E\nE\n" * 20_000
+    heredocs = shell_structure.extract_heredocs(command)
+    vectors.append(
+        {
+            "command": command,
+            "expected": {
+                "heredocs": [asdict(h) for h in heredocs],
+                "masked_bodies": shell_structure.mask_heredoc_bodies(command, heredocs),
+                "masked_complete": shell_structure.mask_complete_heredocs(command, heredocs),
+            },
+        }
+    )
+    interpreter = originals["interpreter_options"]
+    interpreter_parts = [
+        ["bash", "-c", "sentinel"],
+        ["bash", "-lc", "sentinel"],
+        ["bash", "-cl", "sentinel"],
+        ["bash", "-co", "pipefail", "sentinel"],
+        ["bash", "-cOextglob", "sentinel"],
+        ["bash", "--noprofile", "-cl", "sentinel"],
+        ["bash", "--rcfile", "setup.rc", "-cl", "sentinel"],
+        ["fish", "--command", "sentinel"],
+        ["fish", "--command=sentinel"],
+        ["bash", "-oc", "sentinel"],
+        ["bash", "--", "-cl", "sentinel"],
+        ["bash", "--rcfile"],
+        ["bash", "-cl"],
+        ["bash", "script.sh", "-cl", "sentinel"],
+        ["fish", "--command="],
+        ["bash", "-cl", "sentinel", "argument-zero", "-c", "ignored"],
+        ["bash", "-éc", "sentinel"],
+        ["bash", "-\u0345c", "sentinel"],
+        ["bash", "\u001c--command\u001f", "\u001csentinel\u001f"],
+    ]
+    interpreter_vectors = []
+    for parts in interpreter_parts:
+        result = interpreter.shell_interpreter_command_payload(parts, 0)
+        interpreter_vectors.append({"parts": parts, "command_index": 0, "expected": asdict(result) if result else None})
     target = ROOT / "tests/fixtures/shell-helper-python.v1.json"
     target.write_text(
         json.dumps(
-            {"schema": "shell-helper-python.v1", "sources": sources, "vectors": vectors}, ensure_ascii=True, indent=2
+            {
+                "schema": "shell-helper-python.v1",
+                "sources": sources,
+                "vectors": vectors,
+                "interpreter_vectors": interpreter_vectors,
+                "legacy_test_sources": {legacy_path: legacy_digest},
+            },
+            ensure_ascii=True,
+            indent=2,
         )
         + "\n"
     )

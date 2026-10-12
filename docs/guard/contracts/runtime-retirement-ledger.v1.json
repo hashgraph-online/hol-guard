@@ -41,6 +41,118 @@
  ],
  "retired_tests": [
   {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts0-sentinel-2]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts1-sentinel-2]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts2-sentinel-2]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts3-sentinel-3]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts4-sentinel-2]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts5-sentinel-3]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts6-sentinel-4]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts7-sentinel-2]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_parses_exact_command_operand[parts8-sentinel-1]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_rejects_non_command_operands[parts0]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_rejects_non_command_operands[parts1]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_rejects_non_command_operands[parts2]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_rejects_non_command_operands[parts3]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_rejects_non_command_operands[parts4]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_rejects_non_command_operands[parts5]",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_interpreter_options.py::test_shell_interpreter_command_payload_does_not_scan_positional_arguments_as_options",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_interpreter_options_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
    "old_node": "tests/test_guard_shell_command_wrappers.py::test_normalize_transparent_shell_command_unwraps_trusted_absolute_env",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::trusted_absolute_env_wrapper_uses_native_observations"
@@ -4003,6 +4115,14 @@
  },
  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188",
  "replaced_implementations": [
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/interpreter_options.py",
+   "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
+   "source_sha256": "193d26d4434ac4b7a079f3ec311ee9dcfd4d097a5cfec2a1cec63ebbf273d17f",
+   "remaining_role": "Public option payload DTO and bound resident projection only; option and operand admission retired.",
+   "native_replacements": ["rust/crates/guard-command/src/shell_interpreter_options.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
+  },
   {
    "path": "src/codex_plugin_scanner/guard/runtime/data_flow.py",
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",

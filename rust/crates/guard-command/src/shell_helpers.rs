@@ -9,6 +9,7 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
         "normalization" | "trusted_path" => &["command", "cwd", "home_dir"],
         "trace" => &["command", "state", "index"],
         "top_level" => &["command", "state"],
+        "interpreter_payload" => &["command", "parts", "command_index"],
         _ => &["command"],
     };
     let object = input.as_object().ok_or("shell_helpers_invalid")?;
@@ -28,10 +29,23 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
         .and_then(Value::as_str)
         .ok_or("shell_helpers_invalid")?;
     // Workflow and heredoc callers admit inputs larger than command models.
-    if command.len() > 256 * 1024 {
+    if command.len() > 6 * 1024 * 1024 {
         return Err("shell_helpers_bounds");
     }
     match action {
+        "interpreter_payload" => {
+            let parts: Vec<String> = serde_json::from_value(input["parts"].clone())
+                .map_err(|_| "shell_helpers_invalid")?;
+            let index = usize::try_from(
+                input["command_index"]
+                    .as_u64()
+                    .ok_or("shell_helpers_invalid")?,
+            )
+            .map_err(|_| "shell_helpers_invalid")?;
+            Ok(json!(
+                shell_command_wrappers::shell_interpreter_command_payload(&parts, index)
+            ))
+        }
         "top_level" => Ok(json!(shell_structure::ShellScanState::from_snapshot(
             &input["state"]
         )?

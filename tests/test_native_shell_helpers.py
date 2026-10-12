@@ -19,10 +19,25 @@ from codex_plugin_scanner.guard.runtime import data_flow, shell_command_wrappers
 
 @pytest.mark.parametrize(
     "fault",
-    ["missing", "request_id", "request_sha256", "schema", "status", "code", "extra", "wrong_type", "bool_index"],
+    [
+        "missing",
+        "request_id",
+        "request_sha256",
+        "schema",
+        "status",
+        "code",
+        "code_object",
+        "extra",
+        "wrong_type",
+        "bool_index",
+    ],
 )
-def test_transport_rejects_unbound_or_malformed_answers(monkeypatch, fault):
-    monkeypatch.setattr(native_shell_helpers, "runtime_key", lambda: ("native",))
+def test_transport_rejects_unbound_or_malformed_answers(monkeypatch, tmp_path, fault):
+    from codex_plugin_scanner.guard import native_context
+
+    monkeypatch.setattr(native_context, "_resolve_digest_home", lambda _: tmp_path)
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _: True)
+    monkeypatch.setattr(native_context, "_native_runtime_status_memo", lambda: None)
 
     def reply(**kwargs):
         request = kwargs["request"]
@@ -42,6 +57,8 @@ def test_transport_rejects_unbound_or_malformed_answers(monkeypatch, fault):
             result["result"] = [False]
         elif fault == "bool_index":
             result["result"] = [[True, 1, None, 0, False, True]]
+        elif fault == "code_object":
+            result["code"] = {}
         else:
             result[fault] = "invalid"
         return result
@@ -49,6 +66,21 @@ def test_transport_rejects_unbound_or_malformed_answers(monkeypatch, fault):
     monkeypatch.setattr(native_execution, "_resident_request", reply)
     with pytest.raises(native_shell_helpers.NativeShellHelpersError):
         native_shell_helpers.call("trace" if fault == "bool_index" else "segments", "echo")
+
+
+def test_unrepresentable_wire_claims_never_reach_or_fault_the_resident(monkeypatch, tmp_path):
+    from codex_plugin_scanner.guard import native_context
+
+    monkeypatch.setattr(native_context, "_resolve_digest_home", lambda _: tmp_path)
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _: True)
+    monkeypatch.setattr(native_context, "_native_runtime_status_memo", lambda: None)
+    sent = []
+    monkeypatch.setattr(native_execution, "_resident_request", lambda **kwargs: sent.append(kwargs))
+    with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="shell_helpers_invalid"):
+        native_shell_helpers.call("segments", "\ud800")
+    with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="shell_helpers_request_bounds"):
+        native_shell_helpers.call("segments", "x" * (6 * 1024 * 1024))
+    assert sent == []
 
 
 def test_public_helpers_replay_original_python_vectors(native_hook_force, monkeypatch, tmp_path):
@@ -179,3 +211,27 @@ def test_prerequisite_time_consumes_the_same_transport_deadline(monkeypatch, tmp
     monkeypatch.setattr(native_context, "_native_runtime_status_memo", lambda: None)
     with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="deadline"):
         native_shell_helpers.call("segments", "echo value")
+
+
+def test_dense_heredocs_replay_across_native_pages_and_masking_wire(native_hook_force):
+    fixture = json.loads((Path(__file__).parent / "fixtures/shell-helper-python.v1.json").read_text())
+    vector = next(v for v in fixture["vectors"] if v["command"].startswith(":<<E\nE\n"))
+    command, expected = vector["command"], vector["expected"]
+    heredocs = shell_structure.extract_heredocs(command)
+    assert [asdict(h) for h in heredocs] == expected["heredocs"]
+    assert shell_structure.mask_heredoc_bodies(command, heredocs) == expected["masked_bodies"]
+    assert shell_structure.mask_complete_heredocs(command, heredocs) == expected["masked_complete"]
+
+
+def test_rejected_inputs_do_not_poison_shared_native_health(native_hook_force, monkeypatch):
+    failures = []
+    monkeypatch.setattr(
+        native_execution, "native_record_resident_failure", lambda *args, **kwargs: failures.append(kwargs)
+    )
+    for _ in range(3):
+        with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="shell_helpers_invalid"):
+            native_shell_helpers.call("masked_bodies", "echo", heredocs=[{}])
+    with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="shell_helpers_response_bounds"):
+        native_shell_helpers.call("normalization", "x" * 1_100_000)
+    assert data_flow.extract_command_segments("echo healthy") == ("echo healthy",)
+    assert failures == []

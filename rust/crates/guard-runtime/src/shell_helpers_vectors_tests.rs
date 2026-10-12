@@ -45,14 +45,31 @@ fn original_python_shell_helpers_replay() {
                 input["state"] = json!([null, 0, false]);
                 input["index"] = json!(0);
             }
+            if action == "heredocs" {
+                input["offset"] = json!(0);
+            }
             let mut request = ShellHelpersRequest {
                 schema: "guard-shell-helpers-request.v1".into(),
                 request_id: "parity".into(),
-                action: action.into(),
+                action: if action == "heredocs" {
+                    "heredocs_page"
+                } else {
+                    action
+                }
+                .into(),
                 input,
                 timeout_ms: 10_000,
             };
             let mut reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+            if action == "heredocs" {
+                let mut rows = reply["result"]["items"].as_array().unwrap().clone();
+                while !reply["result"]["next_offset"].is_null() {
+                    request.input["offset"] = reply["result"]["next_offset"].clone();
+                    reply = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+                    rows.extend(reply["result"]["items"].as_array().unwrap().iter().cloned());
+                }
+                reply["result"] = json!(rows);
+            }
             if action == "trace" {
                 let mut rows = reply["result"].as_array().unwrap().clone();
                 while rows.last().is_some_and(|r| {
@@ -73,6 +90,64 @@ fn original_python_shell_helpers_replay() {
                 "action={action}, command={command}"
             );
         }
+    }
+}
+
+#[test]
+fn original_python_interpreter_options_replay() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/shell-helper-python.v1.json"
+    ))
+    .unwrap();
+    for vector in fixture["interpreter_vectors"].as_array().unwrap() {
+        let request = ShellHelpersRequest {
+            schema: "guard-shell-helpers-request.v1".into(),
+            request_id: "interpreter-parity".into(),
+            action: "interpreter_payload".into(),
+            timeout_ms: 10_000,
+            input: json!({"command":"", "parts":vector["parts"], "command_index":vector["command_index"]}),
+        };
+        let reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+        assert_eq!(reply["code"], json!("ok"));
+        assert_eq!(
+            reply["result"], vector["expected"],
+            "parts={}",
+            vector["parts"]
+        );
+    }
+}
+
+#[test]
+fn input_rejections_are_bound_replies_and_large_results_are_bounded() {
+    for (action, input, code) in [
+        (
+            "trace",
+            json!({"command":"echo", "index":0,"state":["invalid",0,false]}),
+            "shell_helpers_invalid_state",
+        ),
+        (
+            "masked_bodies",
+            json!({"command":"echo","heredocs":[{}]}),
+            "shell_helpers_invalid",
+        ),
+        (
+            "normalization",
+            json!({"command":"x".repeat(1_100_000)}),
+            "shell_helpers_response_bounds",
+        ),
+    ] {
+        let request = ShellHelpersRequest {
+            schema: "guard-shell-helpers-request.v1".into(),
+            request_id: "rejected-input".into(),
+            action: action.into(),
+            input,
+            timeout_ms: 10_000,
+        };
+        let reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+        assert_eq!(reply["status"], json!("ok"));
+        assert_eq!(reply["code"], json!(code));
+        assert!(reply["result"].is_null());
+        assert_eq!(reply["request_id"], json!(request.request_id));
     }
 }
 
