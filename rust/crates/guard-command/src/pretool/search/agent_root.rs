@@ -19,9 +19,9 @@ pub(in crate::pretool) fn agent_root_listing(
     if value.is_empty()
         || value.len() > 4096
         || value.starts_with('-')
-        || value.contains(HAZARDS)
+        || value.contains(|c: char| HAZARDS.contains(&c) && !windows_separator(c))
         || value.contains(['*', '?', '[', ']', '{', '}'])
-        || value.split('/').any(|part| part == "..")
+        || value.split(['/', '\\']).any(|part| part == "..")
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;
@@ -41,4 +41,10 @@ pub(in crate::pretool) fn agent_root_listing(
     std::fs::symlink_metadata(&agent).is_ok_and(|metadata| metadata.is_dir())
         && std::fs::canonicalize(&root).is_ok_and(|canonical| canonical == agent)
         && (!recursive || walk(agent, &[], &[], false))
+}
+
+/// Windows spells the home path with `\`, so there it is a separator; the
+/// canonical equality in `agent_root_listing` still pins the operand to `<home>/.agent`.
+fn windows_separator(c: char) -> bool {
+    cfg!(windows) && c == '\\'
 }
