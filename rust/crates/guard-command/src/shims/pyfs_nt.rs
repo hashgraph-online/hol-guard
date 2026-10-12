@@ -2,10 +2,38 @@
 
 use std::fs;
 
-use super::winpath::{nt_join, nt_normcase, nt_normpath, nt_split, WinPath};
+use super::winpath::{nt_join, nt_normcase, nt_normpath, nt_split, splitroot, WinPath};
 use super::{ShimFacts, ShimResult};
 
 impl ShimFacts {
+    /// `ntpath.abspath` as `GetFullPathNameW` resolves it: a drive-relative
+    /// path on another drive than the working directory, such as `C:tools`,
+    /// resolves against that drive's current directory (`=C:`), else its root.
+    pub(super) fn nt_abspath(&self, path: &str) -> String {
+        let (drive, root, _) = splitroot(path);
+        let (cwd_drive, _, _) = splitroot(&self.cwd);
+        let base =
+            if !drive.is_empty() && root.is_empty() && !drive.eq_ignore_ascii_case(&cwd_drive) {
+                self.environ
+                    .iter()
+                    .find(|(key, _)| key.eq_ignore_ascii_case(&format!("={drive}")))
+                    .map_or_else(|| format!("{drive}\\"), |(_, value)| value.clone())
+            } else {
+                self.cwd.clone()
+            };
+        nt_normpath(&nt_join(&base, path))
+    }
+
+    /// `NeedCurrentDirectoryForExePath`: true unless
+    /// `NoDefaultCurrentDirectoryInExePath` is set; Windows environment names
+    /// are case-insensitive.
+    fn nt_searches_current_dir(&self) -> bool {
+        !self
+            .environ
+            .keys()
+            .any(|key| key.eq_ignore_ascii_case("NoDefaultCurrentDirectoryInExePath"))
+    }
+
     /// `ntpath.expanduser` home: `USERPROFILE`, else `HOMEDRIVE` + `HOMEPATH`;
     /// `None` when neither is set (the path then stays unexpanded).
     pub(super) fn nt_user_home(&self) -> Option<String> {
@@ -73,7 +101,7 @@ impl ShimFacts {
     /// `ntpath.realpath(strict=False)`: normalise, resolve the longest existing
     /// prefix through the filesystem and keep the rest as spelled.
     pub(super) fn resolve_nt(&self, path: &str) -> String {
-        let absolute = nt_normpath(&nt_join(&self.cwd, path));
+        let absolute = self.nt_abspath(path);
         let parsed = WinPath::new(&absolute);
         let mut existing = parsed.clone();
         let mut remainder: Vec<String> = Vec::new();
@@ -101,11 +129,7 @@ impl ShimFacts {
                 return None;
             }
             let mut listed: Vec<String> = search_path.split(';').map(str::to_owned).collect();
-            // `NeedCurrentDirectoryForExePath` is true unless the variable is set.
-            if !self
-                .environ
-                .contains_key("NoDefaultCurrentDirectoryInExePath")
-            {
+            if self.nt_searches_current_dir() {
                 listed.insert(0, ".".to_owned());
             }
             listed
@@ -158,4 +182,53 @@ fn strip_verbatim_prefix(path: &str) -> String {
         return format!("\\\\{rest}");
     }
     path.strip_prefix("\\\\?\\").unwrap_or(path).to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::ShimFacts;
+
+    fn facts(cwd: &str, environ: &[(&str, &str)]) -> ShimFacts {
+        ShimFacts {
+            environ: environ
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<BTreeMap<_, _>>(),
+            home: String::new(),
+            cwd: cwd.to_owned(),
+            executable: String::new(),
+            frozen: false,
+            frozen_cli: String::new(),
+            trusted_frozen_cli_paths: Vec::new(),
+            python_version: (3, 12),
+            import_root: String::new(),
+            argv0: None,
+            windows: true,
+            sqlite_connect_timeout_seconds: 30.0,
+            now: String::new(),
+        }
+    }
+
+    #[test]
+    fn drive_relative_path_on_another_drive_uses_that_drive() {
+        let plain = facts("D:\\work", &[]);
+        assert_eq!(plain.nt_abspath("C:tools"), "C:\\tools");
+        assert_eq!(plain.nt_abspath("d:bin"), "d:\\work\\bin");
+        assert_eq!(plain.nt_abspath("bin"), "D:\\work\\bin");
+        let per_drive = facts("D:\\work", &[("=C:", "C:\\Users\\dev")]);
+        assert_eq!(per_drive.nt_abspath("C:tools"), "C:\\Users\\dev\\tools");
+    }
+
+    #[test]
+    fn current_directory_opt_out_ignores_key_case() {
+        assert!(facts("C:\\work", &[]).nt_searches_current_dir());
+        for key in [
+            "NoDefaultCurrentDirectoryInExePath",
+            "NODEFAULTCURRENTDIRECTORYINEXEPATH",
+        ] {
+            assert!(!facts("C:\\work", &[(key, "1")]).nt_searches_current_dir());
+        }
+    }
 }

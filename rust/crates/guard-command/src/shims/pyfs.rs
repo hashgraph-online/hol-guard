@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use super::winpath::{nt_is_within, nt_join, nt_normcase, nt_normpath, WinPath};
+use super::winpath::{nt_is_within, nt_normcase, WinPath};
 use super::{ShimFacts, ShimResult};
 use crate::codex_output_py::PyPath;
 
@@ -220,7 +220,7 @@ impl ShimFacts {
     /// `os.path.abspath(os.path.expanduser(path))`.
     pub(crate) fn expanded_abspath(&self, path: &str) -> String {
         if self.windows {
-            return nt_normpath(&nt_join(&self.cwd, &self.expanduser_os_nt(path)));
+            return self.nt_abspath(&self.expanduser_os_nt(path));
         }
         let expanded = self.posix_expanduser(path);
         if is_absolute(&expanded) {
