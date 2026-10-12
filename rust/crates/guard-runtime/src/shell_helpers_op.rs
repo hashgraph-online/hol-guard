@@ -152,7 +152,10 @@ fn prepared_result(
         bytes,
         digest,
     });
-    if action == "heredocs" || action == "heredocs_page" || result.bytes.len() > 256 * 1024 {
+    if action == "heredocs"
+        || action == "heredocs_page"
+        || (result.bytes.len() > 256 * 1024 && !matches!(action, "normalization" | "trusted_path"))
+    {
         let mut entries = cache.lock().map_err(|_| "shell_helpers_invalid")?;
         if entries.len() == 2 {
             entries.pop_front();
