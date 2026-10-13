@@ -115,6 +115,22 @@ from .audit_persistence import WRITTEN as AUDIT_WRITTEN
 from .audit_persistence import AuditPersistence
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
+from .extension_discovery_read import (
+    DISCOVERY_EVENTS_PATH,
+    DISCOVERY_PLACEMENTS_PATH,
+    DISCOVERY_RENDERS_PATH,
+    DISCOVERY_UNAVAILABLE,
+    DiscoveryReadError,
+    discovery_placement_projection,
+    discovery_rollout_enabled,
+    relay_discovery_measurement,
+)
+from .sponsored_discovery_settings import (
+    sponsored_discovery_allowed,
+    sponsored_discovery_measurement_allowed,
+    sponsored_discovery_settings,
+    update_sponsored_discovery_settings,
+)
 from .command_activity_api import (
     parse_command_activity_event_cursor,
     stream_command_activity_events,
@@ -1284,6 +1300,44 @@ class _GuardDaemonHandler(
                 return
             self._write_json({"error": "not_found"}, status=404)
             return
+        if parsed.path.startswith("/v1/discovery/extensions/"):
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not discovery_rollout_enabled():
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
+                return
+            if parsed.path == "/v1/discovery/extensions/settings":
+                store = self.server.store  # type: ignore[attr-defined]
+                self._write_json(sponsored_discovery_settings(store))
+                return
+            if parsed.path != DISCOVERY_PLACEMENTS_PATH:
+                self._write_json({"error": "not_found"}, status=404)
+                return
+            # Sponsored discovery is user/managed gated; a disabled preference
+            # still answers a valid policy-blocked projection rather than an
+            # error, so the dashboard can distinguish opt-out from failure.
+            store = self.server.store  # type: ignore[attr-defined]
+            allowed = sponsored_discovery_allowed(store)
+            result = discovery_placement_projection(
+                guard_home=store.guard_home,
+                policy_allowed=allowed,
+            )
+            if result is None:
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=501)
+                return
+            if result.error_code is not None:
+                self._write_json({"error": result.error_code}, status=result.status)
+                return
+            if result.body is None:
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
+                return
+            self._write_discovery_body(result.body)
+            return
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
@@ -1382,12 +1436,55 @@ class _GuardDaemonHandler(
             }.get(body_error, 400)
             self._write_json({"error": body_error}, status=status)
             return
+        if parsed.path.startswith("/v1/discovery/extensions/"):
+            if not discovery_rollout_enabled():
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
+                return
+            store = self.server.store  # type: ignore[attr-defined]
+            if parsed.path in (DISCOVERY_RENDERS_PATH, DISCOVERY_EVENTS_PATH):
+                # Consent-gated relay: measurement off still allows discovery
+                # but emits no render/event POSTs and no persistent identity.
+                if not sponsored_discovery_measurement_allowed(store):
+                    self._write_json({"error": "measurement_disabled"}, status=403)
+                    return
+                if not isinstance(payload, dict):
+                    self._write_json({"error": "invalid_request"}, status=400)
+                    return
+                # Only the strictly parsed, bounded JSON moves upstream: no
+                # local credential, identifier, or inventory is attached.
+                raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                try:
+                    status, body = relay_discovery_measurement(path=parsed.path, payload=raw)
+                except DiscoveryReadError as error:
+                    self._write_json({"error": error.code}, status=error.status)
+                    return
+                self._write_json_bytes(escape_json_for_html(body), status=status, extra_headers={"Cache-Control": "no-store"})
+                return
+            if parsed.path == "/v1/discovery/extensions/settings":
+                update = payload if isinstance(payload, dict) else {}
+                enabled = update.get("sponsored_discovery_enabled")
+                measurement = update.get("sponsored_discovery_measurement_enabled")
+                if enabled is not None and not isinstance(enabled, bool):
+                    self._write_json({"error": "invalid_request"}, status=400)
+                    return
+                if measurement is not None and not isinstance(measurement, bool):
+                    self._write_json({"error": "invalid_request"}, status=400)
+                    return
+                settings = update_sponsored_discovery_settings(
+                    store,
+                    sponsored_discovery_enabled=enabled if isinstance(enabled, bool) else None,
+                    sponsored_discovery_measurement_enabled=measurement if isinstance(measurement, bool) else None,
+                    now=datetime.now(timezone.utc).isoformat(),
+                )
+                self._write_json(settings)
+                return
+            self._write_json({"error": "not_found"}, status=404)
+            return
         if parsed.path == "/v1/healthz/verify":
             nonce = self._optional_string(payload.get("nonce")) if payload else None
             if not nonce:
                 self._write_json({"error": "missing_nonce"}, status=400)
-                return
-            auth_token = self.server.auth_token  # type: ignore[attr-defined]
+                return            auth_token = self.server.auth_token  # type: ignore[attr-defined]
             daemon_port = self.server.server_address[1]  # type: ignore[attr-defined]
             # Bind the proof to this daemon's listening port so a relay attacker
             # cannot proxy the nonce to the real daemon and reuse its proof from
@@ -2748,6 +2845,19 @@ class _GuardDaemonHandler(
     ) -> None:
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
         self._write_json_bytes(body, status=status, extra_headers=extra_headers)
+
+    def _write_discovery_body(self, body: bytes) -> None:
+        """Write the native discovery projection verbatim, uncached.
+
+        The bytes are exactly what the native validator produced: this server
+        never interprets, filters, or reorders placements.
+        """
+
+        self._write_json_bytes(
+            escape_json_for_html(body),
+            status=200,
+            extra_headers={"Cache-Control": "no-store"},
+        )
 
     def _write_json_bytes(
         self,

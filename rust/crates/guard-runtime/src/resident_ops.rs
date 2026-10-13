@@ -472,6 +472,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::CatalogRead(request) => encode_response(
                 &guard_command::catalog_read_model::evaluate_catalog_read(&request),
             ),
+            // Untrusted Cloud discovery bytes are validated and projected
+            // here; the daemon adapter only moves bytes (no Python fallback).
+            ResidentOperationV1::DiscoveryPlacementProject(request) => {
+                crate::discovery_placement_op::evaluate_discovery_placement_project(&request)
+            }
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }

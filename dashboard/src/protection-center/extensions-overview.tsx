@@ -7,8 +7,10 @@ import {
 } from "../extension-control-center-model";
 import type { CatalogReadModel } from "../extension-catalog-v2";
 import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
+import { fetchExtensionDiscoveryApi } from "../guard-api";
 import { connectorWorkspaceItems, refreshCodexHostInventory, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
+import { ExtensionsDiscover } from "./extensions-discover";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
@@ -128,6 +130,7 @@ export function ExtensionsOverview(props: {
   onOpenLocalCli: (cliId: string) => void;
   onAddCustom: (command?: string) => void;
 }) {
+  const [workspaceView, setWorkspaceView] = useState<"manage" | "discover">("manage");
   const [query, setQuery] = useState("");
   const discoveryStarted = useRef(false);
   const reloadConnections = useRef(props.onReloadConnections);
@@ -246,7 +249,38 @@ export function ExtensionsOverview(props: {
         eyebrow="On this device"
         title={PROTECTION_TERMS.pageTitle}
         description="Choose an Extension to review its permissions and effective protection."
+        tabs={[
+          { value: "manage", label: "Manage" },
+          { value: "discover", label: "Discover" },
+        ]}
+        activeTab={workspaceView}
+        onTabChange={setWorkspaceView}
+        actions={
+          <a
+            className="guard-extensions-chip"
+            data-testid="sponsor-extension-action"
+            href="https://hol.org/guard/extensions/advertise?source=guard_local&intent=extension-promotion&placement=extensions_header"
+            target="_blank"
+            rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
+          >
+            Sponsor an extension
+          </a>
+        }
       />
+      {/* Manage stays the default view; Discover is the explicitly online
+          secondary surface and makes no request while unmounted. */}
+      {workspaceView === "discover" ? (
+        <div className="mt-4" data-testid="extensions-discover-panel">
+          <ExtensionsDiscover
+            active={props.active && workspaceView === "discover"}
+            catalogExtensions={visibleCatalog}
+            onOpenExtension={props.onOpenExtension}
+            fetchPlacements={() => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements")}
+          />
+        </div>
+      ) : (
+        <div data-testid="extensions-manage-panel">
       <div className="mt-6">
         <ProtectionStatusHero
           status={props.status}
@@ -366,6 +400,8 @@ export function ExtensionsOverview(props: {
           <CodexHostConnectors inventory={props.hostInventory} />
           <LocalSkillsWorkspace />
         </>
+      )}
+        </div>
       )}
 
     </div>
