@@ -6,7 +6,8 @@ use super::*;
 
 const GENERATED: &str = "2026-10-13T12:00:00.000Z";
 const LEASE: &str = "2026-10-13T12:00:25.000Z";
-const NOW_MS: i64 = 1_798_833_600_500;
+// 2026-10-13T12:00:00.500Z in epoch milliseconds.
+const NOW_MS: i64 = 1_791_892_800_500;
 
 fn base_snapshot() -> Value {
     json!({
@@ -278,7 +279,7 @@ fn rejects_overdepth_and_malformed_bodies() {
 
 #[test]
 fn strict_utc_parser_handles_boundaries() {
-    assert_eq!(parse_utc_iso_ms("2026-10-13T12:00:00.000Z"), Some(1_798_833_600_000));
+    assert_eq!(parse_utc_iso_ms("2026-10-13T12:00:00.000Z"), Some(1_791_892_800_000));
     assert_eq!(parse_utc_iso_ms("2024-02-29T00:00:00Z"), Some(1_709_164_800_000));
     assert_eq!(parse_utc_iso_ms("2023-02-29T00:00:00Z"), None);
     assert_eq!(parse_utc_iso_ms("2026-13-01T00:00:00.000Z"), None);

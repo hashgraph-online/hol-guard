@@ -406,7 +406,11 @@ function DiscoveryStatusRow(props: { status: DiscoveryFeedStatus; sponsoredAvail
         </p>
       );
     }
-    return null;
+    return (
+      <p className="mt-6 text-xs text-brand-dark/45" data-testid="discovery-status-ready" role="status">
+        Sponsored placements, when present, are labeled and never change protection.
+      </p>
+    );
   }
   if (props.status === "opt-out") {
     return (

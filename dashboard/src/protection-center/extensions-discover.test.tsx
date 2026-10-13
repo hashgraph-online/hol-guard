@@ -186,9 +186,11 @@ describe("ExtensionsDiscover", () => {
       expect(screen.getByTestId("discovery-featured-card")).toBeTruthy();
     });
     const first = screen.getByTestId("discovery-featured-card").getAttribute("data-sponsored-placement-id");
+    // The ten-second foreground cadence must be the only refresh source, and
+    // a still-valid selection must survive it unchanged.
     await waitFor(() => {
       expect(call).toBeGreaterThan(1);
-    });
+    }, { timeout: 12_000 });
     const second = screen.getByTestId("discovery-featured-card").getAttribute("data-sponsored-placement-id");
     expect(second).toBe(first);
     expect(view).toBeTruthy();
