@@ -36,11 +36,13 @@ def sponsored_discovery_settings(store: GuardStore) -> dict[str, object]:
 
     record = _load_mapping(store, _SETTINGS_KEY)
     managed = _load_mapping(store, _MANAGED_KEY)
-    effective = {**_DEFAULTS}
-    for name in _DEFAULTS:
+    # Annotated as object so the bool defaults and the later bool flags share
+    # one dict. A bare copy of _DEFAULTS is dict[str, bool], which is not
+    # assignable to dict[str, object].
+    effective: dict[str, object] = {}
+    for name, default in _DEFAULTS.items():
         value = record.get(name)
-        if isinstance(value, bool):
-            effective[name] = value
+        effective[name] = value if isinstance(value, bool) else default
     managed_discovery = managed.get("sponsored_discovery_enabled")
     if managed_discovery is False:
         effective["sponsored_discovery_enabled"] = False

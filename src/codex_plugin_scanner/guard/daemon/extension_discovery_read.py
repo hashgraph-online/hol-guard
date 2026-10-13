@@ -24,7 +24,7 @@ import urllib.request
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from ..native_catalog_read import NativeCatalogReadResult
 from ..native_resident_client import native_resident_client_request
@@ -93,15 +93,37 @@ _fetch_lock = threading.Lock()
 _cached_snapshot: _CachedSnapshot | None = None
 
 
+class _DiscoveryHeaders(Protocol):
+    def get(self, name: str, /) -> str | None: ...
+
+
+class _ReadableBody(Protocol):
+    def read(self, amount: int, /) -> bytes: ...
+
+
+class _DiscoveryResponse(_ReadableBody, Protocol):
+    @property
+    def status(self) -> int: ...
+
+    @property
+    def headers(self) -> _DiscoveryHeaders: ...
+
+    def close(self) -> None: ...
+
+
 class DiscoveryOpener(Protocol):
-    def open(self, request: urllib.request.Request, timeout: float) -> object: ...
+    def open(self, request: urllib.request.Request, timeout: float) -> _DiscoveryResponse: ...
 
 
 def _build_opener() -> DiscoveryOpener:
-    return urllib.request.build_opener(
+    # urllib's opener uses a different positional signature than this adapter.
+    # Callers still pass timeout by keyword. The object hop is only there so
+    # the typed DiscoveryOpener boundary is an explicit cast.
+    built: object = urllib.request.build_opener(
         _NoRedirects(),
         urllib.request.HTTPSHandler(),
     )
+    return cast(DiscoveryOpener, cast(object, built))
 
 
 def _parse_http_date_ms(value: str | None) -> int | None:
@@ -113,18 +135,18 @@ def _parse_http_date_ms(value: str | None) -> int | None:
         return None
 
 
-def _read_bounded(response: object, limit: int) -> bytes:
+def _read_bounded(response: _ReadableBody, limit: int) -> bytes:
     # Bound the read while streaming rather than after allocating a body.
     chunks: list[bytes] = []
     size = 0
     while size < limit:
-        chunk = response.read(min(8192, limit - size))  # type: ignore[attr-defined]
+        chunk = response.read(min(8192, limit - size))
         if not chunk:
             return b"".join(chunks)
         chunks.append(chunk)
         size += len(chunk)
     # One extra byte proves the body exceeded the bound.
-    if response.read(1):  # type: ignore[attr-defined]
+    if response.read(1):
         raise DiscoveryReadError("discovery_response_too_large", 503)
     return b"".join(chunks)
 
@@ -193,7 +215,7 @@ def fetch_discovery_snapshot(
         except (urllib.error.URLError, OSError, ValueError) as error:
             raise DiscoveryReadError(DISCOVERY_TRANSPORT_FAILED, 503) from error
         try:
-            if response.status != 200:  # type: ignore[attr-defined]
+            if response.status != 200:
                 raise DiscoveryReadError("discovery_upstream_error", 503)
             body = _read_bounded(response, MAX_DISCOVERY_RESPONSE_BYTES)
             etag = response.headers.get("ETag")
@@ -332,7 +354,7 @@ def relay_discovery_measurement(
     except (urllib.error.URLError, OSError, ValueError) as error:
         raise DiscoveryReadError(DISCOVERY_TRANSPORT_FAILED, 503) from error
     try:
-        if response.status != 200:  # type: ignore[attr-defined]
+        if response.status != 200:
             raise DiscoveryReadError("discovery_upstream_error", 503)
         return 200, _read_bounded(response, MAX_DISCOVERY_RESPONSE_BYTES)
     finally:

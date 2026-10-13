@@ -152,7 +152,7 @@ def test_rollout_switch_answers_capability_unavailable(monkeypatch: pytest.Monke
 def test_relay_rejects_unbounded_and_unknown_paths() -> None:
     with pytest.raises(discovery.DiscoveryReadError):
         discovery.relay_discovery_measurement(
-            path="/api/guard/extensions/discovery/v1/events",
+            path="/api/guard/extensions/discovery/v1/unknown",
             payload=b"{}",
             opener=FakeOpener([]),
         )
