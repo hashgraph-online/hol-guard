@@ -17,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize(
     ("arguments", "extra"),
     [
-        (["rustc", "--test", "src/main.rs", "-C", "opt-level=1"], ["-C", "opt-level=0"]),
+        (
+            ["rustc", "--test", "src/main.rs", "-C", "opt-level=1"],
+            ["-C", "opt-level=0", "-C", "link-arg=-fuse-ld=lld"],
+        ),
         (["rustc", "--crate-type", "rlib", "src/lib.rs", "-C", "opt-level=1"], []),
         (["rustc", "--crate-type", "bin", "src/main.rs", "-C", "opt-level=1"], []),
         (["rustc", "-vV"], []),

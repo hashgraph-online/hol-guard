@@ -160,3 +160,27 @@ def test_rust_shards_remain_required_and_cache_isolated() -> None:
     cache = next(step for step in jobs["native-workspace"]["steps"]
                  if step.get("uses") == "./.github/actions/setup-rust")
     assert cache["with"]["cache-key"] == "ci-workspace-${{ matrix.check }}"
+
+
+def test_rust_shard_cache_fallback_is_read_only_and_conditional() -> None:
+    """Seed new shards from trusted dependencies without recreating writer races."""
+    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
+    assert action["inputs"]["cache-fallback-key"]["default"] == ""
+    steps = action["runs"]["steps"]
+    primary = next(step for step in steps if step.get("id") == "rust-cache")
+    fallback = next(
+        step for step in steps
+        if step.get("name") == "Seed a new cache namespace from compatible dependencies"
+    )
+    assert steps.index(primary) < steps.index(fallback)
+    assert fallback["if"] == "inputs.cache-fallback-key != '' && steps.rust-cache.outputs.cache-hit != 'true'"
+    assert fallback["with"]["save-if"] == "false"
+    assert "inputs.cache-key" in primary["with"]["shared-key"]
+    assert "inputs.cache-fallback-key" in fallback["with"]["shared-key"]
+    for key in ("prefix-key", "workspaces", "cache-workspace-crates", "cache-bin"):
+        assert fallback["with"][key] == primary["with"][key]
+    assert "github.ref == 'refs/heads/main'" in primary["with"]["save-if"]
+    setup = next(step for step in workflow("ci.yml")["jobs"]["native-workspace"]["steps"]
+                 if step.get("uses") == "./.github/actions/setup-rust")
+    assert setup["with"]["cache-key"] == "ci-workspace-${{ matrix.check }}"
+    assert setup["with"]["cache-fallback-key"] == "${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}"

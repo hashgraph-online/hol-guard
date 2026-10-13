@@ -174,6 +174,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
+          cache-fallback-key: ${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}
           components: clippy
       - name: Install content-addressed compiler cache
         if: matrix.check != 'clippy'
@@ -206,7 +207,7 @@ jobs:
         # and the live confinement run is skipped.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends apparmor bubblewrap
+          sudo apt-get install -y --no-install-recommends apparmor bubblewrap lld
           sudo tee /etc/apparmor.d/hol-guard-bwrap <<'EOF'
           abi <abi/4.0>,
           include <tunables/global>
