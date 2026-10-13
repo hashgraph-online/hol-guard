@@ -1,4 +1,4 @@
-import { b8 as isGuardDemoMode, b9 as isRecord, ba as fetchWithGuardAuth, r as reactExports, aq as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, ar as ApprovalProofModal, as as Tag, af as harnessPostureRows, bb as overrideRows, ai as harnessRowTone, bc as harnessPostureSummary, bd as joinNames, ae as sortHarnessRows, at as PROTECTION_POSTURE_COPY, ag as selectHarnessPosture, be as restartHarnessWatch, b0 as HiMiniMagnifyingGlass, bf as harnessWatchPrompt, ak as HiMiniEye, y as HiMiniShieldCheck, aj as harnessPostureOptions, bg as canRestartHarnessWatch, al as harnessRowStatus, P as useFocusTrap, bh as HiMiniKey, S as SectionLabel } from "../guard-dashboard.js";
+import { b8 as isGuardDemoMode, b9 as isRecord, ba as fetchWithGuardAuth, r as reactExports, ar as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, as as ApprovalProofModal, at as Tag, ae as harnessPostureRows, bb as overrideRows, ah as harnessRowTone, bc as harnessPostureSummary, bd as joinNames, be as sortHarnessRows, al as PROTECTION_POSTURE_COPY, am as globalPosture, af as selectHarnessPosture, bf as restartHarnessWatch, b0 as HiMiniMagnifyingGlass, bg as harnessWatchPrompt, ai as harnessPostureOptions, bh as canRestartHarnessWatch, aj as HiMiniEye, y as HiMiniShieldCheck, ak as harnessRowStatus, P as useFocusTrap, bi as HiMiniKey, S as SectionLabel } from "../guard-dashboard.js";
 const SUPPORTED_APP_SLUGS = [
   "codex",
   "claude-code",
@@ -373,11 +373,6 @@ function GuardRepairControl({
     ) : null
   ] });
 }
-function machinePosture(settings) {
-  if (settings.protection_posture === "watch") return "watch";
-  if (settings.protection_posture === "extra_careful") return "extra_careful";
-  return "protected";
-}
 function HarnessPostureManager(props) {
   const { settings, onSettingsChange } = props;
   const [pendingWatch, setPendingWatch] = reactExports.useState(null);
@@ -389,7 +384,7 @@ function HarnessPostureManager(props) {
   const visibleRows = query.length === 0 ? sortedRows : sortedRows.filter(
     (row) => row.displayName.toLowerCase().includes(query) || row.harness.toLowerCase().includes(query)
   );
-  const machineLabel = PROTECTION_POSTURE_COPY[machinePosture(settings)].label;
+  const machineLabel = PROTECTION_POSTURE_COPY[globalPosture(settings)].label;
   const pendingRow = pendingWatch !== null ? visibleRows.find((row) => row.harness === pendingWatch) : void 0;
   const handleChoice = reactExports.useCallback((harness, choice) => {
     if (choice === "watch") {
@@ -558,10 +553,14 @@ function HarnessPostureChoiceLabel(props) {
   else if (props.selected) {
     choiceClass = isWatch ? "cursor-pointer bg-brand-attention text-white shadow-sm" : "cursor-pointer bg-brand-blue text-white shadow-sm";
   }
+  let icon = null;
+  if (!props.compact) {
+    icon = isWatch ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "label",
     {
-      className: `flex min-h-11 min-w-24 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-within:ring-2 focus-within:ring-brand-blue ${choiceClass}`,
+      className: `flex min-h-11 items-center justify-center rounded-lg py-2 text-sm font-semibold transition-colors focus-within:ring-2 focus-within:ring-brand-blue ${props.compact ? "min-w-20 px-2.5" : "min-w-24 gap-1.5 px-3"} ${choiceClass}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
@@ -575,7 +574,7 @@ function HarnessPostureChoiceLabel(props) {
             className: "sr-only"
           }
         ),
-        isWatch ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
+        icon,
         props.label
       ]
     }
