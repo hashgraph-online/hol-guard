@@ -6985,7 +6985,7 @@ function parseDiscoveryProjection(value) {
   if (!Array.isArray(snapshot.placements)) return null;
   for (const placement of snapshot.placements) {
     const candidate = placement;
-    if (typeof candidate.publicPlacementId !== "string" || typeof candidate.extensionId !== "string" || candidate.product !== "always" && candidate.product !== "time_slot" && candidate.product !== "sponsored" || typeof candidate.endsAt !== "string" || typeof candidate.creativeVersion !== "string" || typeof candidate.creative?.headline !== "string") {
+    if (typeof candidate.publicPlacementId !== "string" || typeof candidate.extensionId !== "string" || candidate.product !== "always" && candidate.product !== "time_slot" && candidate.product !== "sponsored" || typeof candidate.endsAt !== "string" || typeof candidate.creativeVersion !== "string" || typeof candidate.creative?.headline !== "string" || typeof candidate.creative?.body !== "string") {
       return null;
     }
   }
@@ -7099,17 +7099,23 @@ function ExtensionsDiscover(props) {
   const [visitSeed] = reactExports.useState(() => Math.random());
   const selectedFeatured = reactExports.useRef(null);
   const selectedSponsored = reactExports.useRef(null);
+  const requestGeneration = reactExports.useRef(0);
   const fetchRef = reactExports.useRef(props.fetchPlacements);
   fetchRef.current = props.fetchPlacements;
   const load = reactExports.useCallback(async () => {
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
+    const current = () => generation === requestGeneration.current;
     try {
       const response = await fetchRef.current();
+      if (!current()) return;
       if (response.status === 403) {
         setStatus("opt-out");
         return;
       }
       if (response.status === 501 || response.status === 503 || response.status === 429) {
         const body = await response.json().catch(() => null);
+        if (!current()) return;
         const code = body && typeof body.error === "string" ? body.error : null;
         setStatus(code === "rate_limited" || response.status === 429 ? "rate-limited" : "unavailable");
         setProjection(null);
@@ -7121,6 +7127,7 @@ function ExtensionsDiscover(props) {
         return;
       }
       const parsed = parseDiscoveryProjection(await response.json().catch(() => null));
+      if (!current()) return;
       if (!parsed) {
         setStatus("unavailable");
         setProjection(null);
@@ -7139,6 +7146,7 @@ function ExtensionsDiscover(props) {
       setProjection(parsed);
       setStatus("ready");
     } catch {
+      if (!current()) return;
       setStatus("offline");
       setProjection(null);
     }
@@ -7159,6 +7167,7 @@ function ExtensionsDiscover(props) {
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
+      requestGeneration.current += 1;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
@@ -7171,22 +7180,26 @@ function ExtensionsDiscover(props) {
     ),
     [projection, props.catalogExtensions, status]
   );
-  const featured = reactExports.useMemo(() => {
-    const chosen = chooseStableCard(joined.featured, selectedFeatured.current, visitSeed);
-    selectedFeatured.current = chosen ? chosen.placement.publicPlacementId : null;
-    return chosen;
-  }, [joined.featured, visitSeed]);
+  const featured = reactExports.useMemo(
+    () => chooseStableCard(joined.featured, selectedFeatured.current, visitSeed),
+    [joined.featured, visitSeed]
+  );
+  reactExports.useEffect(() => {
+    selectedFeatured.current = featured ? featured.placement.publicPlacementId : null;
+  }, [featured]);
   const sponsored = reactExports.useMemo(() => {
     if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return null;
-    const chosen = chooseSponsoredCard(
+    return chooseSponsoredCard(
       joined.sponsored,
       selectedSponsored.current,
       visitSeed,
       featured?.placement.extensionId ?? null
     );
-    selectedSponsored.current = chosen ? chosen.placement.publicPlacementId : null;
-    return chosen;
   }, [featured, joined.sponsored, props.catalogExtensions.length, visitSeed]);
+  reactExports.useEffect(() => {
+    if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return;
+    selectedSponsored.current = sponsored ? sponsored.placement.publicPlacementId : null;
+  }, [props.catalogExtensions.length, sponsored]);
   const sponsoredOffer = projection?.snapshot.offers.find(
     (offer) => offer.product === "sponsored"
   ) ?? null;

@@ -93,18 +93,24 @@ export function ExtensionsDiscover(props: {
   const [visitSeed] = useState(() => Math.random());
   const selectedFeatured = useRef<string | null>(null);
   const selectedSponsored = useRef<string | null>(null);
+  const requestGeneration = useRef(0);
   const fetchRef = useRef(props.fetchPlacements);
   fetchRef.current = props.fetchPlacements;
 
   const load = useCallback(async () => {
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
+    const current = () => generation === requestGeneration.current;
     try {
       const response = await fetchRef.current();
+      if (!current()) return;
       if (response.status === 403) {
         setStatus("opt-out");
         return;
       }
       if (response.status === 501 || response.status === 503 || response.status === 429) {
         const body = await response.json().catch(() => null);
+        if (!current()) return;
         const code = body && typeof body.error === "string" ? body.error : null;
         setStatus(code === "rate_limited" || response.status === 429 ? "rate-limited" : "unavailable");
         setProjection(null);
@@ -116,6 +122,7 @@ export function ExtensionsDiscover(props: {
         return;
       }
       const parsed = parseDiscoveryProjection(await response.json().catch(() => null));
+      if (!current()) return;
       if (!parsed) {
         setStatus("unavailable");
         setProjection(null);
@@ -134,6 +141,7 @@ export function ExtensionsDiscover(props: {
       setProjection(parsed);
       setStatus("ready");
     } catch {
+      if (!current()) return;
       setStatus("offline");
       setProjection(null);
     }
@@ -157,6 +165,7 @@ export function ExtensionsDiscover(props: {
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
+      requestGeneration.current += 1;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
@@ -171,23 +180,27 @@ export function ExtensionsDiscover(props: {
     [projection, props.catalogExtensions, status],
   );
 
-  const featured = useMemo(() => {
-    const chosen = chooseStableCard(joined.featured, selectedFeatured.current, visitSeed);
-    selectedFeatured.current = chosen ? chosen.placement.publicPlacementId : null;
-    return chosen;
-  }, [joined.featured, visitSeed]);
+  const featured = useMemo(
+    () => chooseStableCard(joined.featured, selectedFeatured.current, visitSeed),
+    [joined.featured, visitSeed],
+  );
+  useEffect(() => {
+    selectedFeatured.current = featured ? featured.placement.publicPlacementId : null;
+  }, [featured]);
 
   const sponsored = useMemo(() => {
     if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return null;
-    const chosen = chooseSponsoredCard(
+    return chooseSponsoredCard(
       joined.sponsored,
       selectedSponsored.current,
       visitSeed,
       featured?.placement.extensionId ?? null,
     );
-    selectedSponsored.current = chosen ? chosen.placement.publicPlacementId : null;
-    return chosen;
   }, [featured, joined.sponsored, props.catalogExtensions.length, visitSeed]);
+  useEffect(() => {
+    if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return;
+    selectedSponsored.current = sponsored ? sponsored.placement.publicPlacementId : null;
+  }, [props.catalogExtensions.length, sponsored]);
 
   const sponsoredOffer: DiscoveryOffer | null = projection?.snapshot.offers.find(
     (offer) => offer.product === "sponsored",

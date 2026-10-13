@@ -88,6 +88,7 @@ export function parseDiscoveryProjection(value: unknown): DiscoveryProjection | 
       || typeof candidate.endsAt !== "string"
       || typeof candidate.creativeVersion !== "string"
       || typeof candidate.creative?.headline !== "string"
+      || typeof candidate.creative?.body !== "string"
     ) {
       return null;
     }

@@ -116,15 +116,16 @@ const CATALOG = Array.from({ length: 10 }, (_, index) =>
     NOW_MS,
   ).featured;
   const first = chooseStableCard(entries, null, 0.1);
-  const again = chooseStableCard(entries, first?.placement.publicPlacementId ?? null, 0.9);
-  assert.equal(again?.placement.publicPlacementId, first?.placement.publicPlacementId);
-  // A card that disappeared from the snapshot is released.
-  const afterWithdrawal = chooseStableCard(entries.slice(0, 1), first?.placement.publicPlacementId ?? null, 0.9);
-  assert.ok(afterWithdrawal);
-  assert.notEqual(
-    afterWithdrawal.placement.publicPlacementId,
-    entries[1]?.placement.publicPlacementId,
+  assert.ok(first);
+  const again = chooseStableCard(entries, first.placement.publicPlacementId, 0.9);
+  assert.equal(again?.placement.publicPlacementId, first.placement.publicPlacementId);
+  // The selected card left the snapshot, so the next choice is the card that remains.
+  const remaining = entries.filter(
+    (entry) => entry.placement.publicPlacementId !== first.placement.publicPlacementId,
   );
+  const afterWithdrawal = chooseStableCard(remaining, first.placement.publicPlacementId, 0.9);
+  assert.equal(afterWithdrawal?.placement.publicPlacementId, remaining[0]?.placement.publicPlacementId);
+  assert.notEqual(afterWithdrawal?.placement.publicPlacementId, first.placement.publicPlacementId);
 }
 
 // The purchase prompt appears only for a ready, empty, authoritatively open
@@ -207,6 +208,13 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   assert.ok(valid);
   assert.equal(valid.snapshot.placements.length, 1);
   assert.equal(valid.remainingLeaseMs, 25_000);
+  const missingBody = placement();
+  missingBody.creative = { ...missingBody.creative, body: undefined as unknown as string };
+  assert.equal(parseDiscoveryProjection({
+    remainingLeaseMs: 25_000,
+    policyAllowed: true,
+    snapshot: { ...valid.snapshot, placements: [missingBody] },
+  }), null);
 }
 
 // Static markup of the model-backed labels renders the disclosure text and

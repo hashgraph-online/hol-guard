@@ -16998,7 +16998,7 @@ async function fetchLocalCliApi(input, init) {
   return fetchWithGuardAuth(input, init);
 }
 async function fetchExtensionDiscoveryApi(input, init) {
-  const approvedPath = /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+  const approvedPath = typeof input === "string" && /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid extension discovery API path");
   }

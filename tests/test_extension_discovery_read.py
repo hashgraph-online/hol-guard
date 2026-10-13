@@ -128,6 +128,49 @@ def test_redirects_are_refused() -> None:
         discovery.fetch_discovery_snapshot(opener=opener, force=True)
 
 
+def test_non_utf8_upstream_body_is_refused() -> None:
+    opener = FakeOpener([FakeResponse(b"\xff")])
+    with pytest.raises(discovery.DiscoveryReadError) as error:
+        discovery.fetch_discovery_snapshot(opener=opener, force=True)
+    assert error.value.code == discovery.DISCOVERY_TRANSPORT_FAILED
+
+
+def test_non_utf8_snapshot_is_not_sent_to_the_projector(monkeypatch: pytest.MonkeyPatch) -> None:
+    identity = type("Identity", (), {"path": "/usr/bin/false"})()
+    capabilities = type("Capabilities", (), {
+        "features": {discovery._RESIDENT_PROTOCOL_FEATURE, discovery.DISCOVERY_NATIVE_FEATURE},
+    })()
+    status = type("Status", (), {
+        "available": True,
+        "compatible": True,
+        "identity": identity,
+        "capabilities": capabilities,
+    })()
+    monkeypatch.setattr(discovery, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(
+        discovery,
+        "fetch_discovery_snapshot",
+        lambda **_kwargs: discovery._CachedSnapshot(
+            body=b"\xff",
+            server_date_ms=1,
+            etag=None,
+            fetched_monotonic=0,
+        ),
+    )
+    monkeypatch.setattr(discovery, "discovery_rollout_enabled", lambda: True)
+    called: list[bool] = []
+    monkeypatch.setattr(discovery, "native_resident_client_request", lambda **_kwargs: called.append(True))
+    result = discovery.discovery_placement_projection(
+        guard_home=Path("/tmp"),
+        policy_allowed=True,
+        opener=FakeOpener([]),
+    )
+    assert called == []
+    assert result is not None
+    assert result.status == 503
+    assert result.error_code == discovery.DISCOVERY_TRANSPORT_FAILED
+
+
 def test_response_bodies_beyond_64kib_are_refused() -> None:
     oversized = FakeResponse(b"x" * (discovery.MAX_DISCOVERY_RESPONSE_BYTES + 1))
     opener = FakeOpener([oversized])

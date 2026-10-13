@@ -219,6 +219,10 @@ def fetch_discovery_snapshot(
             if response.status != 200:
                 raise DiscoveryReadError("discovery_upstream_error", 503)
             body = _read_bounded(response, MAX_DISCOVERY_RESPONSE_BYTES)
+            try:
+                body.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise DiscoveryReadError(DISCOVERY_TRANSPORT_FAILED, 503) from error
             etag = response.headers.get("ETag")
             server_date_ms = _parse_http_date_ms(response.headers.get("Date"))
         finally:
@@ -283,11 +287,15 @@ def discovery_placement_projection(
         )
     except DiscoveryReadError as error:
         return DiscoveryProjection(status=error.status, error_code=error.code)
+    try:
+        body_text = snapshot.body.decode("utf-8")
+    except UnicodeDecodeError:
+        return DiscoveryProjection(status=503, error_code=DISCOVERY_TRANSPORT_FAILED)
     envelope = {
         "operation": "discovery_placement_project",
         "request": {
             "schema": DISCOVERY_REQUEST_SCHEMA,
-            "body": snapshot.body.decode("utf-8", errors="strict"),
+            "body": body_text,
             "server_date_ms": snapshot.server_date_ms,
             "now_wall_ms": int(time.time() * 1000),
             "policy_allowed": bool(policy_allowed),

@@ -1083,7 +1083,8 @@ export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): 
  */
 export async function fetchExtensionDiscoveryApi(input: string, init?: RequestInit): Promise<Response> {
   const approvedPath =
-    /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+    typeof input === "string"
+    && /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid extension discovery API path");
   }
