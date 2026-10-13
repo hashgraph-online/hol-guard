@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionCatalogSummary } from "../extension-controls-normalize";
+import {
+  advertiseUrl,
+  chooseSponsoredCard,
+  chooseStableCard,
+  joinDiscoveryPlacements,
+  parseDiscoveryProjection,
+  shouldShowPurchasePrompt,
+  sponsoredCardLabel,
+  MIN_ORGANIC_ROWS_BEFORE_IN_FEED,
+  type DiscoveryFeedStatus,
+  type DiscoveryOffer,
+  type DiscoveryPlacement,
+} from "./extensions-discover-model";
 
 /**
  * Discover: the explicitly online secondary Extensions view.
@@ -12,112 +25,7 @@ import type { ExtensionCatalogSummary } from "../extension-controls-normalize";
  * immediately. Failure hides paid content and never affects organic rows.
  */
 
-export const GUARD_DISCOVERY_CLOUD_ORIGIN = "https://hol.org";
-export const GUARD_DISCOVERY_ADVERTISE_PATH =
-  "/guard/extensions/advertise?source=guard_local&intent=extension-promotion";
-
 const DISCOVERY_REFRESH_MS = 10_000;
-const MIN_ORGANIC_ROWS_BEFORE_IN_FEED = 8;
-
-export interface DiscoveryCreative {
-  headline: string;
-  body: string;
-  brandName: string;
-}
-
-export interface DiscoveryPlacement {
-  publicPlacementId: string;
-  extensionId: string;
-  product: "always" | "time_slot" | "sponsored";
-  slotIndex: number;
-  windowIndex: number | null;
-  startsAt: string;
-  endsAt: string;
-  creativeVersion: string;
-  creative: DiscoveryCreative;
-}
-
-export interface DiscoveryOffer {
-  product: "always" | "time_slot" | "sponsored";
-  availability: "open" | "sold_out" | "unknown";
-  indicativeAmountCents: number | null;
-  currency: string | null;
-  checkedAt: string | null;
-  quoteRequired: true;
-}
-
-export interface DiscoverySnapshot {
-  schemaVersion: string;
-  snapshotId: string;
-  state: "ready" | "unavailable";
-  enabled: boolean;
-  reasonCode: string | null;
-  generatedAt: string;
-  leaseExpiresAt: string;
-  placements: DiscoveryPlacement[];
-  offers: DiscoveryOffer[];
-}
-
-export interface DiscoveryProjection {
-  snapshot: DiscoverySnapshot;
-  remainingLeaseMs: number;
-  policyAllowed: boolean;
-}
-
-export type DiscoveryFeedStatus =
-  | "loading"
-  | "ready"
-  | "unavailable"
-  | "rate-limited"
-  | "offline"
-  | "opt-out";
-
-function isPlacement(value: unknown): value is DiscoveryPlacement {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Partial<DiscoveryPlacement>;
-  return typeof record.publicPlacementId === "string"
-    && typeof record.extensionId === "string"
-    && (record.product === "always" || record.product === "time_slot" || record.product === "sponsored")
-    && typeof record.endsAt === "string"
-    && typeof record.creativeVersion === "string"
-    && typeof record.creative === "object" && record.creative !== null
-    && typeof record.creative.headline === "string";
-}
-
-function parseProjection(value: unknown): DiscoveryProjection | null {
-  if (typeof value !== "object" || value === null) return null;
-  const record = value as Partial<DiscoveryProjection> & { snapshot?: Partial<DiscoverySnapshot> };
-  const snapshot = record.snapshot;
-  if (typeof record.remainingLeaseMs !== "number" || typeof record.policyAllowed !== "boolean") return null;
-  if (typeof snapshot !== "object" || snapshot === null) return null;
-  if (snapshot.state !== "ready" && snapshot.state !== "unavailable") return null;
-  if (!Array.isArray(snapshot.placements) || !snapshot.placements.every(isPlacement)) return null;
-  return {
-    snapshot: {
-      schemaVersion: String(snapshot.schemaVersion ?? ""),
-      snapshotId: String(snapshot.snapshotId ?? ""),
-      state: snapshot.state,
-      enabled: snapshot.enabled === true,
-      reasonCode: typeof snapshot.reasonCode === "string" ? snapshot.reasonCode : null,
-      generatedAt: String(snapshot.generatedAt ?? ""),
-      leaseExpiresAt: String(snapshot.leaseExpiresAt ?? ""),
-      placements: snapshot.placements,
-      offers: Array.isArray(snapshot.offers) ? (snapshot.offers as DiscoveryOffer[]) : [],
-    },
-    remainingLeaseMs: record.remainingLeaseMs,
-    policyAllowed: record.policyAllowed,
-  };
-}
-
-function advertiseUrl(placement: "extensions_feed" | "extensions_header", extensionId?: string): string {
-  const url = new URL(GUARD_DISCOVERY_CLOUD_ORIGIN + GUARD_DISCOVERY_ADVERTISE_PATH);
-  url.searchParams.set("placement", placement);
-  if (extensionId) {
-    // Only an explicitly chosen extension id ever leaves the device.
-    url.searchParams.set("extension", extensionId);
-  }
-  return url.toString();
-}
 
 function SponsoredCard(props: {
   placement: DiscoveryPlacement;
@@ -127,7 +35,7 @@ function SponsoredCard(props: {
 }) {
   return (
     <article
-      data-testid={featured ? "discovery-featured-card" : "discovery-sponsored-card"}
+      data-testid={props.featured ? "discovery-featured-card" : "discovery-sponsored-card"}
       data-sponsored-placement-id={props.placement.publicPlacementId}
       className="flex items-start gap-3 rounded-2xl border border-brand-blue/15 bg-white px-4 py-3"
     >
@@ -138,7 +46,7 @@ function SponsoredCard(props: {
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="truncate text-sm font-semibold text-brand-dark">{props.catalog.name}</h3>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600" data-sponsored-label>
-            Sponsored{featured ? " · Featured" : ""}
+            {sponsoredCardLabel(props.featured)}
           </span>
         </div>
         <p className="mt-1 line-clamp-2 text-sm leading-5 text-brand-dark/70">{props.placement.creative.body}</p>
@@ -155,6 +63,25 @@ function SponsoredCard(props: {
   );
 }
 
+function OrganicRow(props: {
+  extension: ExtensionCatalogSummary;
+  onOpen: (extension: ExtensionCatalogSummary) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+      onClick={() => props.onOpen(props.extension)}
+    >
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-brand-dark">{props.extension.name}</span>
+        <span className="block truncate text-xs text-brand-dark/55">{props.extension.extension_id}</span>
+      </span>
+      <span aria-hidden="true" className="text-brand-dark/30">›</span>
+    </button>
+  );
+}
+
 export function ExtensionsDiscover(props: {
   active: boolean;
   catalogExtensions: readonly ExtensionCatalogSummary[];
@@ -162,7 +89,7 @@ export function ExtensionsDiscover(props: {
   fetchPlacements: () => Promise<Response>;
 }) {
   const [status, setStatus] = useState<DiscoveryFeedStatus>("loading");
-  const [projection, setProjection] = useState<DiscoveryProjection | null>(null);
+  const [projection, setProjection] = useState<ReturnType<typeof parseDiscoveryProjection>>(null);
   const [visitSeed] = useState(() => Math.random());
   const selectedFeatured = useRef<string | null>(null);
   const selectedSponsored = useRef<string | null>(null);
@@ -176,10 +103,10 @@ export function ExtensionsDiscover(props: {
         setStatus("opt-out");
         return;
       }
-      if (response.status === 501 || response.status === 503) {
+      if (response.status === 501 || response.status === 503 || response.status === 429) {
         const body = await response.json().catch(() => null);
         const code = body && typeof body.error === "string" ? body.error : null;
-        setStatus(code === "rate_limited" ? "rate-limited" : "unavailable");
+        setStatus(code === "rate_limited" || response.status === 429 ? "rate-limited" : "unavailable");
         setProjection(null);
         return;
       }
@@ -188,7 +115,7 @@ export function ExtensionsDiscover(props: {
         setProjection(null);
         return;
       }
-      const parsed = parseProjection(await response.json().catch(() => null));
+      const parsed = parseDiscoveryProjection(await response.json().catch(() => null));
       if (!parsed) {
         setStatus("unavailable");
         setProjection(null);
@@ -235,70 +162,42 @@ export function ExtensionsDiscover(props: {
     };
   }, [props.active, load]);
 
-  const catalogById = useMemo(() => {
-    const map = new Map<string, ExtensionCatalogSummary>();
-    for (const extension of props.catalogExtensions) {
-      map.set(extension.extension_id, extension);
-    }
-    return map;
-  }, [props.catalogExtensions]);
+  const joined = useMemo(
+    () => joinDiscoveryPlacements(
+      status === "ready" && projection ? projection.snapshot.placements : [],
+      props.catalogExtensions,
+      Date.now(),
+    ),
+    [projection, props.catalogExtensions, status],
+  );
 
-  // Local catalog join: unknown Cloud ids never render as paid cards, and no
-  // query or inventory ever leaves the device.
-  const joined = useMemo(() => {
-    if (status !== "ready" || !projection) return { featured: [], sponsored: [] };
-    const now = Date.now();
-    const featured: { placement: DiscoveryPlacement; catalog: ExtensionCatalogSummary }[] = [];
-    const sponsored: { placement: DiscoveryPlacement; catalog: ExtensionCatalogSummary }[] = [];
-    for (const placement of projection.snapshot.placements) {
-      if (Date.parse(placement.endsAt) <= now) continue;
-      const catalog = catalogById.get(placement.extensionId);
-      if (!catalog) continue;
-      if (placement.product === "sponsored") {
-        sponsored.push({ placement, catalog });
-      } else {
-        featured.push({ placement, catalog });
-      }
-    }
-    return { featured, sponsored };
-  }, [catalogById, projection, status]);
-
-  // Visit-stable selection: a chosen card stays until it is no longer valid
-  // in the current snapshot; polls never shuffle visible cards.
   const featured = useMemo(() => {
-    if (joined.featured.length === 0) {
-      selectedFeatured.current = null;
-      return null;
-    }
-    const current = joined.featured.find((entry) => entry.placement.publicPlacementId === selectedFeatured.current);
-    if (current) return current;
-    const index = Math.floor(visitSeed * joined.featured.length) % joined.featured.length;
-    const chosen = joined.featured[index];
-    selectedFeatured.current = chosen.placement.publicPlacementId;
+    const chosen = chooseStableCard(joined.featured, selectedFeatured.current, visitSeed);
+    selectedFeatured.current = chosen ? chosen.placement.publicPlacementId : null;
     return chosen;
   }, [joined.featured, visitSeed]);
 
   const sponsored = useMemo(() => {
     if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return null;
-    const candidates = joined.sponsored.filter((entry) => entry.placement.publicPlacementId !== selectedFeatured.current);
-    if (candidates.length === 0) {
-      selectedSponsored.current = null;
-      return null;
-    }
-    const current = candidates.find((entry) => entry.placement.publicPlacementId === selectedSponsored.current);
-    if (current) return current;
-    const index = Math.floor(visitSeed * candidates.length) % candidates.length;
-    const chosen = candidates[index];
-    selectedSponsored.current = chosen.placement.publicPlacementId;
+    const chosen = chooseSponsoredCard(
+      joined.sponsored,
+      selectedSponsored.current,
+      visitSeed,
+      featured?.placement.extensionId ?? null,
+    );
+    selectedSponsored.current = chosen ? chosen.placement.publicPlacementId : null;
     return chosen;
-  }, [joined.sponsored, props.catalogExtensions.length, visitSeed]);
+  }, [featured, joined.sponsored, props.catalogExtensions.length, visitSeed]);
 
-  const sponsoredOffer = projection?.snapshot.offers.find((offer) => offer.product === "sponsored") ?? null;
-  const showPurchasePrompt = status === "ready"
-    && joined.featured.length === 0
-    && joined.sponsored.length === 0
-    && sponsoredOffer?.availability === "open"
-    && props.catalogExtensions.length >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED;
+  const sponsoredOffer: DiscoveryOffer | null = projection?.snapshot.offers.find(
+    (offer) => offer.product === "sponsored",
+  ) ?? null;
+  const showPurchasePrompt = shouldShowPurchasePrompt({
+    status,
+    joined,
+    sponsoredOffer,
+    organicCount: props.catalogExtensions.length,
+  });
 
   const organicRows = props.catalogExtensions;
 
@@ -319,18 +218,7 @@ export function ExtensionsDiscover(props: {
 
       <div className="mt-6 space-y-1">
         {organicRows.slice(0, MIN_ORGANIC_ROWS_BEFORE_IN_FEED).map((extension) => (
-          <button
-            key={extension.extension_id}
-            type="button"
-            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
-            onClick={() => props.onOpenExtension(extension)}
-          >
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium text-brand-dark">{extension.name}</span>
-              <span className="block truncate text-xs text-brand-dark/55">{extension.extension_id}</span>
-            </span>
-            <span aria-hidden="true" className="text-brand-dark/30">›</span>
-          </button>
+          <OrganicRow key={extension.extension_id} extension={extension} onOpen={props.onOpenExtension} />
         ))}
       </div>
 
@@ -367,18 +255,7 @@ export function ExtensionsDiscover(props: {
 
       <div className="mt-6 space-y-1">
         {organicRows.slice(MIN_ORGANIC_ROWS_BEFORE_IN_FEED).map((extension) => (
-          <button
-            key={extension.extension_id}
-            type="button"
-            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
-            onClick={() => props.onOpenExtension(extension)}
-          >
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium text-brand-dark">{extension.name}</span>
-              <span className="block truncate text-xs text-brand-dark/55">{extension.extension_id}</span>
-            </span>
-            <span aria-hidden="true" className="text-brand-dark/30">›</span>
-          </button>
+          <OrganicRow key={extension.extension_id} extension={extension} onOpen={props.onOpenExtension} />
         ))}
       </div>
 
