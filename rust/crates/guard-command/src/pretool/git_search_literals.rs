@@ -28,6 +28,52 @@ pub(super) fn arguments_outside_search_text<'a>(
     )
 }
 
+/// Whether the command touches sensitive text outside Git search literals.
+/// Search text is set aside only for an exact parse without wrappers or
+/// here-documents; anything else keeps the whole-text screen.
+pub(super) fn sensitive_outside_search_text(
+    model: &crate::CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> bool {
+    let normalized = model.normalized_text.as_str();
+    if !super::sensitive_command(normalized) {
+        return false;
+    }
+    if model.confidence != "exact"
+        || !model.wrapper_chain.is_empty()
+        || normalized.contains("<<")
+        || model.segments.is_empty()
+    {
+        return true;
+    }
+    let screened: Vec<Option<String>> = model
+        .segments
+        .iter()
+        .map(|segment| screened_text(segment, context))
+        .collect();
+    if screened.iter().all(Option::is_none) {
+        return true;
+    }
+    model
+        .segments
+        .iter()
+        .zip(&screened)
+        .any(|(segment, text)| super::sensitive_command(text.as_deref().unwrap_or(&segment.text)))
+}
+
+/// The segment text with Git search literals left out, when it has any.
+pub(super) fn screened_text(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    let executable = segment.executable.as_deref()?;
+    if super::executable_basename(executable) != "git" {
+        return None;
+    }
+    let screened = arguments_outside_search_text(&segment.arguments, context)?;
+    Some(format!("{executable} {}", screened.join(" ")))
+}
+
 /// The positions in `arguments` of literal search text: `git grep` patterns
 /// inside the read-only grammar, or `git log` pickaxe and `--grep` values.
 pub(super) fn search_positions(

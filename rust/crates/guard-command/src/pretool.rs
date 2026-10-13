@@ -556,7 +556,7 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if sensitive_command(normalized) {
+    if git_search_literals::sensitive_outside_search_text(&model, context) {
         return Ok(pretool_decision(
             model,
             "review",
