@@ -69,3 +69,46 @@ def test_shipped_native_size_gate_uses_cargo_release_profile() -> None:
     assert "native-release-size" in required["needs"]
     aggregate = "\n".join(step.get("run", "") for step in required["steps"])
     assert '"native-release-size"' in aggregate
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux workspace profile uses Bash and LLD")
+def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
+    """Keep expensive test harness optimization off without disabling checks."""
+    steps = workflow("ci.yml")["jobs"]["native-workspace"]["steps"]
+    configure = next(step for step in steps if step.get("name") == "Configure the checked fast test profile")
+    cache = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert steps.index(configure) < steps.index(cache)
+    assert configure["if"] == "matrix.check == 'test'"
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    linker = bindir / "ld.lld"
+    linker.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    linker.chmod(0o755)
+    environment_file = tmp_path / "github-env"
+    subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", configure["run"]],
+        env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
+             "GITHUB_ENV": str(environment_file), "RUSTFLAGS": "-C debuginfo=1"},
+        check=True, capture_output=True, timeout=5,
+    )
+    configured = dict(line.split("=", 1) for line in environment_file.read_text().splitlines())
+    assert configured["CARGO_PROFILE_TEST_OPT_LEVEL"] == "0"
+    assert configured["CARGO_PROFILE_TEST_DEBUG_ASSERTIONS"] == "true"
+    assert configured["CARGO_PROFILE_TEST_OVERFLOW_CHECKS"] == "true"
+    assert configured["CARGO_PROFILE_TEST_DEBUG"] == "line-tables-only"
+    assert configured["RUSTFLAGS"] == "-C debuginfo=1 -C link-arg=-fuse-ld=lld"
+
+
+def test_fast_rust_workspace_keeps_full_validation() -> None:
+    """Optimize dependency runtime while preserving the entire test selection."""
+    job = workflow("ci.yml")["jobs"]["native-workspace"]
+    assert job["strategy"]["matrix"]["check"] == ["clippy", "test"]
+    validate = next(step["run"] for step in job["steps"]
+                    if step.get("name") == "Validate the locked Rust workspace")
+    assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in validate
+    assert "-- -D warnings" in validate
+    assert "cargo nextest run --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in validate
+    assert "--config 'profile.test.package.\"*\".opt-level=1'" in validate
+    assert "--test-threads 4 --retries 0 --no-fail-fast" in validate
+    assert "--partition" not in validate
+    assert "--exclude" not in validate
