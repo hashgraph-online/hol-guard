@@ -133,6 +133,37 @@ def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
     assert native_tools_scope_error(temp, [_call("bash", command="mktemp -d"), scratch, scratch], {}) is not None
 
 
+def test_scope_judge_accepts_the_windows_profile_temp_spelling() -> None:
+    from ci.gauntlet.native_tools import native_tools_scope_error
+
+    temp = _scenario("omp-native-private-temp-write-then-overwrite")
+
+    def mktemp(printed: str) -> dict:
+        return {**_call("bash", command="mktemp -d"), "result": {"content": [{"type": "text", "text": printed}]}}
+
+    mk = mktemp("{{home}}\\AppData\\Local\\Temp\\tmp.ab\n")
+    scratch = _call("write", path="{{home}}\\AppData\\Local\\Temp\\tmp.ab\\scratch-notes.txt")
+    assert native_tools_scope_error(temp, [mk, scratch, scratch], {}) is None
+    forward = _call("write", path="{{home}}/AppData/Local/Temp/tmp.ab/scratch-notes.txt")
+    assert native_tools_scope_error(temp, [mk, scratch, forward], {}) is None
+    # The temp root itself, other profile folders, traversal, streams and mixed spellings stay out of scope.
+    for printed in (
+        "{{home}}\\AppData\\Local\\Temp\n",
+        "{{home}}\\AppData\\Roaming\\tmp.ab\n",
+        "{{home}}\\AppData\\Local\\Temp\\..\\tmp.ab\n",
+        "{{home}}\\AppData\\Local\\Temp\\tmp.ab:s\n",
+        "{{home}}\\AppData/Local/Temp/tmp.ab\n",
+        "C:\\Users\\u\\AppData\\Local\\Temp\\tmp.ab\n",
+    ):
+        assert native_tools_scope_error(temp, [mktemp(printed), scratch, scratch], {}) is not None, printed
+    for path in (
+        "{{home}}\\AppData\\Local\\Temp\\scratch-notes.txt",
+        "{{home}}\\AppData\\Local\\Temp\\tmp.ab\\..\\tmp.cd\\scratch-notes.txt",
+        "{{home}}\\AppData\\Local\\Temp\\tmp.cd\\scratch-notes.txt",
+    ):
+        assert native_tools_scope_error(temp, [mk, scratch, _call("write", path=path)], {}) is not None, path
+
+
 def test_scope_judge_lets_a_guard_denial_surface_as_a_false_positive() -> None:
     from ci.gauntlet.native_tools import native_tools_scope_error
 

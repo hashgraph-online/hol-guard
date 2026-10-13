@@ -6,14 +6,15 @@
 use serde_json::{json, Map, Value};
 
 const GIT_RULES: [&str; 3] = ["command.git.diff", "command.git.log", "command.git.show"];
-const NODE_PERMISSION_CODES: [&str; 4] = [
+const NODE_PERMISSION_CODES: [&str; 5] = [
+    "native_workspace_containment_required",
     "native_vitest_readonly_containment_required",
     "native_package_test_readonly_containment_required",
     "native_node_tool_readonly_containment_required",
     "native_node_build_output_containment_required",
 ];
 
-fn required_profile(reason_code: &str) -> Option<&'static str> {
+pub(super) fn required_profile(reason_code: &str) -> Option<&'static str> {
     Some(match reason_code {
         "native_python_eval_readonly_containment_required" => "python-eval-readonly-v1",
         "native_node_eval_readonly_containment_required" => "node-eval-readonly-v1",
@@ -24,6 +25,7 @@ fn required_profile(reason_code: &str) -> Option<&'static str> {
         "native_vitest_readonly_containment_required" => "vitest-readonly-v1",
         "native_node_test_readonly_containment_required" => "node-test-readonly-v1",
         "native_pytest_readonly_containment_required" => "pytest-readonly-v2",
+        "native_workspace_containment_required" => "workspace-contained-v1",
         _ => return None,
     })
 }
@@ -61,9 +63,18 @@ fn node_permission(item: &Value) -> bool {
         && is_empty_list(item.get("uncertainty_reasons"))
 }
 
+/// The workspace sandbox admits matched command rules; the classifier already
+/// vetted their risk classes, and the binding digest pins them at launch.
+fn certain_observation(item: &Value) -> bool {
+    matches!(item, Value::Object(item) if is_empty_list(item.get("uncertainty_reasons")))
+}
+
 fn observations_ok(reason_code: &str, observations: Option<&Value>) -> bool {
     if is_empty_list(observations) {
         return true;
+    }
+    if reason_code == "native_workspace_containment_required" {
+        return matches!(observations, Some(Value::Array(items)) if items.iter().all(certain_observation));
     }
     reason_code == "native_git_readonly_containment_required"
         && matches!(observations, Some(Value::Array(items)) if items.iter().all(git_observation))
@@ -114,6 +125,15 @@ pub(super) fn receipt(
     receipt.insert("reason_code".into(), json!(reason_code));
     receipt.insert("reason".into(), json!(reason));
     receipt.insert("required_execution_profile".into(), json!(profile));
+    if reason_code == "native_workspace_containment_required" {
+        // Pins the matched extension evidence so the launcher can detect drift
+        // between the first receipt and the one taken just before launch.
+        let digest = extensions
+            .get("binding")
+            .and_then(|binding| binding.get("observations_digest"))
+            .and_then(Value::as_str)?;
+        receipt.insert("command_binding_digest".into(), json!(digest));
+    }
     if matches!(canonical, "zcode" | "claude-code" | "codex") {
         receipt.insert(
             "hookSpecificOutput".into(),

@@ -512,6 +512,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.hook_worker = HookWorker(
                 store=self.store,
                 workspace=self.workspace_dir,
+                home_dir=self.home_dir,
                 activity_writer=self.runtime_hook_evidence_writer,
                 capture_writer=self.codex_binding_capture_writer,
             )

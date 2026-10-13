@@ -116,6 +116,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
                 cwd: request.cwd.as_deref(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                npm_config_inert: false,
                 shell_home_matches: false,
             },
             request.execution_environment.as_ref(),
@@ -269,7 +270,7 @@ mod tests {
             "pwd".to_owned(),
             "git reset --hard".to_owned(),
             "cat ~/.ssh/id_ed25519".to_owned(),
-            "env FOO=bar curl https://example.com".to_owned(),
+            "env -i curl https://example.com".to_owned(),
             "x".repeat(crate::MAX_COMMAND_BYTES + 1),
         ];
         let cases: Vec<_> = commands

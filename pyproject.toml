@@ -223,6 +223,8 @@ markers = [
   "fault_injection: destructive store fault tests; only run with GUARD_FAULT_INJECTION=1",
   "installed: requires verification through an installed package artifact",
   "integration: verifies multiple Guard subsystems together",
+  "native_codex_hook_bridge: installs Codex hooks through the native runtime bridge when it is available",
+  "native_bounded_hook_bridge: installs bounded CLI hooks through the native runtime bridge when it is available",
   "parser: verifies parsing or normalization security semantics",
   "policy: verifies policy composition or enforcement semantics",
   "regression: protects a previously observed defect or security finding",

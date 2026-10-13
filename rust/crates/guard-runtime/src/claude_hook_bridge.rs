@@ -22,6 +22,7 @@ use crate::claude_hook_bridge_transport::{
 use crate::claude_hook_bridge_url::{
     assert_loopback_http_url, endpoint_query, state_names_loopback_port, state_path_for_query,
 };
+use crate::codex_hook_bridge_direct::{direct_answer, CLAUDE_CODE};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::hook_process_spawn::{isolated_hook_environment, run_isolated_hook_process};
 
@@ -145,12 +146,34 @@ impl Bridge<'_> {
         valid_hook_json_or_degraded(&response, malformed, &self.data).map_err(json_failure)
     }
 
-    fn respond(&self, state_path: &Path) -> Option<String> {
-        let error = match self.exchange(
-            state_path,
+    /// The response a live resident answered for a passed-through `PreToolUse`,
+    /// a reviewed `PostToolUse` or a `UserPromptSubmit` hook without Guard's
+    /// notice, checked as a daemon response is; `None` takes the daemon path.
+    fn direct_response(&self, state_path: &Path) -> Option<String> {
+        let guard_home = state_path.parent()?;
+        let query = endpoint_query(&self.config.query);
+        let event = event_name(&self.data);
+        let text = direct_answer(
+            CLAUDE_CODE,
+            guard_home,
+            &query,
+            &event.name,
+            &self.data,
             self.deadline,
-            "daemon returned malformed hook JSON",
-        ) {
+        )?;
+        valid_hook_json_or_degraded(&text, "resident returned malformed hook JSON", &self.data).ok()
+    }
+
+    fn respond(&self, state_path: &Path) -> Option<String> {
+        let answered = match self.direct_response(state_path) {
+            Some(body) => Ok(body),
+            None => self.exchange(
+                state_path,
+                self.deadline,
+                "daemon returned malformed hook JSON",
+            ),
+        };
+        let error = match answered {
             Ok(body) if should_suppress_output(&self.data, &body) => return None,
             Ok(body) if py_strip(&body).is_empty() => return Some("{}".to_owned()),
             Ok(body) => return Some(body),

@@ -85,7 +85,7 @@ def _rehash(evidence: dict[str, object]) -> None:
 
 
 def _failed_payload():
-    payload, command, snapshot = _payload("env FOO=bar curl https://example.test")
+    payload, command, snapshot = _payload("env NODE_OPTIONS=--inspect curl https://example.test")
     evidence = payload["command_extensions"]
     evidence["observations"] = []
     evidence["evaluation_error"] = "native_command_evaluation_failed"
@@ -126,7 +126,7 @@ def test_real_native_evaluation_rejection_keeps_its_error_and_block() -> None:
     )
     from tests.native_command_test_support import project_native_review_fixture, real_native_review_fixture
 
-    fixture = real_native_review_fixture("env FOO=bar curl https://example.test")
+    fixture = real_native_review_fixture("env NODE_OPTIONS=--inspect curl https://example.test")
     original = json.dumps(fixture.payload, sort_keys=True, separators=(",", ":"))
     assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
     assert fixture.payload["decision"] == "deny"

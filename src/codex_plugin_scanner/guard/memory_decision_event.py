@@ -106,7 +106,7 @@ def resolve_command_display(
         return envelope_display
     for candidate in (launch_target, artifact_name, artifact_id, review_command):
         value = _string_or_none(candidate)
-        if value is not None and not _is_approval_wrapper(value) and not _is_generic_fragment(value):
+        if value is not None and not is_approval_wrapper(value) and not _is_generic_fragment(value):
             return value
     if redaction_state == "enabled":
         return "Command redacted"
@@ -312,7 +312,7 @@ def _first_string_from_sequence(value: object) -> str | None:
     return None
 
 
-def _is_approval_wrapper(value: str) -> bool:
+def is_approval_wrapper(value: str) -> bool:
     return value.strip().startswith("hol-guard approvals approve ")
 
 

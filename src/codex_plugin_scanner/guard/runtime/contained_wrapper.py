@@ -155,14 +155,33 @@ def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
     return None
 
 
+def _joined_list(tokens: list[tuple[str, bool]]) -> str | None:
+    """`a && b && c` of plain words, rejoined, or None for any other shape."""
+    segments: list[list[str]] = [[]]
+    for value, operator in tokens:
+        if (value, operator) == ("&&", True):
+            segments.append([])
+        elif operator or set(value) & _ARGUMENT_REJECT:
+            return None
+        else:
+            segments[-1].append(value)
+    if len(segments) < 2 or not all(segments):
+        return None
+    return " && ".join(shlex.join(segment) for segment in segments)
+
+
 def peel_contained_wrapper(
-    command: str, *, workspace: Path, home: Path | None = None
+    command: str, *, workspace: Path, home: Path | None = None, cwd: Path | None = None
 ) -> tuple[str, Path, OutputFilter | None] | None:
     """Return the core command, its directory, and output filter, or None when nothing is wrapped.
 
     A cd target must lie in the workspace or, given `home`, in a sibling
-    repository (see `sibling_project_root`). Raises ValueError (or OSError for
-    a missing cd target) for shapes native authority never upgrades.
+    repository (see `sibling_project_root`). A relative target is accepted only
+    when it names a sibling repository's root from `cwd`, such as a linked
+    worktree beside the checkout; after a cd into a sibling root, the core may
+    be an `&&` list of plain commands, which is re-authorized there. Raises
+    ValueError (or OSError for a missing cd target) for shapes native
+    authority never upgrades.
     """
     status = _STATUS_ECHO.search(command)
     if status is not None:
@@ -176,6 +195,7 @@ def peel_contained_wrapper(
     directory = workspace
     wrapped = status is not None
     output = None
+    sibling_root = False
     if tokens[:1] == [("cd", False)]:
         if len(tokens) < 4 or tokens[1][1] or tokens[2] != ("&&", True):
             raise ValueError("unsupported cd prefix")
@@ -185,15 +205,29 @@ def peel_contained_wrapper(
         # because pathlib treats an absolute right-hand side as the whole path.
         rest = spelled[2:].lstrip("/")
         target = home / rest if home_cd and home is not None else Path(spelled)
-        if not exact or not target.is_absolute():
+        if not exact:
             raise ValueError("relative cd target")
-        directory = target.resolve(strict=True)
+        inside = workspace.resolve(strict=True)
+        directory = ((cwd or workspace) / target).resolve(strict=True)
+        if not target.is_absolute() and (
+            _path_is_within(directory, inside) or sibling_project_root(directory, home=home) != directory
+        ):
+            raise ValueError("relative cd target")
         if not directory.is_dir() or not (
-            _path_is_within(directory, workspace.resolve(strict=True))
-            or sibling_project_root(directory, home=home) is not None
+            _path_is_within(directory, inside) or sibling_project_root(directory, home=home) is not None
         ):
             raise ValueError("cd target outside the workspace")
+        sibling_root = sibling_project_root(directory, home=home) == directory and not _path_is_within(
+            directory, inside
+        )
         tokens, wrapped = tokens[3:], True
+        joined = _joined_list(tokens) if sibling_root else None
+        if joined is not None:
+            # A filter after `a && b` applies to `b` alone, so none is peeled.
+            if status is not None:
+                label = status.group(1) if status.group(1) is not None else status.group(2)
+                output = OutputFilter("all", 0, False, status_label=label)
+            return joined, directory, output
     if ("|", True) in tokens:
         index = tokens.index(("|", True))
         program = tokens[index + 1 : index + 2]

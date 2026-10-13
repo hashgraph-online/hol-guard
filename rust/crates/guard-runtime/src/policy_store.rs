@@ -39,6 +39,8 @@ mod policy_store_business_source;
 mod policy_store_command_authority;
 #[path = "policy_store_command_floor.rs"]
 mod policy_store_command_floor;
+#[path = "policy_store_direct_lane.rs"]
+pub(crate) mod policy_store_direct_lane;
 #[path = "policy_store_migration.rs"]
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
@@ -196,6 +198,8 @@ pub(crate) struct PolicySnapshotStore {
     authority_observed: Arc<Mutex<Option<String>>>,
     authority_changed: Arc<AtomicBool>,
     state: Mutex<PolicyState>,
+    direct_lane: Mutex<Option<Arc<policy_store_direct_lane::DirectLaneBinding>>>,
+    direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue,
 }
 
 impl PolicySnapshotStore {
@@ -298,11 +302,18 @@ impl PolicySnapshotStore {
                 command_control_floor: loaded.command_control_floor,
                 business_policy_floor: loaded.business_policy_floor,
             }),
+            direct_lane: Mutex::new(None),
+            direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue::default(),
         })
     }
 
     pub(crate) fn state_base(&self) -> &Path {
         &self.state_base
+    }
+
+    /// Evidence of direct hook answers, waiting for the daemon to drain it.
+    pub(crate) fn direct_evidence(&self) -> &crate::hook_direct_evidence::DirectEvidenceQueue {
+        &self.direct_evidence
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.
@@ -337,11 +348,19 @@ impl PolicySnapshotStore {
         if request.schema != POLICY_SNAPSHOT_PUSH_SCHEMA {
             return Err("native_policy_snapshot_push_schema_mismatch".to_owned());
         }
+        if request
+            .direct_lane
+            .as_ref()
+            .is_some_and(|binding| !binding.is_valid())
+        {
+            return Err("native_policy_snapshot_push_invalid".to_owned());
+        }
         let state_base = self.state_base().to_owned();
         approval_enrollment::with_transition_lock(&state_base, || self.push_locked(request))
     }
 
-    fn push_locked(&self, request: PolicySnapshotPushV1) -> Result<Vec<u8>, String> {
+    fn push_locked(&self, mut request: PolicySnapshotPushV1) -> Result<Vec<u8>, String> {
+        let direct_lane = request.direct_lane.take();
         let _command_lease = self.command_authority_lease(&request.snapshot)?;
         let snapshot_bytes = snapshot_bytes(&request.snapshot).map_err(snapshot_error)?;
         let now = now_ms()?;
@@ -381,6 +400,10 @@ impl PolicySnapshotStore {
                 if snapshot_bytes != state.canonical_bytes {
                     return Err("native_policy_snapshot_generation_reused".to_owned());
                 }
+                // An idempotent push refreshes what the same snapshot is
+                // bound to, so the publisher can reopen the lane after a
+                // benign input change without allocating a generation.
+                self.bind_direct_lane(current.generation, &current.policy_digest, direct_lane);
                 return encode_ack(current.as_ref(), true, self.resident_generation);
             }
         } else if request.snapshot.generation <= state.generation_floor {
@@ -426,6 +449,7 @@ impl PolicySnapshotStore {
         state.invalid_on_startup = false;
         state.command_control_floor = control_floor;
         state.business_policy_floor = business_floor;
+        self.bind_direct_lane(admitted.generation, &admitted.policy_digest, direct_lane);
         *observed = authority_fingerprint(&self.authority_path);
         drop(observed);
         self.authority_changed.store(

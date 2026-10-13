@@ -377,3 +377,43 @@ fn source_classifier_rejects_sensitive_external_filename_without_substring_false
     assert!(classify_source_path(benign.to_str().unwrap(), &workspace, Some(&home), true).allowed);
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn hidden_empty_marker_files_are_bounded_to_work_trees() {
+    let root = std::env::temp_dir().join(format!("secure-fs-hidden-marker-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let tree = root.join("app");
+    std::fs::create_dir_all(tree.join(".git")).unwrap();
+    std::fs::create_dir_all(root.join("plain")).unwrap();
+    for (path, text) in [
+        (tree.join(".deploy-success"), ""),
+        (tree.join(".state-note"), "pid\n"),
+        (tree.join(".env"), ""),
+        (tree.join(".env.local"), ""),
+        (tree.join(".npmrc"), ""),
+        (tree.join("visible.txt"), ""),
+        (root.join("plain/.marker"), ""),
+    ] {
+        std::fs::write(path, text).unwrap();
+    }
+    assert!(crate::hidden_empty_work_tree_file(
+        &tree.join(".deploy-success")
+    ));
+    for denied in [
+        tree.join(".state-note"),
+        tree.join(".env"),
+        tree.join(".env.local"),
+        tree.join(".npmrc"),
+        tree.join("visible.txt"),
+        tree.join(".git"),
+        tree.join(".missing"),
+        root.join("plain/.marker"),
+    ] {
+        assert!(
+            !crate::hidden_empty_work_tree_file(&denied),
+            "{}",
+            denied.display()
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}

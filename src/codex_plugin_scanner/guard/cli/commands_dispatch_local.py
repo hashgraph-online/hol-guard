@@ -116,6 +116,7 @@ def _run_guard_execute_contained_test_command(
     store: GuardStore | None = None,
     **_kwargs: object,
 ) -> int:
+    from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
     from ..runtime.contained_test_hook import read_contained_test_request, run_authorized_contained_test
     from ..runtime.restricted_pytest import RestrictedPytestError
     from .commands_hook_native_authority import try_native_hook_authority
@@ -143,7 +144,14 @@ def _run_guard_execute_contained_test_command(
             payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
             home_dir=context.home_dir,
             authorize=lambda original: try_native_hook_authority(
-                payload={**original, "guard_containment_receipt_only": True},
+                # The adapter snapshots the hook payload before stamping it, so
+                # declare the environment this process will launch the command
+                # from rather than letting Rust fall back to the resident's.
+                payload={
+                    **original,
+                    "guard_containment_receipt_only": True,
+                    HOOK_EXECUTION_ENVIRONMENT_KEY: collect_hook_execution_environment(),
+                },
                 harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
                 guard_home=guard_home,
                 workspace=execution_workspace(original),

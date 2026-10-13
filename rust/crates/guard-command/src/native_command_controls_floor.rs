@@ -46,7 +46,7 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
         result.reason_code = reason.to_owned();
         result.reason = match reason {
             "native_command_extension_evaluation_failed" => {
-                "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
+                "HOL Guard could not check this command against the installed extension controls, so it stays blocked. Split it into simpler commands, or ask the user to run `hol-guard doctor` if this keeps happening."
             }
             "native_command_extension_uncertain" => {
                 "HOL Guard requires review because it could not match this command to its extension permissions."

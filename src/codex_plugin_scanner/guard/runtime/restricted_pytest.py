@@ -31,11 +31,12 @@ from .restricted_pytest_sandbox import (
     _backend_argv as _build_backend_argv,
 )
 from .restricted_pytest_sandbox import (
-    _macos_profile as _build_macos_profile,
-)
-from .restricted_pytest_sandbox import (
+    _link_user_site,
     _restricted_environment,
     _run_backend_process,
+)
+from .restricted_pytest_sandbox import (
+    _macos_profile as _build_macos_profile,
 )
 
 
@@ -98,19 +99,22 @@ def run_restricted_pytest(
         private_tmp = private_root / "tmp"
         private_home.mkdir(mode=0o700)
         private_tmp.mkdir(mode=0o700)
+        source = env if env is not None else os.environ
+        user_site_root = _link_user_site(source, private_home)
         launch_env = _restricted_environment(
-            env if env is not None else os.environ,
+            source,
             workspace=plan.workspace,
             cwd=plan.cwd,
             private_home=private_home,
             private_tmp=private_tmp,
             allowed_executables=plan.allowed_executables,
+            user_site_root=user_site_root,
         )
         if read_only_workspace:
             # Normal pytest caches belong to this run, not the protected source tree.
             launch_env["PYTHONDONTWRITEBYTECODE"] = "1"
             launch_env["PYTEST_ADDOPTS"] = f"-o cache_dir={shlex.quote(str(private_tmp / 'pytest-cache'))}"
-        backend_argv = _backend_argv(plan, private_root=private_root)
+        backend_argv = _backend_argv(plan, private_root=private_root, user_site_root=user_site_root)
         return _run_backend_process(
             backend_argv,
             env=launch_env,
@@ -120,10 +124,10 @@ def run_restricted_pytest(
         )
 
 
-def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> list[str]:
     """Compatibility wrapper for focused profile tests."""
 
-    return _build_backend_argv(plan, private_root=private_root)
+    return _build_backend_argv(plan, private_root=private_root, user_site_root=user_site_root)
 
 
 def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:

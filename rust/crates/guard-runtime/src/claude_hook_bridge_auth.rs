@@ -82,6 +82,11 @@ fn parent_of(path: &Path) -> PathBuf {
 /// `_private_file_text`: an owner-only regular file in an owner-only
 /// directory, read as stripped UTF-8.
 pub(crate) fn private_file_text(path: &Path, label: &str) -> Result<String, String> {
+    private_file_raw(path, label).map(|text| py_strip(&text).to_owned())
+}
+
+/// [`private_file_text`] without the strip: the file's UTF-8 text as is.
+pub(crate) fn private_file_raw(path: &Path, label: &str) -> Result<String, String> {
     let unavailable = || format!("{label} is unavailable");
     let parent = fs::symlink_metadata(parent_of(path)).map_err(|_| unavailable())?;
     let metadata = fs::symlink_metadata(path).map_err(|_| unavailable())?;
@@ -118,7 +123,7 @@ pub(crate) fn private_file_text(path: &Path, label: &str) -> Result<String, Stri
         return Err(unreadable());
     }
     match std::str::from_utf8(&bytes) {
-        Ok(text) => Ok(py_strip(text).to_owned()),
+        Ok(text) => Ok(text.to_owned()),
         Err(error) => Err(utf8_error_message(&bytes, error)),
     }
 }

@@ -41,9 +41,15 @@ pub(super) fn safe_listing_arguments(
         (command_read_target(argument, context, true)
             && !super::search::skill_link_resolves_over_home(argument, context))
             || super::search::agent_root_listing(argument, context, false)
+            || super::read_paths::repository_hidden_directory(
+                argument,
+                context.home_dir,
+                context.cwd,
+            )
             || (super::search::skill_listing_root(argument, context)
                 && !super::search::skill_link_resolves_over_home(argument, context))
             || super::listing_reads::absent_listing_operand(argument, context)
+            || super::tool_bin_listing::tool_bin_listing_operand(argument, context)
     })
 }
 
@@ -300,6 +306,21 @@ fn safe_word_count_with_targets(
         saw_target = true;
     }
     saw_target || piped_input
+}
+
+/// `jq <projection> <file>` reads one bounded file through the same
+/// field/index projection the stdin form admits.
+pub(super) fn safe_jq_file_arguments(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some((file, rest)) = arguments.split_last() else {
+        return false;
+    };
+    !file.starts_with('-')
+        && rest.last().is_some_and(|filter| filter.starts_with('.'))
+        && safe_jq_stdin_arguments(rest)
+        && command_read_target(file, context, false)
 }
 
 pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {

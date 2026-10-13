@@ -171,9 +171,13 @@ def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) ->
     if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
         return True
     try:
-        tokens = shlex.split(command)
+        split_tokens = shlex.split(command)
     except ValueError:
         return False
+    from .bounded_cli_hook_native import bounded_python_argv
+
+    # A native launcher prefix wraps the same Python bridge argv.
+    tokens = [str(token) for token in bounded_python_argv(split_tokens)]
     if len(tokens) == 3 and tokens[1] == "__guard-bounded-hook":
         if Path(tokens[0]).name.lower() not in {"hol guard", "hol-guard", "hol-guard.exe"}:
             return False

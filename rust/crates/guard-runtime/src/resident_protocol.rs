@@ -58,6 +58,10 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "policy-snapshot-v3".into(),
         "policy-snapshot-push-v1".into(),
         "policy-snapshot-resident-generation-v1".into(),
+        "policy-snapshot-direct-lane-v1".into(),
+        crate::hook_direct::HOOK_DIRECT_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_CONTAINED_ROUTE_FEATURE.into(),
+        crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),
         "native-approval-artifact-v3".into(),
         "native-approval-challenge-v3".into(),
         "native-approval-validation-v3".into(),
@@ -111,6 +115,12 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
         #[cfg(unix)]
         features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
+        #[cfg(unix)]
+        features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
+        #[cfg(unix)]
+        features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+        #[cfg(unix)]
+        features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     }
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
@@ -136,6 +146,8 @@ pub(crate) enum ResidentOperationV1 {
     RichCommandModel(crate::rich_command_model_op::RichCommandModelRequest),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),
+    HookDirect(crate::hook_direct::HookDirectRequestV1),
+    HookDirectEvidenceDrain(crate::hook_direct_evidence::HookDirectEvidenceDrainRequestV1),
     ApprovalChallenge(ApprovalChallengeRequestV3),
     ApprovalValidate(ApprovalValidateRequestV3),
     ApprovalConsume(ApprovalConsumeRequestV3),

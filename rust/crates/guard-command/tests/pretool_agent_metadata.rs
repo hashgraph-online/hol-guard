@@ -66,3 +66,44 @@ fn task_output_only_retrieves_a_bounded_existing_host_task() {
         "allow"
     );
 }
+
+#[test]
+fn task_stop_and_skill_are_bounded_host_metadata() {
+    for payload in [
+        json!({"tool_name":"TaskStop", "tool_input":{"task_id":"exec_abc-123"}}),
+        json!({"tool_name":"Skill", "tool_input":{"skill":"plugin:review_code-2", "args":"focus on tests"}}),
+        json!({"tool_name":"Skill", "tool_input":{"skill":"review"}}),
+    ] {
+        let result = evaluate(payload);
+        assert_eq!(result.minimum_action, "allow");
+        assert_eq!(result.reason_code, "native_agent_task_metadata");
+    }
+    for payload in [
+        json!({"tool_name":"TaskStop", "tool_input":{"task_id":"../x"}}),
+        json!({"tool_name":"TaskStop", "tool_input":{"task_id":"t", "command":"echo unsafe"}}),
+        json!({"tool_name":"TaskStop", "tool_input":{}}),
+        json!({"tool_name":"Skill", "tool_input":{"skill":"bad name"}}),
+        json!({"tool_name":"Skill", "tool_input":{"skill":"../x"}}),
+        json!({"tool_name":"Skill", "tool_input":{"skill":"ok", "args":{"a":1}}}),
+        json!({"tool_name":"Skill", "tool_input":{"skill":"ok", "extra":"x"}}),
+        json!({"tool_name":"mcp__external__Skill", "tool_input":{"skill":"ok"}}),
+    ] {
+        assert_ne!(evaluate(payload).minimum_action, "allow");
+    }
+}
+
+#[test]
+fn web_fetch_with_prompt_is_judged_as_network() {
+    let result = evaluate(json!({"tool_name":"WebFetch", "tool_input":{
+        "url":"https://app.example.test/health", "prompt":"return body"
+    }}));
+    assert!(
+        !result.reason_code.contains("prompt"),
+        "unexpected reason {}",
+        result.reason_code
+    );
+    assert_eq!(
+        result.action.action_type,
+        guard_contracts::PreToolActionTypeV1::Network
+    );
+}

@@ -34,6 +34,7 @@ pub(super) fn exact_safe_command(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        npm_config_inert: context.npm_config_inert,
         shell_home_matches: context.shell_home_matches,
         cwd: cwd_proof
             .as_ref()
@@ -286,18 +287,26 @@ fn valid_ref_component(value: &str) -> bool {
         && !value.ends_with(".lock")
 }
 
+/// A relative destination may start by climbing out of the repository, as in
+/// `../report-worktree`, the usual sibling layout; `fresh_destination` then
+/// requires the canonical parent to stay under home.
 fn valid_path_text(value: &str) -> bool {
-    let components = value.strip_prefix('/').unwrap_or(value);
+    let absolute = value.strip_prefix('/');
+    let mut parts = absolute.unwrap_or(value).split('/').peekable();
+    if absolute.is_none() {
+        while parts.next_if_eq(&"..").is_some() {}
+    }
+    let parts: Vec<&str> = parts.collect();
     value.len() <= MAX_DESTINATION_BYTES
-        && !components.is_empty()
+        && !parts.is_empty()
         && value.trim() == value
         && !value.starts_with('~')
         && !value.contains([
             '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}', '\\',
         ])
-        && !components
-            .split('/')
-            .any(|part| part.is_empty() || part == "." || part == "..")
+        && !parts
+            .iter()
+            .any(|part| part.is_empty() || *part == "." || *part == "..")
 }
 
 fn fresh_destination(value: &str, context: super::PathContext<'_>) -> Option<PathBuf> {

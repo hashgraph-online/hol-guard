@@ -304,12 +304,22 @@ def test_sink_needs_a_receipt_for_the_wrapped_original(
     assert executed == []
 
 
-def test_sink_rejects_unpeelable_wrappers_before_authority(tmp_path: Path) -> None:
+def test_sink_rejects_unpeelable_wrappers_without_a_workspace_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sink, "run_workspace_contained", lambda *args, **kwargs: pytest.fail("ran"))
     original = {"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": "pytest -q | sh"}}
-    with pytest.raises(RestrictedPytestError):
-        sink.run_authorized_contained_test(
-            original, workspace=tmp_path, timeout_seconds=20, authorize=lambda value: pytest.fail("authorized")
-        )
+    for receipt in (None, required_profile()):
+        seen: list[object] = []
+        with pytest.raises(RestrictedPytestError):
+            sink.run_authorized_contained_test(
+                original,
+                workspace=tmp_path,
+                timeout_seconds=20,
+                authorize=lambda value, receipt=receipt, seen=seen: seen.append(value) or receipt,
+            )
+        # Only the command as issued is checked; nothing peeled runs.
+        assert seen == [original]
 
 
 def test_subdirectory_runs_resolve_from_the_workspace_root(tmp_path: Path) -> None:
@@ -403,9 +413,7 @@ def test_unquoted_home_cd_expands_from_home(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         peel_contained_wrapper("cd ~/project && pytest -q", workspace=workspace)
     doubled = "cd ~//sibling-worktree/dashboard && node node_modules/vite/bin/vite.js build 2>&1 | tail -12"
-    assert peel_contained_wrapper(doubled, workspace=workspace, home=home)[1] == (
-        sibling / "dashboard"
-    ).resolve()
+    assert peel_contained_wrapper(doubled, workspace=workspace, home=home)[1] == (sibling / "dashboard").resolve()
     for mixed in (
         'cd ~"/sibling-worktree/dashboard" && node node_modules/vite/bin/vite.js build',
         "cd ~'/sibling-worktree/dashboard' && node node_modules/vite/bin/vite.js build",
@@ -449,8 +457,8 @@ def test_sink_moves_the_approved_root_to_the_sibling_repository(
         ("authorize", ("pytest -q", str(resolved))),
         ("execute", (sibling.resolve(), resolved)),
     ]
-    # The same command without a home to bound the sibling is refused before authority.
+    # Without a home to bound the sibling, the pytest receipt does not cover it.
+    calls.clear()
     with pytest.raises(RestrictedPytestError):
-        sink.run_authorized_contained_test(
-            original, workspace=workspace, timeout_seconds=20, authorize=lambda value: pytest.fail("authorized")
-        )
+        sink.run_authorized_contained_test(original, workspace=workspace, timeout_seconds=20, authorize=authorize)
+    assert calls == [("authorize", (original["tool_input"]["command"], str(workspace)))]

@@ -266,6 +266,15 @@ use go_sources::{go_replace_result, target_requires_npm_source_review};
 #[path = "supply_chain_package_eval/archive_scanning.rs"]
 mod archive_scanning;
 
+#[path = "supply_chain_package_eval/registry_install_identity.rs"]
+mod registry_install_identity;
+use registry_install_identity::{
+    lifecycle_scripts_enabled_reason, plain_registry_spec, registry_install_needs_flags,
+    registry_selector, script_free_older_npm_install, script_free_registry_install,
+};
+#[path = "supply_chain_package_eval/registry_install_tree.rs"]
+mod registry_install_tree;
+use registry_install_tree::git_free_install_tree;
 #[path = "supply_chain_package_eval/fallback_packages.rs"]
 mod fallback_packages;
 use fallback_packages::{

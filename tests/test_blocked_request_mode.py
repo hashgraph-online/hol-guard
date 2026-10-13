@@ -55,3 +55,42 @@ def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
     )
     assert reason == guidance
     assert "Wait for approval" not in reason
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("native_destructive_command", "git worktree remove"),
+        ("native_package_review", "--ignore-scripts"),
+        ("native_command_review_required", "read-only"),
+        ("native_network_review", "network request"),
+        ("native_pre_tool_unknown_review", "does not recognize"),
+    ],
+)
+def test_specific_deny_text_names_reason_and_inbox_when_approval_queued(code: str, expected: str) -> None:
+    text = safe_alternative_reason("HOL Guard blocked this action.", reason_code=code, approval_queued=True)
+    assert expected in text
+    assert "HOL Guard inbox" in text
+    assert "hol-guard approvals" in text
+    assert "Do not retry the same action until it is approved" in text
+    assert "safe, permitted alternative" not in text
+
+
+def test_specific_deny_text_without_queued_approval_points_to_no_approval() -> None:
+    text = safe_alternative_reason("Blocked.", reason_code="native_policy_reapproval_required", approval_queued=False)
+    assert text.startswith("Blocked. No approval is waiting in HOL Guard")
+    assert "Ask the user to approve" not in text
+    assert "hol-guard approvals" not in text
+
+
+def test_extension_failure_keeps_the_native_reason_without_a_generic_hint() -> None:
+    reason = "HOL Guard blocked this command because it leaves a quote open."
+    text = safe_alternative_reason(
+        reason, reason_code="native_command_extension_evaluation_failed", approval_queued=True
+    )
+    assert text.startswith(reason)
+    assert "command substitution" not in text
+
+
+def test_default_deny_text_is_unchanged_without_native_context() -> None:
+    assert "safe, permitted alternative" in safe_alternative_reason("Blocked.")

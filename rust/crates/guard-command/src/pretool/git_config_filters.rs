@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 // Attribute inspection never invokes clean/smudge/process filters. Check every
 // tracked and untracked path, or only the `named` operands when the command
 // reads nothing else; a global filter definition alone cannot execute.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn unused(
     binary: &Path,
     leading: &[String],
@@ -14,6 +15,7 @@ pub(super) fn unused(
     environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     deadline: Instant,
     named: &[&str],
+    repository_optional: bool,
 ) -> Option<bool> {
     let query = |arguments: &[&str], input: Option<Vec<u8>>, root: Option<&Path>| {
         let mut command = Command::new(binary);
@@ -70,7 +72,18 @@ pub(super) fn unused(
         )?;
         return filters_unset(&attributes, &batch);
     }
-    let root = query(&["rev-parse", "--show-toplevel"], None, None)?;
+    let Some(root) = query(&["rev-parse", "--show-toplevel"], None, None) else {
+        // `git status` outside any repository stops during repository setup,
+        // before it reads attributes or starts a filter. Both discovery
+        // queries failing is that case; a bare repository or a git directory
+        // still answers `--git-dir` and stays unproven.
+        // A probe cut off by the deadline proves nothing.
+        return (repository_optional
+            && Instant::now() < deadline
+            && query(&["rev-parse", "--git-dir"], None, None).is_none()
+            && query(&["rev-parse", "--is-inside-work-tree"], None, None).is_none())
+        .then_some(true);
+    };
     let root = std::str::from_utf8(&root).ok()?.strip_suffix('\n')?;
     if root.len() > 4096 || root.chars().any(char::is_control) {
         return None;

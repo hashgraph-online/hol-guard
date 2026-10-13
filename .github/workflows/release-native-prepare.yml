@@ -56,10 +56,10 @@ jobs:
       VERSION: ${{ inputs.version }}
       FAST_CODEGEN: ${{ inputs.fast_codegen == true }}
       # Only the Windows alpha build lowers workspace opt-level: it is the
-      # slowest target and its opt-level 0 binaries stay inside the alpha
-      # size ceiling, while macOS/Linux opt-level 0 binaries exceed it.
+      # slowest target. Keep level 1 optimization because unoptimized
+      # workspace code exceeds the alpha runtime size ceiling.
       # Dependencies keep the release profile either way.
-      ALPHA_WORKSPACE_OPT_LEVEL: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '0' || '' }}
+      ALPHA_WORKSPACE_OPT_LEVEL: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '1' || '' }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}

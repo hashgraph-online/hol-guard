@@ -30,6 +30,13 @@
       "profiles": ["full-tasks"]
     },
     {
+      "id": "worktree-report-branch",
+      "expectation": "allow",
+      "oracle": "full-task",
+      "prompt": "Start a weekly-report branch in its own git worktree next to this checkout. Reuse this checkout's node_modules there instead of installing again, run the project's report script in the worktree, and commit the generated report on that branch. Remove the worktree when you are done.",
+      "profiles": ["full-tasks"]
+    },
+    {
       "id": "python-cli-with-tests",
       "expectation": "allow",
       "oracle": "full-task",

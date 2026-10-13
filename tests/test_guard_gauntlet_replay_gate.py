@@ -12,8 +12,11 @@ passes fails as stale.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+import tempfile
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -57,7 +60,14 @@ _ENFORCE_STALE = bool(os.environ.get("CI")) and sys.platform != "darwin"
 def replay_environment(
     request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
 ) -> Iterator[tuple[str, BenignFixture, HookWorker]]:
-    fixture = build_fixture(tmp_path_factory.mktemp(f"gauntlet-replay-{request.param}"))
+    # macOS pytest temp dirs sit under /private/var, which real sessions never use for sibling
+    # worktrees; root the fixture under /tmp as a Linux runner and real developer hosts do.
+    root = (
+        Path(tempfile.mkdtemp(prefix=f"gauntlet-replay-{request.param}-", dir="/tmp")).resolve()
+        if sys.platform == "darwin"
+        else tmp_path_factory.mktemp(f"gauntlet-replay-{request.param}")
+    )
+    fixture = build_fixture(root)
     write_global_gitconfig(request.param, fixture.home)
     patch = pytest.MonkeyPatch()
     patch.setenv("HOME", str(fixture.home))
@@ -75,6 +85,13 @@ def replay_environment(
     patch.setenv("HOL_GUARD_NATIVE_BINARY", binary)
     for key, value in environment_overlay(request.param, fixture.home).items():
         patch.setenv(key, value)
+    # The `bun -e` proof resolves `bun` from PATH outside the workspace. Hosted runners ship no
+    # Bun, so put a stand-in where Bun's installer does; a real Bun earlier on PATH still wins.
+    bun = fixture.home / ".bun" / "bin" / "bun"
+    bun.parent.mkdir(parents=True, exist_ok=True)
+    bun.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    bun.chmod(0o755)
+    patch.setenv("PATH", os.pathsep.join([os.environ.get("PATH", ""), str(bun.parent)]))
     worker = HookWorker(store=GuardStore(fixture.guard_home), workspace=fixture.worktree)
     try:
         yield request.param, fixture, worker
@@ -82,6 +99,8 @@ def replay_environment(
         worker.close()
         patch.undo()
         fixture.cleanup()
+        if sys.platform == "darwin":
+            shutil.rmtree(root, ignore_errors=True)
 
 
 def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tuple[dict[str, object], list[dict]]:
@@ -123,7 +142,12 @@ def test_replayed_payload_is_quiet_offers_always_or_blocks(
     gap_key = next((k for k in (label, case.case_id, f"{case.base_id}/{kind}", case.base_id) if k in _GAPS), None)
     if gap_key is not None:
         reason = _GAPS[gap_key]
-        if failure and reason in failure_reasons(case, result, rows):
+        reasons = failure_reasons(case, result, rows)
+        # macOS offers protected read-only test execution where the Linux runner that recorded
+        # these gaps can only review; either outcome is the same recorded gap.
+        if sys.platform == "darwin" and any(r.endswith("_readonly_containment_required") for r in reasons):
+            reasons = {*reasons, "native_command_review_required"}
+        if failure and reason in reasons:
             pytest.xfail(f"known gap ({reason}): {failure}")
         if failure:
             pytest.fail(f"{label}: failed differently than its known gap ({reason}): {failure}")

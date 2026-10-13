@@ -110,6 +110,11 @@ impl PolicySnapshotStore {
     }
 
     pub(crate) fn current_snapshot(&self) -> Result<PolicySnapshotV3, String> {
+        self.current_admitted_snapshot()
+            .map(|snapshot| snapshot.snapshot().clone())
+    }
+
+    pub(crate) fn current_admitted_snapshot(&self) -> Result<Arc<AdmittedPolicySnapshot>, String> {
         let now = now_ms()?;
         if self.authority_changed.load(Ordering::SeqCst)
             || !policy_store_authority::authority_unchanged_fenced(self)
@@ -136,6 +141,6 @@ impl PolicySnapshotStore {
             now,
         )
         .map_err(snapshot_error)?;
-        Ok(snapshot.snapshot().clone())
+        Ok(Arc::clone(snapshot))
     }
 }

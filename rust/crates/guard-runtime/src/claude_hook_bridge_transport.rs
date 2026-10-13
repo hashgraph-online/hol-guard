@@ -201,14 +201,14 @@ pub(crate) fn hook_event_name(data: &str) -> Result<String, BridgeError> {
     Ok(name.to_owned())
 }
 
-fn new_nonce() -> Result<String, BridgeError> {
+pub(crate) fn new_nonce() -> Result<String, BridgeError> {
     let mut bytes = [0_u8; 32];
     getrandom::fill(&mut bytes).map_err(|error| BridgeError::Transport(error.to_string()))?;
     Ok(hex::encode(bytes))
 }
 
 /// POST the identity challenge and read its JSON object.
-fn request_identity_challenge(
+pub(crate) fn request_identity_challenge(
     connection: &mut LoopbackConnection,
     state_id: &str,
     nonce: &str,

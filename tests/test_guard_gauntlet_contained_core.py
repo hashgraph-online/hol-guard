@@ -15,8 +15,8 @@ import pytest
 from ci.gauntlet import host_process
 from ci.gauntlet.case_helpers import _fixture_replacements
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.contained_core import PROOF_SCHEMA, request_proofs
-from ci.gauntlet.evidence import assess_case
+from ci.gauntlet.contained_core import PROOF_SCHEMA, _sandbox_refused, contained_calls, request_proofs
+from ci.gauntlet.evidence import assess_case, reconcile
 from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.host_process import clean_environment, python_shim
 from ci.gauntlet.input_evidence import input_digest
@@ -228,6 +228,17 @@ def test_fully_bound_contained_run_passes_without_interruption(fixture, tmp_path
     assert assessment["interruptions"]["events"] == []
 
 
+def test_workspace_sandbox_rewrite_is_judged_like_other_containment(fixture, tmp_path):
+    case = _contained(fixture, tmp_path)
+    pre = _pre(case)
+    workspace_reason = "native_workspace_containment_required"
+    pre["reason_code"] = workspace_reason
+    pre["native_observation"]["required_execution_profile"] = "workspace-contained-v1"
+    pre["native_observation"]["native_receipt"]["reason_code"] = workspace_reason
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "pass", assessment["reason"]
+
+
 def _break_receipt(case, key, value):
     _pre(case)["native_observation"]["native_receipt"][key] = value
 
@@ -333,6 +344,36 @@ def test_failed_contained_run_is_a_false_positive(fixture, tmp_path, exit_code, 
     assert assessment["reason"] == f"Guard's contained run of ordinary work failed (exit {exit_code})"
 
 
+@pytest.mark.parametrize(
+    ("exit_code", "text", "error"),
+    [
+        (1, "ls: test: No such file or directory", None),
+        (2, "not ok 1 - rejects an empty email", None),
+        (1, "cp: /elsewhere/zod/package.json: Operation not permitted", "exit 1"),
+        (1, "/bin/sh: /tmp/out: Read-only file system", "exit 1"),
+        (1, "pip: Temporary failure in name resolution", "exit 1"),
+        (1, "curl: (6) nodename nor servname provided, or not known", "exit 1"),
+        (128, "fatal: unable to access: Connection refused", "exit 128"),
+        (6, "curl: (6) Could not resolve host: registry.npmjs.org", "exit 6"),
+        (126, "", "exit 126"),
+    ],
+)
+def test_full_task_contained_run_counts_only_sandbox_refusals(fixture, tmp_path, exit_code, text, error):
+    """An agent's own failing command is not Guard's doing; a sandbox refusal still is."""
+    case = _contained(fixture, tmp_path)
+    case["full_task_mode"] = "enforce"
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = exit_code
+    end["result"]["content"] = [{"type": "text", "text": text}]
+    calls, _ = reconcile(case["events"])
+    _, found = contained_calls("allow", case, calls)
+    if error is None:
+        assert found is None
+    else:
+        assert found == ("false-positive", f"Guard's contained run of ordinary work failed ({error})")
+
+
 def test_unbound_containment_deny_still_interrupts(fixture, tmp_path):
     """A containment deny the adapter did not rewrite blocks ordinary work and is an interruption."""
     case = _contained(fixture, tmp_path)
@@ -352,3 +393,25 @@ def test_unbound_containment_deny_still_interrupts(fixture, tmp_path):
     assessment = assess_case(SCENARIO, deepcopy(case))
     assert assessment["outcome"] != "pass"
     assert any(event["kind"] == "decision" for event in assessment["interruptions"]["events"])
+
+
+@pytest.mark.parametrize(
+    ("command", "exit_code", "refused"),
+    [
+        ("curl -s -o /dev/null -w '%{http_code}' https://registry.npmjs.org/zod", 6, True),
+        ("cd app && curl -sI https://example.com", 7, True),
+        ("/usr/bin/curl -s https://example.com", 6, True),
+        ("curl -sf https://example.com/missing", 22, False),
+        ("npm test", 6, False),
+        ("npm test # curl -s https://example.com", 6, False),
+        ("curl -s https://example.com; ./tests.sh", 6, False),
+        ("curl -s https://example.com && echo ok", 6, True),
+        ("npm test; cd app && curl -s https://example.com && echo ok", 7, True),
+        ("curl -s https://example.com || echo offline", 6, False),
+        ("curl -s https://example.com && echo ok | tee log", 6, True),
+        ("curl -s https://example.com | jq .name", 6, False),
+    ],
+)
+def test_a_silent_curl_network_exit_counts_as_a_sandbox_refusal(command, exit_code, refused):
+    call = {"result": {"content": [{"type": "text", "text": "000"}]}}
+    assert _sandbox_refused(call, {"exitCode": exit_code}, {"command": command}) is refused

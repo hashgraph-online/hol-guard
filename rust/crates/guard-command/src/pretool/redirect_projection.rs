@@ -137,6 +137,7 @@ fn redirect_disqualifies_containment(reason: &str) -> bool {
         "native_pytest_readonly_containment_required"
             | "native_python_eval_readonly_containment_required"
             | "native_node_eval_readonly_containment_required"
+            | "native_workspace_containment_required"
     )
 }
 
@@ -261,7 +262,7 @@ fn remove_output_redirect(
     Some(index)
 }
 
-fn remove_quoted_heredoc(
+pub(super) fn remove_quoted_heredoc(
     chars: &[char],
     start: usize,
     out: &mut String,
@@ -306,7 +307,7 @@ fn remove_quoted_heredoc(
     Some(index + 1)
 }
 
-fn skip_heredoc_bodies(
+pub(super) fn skip_heredoc_bodies(
     chars: &[char],
     mut index: usize,
     heredocs: &mut Vec<(String, bool)>,
@@ -336,14 +337,14 @@ fn skip_heredoc_bodies(
     Some(index.min(chars.len()))
 }
 
-fn trailing_word(out: &str) -> &str {
+pub(super) fn trailing_word(out: &str) -> &str {
     let start = out
         .rfind(|value: char| value.is_whitespace() || matches!(value, ';' | '|'))
         .map_or(0, |position| position + 1);
     &out[start..]
 }
 
-fn boundary(value: Option<&char>) -> bool {
+pub(super) fn boundary(value: Option<&char>) -> bool {
     value.is_none_or(|value| value.is_whitespace() || matches!(value, ';' | '|' | '&'))
 }
 

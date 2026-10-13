@@ -223,6 +223,9 @@ fn classify(original: &[String], literal_dollars: bool) -> Capabilities {
             "edit" => return one("access_remote"),
             "set-default" => return one("write_local"),
             "sync" if options::has_option(tail, "--force") => return one("force_remote"),
+            "create" if crate::github_command_capabilities::private_repo_create(tail) => {
+                return one("create_private_remote")
+            }
             _ => {}
         }
     }

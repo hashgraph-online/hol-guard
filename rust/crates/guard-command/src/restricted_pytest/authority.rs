@@ -24,12 +24,16 @@ struct Input {
     search_path: String,
     read_only_workspace: bool,
     source: BTreeMap<String, String>,
+    user_site_root: Option<PathBuf>,
 }
 
 pub fn evaluate(operation: &str, input: &Value) -> Value {
     if let Some(result) = crate::contained_argv::evaluate(operation, input)
         .or_else(|| super::contained::evaluate(operation, input))
         .or_else(|| super::profiles::evaluate(operation, input))
+        .or_else(|| super::workspace::evaluate(operation, input))
+        .or_else(|| super::workspace_linux::evaluate(operation, input))
+        .or_else(|| super::workspace_overlay::evaluate(operation, input))
         .or_else(|| super::credentials::evaluate(operation, input))
     {
         return result;
@@ -94,8 +98,13 @@ fn evaluate_inner(operation: &str, input: &Input) -> Result<Value, RestrictedPyt
             &input.cwd,
             &input.private_home,
             &input.private_tmp,
-            &input.allowed_executables
+            &input.allowed_executables,
+            input
+                .user_site_root
+                .as_deref()
+                .is_some_and(super::user_site::grantable)
         )?),
+        "user_site_link_target" => json!(super::user_site::link_target(&input.source)),
         "runtime_roots" => json!(runtime_roots(
             &input.allowed_executables,
             &input.workspace,

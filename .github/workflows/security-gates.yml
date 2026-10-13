@@ -197,6 +197,7 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: >-
           gitleaks git
+          --verbose
           --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
           --no-banner
           --redact

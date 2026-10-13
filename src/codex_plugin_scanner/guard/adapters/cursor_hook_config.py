@@ -21,6 +21,7 @@ from .cursor_hook_events import (
     unsupported_cursor_hook_events,
 )
 from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
+from .cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, client_hook_tokens, native_cursor_hook_bridge
 from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
 
@@ -102,11 +103,11 @@ def _managed_hook_command(
     script = str(script_path.resolve())
     event_args = ["--cursor-hook-event", event_name]
     interpreter = str(python_executable) if python_executable is not None else isolated_cursor_hook_python()
-    if interpreter:
-        return shlex.join([interpreter, "-I", script, *event_args])
-    if bool(getattr(sys, "frozen", False)):
+    if not interpreter and bool(getattr(sys, "frozen", False)):
         return shlex.join([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
-    return shlex.join([sys.executable, "-I", script, *event_args])
+    native_bridge = native_cursor_hook_bridge()
+    prefix = [] if native_bridge is None else [str(native_bridge), NATIVE_CURSOR_HOOK_COMMAND]
+    return shlex.join([*prefix, interpreter or sys.executable, "-I", script, *event_args])
 
 
 def _is_managed_cursor_hook_script(path: Path) -> bool:
@@ -335,7 +336,7 @@ def _accepted_live_cursor_hook_script(path: Path) -> Path | None:
 
 def _live_cursor_hook_script_path(command: str) -> Path | None:
     try:
-        tokens = shlex.split(command)
+        tokens = client_hook_tokens(shlex.split(command))
     except ValueError:
         tokens = command.split()
     if not tokens:
@@ -399,7 +400,7 @@ _FROZEN_CURSOR_LAUNCHERS = {
 
 def _is_structured_managed_cursor_hook_command(command: str) -> bool:
     try:
-        tokens = shlex.split(command)
+        tokens = client_hook_tokens(shlex.split(command))
     except ValueError:
         tokens = command.split()
     if not tokens:

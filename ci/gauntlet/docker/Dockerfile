@@ -3,7 +3,7 @@
 # repository lockfile in ci/pi-exact-continuation. Guard itself is supplied at run time.
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS node
 
-FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+FROM python:3.12-slim-trixie@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
 ARG TARGETARCH
 ARG GH_VERSION=2.102.0
 ARG GH_SHA256_AMD64=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
@@ -13,8 +13,10 @@ ARG BUN_VERSION=1.3.14
 ARG BUN_SHA256_AMD64=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7
 ARG BUN_SHA256_ARM64=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
 
+# Bubblewrap runs Guard's Linux workspace containment. Its overlay mounts need
+# bubblewrap 0.10 or newer, which is why the base is trixie rather than bookworm.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git openssl unzip \
+ && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl git openssl unzip \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules

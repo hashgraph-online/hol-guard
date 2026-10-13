@@ -53,6 +53,7 @@ from .hook_worker_readiness import prepare_workspace_policy
 if TYPE_CHECKING:
     from ..config import GuardConfig
     from ..store import GuardStore
+    from .hook_direct_evidence_drain import DirectHookEvidenceDrain
 
 
 class CommandActivityWriter(Protocol):
@@ -94,6 +95,7 @@ class HookWorker(HookWorkerNativeMixin):
         *,
         store: GuardStore,
         workspace: Path | None = None,
+        home_dir: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
@@ -117,9 +119,14 @@ class HookWorker(HookWorkerNativeMixin):
 
         _ = list_adapters()
         self._owns_policy_snapshot_publisher = publish_native_policy
+        self._direct_evidence_drain: DirectHookEvidenceDrain | None = None
         if self._owns_policy_snapshot_publisher and start_native_policy:
+            bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
+            if home_dir is not None and callable(bind_daemon_home):
+                bind_daemon_home(home_dir)
             if workspace is not None:
                 self.policy_snapshot_publisher.register_workspace(workspace)
+            self._start_direct_evidence_drain()
             self.policy_snapshot_publisher.start()
         if wait_for_native_policy and start_native_policy:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
@@ -181,9 +188,33 @@ class HookWorker(HookWorkerNativeMixin):
 
         return self.close_contained(deadline_monotonic=deadline_monotonic)
 
+    def _start_direct_evidence_drain(self) -> None:
+        # Direct answers are bound only while their evidence has a writer.
+        enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
+        if self.activity_writer is None or not callable(enable):
+            return
+        from .hook_direct_evidence_drain import DirectHookEvidenceDrain
+
+        self._direct_evidence_drain = DirectHookEvidenceDrain(self)
+        enable(True)
+        self._direct_evidence_drain.start()
+
+    def _stop_direct_evidence_drain(self) -> None:
+        drain = self._direct_evidence_drain
+        if drain is None:
+            return
+        self._direct_evidence_drain = None
+        # Close the lane first, then collect what the resident already queued.
+        enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
+        if callable(enable):
+            with suppress(Exception):
+                enable(False)
+        drain.stop()
+
     def close_contained(self, *, deadline_monotonic: float | None = None) -> bool:
         """Confirm this worker's publisher has stopped before releasing ownership."""
 
+        self._stop_direct_evidence_drain()
         if self._owns_policy_snapshot_publisher:
             close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
             if callable(close_contained):

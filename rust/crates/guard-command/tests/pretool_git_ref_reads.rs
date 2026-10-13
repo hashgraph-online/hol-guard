@@ -115,6 +115,8 @@ fn git_ref_files_are_readable_without_opening_other_git_state() {
             ".git/refs/tags/v1.0.0",
             ".git/refs/remotes/origin/main",
             ".git/worktrees/feature/HEAD",
+            // A credential-free repository config is plain settings.
+            ".git/config",
         ] {
             assert_eq!(
                 read(harness, &repo.join(path), &home, &repo),
@@ -123,7 +125,6 @@ fn git_ref_files_are_readable_without_opening_other_git_state() {
             );
         }
         for path in [
-            ".git/config",
             ".git/hooks/pre-commit",
             ".git/logs/HEAD",
             ".git/refs/stash",

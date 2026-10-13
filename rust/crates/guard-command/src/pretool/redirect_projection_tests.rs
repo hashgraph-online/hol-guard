@@ -18,6 +18,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         cwd: Some(CWD),
         cdpath_unset: false,
         rustup_override_absent: false,
+        npm_config_inert: false,
         shell_home_matches: false,
     }
 }
@@ -121,6 +122,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         cwd: Some(&cwd),
         cdpath_unset: false,
         rustup_override_absent: false,
+        npm_config_inert: false,
         shell_home_matches: false,
     };
     for command in [
@@ -207,7 +209,9 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
     .unwrap();
     let home = root.to_string_lossy().into_owned();
     let cwd = project.to_string_lossy().into_owned();
-    let contained = if cfg!(target_os = "macos") {
+    let contained = if cfg!(target_os = "macos")
+        || crate::restricted_pytest::linux_workspace_sandbox_available()
+    {
         "sandbox-required"
     } else {
         "review"

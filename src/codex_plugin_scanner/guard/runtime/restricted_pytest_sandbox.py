@@ -43,25 +43,37 @@ def _restricted_environment(
     private_home: Path,
     private_tmp: Path,
     allowed_executables: tuple[Path, ...],
+    user_site_root: Path | None = None,
 ) -> dict[str, str]:
-    result = restricted_native(
-        "environment",
-        {
-            "source": dict(source),
-            "workspace": workspace,
-            "cwd": cwd,
-            "private_home": private_home,
-            "private_tmp": private_tmp,
-            "allowed_executables": allowed_executables,
-        },
-        dict,
-    )
+    fields: dict[str, object] = {
+        "source": dict(source),
+        "workspace": workspace,
+        "cwd": cwd,
+        "private_home": private_home,
+        "private_tmp": private_tmp,
+        "allowed_executables": allowed_executables,
+    }
+    if user_site_root is not None:
+        fields["user_site_root"] = user_site_root
+    result = restricted_native("environment", fields, dict)
     if not all(isinstance(value, str) for value in result.values()):
         raise ValueError("Invalid native restricted environment reply")
     return result
 
 
-def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+def _link_user_site(source: Mapping[str, str], private_home: Path) -> Path | None:
+    """Link the user's own Python packages into the private HOME for reading."""
+
+    target = restricted_native("user_site_link_target", {"source": dict(source)}, (str, type(None)))
+    if target is None:
+        return None
+    library = private_home / "Library"
+    library.mkdir(mode=0o700)
+    (library / "Python").symlink_to(target, target_is_directory=True)
+    return Path(target)
+
+
+def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> list[str]:
     if plan.output_roots:
         if plan.profile_version != "node-build-output-v1":
             raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected output grants.")
@@ -72,7 +84,7 @@ def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str
     if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
         raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":
-        profile = _macos_profile(plan, private_root=private_root)
+        profile = _macos_profile(plan, private_root=private_root, user_site_root=user_site_root)
         return [str(plan.backend_executable), "-p", profile, "--", *plan.command]
     return _bubblewrap_argv(plan, private_root=private_root)
 
@@ -93,8 +105,11 @@ def _profile_fields(plan: RestrictedPytestPlan, private_root: Path) -> Mapping[s
     } | {"private_root": private_root}
 
 
-def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
-    return restricted_native("macos_profile", _profile_fields(plan, private_root), str)
+def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> str:
+    fields = dict(_profile_fields(plan, private_root))
+    if user_site_root is not None:
+        fields["user_site_root"] = user_site_root
+    return restricted_native("macos_profile", fields, str)
 
 
 def _collection_link_metadata(plan: RestrictedPytestPlan) -> tuple[Path, ...]:

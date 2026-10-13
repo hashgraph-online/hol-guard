@@ -14,7 +14,7 @@ use crate::git_execution_safety_config::{
     checkout_config_can_fetch, checkout_environment_is_set, credential_helper_shape,
     credential_helpers, fetch_config_routes_execution, fetch_environment_is_set, parse_null_config,
     push_config_routes_execution, push_effective_config_weakens_transport,
-    push_scoped_config_routes_transport, routing_environment_is_clean,
+    push_scoped_config_routes_transport, rewritten_remote_url, routing_environment_is_clean,
     safe_github_https_remote_url, status_arguments_are_read_only, Environment, GitConfig,
     HelperShape,
 };
@@ -247,7 +247,11 @@ impl Context<'_> {
             return false;
         }
         match config.get("remote.origin.url") {
-            Some(urls) if urls.iter().all(|url| safe_github_https_remote_url(url)) => {}
+            Some(urls)
+                if urls.iter().all(|url| {
+                    rewritten_remote_url(&config, url)
+                        .is_some_and(|url| safe_github_https_remote_url(&url))
+                }) => {}
             _ => return false,
         }
         let exec_path = prober

@@ -352,3 +352,37 @@ fn profile_preserves_denials_and_readonly_workspace() {
         assert!(profile.contains(&denial));
     }
 }
+
+// A fresh project with only source and tests is still a pytest root.
+#[test]
+fn root_test_modules_mark_a_project_but_not_a_home_or_a_link() {
+    let fixture = fixture("guard-test-module-root");
+    let resolve = |path: &Path| super::validation::resolve_workspace_with_home(path, None);
+    for (name, marks) in [
+        ("test_cli.py", true),
+        ("cli_test.py", true),
+        ("conftest.py", true),
+        ("test_.py", false),
+        ("cli.py", false),
+        ("test_cli.txt", false),
+    ] {
+        let workspace = fixture.0.join(format!("project-{name}"));
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join(name), "").unwrap();
+        assert_eq!(resolve(&workspace).is_ok(), marks, "{name}");
+    }
+    let linked = fixture.0.join("linked");
+    fs::create_dir(&linked).unwrap();
+    std::os::unix::fs::symlink(
+        fixture.0.join("project-test_cli.py/test_cli.py"),
+        linked.join("test_cli.py"),
+    )
+    .unwrap();
+    assert!(resolve(&linked).is_err());
+
+    let home = fixture.0.join("caller-home");
+    fs::create_dir(&home).unwrap();
+    fs::write(home.join("test_cli.py"), "").unwrap();
+    let refused = super::validation::resolve_workspace_with_home(&home, Some(&home));
+    assert!(refused.is_err());
+}

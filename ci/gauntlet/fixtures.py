@@ -112,7 +112,9 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def create_fixture(root: Path, *, realistic: bool = False, linked_worktree: bool = False) -> Fixture:
+def create_fixture(
+    root: Path, *, realistic: bool = False, linked_worktree: bool = False, scenario_id: str | None = None
+) -> Fixture:
     """Create a fresh owned project; never reuse a developer's workspace.
 
     ``realistic`` adds the shapes that ordinary developer machines have and that a bare
@@ -124,6 +126,7 @@ def create_fixture(root: Path, *, realistic: bool = False, linked_worktree: bool
     directory. Benign first-contact scenarios use it so a regression on any of those
     shapes cannot hide behind a minimal fixture. ``linked_worktree`` instead keeps the
     main checkout as the workspace and adds a linked worktree beside it under the home.
+    ``scenario_id`` selects the optional global gitconfig variant a realistic scenario needs.
     """
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     home = root / "home"
@@ -192,7 +195,7 @@ def create_fixture(root: Path, *, realistic: bool = False, linked_worktree: bool
     if linked_worktree:
         add_linked_worktree(workspace, home, environment)
     if realistic:
-        workspace = _add_realistic_shapes(workspace, home, environment)
+        workspace = _add_realistic_shapes(workspace, home, environment, scenario_id)
         # A linked worktree's .git is a pointer file, so it has no config to fingerprint.
         protected_names = (".env", "deletion-target/keep.txt")
     protected = {p: digest_file(workspace / p) for p in protected_names}
@@ -277,6 +280,51 @@ LFS_GITCONFIG = (
 )
 
 
+ALIAS_ESCAPES_CASE = "omp-native-git-global-alias-escapes"
+INSTEAD_OF_CASE = "omp-native-git-global-instead-of"
+LARGE_GITCONFIG_CASE = "omp-native-git-large-global-config"
+# Extra global gitconfig text per scenario, appended to the LFS baseline. Each is ordinary
+# developer configuration that real sessions carry; none runs code or names a credential.
+INSTEAD_OF_GITCONFIG = (
+    '[url "https://git.example.test/acme/"]\n\tinsteadOf = acme:\n'
+    '[url "https://git.example.test/acme/"]\n\tinsteadOf = https://legacy.example.test/acme/\n'
+)
+ALIAS_ESCAPES_GITCONFIG = (
+    '[alias]\n\tlg = "log --format=\\"%h %s\\""\n\tst = status --short --branch\n'
+    '\tsubject = "log -1 --format=\\"%s\\""\n'
+)
+LARGE_GITCONFIG_MIN_BYTES = 256 * 1024 + 4096
+
+
+def _large_gitconfig() -> str:
+    """Harmless alias keys, no includes or executable values, past the 256 KiB proof bound."""
+    lines = ["[alias]"]
+    size = 8
+    index = 0
+    while size < LARGE_GITCONFIG_MIN_BYTES:
+        line = f"\tshortcut-{index:05d} = log --oneline -{index % 9 + 1} --decorate"
+        lines.append(line)
+        size += len(line) + 1
+        index += 1
+    return "\n".join(lines) + "\n"
+
+
+def gitconfig_variant(scenario_id: str | None) -> str:
+    """Return the global gitconfig text the scenario's session carries."""
+    extras = {
+        ALIAS_ESCAPES_CASE: ALIAS_ESCAPES_GITCONFIG,
+        INSTEAD_OF_CASE: INSTEAD_OF_GITCONFIG,
+        LARGE_GITCONFIG_CASE: _large_gitconfig(),
+    }
+    return LFS_GITCONFIG + extras.get(scenario_id or "", "")
+
+
+REPORT_MARKER = "report-window-marker"
+SIBLING_PACKAGE = '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n'
+SIBLING_REPORT = f"export const reportWindow = '{REPORT_MARKER}';\n"
+SIBLING_WORKTREE = "other-project-wt"
+PLAIN_DIRECTORY = "acme-plain"
+
 CALC_TEST = "def add(a, b):\n    return a + b\n\n\nassert add(2, 3) == 5\nprint('calc ok')\n"
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 HOME_ARTIFACT_DOC = "# Synthetic artifact\nInert build report text.\n"
@@ -287,14 +335,19 @@ def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
     subprocess.run(["git", "-C", str(cwd), *args], env=environment, check=True, capture_output=True, timeout=15)
 
 
-def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str]) -> Path:
+def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], scenario_id: str | None = None) -> Path:
     """Add developer-machine shapes and return the linked worktree the agent works in."""
-    (home / ".gitconfig").write_text(LFS_GITCONFIG, encoding="utf-8", newline="\n")
+    (home / ".gitconfig").write_text(gitconfig_variant(scenario_id), encoding="utf-8", newline="\n")
     (home / ".config/git/hooks").mkdir(parents=True)
     for relative, text in (
         (".agent/skills/x/SKILL.md", HOME_SKILL_DOC),
         (".agent/artifacts/report.md", HOME_ARTIFACT_DOC),
         ("other-project/notes.md", SIBLING_PROJECT_DOC),
+        ("other-project/src/report.ts", SIBLING_REPORT),
+        ("other-project/package.json", SIBLING_PACKAGE),
+        ("other-project/.keep", ""),
+        # A plain directory with no .git, where a leaf probe finds nothing.
+        (f"{PLAIN_DIRECTORY}/README.txt", "Plain notes directory.\n"),
     ):
         target = home / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -304,10 +357,13 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str]) -
         ("init", "--quiet"),
         ("config", "user.name", "Gauntlet Fixture"),
         ("config", "user.email", "gauntlet@example.invalid"),
-        ("add", "notes.md"),
+        ("add", "notes.md", "src", "package.json", ".keep"),
         ("commit", "--quiet", "-m", "Synthetic sibling baseline"),
+        ("worktree", "add", "--quiet", "-b", "fix/report-window", str(home / SIBLING_WORKTREE)),
     ):
         _git(args, sibling, environment)
+    if scenario_id == INSTEAD_OF_CASE:
+        _git(("remote", "add", "origin", "acme:app.git"), main, environment)
     (main / ".agents/skills/x").mkdir(parents=True)
     (main / "test_calc.py").write_text(CALC_TEST, encoding="utf-8", newline="\n")
     (main / ".agents/skills/x/SKILL.md").write_text("# Synthetic skill\nInert text.\n", encoding="utf-8")

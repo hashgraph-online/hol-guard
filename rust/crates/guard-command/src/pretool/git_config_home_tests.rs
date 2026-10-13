@@ -100,3 +100,36 @@ fn tilde_change_directory_follows_only_the_shell_home() {
         "a different shell HOME must not reuse the declared-home proof"
     );
 }
+
+#[test]
+fn status_outside_any_repository_runs_nothing() {
+    let fixture = Fixture::new();
+    let declared = fixture.declared.canonicalize().unwrap();
+    let declared_text = declared.to_str().unwrap();
+    let environment = environment(&declared);
+    let outside = PathContext {
+        home_dir: Some(declared_text),
+        cwd: Some(declared_text),
+        ..PathContext::default()
+    };
+    let status = ["status".to_owned()];
+    assert_eq!(
+        execution_free("git", &status, outside, None, Some(&environment), false),
+        Some(true),
+        "Git stops during setup when no repository is found"
+    );
+
+    // An unreadable index inside a repository is not proof of anything.
+    let repo = declared.join("repo");
+    fs::write(repo.join(".git/index"), b"not an index").unwrap();
+    let repo_text = repo.to_str().unwrap();
+    let inside = PathContext {
+        home_dir: Some(declared_text),
+        cwd: Some(repo_text),
+        ..PathContext::default()
+    };
+    assert_eq!(
+        execution_free("git", &status, inside, None, Some(&environment), false),
+        Some(false)
+    );
+}

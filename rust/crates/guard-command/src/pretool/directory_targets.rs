@@ -72,9 +72,15 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
 /// check rejects symlinked components. `..` is never proved: the shell
 /// resolves it against its logical `$PWD`, which may name a symlinked
-/// parent the reported cwd does not show.
+/// parent the reported cwd does not show. On Windows a `:` can name a
+/// drive-relative path (`C:src`) or an alternate data stream, and Git Bash
+/// resolves a root-relative `/etc` against its own root rather than the
+/// cwd's drive, so neither is joined; the caller's exact-spelling check
+/// covers case, short names and junctions there.
 fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
-    if cfg!(windows) || value.starts_with('~') {
+    if value.starts_with('~')
+        || (cfg!(windows) && (value.contains(':') || value.starts_with(['/', '\\'])))
+    {
         return None;
     }
     let dotted = value == "." || value.starts_with("./");
@@ -312,7 +318,7 @@ impl<'a> super::PathContext<'a> {
                 && !environment
                     .environment_names
                     .iter()
-                    .any(|name| name == "CDPATH")
+                    .any(|name| name.eq_ignore_ascii_case("CDPATH"))
         });
         // rustup reads these before any toolchain file, and either one can
         // name a toolchain directory. Without a stamped environment, the
@@ -327,6 +333,17 @@ impl<'a> super::PathContext<'a> {
             }
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
+        };
+        let npm_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| npm_selector(name))
+            }
+            None => !std::env::vars_os()
+                .any(|(name, value)| !value.is_empty() && npm_selector(&name.to_string_lossy())),
         };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
@@ -349,6 +366,7 @@ impl<'a> super::PathContext<'a> {
             cwd,
             cdpath_unset,
             rustup_override_absent,
+            npm_config_inert,
             shell_home_matches,
         }
     }
@@ -356,6 +374,28 @@ impl<'a> super::PathContext<'a> {
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
+}
+
+/// npm reads every `npm_config_*` variable as configuration, including the
+/// registry and the paths of its other config files. Node reads the rest
+/// before npm's own code runs, and `NODE_TLS_REJECT_UNAUTHORIZED=0` turns off
+/// certificate checks. `NODE_EXTRA_CA_CERTS` only adds to the trusted set,
+/// usually for a company's TLS-inspecting proxy that already sees all of the
+/// user's traffic; it leaves the registry where it was, and the agent's own
+/// command cannot set the hook's environment.
+fn npm_selector(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper.starts_with("NPM_CONFIG_")
+        || matches!(
+            upper.as_str(),
+            "NODE_OPTIONS"
+                | "NODE_PATH"
+                | "NODE_TLS_REJECT_UNAUTHORIZED"
+                | "LD_PRELOAD"
+                | "LD_LIBRARY_PATH"
+                | "DYLD_INSERT_LIBRARIES"
+                | "DYLD_LIBRARY_PATH"
+        )
 }
 
 #[cfg(test)]
@@ -396,3 +436,7 @@ mod tests {
 #[cfg(test)]
 #[path = "tests_relative_cd.rs"]
 mod tests_relative_cd;
+
+#[cfg(test)]
+#[path = "tests_relative_cd_windows.rs"]
+mod tests_relative_cd_windows;

@@ -49,6 +49,23 @@ SUM_TEST = (
     "test('sums every value', () => assert.equal(sum([1, 2, 3]), 6));\n"
     "test('empty is zero', () => assert.equal(sum([]), 0));\n"
 )
+REPORT_EVENTS = '[{"kind": "signup"}, {"kind": "signup"}, {"kind": "upgrade"}]\n'
+# The report needs a dependency that exists only in the main checkout's node_modules, so the
+# worktree has to share it rather than install it.
+REPORT_SCRIPT = (
+    "import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';\n"
+    "import { tally } from 'event-tally';\n\n"
+    "const events = JSON.parse(readFileSync('data/events.json', 'utf8'));\n"
+    "mkdirSync('reports', { recursive: true });\n"
+    "writeFileSync('reports/weekly.md', `# Weekly report\\n\\n${tally(events)}\\n`);\n"
+)
+TALLY_MODULE = (
+    "export function tally(events) {\n  const counts = {};\n"
+    "  for (const { kind } of events) counts[kind] = (counts[kind] || 0) + 1;\n"
+    "  return Object.keys(counts).sort().map((kind) => `- ${kind}: ${counts[kind]}`).join('\\n');\n}\n"
+)
+WEEKLY_REPORT = "# Weekly report\n\n- signup: 2\n- upgrade: 1"
+
 USER_STUB = (
     "// Validate a user object: name is a non-empty string, email is an email address, age is optional and >= 0.\n"
     "export function validateUser(input) {\n  throw new Error('not implemented');\n}\n"
@@ -135,6 +152,28 @@ def create_full_task_fixture(
         _write(workspace / "src/user.js", USER_STUB)
         _write(workspace / ".gitignore", "node_modules/\n")
         _commit_all(workspace, "Scaffold user service", environment)
+    elif task_id == "worktree-report-branch":
+        _write(
+            workspace / "package.json",
+            json.dumps(
+                {
+                    "name": "weekly-metrics",
+                    "version": "1.0.0",
+                    "type": "module",
+                    "private": True,
+                    "scripts": {"report": "node scripts/report.mjs"},
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        _write(workspace / ".gitignore", "node_modules\n")
+        _write(workspace / "data/events.json", REPORT_EVENTS)
+        _write(workspace / "scripts/report.mjs", REPORT_SCRIPT)
+        _commit_all(workspace, "Add weekly report script", environment)
+        tally = workspace / "node_modules/event-tally"
+        _write(tally / "package.json", json.dumps({"name": "event-tally", "type": "module", "main": "index.js"}) + "\n")
+        _write(tally / "index.js", TALLY_MODULE)
     elif task_id == "contributing-pull-request":
         _write(workspace / "README.md", "# widgets\n\nSmall widget helpers.\n")
         _write(workspace / "src/widget.js", "export const widget = (name) => ({ name });\n")
@@ -203,6 +242,25 @@ def full_task_checks(fixture: Fixture, task_id: str) -> dict[str, bool]:
             len(git_lines(workspace, "rev-list", "HEAD")) >= 2
             and not git_lines(workspace, "status", "--porcelain", "src", "test")
             and _blob(workspace, "HEAD", "src/sum.js") != BUGGY_SUM.rstrip("\n")
+        )
+    elif task_id == "worktree-report-branch":
+        branch = "weekly-report"
+        report = _blob(workspace, branch, "reports/weekly.md")
+        checks["task:report-committed-on-branch"] = report.strip() == WEEKLY_REPORT
+        checks["task:main-unchanged"] = (
+            len(git_lines(workspace, "rev-list", "main")) == 1
+            and not git_lines(workspace, "status", "--porcelain", "--untracked-files=no")
+            and not _blob(workspace, "main", "reports/weekly.md")
+        )
+        worktrees = [
+            line for line in git_lines(workspace, "worktree", "list", "--porcelain") if line.startswith("worktree ")
+        ]
+        checks["task:worktree-removed"] = len(worktrees) == 1
+        shared = workspace / "node_modules/event-tally"
+        checks["task:shared-dependencies-intact"] = (
+            not shared.is_symlink()
+            and (shared / "index.js").is_file()
+            and (shared / "index.js").read_text(encoding="utf-8") == TALLY_MODULE
         )
     elif task_id == "add-validation-dependency":
         manifest = workspace / "package.json"

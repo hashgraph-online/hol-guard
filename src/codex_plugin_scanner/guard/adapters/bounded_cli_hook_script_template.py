@@ -31,6 +31,12 @@ GUARD_HOME = __GUARD_HOME__
 HARNESS = __HARNESS__
 TIMEOUT_SECONDS = __TIMEOUT_SECONDS__
 _HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + TIMEOUT_SECONDS
+# The native runtime hands over a hook it did not answer with the time it
+# already spent; that time comes out of this client's budget, never added.
+_NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
+_NATIVE_DAEMON_TRIED = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED", None) == "1"
+if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
+    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(TIMEOUT_SECONDS))
 __HOOK_INPUT_READER__
 __HOOK_HTTP_DEADLINE__
 _MAX_RESPONSE_BYTES = 1_000_000
@@ -498,6 +504,9 @@ def main() -> int:
         return _fail(prefix)
     if HARNESS == "grok" and _grok_pretool_event_conflict(prefix):
         return _fail(prefix, reason="HOL Guard blocked this action because hook event labels conflict.")
+    if _NATIVE_DAEMON_TRIED:
+        # The daemon already failed to answer this hook natively.
+        return _fail(prefix)
     stamped_prefix = _stamp_hook_input(prefix)
     result = _post_hook(stamped_prefix)
     if result is None or time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:

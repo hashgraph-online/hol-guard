@@ -160,7 +160,13 @@ def test_outer_bounded_bridge_stamps_caller_environment_before_dispatch(
     )
     captured: dict[str, object] = {}
 
-    def fake_run(config: dict[str, object], *, input_text: str, deadline_monotonic: float | None = None) -> int:
+    def fake_run(
+        config: dict[str, object],
+        *,
+        input_text: str,
+        deadline_monotonic: float | None = None,
+        skip_daemon: bool = False,
+    ) -> int:
         captured["config"] = config
         captured["input_text"] = input_text
         captured["deadline_monotonic"] = deadline_monotonic
@@ -399,7 +405,13 @@ def test_cmd_exe_passes_zcode_marker_comment_as_arguments(
 ) -> None:
     calls: list[dict[str, object]] = []
 
-    def fake_run(config: dict[str, object], *, input_text: str, deadline_monotonic: float | None = None) -> int:
+    def fake_run(
+        config: dict[str, object],
+        *,
+        input_text: str,
+        deadline_monotonic: float | None = None,
+        skip_daemon: bool = False,
+    ) -> int:
         calls.append(config)
         return 0
 

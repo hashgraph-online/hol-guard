@@ -192,14 +192,17 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     {
         return false;
     }
-    let mut missing = Vec::new();
+    let mut missing: Vec<&std::ffi::OsStr> = Vec::new();
     for ancestor in expanded.ancestors() {
         match std::fs::symlink_metadata(ancestor) {
             Ok(_) => {
                 return !missing.is_empty()
-                    && missing
-                        .iter()
-                        .all(|part: &&std::ffi::OsStr| !part.to_string_lossy().starts_with('.'))
+                    && missing.iter().enumerate().all(|(index, part)| {
+                        let name = part.to_string_lossy();
+                        // `.git` is the one marker agents probe for. A missing
+                        // leaf prints only an error and reveals no content.
+                        !name.starts_with('.') || (index == 0 && name == ".git")
+                    })
                     && ancestor.to_str().is_some_and(|parent| {
                         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
                             || search::skill_listing_root(parent, context)

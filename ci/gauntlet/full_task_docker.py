@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 from .catalog import Scenario
 from .evidence import reconcile
 from .full_task_docker_inputs import (
+    DOCKER_DIR,
     GuardSource,
     ensure_image,
     write_repo_inputs,
@@ -38,6 +39,20 @@ from .source_identity import source_identity
 AGENT_LIMITS = ["--cpus", "2", "--memory", "6g", "--pids-limit", "2048"]
 GATEWAY_LIMITS = ["--cpus", "0.5", "--memory", "256m", "--pids-limit", "256"]
 HARDENING = ["--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
+# What Guard's Linux workspace containment needs to run inside the agent container.
+# The seccomp profile is Docker's default plus the namespace and mount calls
+# bubblewrap makes in an unprivileged user namespace. Mounting a fresh /proc there
+# requires an unmasked /proc, and the overlay's upper layer cannot sit on the
+# container's own overlay root, so /tmp is a tmpfs. Capabilities stay dropped, so
+# the agent still cannot mount anything in the container's own namespaces.
+AGENT_CONTAINMENT = [
+    "--security-opt",
+    f"seccomp={DOCKER_DIR / 'agent-seccomp.json'}",
+    "--security-opt",
+    "systempaths=unconfined",
+    "--tmpfs",
+    "/tmp:rw,exec,size=2g,mode=1777",
+]
 # Example target for the foreign-repository probe: any repository outside the run's own set.
 FOREIGN_PROBE = "octocat/Hello-World"
 MAX_LOAD = 12.0
@@ -220,6 +235,7 @@ class TaskRun:
             *hosts,
             *AGENT_LIMITS,
             *HARDENING,
+            *AGENT_CONTAINMENT,
             "--init",
             "-v",
             f"{self.inputs}:/inputs:ro",

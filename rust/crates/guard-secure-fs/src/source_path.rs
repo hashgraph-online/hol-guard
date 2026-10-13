@@ -444,6 +444,36 @@ pub fn hidden_read_parts_allowed(path: &Path) -> bool {
     hidden_parts_allowed(&lowered_parts(path))
 }
 
+/// An existing, empty, regular hidden file (a marker such as a deploy
+/// sentinel) inside a git work tree. Only the final component may be hidden;
+/// every other hidden component must be on the benign list. Size zero bounds
+/// the boundary: a non-empty hidden file could hold credentials or state, so
+/// it keeps the normal review. Sensitive names and families stay refused.
+pub fn hidden_empty_work_tree_file(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() != 0 {
+        return false;
+    }
+    let parts = lowered_parts(path);
+    let Some((name, parents)) = parts.split_last() else {
+        return false;
+    };
+    if !name.starts_with('.')
+        || name.starts_with(".env")
+        || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
+        || sensitive_external_filename(path)
+        || !hidden_parts_allowed(parents)
+    {
+        return false;
+    }
+    path.ancestors()
+        .skip(1)
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
+}
+
 pub fn source_like(path: &Path) -> bool {
     let parts = lowered_parts(path);
     if parts

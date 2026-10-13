@@ -450,6 +450,88 @@ pub(in crate::pretool) fn git_ref_document(
         }
 }
 
+/// A repository's own `.git/config`: a small regular file of a repository
+/// that contains, or sits inside, the working directory, with no credential
+/// section, token key, authorization header or URL with userinfo. Anything
+/// that looks like a credential keeps the ordinary hidden-path review.
+pub(in crate::pretool) fn git_config_document(
+    canonical: &std::path::Path,
+    cwd: Option<&str>,
+) -> bool {
+    use std::io::Read;
+
+    let Some(root) = canonical
+        .parent()
+        .filter(|git| git.file_name().is_some_and(|name| name == ".git"))
+        .and_then(std::path::Path::parent)
+    else {
+        return false;
+    };
+    let Some(workspace) = cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()) else {
+        return false;
+    };
+    if canonical.file_name().is_none_or(|name| name != "config")
+        || !visible_path(root)
+        || !(workspace.starts_with(root) || root.starts_with(&workspace))
+        || std::fs::symlink_metadata(canonical.parent().unwrap_or(canonical))
+            .is_ok_and(|metadata| !metadata.is_dir())
+    {
+        return false;
+    }
+    let Ok(metadata) = std::fs::symlink_metadata(canonical) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() > 65_536 {
+        return false;
+    }
+    let mut content = String::new();
+    std::fs::File::open(canonical)
+        .and_then(|file| file.take(65_537).read_to_string(&mut content))
+        .is_ok()
+        && content.len() <= 65_536
+        && crate::pretool::git_config_reads::file_text_free(&content)
+}
+
+/// A linked worktree's `.git` pointer file: a small regular file whose only
+/// content is `gitdir: <path>`. It names a directory and holds no secret, so
+/// reading it is how an agent learns which repository a checkout belongs to.
+pub(in crate::pretool) fn worktree_gitfile(canonical: &std::path::Path) -> bool {
+    use std::io::Read;
+
+    if canonical.file_name().is_none_or(|name| name != ".git")
+        || canonical
+            .parent()
+            .is_none_or(|parent| !visible_path(parent))
+    {
+        return false;
+    }
+    let Ok(metadata) = std::fs::symlink_metadata(canonical) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() > 1024 {
+        return false;
+    }
+    let mut content = String::new();
+    if std::fs::File::open(canonical)
+        .and_then(|file| file.take(1025).read_to_string(&mut content))
+        .is_err()
+        || content.len() > 1024
+    {
+        return false;
+    }
+    let line = content.strip_suffix('\n').unwrap_or(&content);
+    line.strip_prefix("gitdir: ")
+        .is_some_and(|path| !path.is_empty() && !path.contains(['\n', '\r', '\0']))
+}
+
+/// No component of `path` below the root is hidden.
+pub(in crate::pretool) fn visible_path(path: &std::path::Path) -> bool {
+    path.components().all(|component| match component {
+        std::path::Component::Normal(part) => !part.to_string_lossy().starts_with('.'),
+        _ => true,
+    })
+}
+
 fn common_git_marker(common: &std::path::Path, parts: &[&str]) -> Option<usize> {
     let count = common
         .components()

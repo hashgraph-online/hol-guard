@@ -30,6 +30,14 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "headers: { 'X-Guard-Token': connection.authToken },",
         "headers: { 'X-Guard-Token': connection.authToken, 'Connection': 'close' },",
         1,
+    ).replace(
+        "  const approvalUrl = approvalUrlFromResponse(response);\n  const retryLine",
+        "  const approvalUrl = approvalUrlFromResponse(response);\n"
+        "  // Without an approval request there is nothing to approve, and the reason\n"
+        "  // already tells the agent to find a permitted alternative.\n"
+        "  if (!approvalUrl && !approvalRequestId(response)) return reason;\n"
+        "  const retryLine",
+        1,
     )
     return (
         "type GuardDaemonConnection = { port: number; "

@@ -60,11 +60,8 @@ fn prompt_requests_secret(value: &str) -> bool {
     if !CREDENTIAL_WORDS.iter().any(|word| lowered.contains(word)) {
         return false;
     }
-    if referential_access_pattern().is_match(value) {
-        return true;
-    }
     let request = VALUE_REQUEST.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|paste|post|email|forward|share|give|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|steal|leak|exfiltrate|upload|send|transfer|grab|write|type|include|store|save|log|access|hand|pass|supply|embed|attach|insert|encode|base64|commit|push|curl|wget|use|using|authenticate|login|sign\s+in|find|get|look\s+up|lookup|list|export|decode|decrypt|crack|guess|recover|what(?:'s|\s+is|\s+are)|value|contents?)\b")
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|paste|post|email|forward|share|give|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|steal|leak|exfiltrate|upload|send|transfer|grab|write|type|include|store|save|log|access|hand|pass|supply|embed|attach|insert|encode|base64|commit|push|curl|wget|use|using|authenticate|login|sign\s+in|find|get|look\s+up|lookup|list|export|decode|decrypt|crack|guess|recover|what(?:'s|\s+is|\s+are)|value|contents?|(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:redact|omit|hide|withhold|conceal|mask|censor|leave\s+out|hold\s+back)\w*)\b")
             .expect("bounded credential value request")
     });
     // Sentence ends and JSON list items separate clauses. A period inside a
@@ -73,10 +70,86 @@ fn prompt_requests_secret(value: &str) -> bool {
     let clause_break = CLAUSE_BREAK.get_or_init(|| {
         Regex::new(r#"[.!?;](?:\s|$)|\n|"\s*,\s*""#).expect("bounded prompt clause break")
     });
-    clause_break
-        .split(&lowered)
-        .filter(|clause| CREDENTIAL_WORDS.iter().any(|word| clause.contains(word)))
-        .any(|clause| request.is_match(clause))
+    // Asking not to redact or omit a credential asks for its value.
+    // A referent such as "read these" counts only when it shares a clause with
+    // a credential word or sits in an adjacent clause. A negated credential
+    // mention ("never enter approval passwords") is a prohibition, not a request.
+    let clauses: Vec<&str> = clause_break.split(&lowered).collect();
+    let credential: Vec<bool> = clauses
+        .iter()
+        .map(|clause| {
+            CREDENTIAL_WORDS.iter().any(|word| clause.contains(word))
+                && !negated_before_credential(clause)
+        })
+        .collect();
+    let referential: Vec<bool> = clauses
+        .iter()
+        .map(|clause| referential_access_pattern().is_match(clause))
+        .collect();
+    (0..clauses.len()).any(|index| {
+        if !credential[index] {
+            return false;
+        }
+        referential[index]
+            || request.is_match(clauses[index])
+            || (index > 0 && referential[index - 1])
+            || referential.get(index + 1).copied().unwrap_or(false)
+    })
+}
+
+/// True when every credential word in the clause sits inside the scope of an
+/// unconditional prohibition. Contrast words and inverted negations such as
+/// "do not hesitate to" keep the clause live.
+fn negated_before_credential(clause: &str) -> bool {
+    let masked = mask_negated_clauses(clause);
+    !CREDENTIAL_WORDS.iter().any(|word| masked.contains(word))
+}
+
+const NEGATED_MARK: &str = " prohibited-scope ";
+
+/// Replace the scope of each unconditional prohibition with a marker so that
+/// words inside "never X or Y" lists are not read as requested actions. A
+/// scope is the rest of the sentence; it is left intact when it carries a
+/// contrast or exception word, or when the negation is inverted ("do not
+/// hesitate to", "never mind").
+fn mask_negated_clauses(value: &str) -> String {
+    static NEGATOR: OnceLock<Regex> = OnceLock::new();
+    static INVERTED: OnceLock<Regex> = OnceLock::new();
+    static CONTRAST: OnceLock<Regex> = OnceLock::new();
+    static CLAUSE_END: OnceLock<Regex> = OnceLock::new();
+    let negator = NEGATOR.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not|shall\s+not|may\s+not|cannot|can't|won't)\b")
+            .expect("bounded negator")
+    });
+    let inverted = INVERTED.get_or_init(|| {
+        Regex::new(r"(?i)^\s*(?:mind\b|(?:hesitat\w*|forget|fail|stop|wait|neglect|worry|bother|skip|refuse|think|ask|need|have|be\s+(?:shy|afraid)|redact\w*|omit\w*|hide|hid\w*|keep|withhold\w*|leave\s+out|hold\s+back|censor\w*|mask\w*|conceal\w*|just|only)\b)")
+            .expect("bounded inverted negation")
+    });
+    let contrast = CONTRAST.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:except|unless|until|but|instead|then|anyway|regardless|otherwise|however|although|though|besides|rather)\b")
+            .expect("bounded negation contrast")
+    });
+    let clause_end = CLAUSE_END
+        .get_or_init(|| Regex::new(r"[.!?;](?:\s|$)|\n").expect("bounded negation clause end"));
+    let mut output = String::with_capacity(value.len());
+    let mut cursor = 0;
+    for matched in negator.find_iter(value) {
+        if matched.start() < cursor {
+            continue;
+        }
+        let tail = &value[matched.end()..];
+        let end = clause_end
+            .find(tail)
+            .map_or(value.len(), |found| matched.end() + found.start());
+        if inverted.is_match(tail) || contrast.is_match(&value[matched.end()..end]) {
+            continue;
+        }
+        output.push_str(&value[cursor..matched.start()]);
+        output.push_str(NEGATED_MARK);
+        cursor = end;
+    }
+    output.push_str(&value[cursor..]);
+    output
 }
 
 pub(super) fn prompt_sensitive_text(value: &str) -> bool {
@@ -360,5 +433,7 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     }
     // Naming a credential is not a request for its value; locations, env
     // dumps and value requests still keep the prompt off the benign path.
-    !prompt_requests_secret(&remainder) && !risky_action.is_match(&remainder)
+    // Words inside an unconditional prohibition ("never X or Y") are not
+    // requested actions; the strong intent detectors run on the raw prompt.
+    !prompt_requests_secret(&remainder) && !risky_action.is_match(&mask_negated_clauses(&remainder))
 }

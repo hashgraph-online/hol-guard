@@ -42,6 +42,7 @@ pub(super) fn bounded_native_temporary_write_target(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            npm_config_inert: false,
             shell_home_matches: false,
         },
     )
@@ -316,7 +317,71 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         && !autostart_write_target(&target)
 }
 
-#[cfg(not(unix))]
+/// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's
+/// profile temp folder. Only a directory strictly below the exact
+/// `<home>\AppData\Local\Temp` is admitted, located from the canonical home
+/// rather than the caller-controlled `TEMP`/`TMP`. The profile ACL keeps other
+/// non-administrator users out of that tree, and the exact-spelling checks
+/// reject junctions, short names and case aliases on the way there.
+#[cfg(windows)]
+fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+    use super::directory_targets::exact_drive_spelling;
+    use super::read_paths::resolved_path_allowed_in_scope;
+    use std::path::Path;
+
+    let path = Path::new(value);
+    if !path.is_absolute()
+        || value.len() > 4096
+        || value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}', '~',
+        ])
+        || value.get(2..).is_some_and(|rest| rest.contains(':'))
+        || path
+            .components()
+            .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return false;
+    }
+    let Some(home) = context
+        .home_dir
+        .and_then(|home| std::fs::canonicalize(home).ok())
+    else {
+        return false;
+    };
+    let temp_root = home.join("AppData").join("Local").join("Temp");
+    if std::fs::canonicalize(&temp_root).ok().as_deref() != Some(temp_root.as_path()) {
+        return false;
+    }
+    let (Some(parent_text), Some(name)) = (
+        path.parent().and_then(Path::to_str),
+        path.file_name().and_then(|name| name.to_str()),
+    ) else {
+        return false;
+    };
+    let Some(parent) = std::fs::canonicalize(parent_text).ok() else {
+        return false;
+    };
+    if !exact_drive_spelling(parent_text, &parent)
+        || parent == temp_root
+        || !parent.starts_with(&temp_root)
+        || !parent.is_dir()
+        || shared_library_part(&name.to_ascii_lowercase())
+    {
+        return false;
+    }
+    let target = parent.join(name);
+    let inside_workspace = context
+        .cwd
+        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+        .is_some_and(|workspace| target.starts_with(workspace));
+    !inside_workspace
+        && single_link_write_target(&target)
+        && resolved_path_allowed_in_scope(&target, context.home_dir, context.cwd, true)
+        && guard_secure_fs::hidden_read_parts_allowed(&target)
+        && !autostart_write_target(&target)
+}
+
+#[cfg(all(not(unix), not(windows)))]
 fn bounded_temporary_copy_target(_value: &str, _context: super::PathContext<'_>) -> bool {
     false
 }

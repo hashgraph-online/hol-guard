@@ -32,9 +32,13 @@ pub(super) fn safe_hol_guard_segment(
 
 fn cwd_shadows_launcher(cwd: &Path) -> bool {
     !cwd.is_absolute()
-        || SHADOW_NAMES
-            .iter()
-            .any(|name| cwd.join(name).symlink_metadata().is_ok())
+        || SHADOW_NAMES.iter().any(|name| {
+            // A directory cannot be executed through a bare-name lookup;
+            // files and symlinks (even to directories) still shadow.
+            cwd.join(name)
+                .symlink_metadata()
+                .is_ok_and(|metadata| !metadata.is_dir())
+        })
 }
 
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {

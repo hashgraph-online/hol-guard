@@ -200,11 +200,103 @@ fn read_controlled_body(candidate: &PyPath, ctx: &Ctx) -> Option<Vec<u8>> {
     Some(payload)
 }
 
-/// Windows reads the bytes through a handle that denies write and delete
-/// sharing. Stable `std` cannot report the file index or the hard-link count
-/// that the Python check compares, so the body is refused rather than
-/// trusted on a weaker identity.
+/// Windows uses the existing single-link, identity-bound native file service.
+/// Its handle denies write/delete sharing through every byte and identity check.
 #[cfg(windows)]
-fn read_controlled_body(_candidate: &PyPath, _ctx: &Ctx) -> Option<Vec<u8>> {
-    None
+fn read_controlled_body(candidate: &PyPath, _ctx: &Ctx) -> Option<Vec<u8>> {
+    use guard_runtime_windows_process::{
+        handle_file_id, is_single_link_handle, open_bound_regular_file, regular_file_id,
+    };
+    use std::io::Read;
+    use std::time::SystemTime;
+
+    let path = std::path::PathBuf::from(candidate.to_string());
+    let path_metadata = fs::symlink_metadata(&path).ok()?;
+    if !path_metadata.is_file() || path_metadata.file_type().is_symlink() {
+        return None;
+    }
+    let (identity, links) = regular_file_id(&path, false).ok()?;
+    if links != 1 {
+        return None;
+    }
+    let mut file = open_bound_regular_file(&path).ok()?;
+    let metadata = file.metadata().ok()?;
+    if handle_file_id(&file).ok()? != identity
+        || !is_single_link_handle(&file).ok()?
+        || !metadata.is_file()
+        || metadata.len() == 0
+        || metadata.len() > MAX_PR_BODY_BYTES
+    {
+        return None;
+    }
+    let stable = |left: &fs::Metadata, right: &fs::Metadata| {
+        left.is_file() == right.is_file()
+            && left.len() == right.len()
+            && left.modified().ok() == right.modified().ok()
+            && left.created().ok() == right.created().ok()
+    };
+    if !stable(&metadata, &path_metadata) {
+        return None;
+    }
+    let modified = metadata.modified().ok()?;
+    let age = match SystemTime::now().duration_since(modified) {
+        Ok(age) => age.as_secs_f64(),
+        Err(error) => -error.duration().as_secs_f64(),
+    };
+    if !(-60.0..=MAX_PR_BODY_AGE_SECONDS).contains(&age) {
+        return None;
+    }
+    let mut payload = Vec::with_capacity(usize::try_from(metadata.len()).ok()?);
+    Read::by_ref(&mut file)
+        .take(MAX_PR_BODY_BYTES + 1)
+        .read_to_end(&mut payload)
+        .ok()?;
+    let after_path = fs::symlink_metadata(&path).ok()?;
+    if u64::try_from(payload.len()).ok()? != metadata.len()
+        || !stable(&file.metadata().ok()?, &metadata)
+        || !stable(&after_path, &path_metadata)
+        || after_path.file_type().is_symlink()
+        || handle_file_id(&file).ok()? != identity
+        || regular_file_id(&path, false).ok()? != (identity, 1)
+        || !is_single_link_handle(&file).ok()?
+    {
+        return None;
+    }
+    Some(payload)
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use crate::sfrs_token_vectors::NoEnvHost;
+
+    #[test]
+    fn existing_locked_service_preserves_static_body_files_and_rejects_aliases() {
+        let root = std::env::temp_dir().join(format!(
+            "guard-pr-body-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("pr-body.md");
+        let content = b"PR body with a bounded public change description";
+        fs::write(&path, content).unwrap();
+        let host = NoEnvHost;
+        let ctx = Ctx::new(&host, "/", "/");
+        let candidate = PyPath::new(&path.to_string_lossy());
+        assert_eq!(
+            read_controlled_body(&candidate, &ctx).as_deref(),
+            Some(content.as_slice())
+        );
+        let alias = root.join("alias.md");
+        fs::hard_link(&path, &alias).unwrap();
+        assert!(read_controlled_body(&candidate, &ctx).is_none());
+        fs::remove_file(&alias).unwrap();
+        fs::write(&path, []).unwrap();
+        assert!(read_controlled_body(&candidate, &ctx).is_none());
+        fs::remove_dir_all(&root).unwrap();
+    }
 }

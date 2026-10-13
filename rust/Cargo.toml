@@ -48,6 +48,7 @@ rsa = "0.9.8"
 getrandom = { version = "0.3.3", features = ["std"] }
 libc = "0.2.175"
 nix = { version = "0.31.3", features = ["dir", "fs", "poll", "process", "signal", "socket"] }
+rustix = { version = "1.1.5", features = ["fs"] }
 regex = "1.11.2"
 fancy-regex = "0.19"
 rusqlite = { version = "0.40.2", features = ["bundled"] }

@@ -247,6 +247,7 @@ fn probe(
             execution_environment,
             deadline,
             hashed.as_deref().unwrap_or_default(),
+            operation == "status",
         )?;
     for (key, value) in effective {
         let disabled = disabled_boolean(value);

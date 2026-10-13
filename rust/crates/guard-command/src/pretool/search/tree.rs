@@ -23,13 +23,27 @@ const MAX_GLOB_MATCHES: usize = 256;
 const MAX_GLOB_ENTRIES: usize = 20_000;
 
 /// Hidden names that carry no credentials and are common in source trees.
+/// Hidden names that hold project metadata, never credentials. Descendants of
+/// the listed directories still clear every per-entry screen.
 const BENIGN_HIDDEN_NAMES: &[&str] = &[
     ".ds_store",
     ".well-known",
     ".gitignore",
     ".gitkeep",
+    ".keep",
+    ".gitattributes",
     ".nvmrc",
+    ".node-version",
+    ".python-version",
     ".editorconfig",
+    ".prettierrc",
+    ".prettierignore",
+    ".eslintignore",
+    ".dockerignore",
+    ".github",
+    ".vscode",
+    ".husky",
+    ".changeset",
 ];
 
 /// Key and certificate containers whose names carry no credential word.

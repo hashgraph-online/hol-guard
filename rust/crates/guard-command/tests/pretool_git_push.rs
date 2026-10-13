@@ -279,3 +279,56 @@ fn a_relative_xdg_config_home_keeps_the_review() {
     );
     assert_ne!(result.decision, "allow");
 }
+
+#[test]
+fn a_session_certificate_anchor_keeps_the_proof() {
+    let home = home();
+    install_git_push_verdict(verdict);
+    let anchored = environment(
+        &home,
+        &[
+            "HOME",
+            "PATH",
+            "GIT_SSL_CAINFO",
+            "GIT_SSL_CAPATH",
+            "SSL_CERT_FILE",
+            "SSL_CERT_DIR",
+            "CURL_CA_BUNDLE",
+        ],
+    );
+    let result = classify(
+        &home,
+        "ready",
+        Some(&anchored),
+        "omp",
+        "git push -u origin main",
+    );
+    assert_eq!(result.decision, "allow", "{result:?}");
+
+    // The agent's own assignment, and settings that present a client identity
+    // or loosen verification, keep the review.
+    let result = classify(
+        &home,
+        "ready",
+        Some(&anchored),
+        "omp",
+        "GIT_SSL_CAINFO=/tmp/ca.pem git push origin main",
+    );
+    assert_ne!(result.decision, "allow");
+    for name in [
+        "GIT_SSL_CERT",
+        "GIT_SSL_KEY",
+        "GIT_SSL_VERSION",
+        "GIT_SSL_CIPHER_LIST",
+    ] {
+        let tainted = environment(&home, &["HOME", "PATH", "SSL_CERT_FILE", name]);
+        let result = classify(
+            &home,
+            "ready",
+            Some(&tainted),
+            "omp",
+            "git push origin main",
+        );
+        assert_ne!(result.decision, "allow", "{name}");
+    }
+}

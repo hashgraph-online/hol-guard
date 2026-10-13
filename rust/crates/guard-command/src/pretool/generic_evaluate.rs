@@ -88,7 +88,7 @@ pub(super) fn evaluate_signals(
             action,
             floor,
             code,
-            "HOL Guard requires review because this prompt asks to transfer data.",
+            "HOL Guard did not send this prompt because it asks to send data to an external place. Nothing is waiting for approval; rephrase that part of the request.",
         );
     }
     if signals.destructive_intent && action_type == PreToolActionTypeV1::Prompt {
@@ -101,7 +101,7 @@ pub(super) fn evaluate_signals(
             action,
             floor,
             code,
-            "HOL Guard requires review because this prompt asks to change local files.",
+            "HOL Guard did not send this prompt because it asks to delete or overwrite local files. Nothing is waiting for approval; rephrase that part, or run the change yourself.",
         );
     }
     if action.sensitive_target && action_type == PreToolActionTypeV1::Prompt {
@@ -112,7 +112,7 @@ pub(super) fn evaluate_signals(
             action,
             "require-reapproval",
             "native_sensitive_prompt",
-            "HOL Guard requires review because this prompt requests sensitive local data.",
+            "HOL Guard did not send this prompt because it asks to read credentials or other sensitive local data. Nothing is waiting for approval; rephrase that part of the request.",
         );
     }
     if signals.prompt_injection_intent && action_type == PreToolActionTypeV1::Prompt {
@@ -120,7 +120,7 @@ pub(super) fn evaluate_signals(
             action,
             "require-reapproval",
             "native_prompt_injection_review",
-            "HOL Guard requires review because this prompt asks to override trusted instructions.",
+            "HOL Guard did not send this prompt because it asks to override trusted instructions. Nothing is waiting for approval; rephrase that part of the request.",
         );
     }
     if signals.subprocess_intent && action_type == PreToolActionTypeV1::Prompt {
@@ -128,7 +128,7 @@ pub(super) fn evaluate_signals(
             action,
             "review",
             "native_prompt_subprocess_review",
-            "HOL Guard requires review because this prompt asks to run a subprocess.",
+            "HOL Guard did not send this prompt because it asks to run a subprocess. Nothing is waiting for approval; rephrase that part of the request.",
         );
     }
     if benign_prompt {
@@ -311,6 +311,18 @@ pub(super) fn evaluate_signals(
             "allow",
             "native_exact_safe_file_write",
             "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, the verified user home, or a private user-owned temporary directory and clears sensitive-path checks.",
+        );
+    }
+    if action_type == PreToolActionTypeV1::Network
+        && super::web_fetch::plain_public_web_request(signals)
+    {
+        // A plain public GET is low risk by itself; the installed
+        // new_network_domain_action floor decides whether it runs.
+        return generic_result(
+            action,
+            "allow",
+            "native_plain_web_request",
+            "The Rust authority proved this web fetch or search is a plain request for public web content; the installed network setting decides the outcome.",
         );
     }
     let (reason_code, reason) = review_reason(action_type);

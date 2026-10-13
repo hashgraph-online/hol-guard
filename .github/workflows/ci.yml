@@ -193,6 +193,22 @@ jobs:
           } >> "$GITHUB_ENV"
         env:
           SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+      - name: Provision bubblewrap for the Linux workspace sandbox tests
+        if: matrix.check == 'test'
+        # Without it the overlay sandbox tests take the unavailable-host branch
+        # and the live confinement run is skipped.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apparmor bubblewrap
+          sudo tee /etc/apparmor.d/hol-guard-bwrap <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+          /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/hol-guard-bwrap
+          /usr/bin/bwrap --version
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
@@ -234,9 +250,9 @@ jobs:
 
   native-command-evaluators:
     runs-on: ubuntu-latest
-    # A cold opt-level=s release build took about four minutes and left the
-    # pytest gates short of the previous five-minute job limit.
-    timeout-minutes: 10
+    # A cold opt-level=s release build takes about four minutes, and the
+    # Gauntlet replay gate now replays 81 cases; together they overran ten.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:

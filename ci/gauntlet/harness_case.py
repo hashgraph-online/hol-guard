@@ -99,7 +99,7 @@ def run_harness_case(
     """Exercise one scenario through a real harness CLI and its installed Guard hooks."""
     spec = adapter(harness)
     realistic = scenario.oracle == "native-tools"
-    fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=realistic)
+    fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=realistic, scenario_id=scenario.id)
     stage_supply_chain(fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)

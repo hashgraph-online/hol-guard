@@ -26,7 +26,7 @@ _PROC_PIDTBSDINFO = 3
 _PROC_BSDINFO_SIZE = 136
 _PPID_OFFSET = 16
 _VERSION = re.compile(r"^codex-cli (\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?\s*$")
-UPDATE_HINT = "Update Codex to 0.131 or later so HOL Guard can run this test inside its contained runner."
+UPDATE_HINT = "Update Codex to 0.131 or later so HOL Guard can run this command inside its contained runner."
 
 
 def route_codex_containment(

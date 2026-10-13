@@ -319,7 +319,7 @@ pub(crate) fn with_remaining_hint(data: &str, remaining_ms: u128) -> Result<Stri
     Ok(hinted)
 }
 
-fn set_member(entries: &mut Vec<(String, PyVal)>, key: &str, value: PyVal) {
+pub(crate) fn set_member(entries: &mut Vec<(String, PyVal)>, key: &str, value: PyVal) {
     match entries.iter_mut().find(|(existing, _)| existing == key) {
         Some(entry) => entry.1 = value,
         None => entries.push((key.to_owned(), value)),

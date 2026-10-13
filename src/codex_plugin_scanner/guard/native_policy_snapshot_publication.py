@@ -14,6 +14,12 @@ from .native_policy_snapshot_constants import (
     _REQUIRED_PUBLISH_FEATURES,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_direct_lane import (
+    contained_sink_command,
+    direct_lane_binding,
+    local_cli_block_rules_present,
+    with_direct_hook_state,
+)
 from .native_policy_snapshot_harness_postures import (
     HARNESS_POSTURES_BINDING_KEY,
     valid_harness_postures,
@@ -24,6 +30,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
+
+
+def _local_cli_revision_or_none(publisher: NativePolicySnapshotPublisher) -> int | None:
+    try:
+        return publisher._current_local_cli_revision()
+    except (NativePolicySnapshotError, OSError, RuntimeError, ValueError, sqlite3.Error):
+        # -1 is never a bound revision, so an unreadable one closes the lane.
+        return -1
 
 
 def _publisher_api():
@@ -65,10 +79,12 @@ class NativePolicySnapshotPublicationMixin:
                 publisher._reconcile_due_monotonic = publisher._monotonic_clock() + 1.0
                 if publisher._policy_input_changed():
                     publisher._republish_preserving_watch()
+                publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
             with publisher._condition:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
+                publisher._renew_direct_lane_ack()
                 now = publisher._monotonic_clock()
                 wait_seconds = publisher._poll_interval_seconds
                 if publisher._retry_not_before_monotonic is not None:
@@ -87,6 +103,7 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
+                publisher._renew_direct_lane_ack()
                 now = publisher._monotonic_clock()
                 if (
                     publisher._acked
@@ -158,7 +175,21 @@ class NativePolicySnapshotPublicationMixin:
                     # now would make the ACKed digest disagree with the
                     # settled-only reconcile and withdraw readiness home-wide.
                     compiled_workspaces = frozenset(publisher._workspace_paths)
+                # Observe inputs before compiling: a change after this point
+                # leaves the resident with a stat mismatch, never a stale pass.
+                # The binding is optional, so an observation failure only
+                # keeps the lane closed; publication reports its own errors.
+                try:
+                    direct_lane = direct_lane_binding(
+                        inputs=publisher._current_policy_input_stats(),
+                        workspaces=compiled_workspaces,
+                    )
+                except (OSError, RuntimeError, ValueError, sqlite3.Error):
+                    direct_lane = None
                 local_cli_revision = publisher._current_local_cli_revision()
+                # Probed after the revision: a rule saved in between fails the
+                # revision recheck below rather than escaping the binding.
+                local_cli_block_rules = local_cli_block_rules_present(publisher.store)
                 provider_reader = getattr(publisher.store, "read_mcp_provider_authority_hash", None)
                 provider_authority_hash = provider_reader() if callable(provider_reader) else None
                 context = publisher._publication_context(workspaces=compiled_workspaces)
@@ -173,6 +204,16 @@ class NativePolicySnapshotPublicationMixin:
             else:
                 return
             identity, capabilities, master_key, config, command_extensions, client = context
+            bound_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
+            resident_features = tuple(getattr(capabilities, "features", ()))
+            direct_lane = with_direct_hook_state(
+                direct_lane,
+                home_dir=publisher._direct_lane_home_dir(),
+                harness_postures=bound_postures,
+                local_cli_block_rules=local_cli_block_rules,
+                evidence_drain=publisher.direct_evidence_bound(resident_features),
+                contained_sink_command=contained_sink_command(resident_features),
+            )
             resident_fingerprint_before = publisher._current_input_fingerprint()[1]
             try:
                 business_source = publisher._compiled_business_source()
@@ -185,6 +226,7 @@ class NativePolicySnapshotPublicationMixin:
                     master_key=master_key,
                     client=client,
                     renew_after_generation=renew_after_generation,
+                    direct_lane=direct_lane,
                     **(
                         {
                             "business_policy": cast(
@@ -282,9 +324,17 @@ class NativePolicySnapshotPublicationMixin:
                         publisher.store,
                         generation=cast(int, snapshot["generation"]),
                         policy_digest=cast(str, snapshot["policy_digest"]),
-                        postures=valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY)),
+                        postures=bound_postures,
                     )
                     publisher._acked = True
+                    if publisher._harness_postures == bound_postures:
+                        publisher._direct_lane_local_cli_revision = local_cli_revision
+                        evidence_drain = isinstance(direct_lane, Mapping) and direct_lane.get("evidence_drain") is True
+                        publisher._publish_direct_lane_ack(snapshot, evidence_drain=evidence_drain)
+                    else:
+                        # Daemon hooks read the persisted postures; a direct
+                        # hook must never see a different Watch decision.
+                        publisher._close_direct_lane_ack()
                     publisher._last_error = None
                     publisher._renewal_after_generation = None
                     publisher._failure_count = 0

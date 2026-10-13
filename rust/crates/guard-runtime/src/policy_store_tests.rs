@@ -41,7 +41,7 @@ mod migration_tests;
 
 use fixture_tests::policy;
 
-fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(super) fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
     let mut value = policy();
     value.default_action = default_action.to_owned();
     value
@@ -74,7 +74,7 @@ pub(super) fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) ->
     signed_snapshot_with_policy(generation, key, guard_home, policy())
 }
 
-fn signed_snapshot_with_policy(
+pub(super) fn signed_snapshot_with_policy(
     generation: u64,
     key: &[u8],
     guard_home: &Path,

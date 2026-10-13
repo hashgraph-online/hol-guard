@@ -49,9 +49,20 @@ const TRANSPORT_ENVIRONMENT: &[&str] = &[
     "GIT_EXEC_PATH",
     "GIT_ALLOW_PROTOCOL",
     "GIT_PROTOCOL_FROM_USER",
-    "CURL_CA_BUNDLE",
 ];
 const TRANSPORT_PREFIXES: &[&str] = &["GIT_SSL_", "GIT_SSH", "GIT_HTTP", "GIT_CURL", "SSL_CERT_"];
+/// Certificate anchors, usually for a company's TLS-inspecting proxy that
+/// already sees all of the user's traffic. They choose which authority signs
+/// for the server but leave origin, credentials and verification where they
+/// were. The hook stamps them from the session, which the agent's command
+/// cannot set; an inline assignment on the command is still refused.
+const CERTIFICATE_ANCHORS: &[&str] = &[
+    "GIT_SSL_CAINFO",
+    "GIT_SSL_CAPATH",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "CURL_CA_BUNDLE",
+];
 
 struct Push<'a> {
     directory: Option<&'a str>,
@@ -179,10 +190,11 @@ fn proven_push(
         || !super::git_config::clean_environment(execution_environment, &home, &cwd)
         || environment.environment_names.iter().any(|name| {
             let key = name.to_ascii_uppercase();
-            TRANSPORT_ENVIRONMENT.contains(&key.as_str())
-                || TRANSPORT_PREFIXES
-                    .iter()
-                    .any(|prefix| key.starts_with(prefix))
+            !CERTIFICATE_ANCHORS.contains(&key.as_str())
+                && (TRANSPORT_ENVIRONMENT.contains(&key.as_str())
+                    || TRANSPORT_PREFIXES
+                        .iter()
+                        .any(|prefix| key.starts_with(prefix)))
         })
     {
         return false;

@@ -399,9 +399,9 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
     assert {key: tuple(value) for key, value in native_groups.items()} == expected_native_groups()
     rejection_groups = cast(dict[str, list[object]], report["native_rejection_groups"])
     assert {key: tuple(value) for key, value in rejection_groups.items()} == expected_native_rejection_groups()
-    assert report["native_rejection_count"] == 27_084
+    assert report["native_rejection_count"] == 25_002
     assert report["original_oracle_below_count"] == 0
-    assert report["original_oracle_above_count"] == 10_566
+    assert report["original_oracle_above_count"] == 8_484
     assert isinstance(report["elapsed"], int | float) and report["elapsed"] < int(
         load_seed_manifest()["evaluation_budget_seconds"]
     )

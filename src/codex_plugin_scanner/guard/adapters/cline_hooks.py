@@ -12,6 +12,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from .base import HarnessContext
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cline_paths import cline_hook_roots as _resolve_cline_hook_roots
 from .cline_paths import ensure_safe_cline_destination
 from .cline_state_paths import canonical_cline_state_path as _canonical_state_path
@@ -25,6 +26,8 @@ _MAX_BYTES = 256 * 1024
 _MAX_PRETOOL_BYTES = 64 * 1024
 _MAX_DEPTH = 48
 _TIMEOUT = 9
+# The bounded bridge answers inside the worker's own subprocess timeout.
+_BRIDGE_TIMEOUT_SECONDS = 8
 _PROOF_MAX_AGE = 7 * 24 * 60 * 60
 _EVENTS = ("PreToolUse", "PostToolUse", "UserPromptSubmit", "TaskStart", "TaskError", "SessionShutdown")
 
@@ -81,7 +84,10 @@ def _write(path: Path, text: str, *, executable: bool = False) -> None:
 
 
 def _hook_source(context: HarnessContext, *, event_name: str, guard_cli: list[str]) -> str:
-    """Generate the bounded Python worker invoked by platform launchers."""
+    """Generate the bounded Python worker invoked by platform launchers.
+
+    ``guard_cli`` is the complete argv the worker runs once per hook payload.
+    """
 
     proof = str(_proof_path(context, event_name))
     adapter_state = str(_adapter_state_path(context))
@@ -313,7 +319,7 @@ def main():
     for item in command_payloads(value):
         try:
             result = subprocess.run(
-                [*GUARD, "--harness", "cline", "--json"],
+                GUARD,
                 input=json.dumps(item),
                 capture_output=True,
                 text=True,
@@ -404,6 +410,22 @@ def _powershell_wrapper(*, worker: Path, python: str, blocking: bool) -> str:
     )
 
 
+def _bounded_hook_argv(context: HarnessContext, interpreter: str) -> tuple[str, ...]:
+    """The bounded hook bridge argv: the daemon answers first, the CLI is the fallback."""
+
+    guard_args = ["guard", "hook", "--guard-home", str(context.guard_home), "--harness", "cline"]
+    if context.home_dir.resolve() != Path.home().resolve():
+        guard_args.extend(["--home", str(context.home_dir)])
+    return bounded_cli_hook_command(
+        python_executable=interpreter,
+        package_root=Path(__file__).resolve().parents[3],
+        guard_home=context.guard_home,
+        cli_args=guard_args,
+        harness="cline",
+        timeout_seconds=_BRIDGE_TIMEOUT_SECONDS,
+    )
+
+
 def _load_state(context: HarnessContext) -> dict[str, object]:
     try:
         value = json.loads(_state_path(context).read_text(encoding="utf-8"))
@@ -418,8 +440,8 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     attested = resolve_attested_guard_cli(context)
     if attested.python is None:
         raise RuntimeError("Cline native hooks require a standalone Python Guard runtime.")
-    guard = [*attested.command, "guard", "hook"]
     interpreter = str(attested.python.executable)
+    guard = list(_bounded_hook_argv(context, interpreter))
     root = cline_hook_roots(context)[0]
     paths: dict[str, str] = {}
     digests: dict[str, str] = {}

@@ -131,9 +131,9 @@ def test_scratch_repair_cannot_hide_missing_committed_public_record(tmp_path, pr
     assert build("--publish-descriptor", "command.example") == 0
     capsys.readouterr()
     assert build("--check-public-descriptors") == 1
-    assert json.loads(capsys.readouterr().out)["stale_public_descriptors"] == [
-        "contributions/extensions/command.example.json"
-    ]
+    report = json.loads(capsys.readouterr().out)
+    assert report["stale_public_descriptors"] == ["contributions/extensions/command.example.json"]
+    assert report["expected_public_descriptors"] == {"contributions/extensions/command.example.json": descriptor}
     build.public_blobs["HEAD:contributions/extensions/command.example.json"] = (
         json.dumps(descriptor, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode()

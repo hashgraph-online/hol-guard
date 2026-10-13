@@ -100,6 +100,16 @@ def test_sensitivity_uses_one_absolute_deadline_for_the_persistent_client(monkey
     }
 
 
+def test_default_budget_covers_a_resident_spawn_but_keeps_warm_round_trips_short(monkeypatch):
+    calls = _resident(monkeypatch)
+    monkeypatch.setattr(client, "native_resident_client_ready", lambda *_: False)
+    client.content_query("content_version", {})
+    assert 500 < json.loads(calls[0]["payload"])["request"]["budget_ms"] <= 4000
+    monkeypatch.setattr(client, "native_resident_client_ready", lambda *_: True)
+    client.content_query("content_version", {})
+    assert json.loads(calls[1]["payload"])["request"]["budget_ms"] <= 500
+
+
 def test_expired_sensitivity_deadline_never_opens_a_client(monkeypatch):
     calls = _resident(monkeypatch)
     with pytest.raises(client.NativeContentSensitivityError):
@@ -123,7 +133,8 @@ def test_caller_rejections_do_not_quarantine_the_shared_resident(monkeypatch, ca
         body = {"unused": float("nan")}
     if case == "expired_reply":
         now = time.monotonic()
-        monkeypatch.setattr(client.time, "monotonic", lambda: now + (1 if calls else 0))
+        # Past both the warm and the cold-start default budget.
+        monkeypatch.setattr(client.time, "monotonic", lambda: now + (5 if calls else 0))
     with pytest.raises(client.NativeContentSensitivityError):
         client.content_query("content_version", body)
     assert not failures

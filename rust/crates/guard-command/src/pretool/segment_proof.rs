@@ -75,6 +75,7 @@ pub(super) fn exact_safe_cwd_compound(
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
+                npm_config_inert: context.npm_config_inert,
                 shell_home_matches: context.shell_home_matches,
                 cwd: Some(&cwd),
             },
@@ -126,6 +127,7 @@ pub(super) fn exact_safe_cwd_compound(
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
+                npm_config_inert: context.npm_config_inert,
                 shell_home_matches: context.shell_home_matches,
                 cwd: Some(&cwd),
             },
@@ -182,6 +184,7 @@ pub(crate) fn benign_command_segments(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        npm_config_inert: context.npm_config_inert,
         shell_home_matches: context.shell_home_matches,
         cwd: cwd.as_deref().or(context.cwd),
     };
@@ -206,21 +209,7 @@ pub(crate) fn benign_command_segments(
             let segment = stripped.as_ref().unwrap_or(original);
             let benign = segment_benign[index];
             let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
-            let stdin_filter = segment.pipeline_index > 0
-                && ((matches!(basename, "head" | "tail")
-                    && safe_reads::safe_head_tail_stdin_arguments(&segment.arguments))
-                    || (basename == "jq"
-                        && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
-                    || (basename == "wc"
-                        && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
-                    || (basename == "od"
-                        && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
-                    || (basename == "grep"
-                        && search::safe_grep_stdin_arguments(&segment.arguments))
-                    || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
-                    || (basename == "sed"
-                        && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
-                    || super::stdin_filters::safe_arguments(basename, &segment.arguments));
+            let stdin_filter = stdin_filter_segment(segment);
             let path_free = matches!(
                 basename,
                 "pwd"
@@ -263,6 +252,8 @@ pub(crate) fn benign_command_segments(
                         | "find"
                         | "du"
                         | "diff"
+                        | "npm"
+                        | "jq"
                 );
             let ls_has_explicit_target = basename != "ls" || {
                 let mut skip_next = false;
@@ -313,6 +304,22 @@ pub(crate) fn benign_command_segments(
             covered.then_some(index)
         })
         .collect()
+}
+
+/// A later pipeline stage that only filters its standard input.
+pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
+    let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
+    segment.pipeline_index > 0
+        && ((matches!(basename, "head" | "tail")
+            && safe_reads::safe_head_tail_stdin_arguments(&segment.arguments))
+            || (basename == "jq" && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+            || (basename == "wc"
+                && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
+            || (basename == "od" && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
+            || (basename == "grep" && search::safe_grep_stdin_arguments(&segment.arguments))
+            || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
+            || (basename == "sed" && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
+            || super::stdin_filters::safe_arguments(basename, &segment.arguments))
 }
 
 pub(super) fn exact_safe_segment_with_context(
@@ -379,6 +386,7 @@ pub(super) fn exact_safe_segment_with_context(
                 && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
         "cp" => {
             model.segments.len() == 1
+                && super::directory_targets::drive_targets_quoted(segment)
                 && (safe_reads::safe_copy_arguments(&segment.arguments, context)
                     || super::recursive_copy::safe_recursive_copy_arguments(
                         &segment.arguments,
@@ -389,7 +397,11 @@ pub(super) fn exact_safe_segment_with_context(
             model.segments.len() == 1
                 && (basename != "ln" && basename != "rm"
                     || super::directory_targets::home_targets_unquoted(segment))
-                && safe_reads::safe_file_mutation_arguments(basename, &segment.arguments, context)
+                && (safe_reads::safe_file_mutation_arguments(basename, &segment.arguments, context)
+                    // A session run from the directory above its checkouts can
+                    // still share a dependency directory between two of them.
+                    || (basename == "ln"
+                        && super::symlink_writes::safe_symlink_arguments(segment, context)))
         }
         // Admit stdin only when every producer in the pipeline is also proven safe.
         "head" | "tail" => safe_reads::safe_head_tail_arguments(
@@ -404,13 +416,19 @@ pub(super) fn exact_safe_segment_with_context(
         }
         "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
+        "npm" => {
+            super::npm_reads::read_only_neighbors(model)
+                && super::npm_reads::safe_npm_read(&segment.arguments, context)
+        }
         "hol-guard" => super::guard_diagnostics::safe_hol_guard_segment(
             &segment.arguments,
             context.cwd,
             segment.pipeline_index,
         ),
         "jq" => {
-            segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)
+            (segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+                || (segment.pipeline_index == 0
+                    && safe_reads::safe_jq_file_arguments(&segment.arguments, context))
         }
         "wc" => safe_reads::safe_word_count_arguments(
             &segment.arguments,

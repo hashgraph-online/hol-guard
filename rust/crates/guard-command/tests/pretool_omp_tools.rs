@@ -48,6 +48,7 @@ fn fixture() -> Fixture {
         ".agent/skills/demo/SKILL.md",
         ".codex/plans/plan-a/TODO.md",
         ".codex/plans/plan-a/notes.txt",
+        ".codex/plans/plan-a/run.sh",
         ".codex/memories/MEMORY.md",
         ".codex/sessions/2026/log.md",
         ".hol-support/SAFETY.md",
@@ -195,8 +196,8 @@ fn skill_and_note_documents_are_readable_in_bounds() {
         ".agents/skills/example/SKILL.md",
         "~/.codex/plans/plan-a/TODO.md",
         "~/.codex/plans/plan-a/TODO.md:1-120",
-        "~/.codex/memories/MEMORY.md",
         "~/.codex/plans/plan-a/notes.txt",
+        "~/.codex/memories/MEMORY.md",
     ] {
         let result = omp(&f, "read", json!({"path": path}));
         assert!(allowed(&result), "{path}: {}", result.reason_code);
@@ -206,6 +207,7 @@ fn skill_and_note_documents_are_readable_in_bounds() {
         "~/project/.agents/skills/example/run.py",
         "~/project/.agents/skills/.hidden/SKILL.md",
         "~/project/.git/skills/example/SKILL.md",
+        "~/.codex/plans/plan-a/run.sh",
         "~/.codex/sessions/2026/log.md",
         "~/.codex/auth.json",
         "~/.codex/config.toml",

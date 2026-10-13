@@ -13,6 +13,9 @@ use guard_contracts::{
 use crate::native_command_program::{digest_value, packaged_command_program, NativeCommandProgram};
 use crate::CanonicalCommandV1;
 
+#[path = "native_command_controls_risk.rs"]
+mod risk;
+
 #[derive(Debug)]
 pub struct CompiledNativeCommandControls {
     program: Arc<NativeCommandProgram>,

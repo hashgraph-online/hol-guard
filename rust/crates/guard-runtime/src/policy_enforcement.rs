@@ -30,6 +30,8 @@ mod policy_enforcement_matrix;
 mod policy_enforcement_mcp_provider;
 #[path = "policy_enforcement_policy.rs"]
 mod policy_enforcement_policy;
+#[path = "policy_enforcement_reason.rs"]
+mod policy_enforcement_reason;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
 
 /// Recheck business rules above the authenticated native receipt's intrinsic
@@ -63,9 +65,10 @@ use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
 };
 use policy_enforcement_helpers::{
-    action_rank, join_action, normalized_harness, policy_floor, FloorInput,
+    action_rank, join_action, normalized_harness, policy_floor_with_cause, FloorInput,
 };
 use policy_enforcement_policy::CompiledEffectivePolicy;
+use policy_enforcement_reason::policy_override_reason;
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
@@ -110,32 +113,19 @@ const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;
 
-fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
-    match action {
-        "block" => (
-            "native_policy_block",
-            "HOL Guard blocked this hook action under the installed native policy.",
-        ),
-        "sandbox-required" => (
-            "native_policy_sandbox_required",
-            "HOL Guard requires sandbox enforcement under the installed native policy.",
-        ),
-        "require-reapproval" => (
-            "native_policy_reapproval_required",
-            "HOL Guard requires fresh approval under the installed native policy.",
-        ),
-        "review" => (
-            "native_policy_review_required",
-            "HOL Guard requires review under the installed native policy.",
-        ),
-        _ => (
-            "native_policy_warning",
-            "HOL Guard raised this action under the installed native policy.",
-        ),
-    }
+/// Apply the authenticated policy to a generic native PreTool result.
+/// A package-manager install proven to run no lifecycle scripts has nothing
+/// for the `package_script` risk setting to govern. The proof is the native
+/// command authority's; every other floor and intrinsic review still applies.
+fn package_scripts_disabled(payload: &Value, result: &PreToolResultV1) -> bool {
+    result.action.action_type == PreToolActionTypeV1::Package
+        && result.reason_code == "native_package_review"
+        && guard_command::pretool::generic::extract_untrusted_command_context(payload)
+            .ok()
+            .and_then(|context| context.command)
+            .is_some_and(|command| guard_command::pretool::no_script_install_command(&command))
 }
 
-/// Apply the authenticated policy to a generic native PreTool result.
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
@@ -270,7 +260,7 @@ pub(crate) fn apply_pre_tool_policy(
             }
         }
     }
-    let policy_floor = policy_floor(
+    let (policy_floor, floor_cause) = policy_floor_with_cause(
         &snapshot.effective_policy,
         &snapshot.compiled,
         &harness,
@@ -280,6 +270,7 @@ pub(crate) fn apply_pre_tool_policy(
             reason_code: &result.reason_code,
             prompt_classes: &result.prompt_risk_classes,
             benign_prompt,
+            package_scripts_disabled: package_scripts_disabled(payload, &result),
         },
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;
@@ -328,9 +319,13 @@ pub(crate) fn apply_pre_tool_policy(
     }
 
     if policy_raised {
-        let (reason_code, reason) = policy_override_reason(&effective);
+        let (reason_code, reason) = policy_override_reason(
+            &effective,
+            Some(floor_cause),
+            output.action.action_type == guard_contracts::PreToolActionTypeV1::Prompt,
+        );
         output.reason_code = reason_code.to_owned();
-        output.reason = reason.to_owned();
+        output.reason = reason;
     }
     output.policy_action = effective.clone();
     output.minimum_action = effective.clone();
@@ -399,7 +394,7 @@ pub(crate) fn apply_post_tool_policy(
         action_type,
         &response.reason_code,
     )?;
-    let floor = policy_floor(
+    let (floor, floor_cause) = policy_floor_with_cause(
         &snapshot.effective_policy,
         &snapshot.compiled,
         &harness,
@@ -418,6 +413,7 @@ pub(crate) fn apply_post_tool_policy(
             },
             prompt_classes: &[],
             benign_prompt: false,
+            package_scripts_disabled: false,
         },
     )?;
     let effective = join_action(&intrinsic, &floor)?;
@@ -466,7 +462,10 @@ pub(crate) fn apply_post_tool_policy(
     if intrinsic == "block" && response.decision == "deny" {
         return Ok(response);
     }
-    let (reason_code, reason) = policy_override_reason(&effective);
+    // Name the setting only when the policy floor, not the intrinsic
+    // result, set the outcome.
+    let cause = (action_rank(&floor) > action_rank(&intrinsic)).then_some(floor_cause);
+    let (reason_code, reason) = policy_override_reason(&effective, cause, false);
     let mut denied = HookReviewResponseV1::deny(reason_code, reason);
     denied.policy_action = Some(effective);
     Ok(denied)

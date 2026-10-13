@@ -125,3 +125,71 @@ fn graphql_endpoint_with_leading_slash_matches_the_bare_endpoint() {
         C::ReadRemote
     );
 }
+
+#[test]
+fn only_a_bare_private_repository_creation_is_prompt_free() {
+    use crate::github_capability_contract::GitHubCommandCapability as C;
+    for command in [
+        "repo create todo-app --private",
+        "repo create todo-app --private --source=.",
+        "repo create todo-app --private --source . --remote origin",
+        "repo create todo-app --private -s . -r upstream -d \"A small todo app\"",
+        "repo create todo_app.v2 --private --add-readme --license mit --gitignore Node",
+        "repo create todo-app --disable-wiki --private --disable-issues",
+    ] {
+        let args: Vec<&str> = split(command);
+        assert_eq!(
+            graphql_capability(&args),
+            C::CreatePrivateRemote,
+            "{command}"
+        );
+    }
+    for command in [
+        "repo create todo-app",
+        "repo create todo-app --public",
+        "repo create todo-app --private --public",
+        "repo create todo-app --internal",
+        "repo create todo-app --private --push --source=.",
+        "repo create todo-app --private --source=../other",
+        "repo create todo-app --private --source /tmp/x",
+        "repo create example-org/todo-app --private",
+        "repo create todo-app --private --template example-org/base",
+        "repo create todo-app --private --clone",
+        "repo create todo-app --private --team core",
+        "repo create todo-app --private --homepage https://example.com",
+        "repo create todo-app --private=true",
+        "repo create --private",
+        "repo create . --private",
+        "repo create todo-app other --private",
+        "repo create todo-app --private -d $SECRET",
+        "repo create todo-app --private --description=@notes.txt",
+        "repo create todo-app --private --remote",
+        "repo create todo-app --private -sp .",
+    ] {
+        let args: Vec<&str> = split(command);
+        assert_ne!(
+            graphql_capability(&args),
+            C::CreatePrivateRemote,
+            "{command}"
+        );
+    }
+}
+
+/// Whitespace split that keeps one double-quoted word together.
+fn split(command: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut rest = command;
+    while let Some(start) = rest.find(|c: char| !c.is_whitespace()) {
+        rest = &rest[start..];
+        if let Some(quoted) = rest.strip_prefix('"') {
+            let end = quoted.find('"').unwrap();
+            words.push(&quoted[..end]);
+            rest = &quoted[end + 1..];
+        } else {
+            let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            words.push(&rest[..end]);
+            rest = &rest[end..];
+        }
+    }
+    words
+}

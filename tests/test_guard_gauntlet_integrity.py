@@ -405,8 +405,8 @@ def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
     assert exported["input_sha256"] == input_digest(exported["input"])
     assert exported["observed_input_sha256"] == observation["input_sha256"]
     assert "input_json" not in exported
-    with pytest.raises(ValueError, match="observed digest"):
-        public_observations([{**observation, "input_json": "{}"}], {})
+    tampered = public_observations([{**observation, "input_json": "{}", "tool": "read"}], {})[0]
+    assert tampered == {"tool": "read", "observer_error": True, "observer_error_code": "input_digest_mismatch"}
 
 
 @pytest.mark.parametrize("change", ["execution_error", "returncode", "timed_out", "cleanup_ok"])

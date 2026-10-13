@@ -35,6 +35,9 @@ unicode-normalization = "0.1.25"
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix.workspace = true
+
 [build-dependencies]
 guard-command-build = { path = "../guard-command-build" }
 serde_json.workspace = true

@@ -196,6 +196,7 @@ mod sfrs_gh_service;
 mod sfrs_gh_shell;
 #[cfg(test)]
 mod sfrs_gh_shell_vectors;
+mod sfrs_gh_static_body_safety;
 mod sfrs_git_audit;
 mod sfrs_git_cached_diff;
 mod sfrs_git_fetch;
@@ -298,6 +299,7 @@ mod shell_execution_context_support;
 pub mod shell_helpers;
 mod shell_model_limits;
 mod shell_read_literal_wrapper;
+pub mod shell_request_authority;
 mod shell_secret_read_flow;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;

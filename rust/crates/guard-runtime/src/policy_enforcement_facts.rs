@@ -55,6 +55,24 @@ const CHANGED_BOOL_KEYS: &[&str] = &[
     "contentChanged",
 ];
 const CHANGED_CAPABILITY_KEYS: &[&str] = &["changed_capabilities", "changedCapabilities"];
+/// Subtrees the model or the tool authored. A `changed` flag or hash pair in
+/// tool arguments or output is data, not Guard's artifact-change evidence.
+const MODEL_AUTHORED_KEYS: &[&str] = &[
+    "tool_input",
+    "toolInput",
+    "tool_response",
+    "toolResponse",
+    "tool_output",
+    "toolOutput",
+    "arguments",
+    "args",
+    "params",
+    "parameters",
+    "input",
+    "content",
+    "output",
+    "result",
+];
 
 #[derive(Debug, Default)]
 pub(super) struct PolicyFacts {
@@ -96,6 +114,34 @@ pub(super) fn collect_fact_maps<'a>(
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
     Ok(())
+}
+
+/// The maps outside model-authored subtrees. The payload already passed
+/// `collect_fact_maps`, so this subset walk stays within the same bounds.
+fn guard_authored_maps<'a>(
+    value: &'a Value,
+    depth: usize,
+    output: &mut Vec<&'a Map<String, Value>>,
+) {
+    if depth > MAX_FACT_DEPTH {
+        return;
+    }
+    match value {
+        Value::Object(record) => {
+            output.push(record);
+            for (key, child) in record {
+                if !MODEL_AUTHORED_KEYS.contains(&key.as_str()) {
+                    guard_authored_maps(child, depth.saturating_add(1), output);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                guard_authored_maps(child, depth.saturating_add(1), output);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
 }
 
 pub(super) fn bounded_selector_value(value: &str) -> Result<String, String> {
@@ -455,10 +501,12 @@ pub(super) fn payload_facts(
         || action_type == PreToolActionTypeV1::Package
         || (action_type == PreToolActionTypeV1::McpTool
             && reason_code != "native_pure_constant_eval");
+    let mut change_maps = Vec::new();
+    guard_authored_maps(payload, 0, &mut change_maps);
     Ok(PolicyFacts {
         publisher,
         artifact,
-        changed_hash: payload_changed_hash(&maps)?,
+        changed_hash: payload_changed_hash(&change_maps)?,
         sensitive_target,
         publisher_relevant,
     })

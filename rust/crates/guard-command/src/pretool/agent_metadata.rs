@@ -2,7 +2,10 @@ use serde_json::Value;
 
 /// Only host task-list data is admitted here, never commands or external tools.
 pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> bool {
-    if !matches!(tool_name, Some("TodoWrite" | "TaskOutput")) {
+    if !matches!(
+        tool_name,
+        Some("TodoWrite" | "TaskOutput" | "TaskStop" | "Skill")
+    ) {
         return false;
     }
     let Some(root) = payload.as_object() else {
@@ -53,20 +56,30 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
     }) {
         return false;
     }
+    if tool_name == Some("Skill") {
+        return input
+            .keys()
+            .all(|key| matches!(key.as_str(), "skill" | "args"))
+            && input
+                .get("skill")
+                .and_then(Value::as_str)
+                .is_some_and(|name| {
+                    !name.is_empty()
+                        && name.len() <= 64
+                        && name.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'-')
+                        })
+                })
+            && input.get("args").is_none_or(Value::is_string);
+    }
+    if tool_name == Some("TaskStop") {
+        return input.keys().all(|key| key == "task_id") && bounded_task_id(input.get("task_id"));
+    }
     if tool_name == Some("TaskOutput") {
         return input
             .keys()
             .all(|key| matches!(key.as_str(), "task_id" | "block" | "timeout"))
-            && input
-                .get("task_id")
-                .and_then(Value::as_str)
-                .is_some_and(|id| {
-                    !id.is_empty()
-                        && id.len() <= 128
-                        && id
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-                })
+            && bounded_task_id(input.get("task_id"))
             && input.get("block").is_none_or(Value::is_boolean)
             && input
                 .get("timeout")
@@ -102,4 +115,14 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
                     }
                 })
         })
+}
+
+fn bounded_task_id(value: Option<&Value>) -> bool {
+    value.and_then(Value::as_str).is_some_and(|id| {
+        !id.is_empty()
+            && id.len() <= 128
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    })
 }

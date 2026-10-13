@@ -18,6 +18,7 @@ from ..runtime.actions import normalize_harness_payload
 from .hook_fail_closed import render_accepted_allow, render_pre_tool, render_pre_tool_review
 from .hook_native_exact_action import native_exact_action, native_review_binding
 from .hook_native_local_cli import native_local_cli_grant_response
+from .hook_native_package_review import native_package_review_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
@@ -142,6 +143,18 @@ def pause_native_pre_tool_for_approval(
         allowed["minimum_action"] = "allow"
         allowed["policy_action"] = "allow"
         return render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
+    settled = native_package_review_response(
+        store,
+        harness=harness,
+        payload=payload,
+        native_result=native_result,
+        workspace=workspace,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        deadline=deadline,
+    )
+    if settled is not None:
+        return settled
     from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
     from ..config import load_guard_config
 
@@ -176,7 +189,11 @@ def pause_native_pre_tool_for_approval(
             decision="deny",
             minimum_action="block",
             policy_action="block",
-            reason=safe_alternative_reason(str(native_result.get("reason") or "HOL Guard blocked this action.")),
+            reason=safe_alternative_reason(
+                str(native_result.get("reason") or "HOL Guard blocked this action."),
+                reason_code=str(native_result.get("reason_code") or "") or "unknown",
+                approval_queued=queued is not None,
+            ),
         )
         response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
         response["prompted"] = False

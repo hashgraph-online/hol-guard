@@ -50,8 +50,10 @@ def test_native_review_defaults_to_safe_alternative(
     assert response.get("approval_requests", []) == []
     assert_silent_review_recorded(store)
     reason = response.get("reason") or response["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "safe, permitted alternative" in reason
-    assert "bypass Guard" in reason
+    assert "waiting for the user to approve it in the HOL Guard inbox" in reason
+    assert "hol-guard approvals" in reason
+    assert "Do not retry the same action until it is approved" in reason
+    assert "safe, permitted alternative" not in reason
     if "hookSpecificOutput" in response:
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     worker.close()

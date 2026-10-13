@@ -158,7 +158,7 @@ def test_resolve_job_mirrors_build_alpha_version_rules() -> None:
 def test_windows_alpha_compile_lowers_only_workspace_opt_level() -> None:
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     expression = prepare["env"]["ALPHA_WORKSPACE_OPT_LEVEL"]
-    assert expression == "${{ matrix.target == 'x86_64-pc-windows-msvc' && '0' || '' }}"
+    assert expression == "${{ matrix.target == 'x86_64-pc-windows-msvc' && '1' || '' }}"
     legs = prepare["strategy"]["matrix"]["include"]
     assert len(legs) == 4
     targets = [leg["target"] for leg in legs]

@@ -64,10 +64,11 @@ def test_host_ancestry_audit_proof_does_not_override_native_unsupported_loop(tmp
     assert_host_git_proof_result(is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home), cwd=repository)
     result = inspect_command(command, cwd=home, home_dir=home)
     # Supported hosts recognize this bounded audit. Native command parsing does not
-    # support its loop, so production must keep its terminal classification.
+    # model its loop, so the host proof must not make it benign: the loop and its
+    # literal `2>/dev/null` redirect stay at the review floor.
     assert _classification(result)["explicitly_benign"] is False
-    assert result["status"] == "native_unavailable"
-    assert result["minimum_action"] == "block"
+    assert result["status"] == "no_match"
+    assert result["minimum_action"] == "review"
 
 
 def test_ancestry_audit_rejects_path_as_loop_variable(tmp_path: Path) -> None:
@@ -90,8 +91,8 @@ def test_ancestry_audit_allows_bounded_log_and_numeric_pid_read(tmp_path: Path) 
     assert_host_git_proof_result(is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home), cwd=repository)
     result = inspect_command(command, cwd=home, home_dir=home)
     assert _classification(result)["explicitly_benign"] is False
-    assert result["status"] == "native_unavailable"
-    assert result["minimum_action"] == "block"
+    assert result["status"] == "no_match"
+    assert result["minimum_action"] == "review"
 
 
 def test_ancestry_audit_rejects_workspace_outside_home_and_cwd(tmp_path: Path) -> None:
@@ -178,21 +179,25 @@ def test_ancestry_audit_never_reads_arbitrary_numeric_file(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize(
-    "replacement",
+    ("replacement", "status", "minimum_action"),
     (
-        "git checkout --detach $commit",
-        "git merge-base --is-ancestor $(payload) HEAD",
-        "git merge-base --is-ancestor $commit HEAD && cat .env",
+        # The loop's only redirects are literal, so it is reviewable at the review floor.
+        ("git checkout --detach $commit", "no_match", "review"),
+        ("git merge-base --is-ancestor $commit HEAD && cat .env", "no_match", "review"),
+        # Command substitution still fails native evaluation.
+        ("git merge-base --is-ancestor $(payload) HEAD", "native_unavailable", "block"),
     ),
 )
-def test_widened_ancestry_loop_remains_sensitive(tmp_path: Path, replacement: str) -> None:
+def test_widened_ancestry_loop_remains_sensitive(
+    tmp_path: Path, replacement: str, status: str, minimum_action: str
+) -> None:
     home, repository = _repository(tmp_path)
     command = _audit(repository).replace("git merge-base --is-ancestor $commit HEAD", replacement)
 
     result = inspect_command(command, cwd=home, home_dir=home)
     assert _classification(result)["explicitly_benign"] is False
-    assert result["status"] == "native_unavailable"
-    assert result["minimum_action"] == "block"
+    assert result["status"] == status
+    assert result["minimum_action"] == minimum_action
 
 
 def test_ancestry_audit_rejects_executable_log_pager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

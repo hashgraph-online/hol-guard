@@ -41,11 +41,29 @@ pub(super) fn requires_review(
                 })
         })
         .collect();
+    // Exact models carry no file redirects, and a proof admits a file writer
+    // only as the whole command, so a proven segment before a read wrote
+    // nothing. Its own read may still lack the path proof that `benign`
+    // needs (a bare `ls`); that is decided separately.
+    let write_free = |segment: &crate::CommandSegmentV1| {
+        model.confidence == "exact"
+            && !model.path_overridden
+            && model.wrapper_chain.is_empty()
+            && !segment.path_overridden
+            && segment.wrapper_chain.is_empty()
+            && super::segment_proof::exact_safe_segment_with_context(
+                model,
+                segment,
+                false,
+                read_context,
+            )
+    };
     // A proven Git read writes no configuration, so it cannot change what a
     // later read in the same command would run.
     let settled = |prior: usize| {
         let segment = &model.segments[prior];
         benign.contains(&prior)
+            || write_free(segment)
             || (inspections[prior] == Some(true)
                 && segment.environment_names.is_empty()
                 && super::git_reads::safe_git_arguments(&segment.arguments, true, read_context))

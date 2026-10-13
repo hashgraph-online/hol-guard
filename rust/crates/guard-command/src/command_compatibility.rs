@@ -21,7 +21,7 @@ mod git;
 mod github;
 
 pub use catalog::compatibility_rule_ids;
-pub(crate) use environment::inert_environment_name;
+pub(crate) use environment::{code_or_redirect_environment_name, inert_environment_name};
 
 pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     github::arguments_are_read_only(arguments, text)
@@ -32,6 +32,20 @@ pub(crate) fn git_inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     git::inspection_arguments(arguments, context)
+}
+
+/// `origin` followed by quiet/prune flags and simple named refs.
+pub(crate) fn git_fetch_origin_shaped(arguments: &[String]) -> bool {
+    git::fetch_origin_shaped(arguments)
+}
+
+/// The arguments after leading `-C` routes that stay within the workspace,
+/// whatever the subcommand. Remote and worktree proofs start from here.
+pub(crate) fn git_routed_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    git::routed_arguments(arguments, context)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,30 +167,14 @@ fn basename(segment: &CommandSegmentV1) -> String {
         .to_owned()
 }
 
-/// Toolchain runners take the rest of the command as code they compile or
-/// execute. A non-inert assignment can point that runner at other code, and
-/// the loader and compiler names do that for any program. Credential names
-/// swap whose authority any program runs with, as `env NAME=` already does.
+/// A code-loading setting makes any program run other code, and a credential
+/// name swaps whose authority it runs with, as `env NAME=` already does.
+/// Neither is a reviewable steer of that program.
 fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
-    let non_inert = segment
-        .environment_names
-        .iter()
-        .any(|name| !environment::inert_environment_name(name));
-    non_inert
-        && (segment.environment_names.iter().any(|name| {
-            matches!(
-                name.as_str(),
-                "CC" | "GIT_SSH_COMMAND"
-                    | "GOFLAGS"
-                    | "LD_PRELOAD"
-                    | "NODE_OPTIONS"
-                    | "NODE_PATH"
-                    | "RUSTFLAGS"
-            ) || environment::credential_routing_environment_name(name)
-        }) || matches!(
-            basename(segment).as_str(),
-            "bun" | "cargo" | "go" | "node" | "npm" | "vite"
-        ))
+    segment.environment_names.iter().any(|name| {
+        environment::code_loading_environment_name(name)
+            || environment::credential_routing_environment_name(name)
+    })
 }
 
 pub fn compatibility_observations(
@@ -256,10 +254,10 @@ pub fn compatibility_observations_with_context(
         }
         // Inert names (`CI`, `LANG`, `LC_*`) do not steer, so the segment
         // keeps the same permission decision as the unprefixed command.
-        // A loader, compiler or credential name, or any non-inert name on a
-        // toolchain runner, is not a reviewable prefix: it can run other code
-        // or another identity, so the context is unsupported. Every other non-inert name (`GIT_DIR=`,
-        // `GH_HOST=`, `X=`) stays uncertainty. It takes the owners' floor and
+        // A loader, compiler or credential name is not a reviewable prefix: it
+        // runs other code or another identity, so the context is unsupported.
+        // Every other non-inert name (`GIT_DIR=`, `GH_HOST=`, `PORT=`) stays
+        // uncertainty. It takes the owners' floor and
         // no permission can allow it, without turning the evaluation into a
         // failure that would hide a disabled permission.
         if assignment_prefix_is_unsupported(segment) {

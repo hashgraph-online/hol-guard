@@ -48,6 +48,9 @@ unicode-normalization = "0.1.25"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.3", features = ["process", "signal", "user"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1.1.5", features = ["fs"] }
+
 [build-dependencies]
 sha2 = "0.10.9"
 

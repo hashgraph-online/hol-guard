@@ -142,18 +142,42 @@ impl LoopbackConnection {
         body: &[u8],
         deadline: Instant,
     ) -> Result<ResponseHead, BridgeError> {
+        self.send("POST", url, headers, Some(body), deadline)
+    }
+
+    /// `connection.request("GET", url, headers=...)` followed by
+    /// `getresponse()`: a bodyless request, sent without a Content-Length.
+    pub(crate) fn get(
+        &mut self,
+        url: &str,
+        headers: &[(&str, &str)],
+        deadline: Instant,
+    ) -> Result<ResponseHead, BridgeError> {
+        self.send("GET", url, headers, None, deadline)
+    }
+
+    fn send(
+        &mut self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<&[u8]>,
+        deadline: Instant,
+    ) -> Result<ResponseHead, BridgeError> {
         validate_request_target(url)?;
         let mut message = format!(
-            "POST {url} HTTP/1.1\r\nHost: {}\r\nAccept-Encoding: identity\r\nContent-Length: {}\r\n",
+            "{method} {url} HTTP/1.1\r\nHost: {}\r\nAccept-Encoding: identity\r\n",
             self.host_header(),
-            body.len()
         );
+        if let Some(body) = body {
+            message.push_str(&format!("Content-Length: {}\r\n", body.len()));
+        }
         for (name, value) in headers {
             message.push_str(&format!("{name}: {value}\r\n"));
         }
         message.push_str("\r\n");
         let mut message = message.into_bytes();
-        message.extend_from_slice(body);
+        message.extend_from_slice(body.unwrap_or_default());
         if self.stream.is_none() {
             self.stream = Some(BufReader::new(self.connect(deadline)?));
         }

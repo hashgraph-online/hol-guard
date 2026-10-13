@@ -401,6 +401,11 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
             "command.github.permission.propose-remote",
             "gh pr create --title title --body body",
         ),
+        (
+            "permission",
+            "command.github.permission.create-private-remote",
+            "gh repo create todo-app --private --source=.",
+        ),
     ] {
         let controlled = binding(&[(kind, target, "disabled")], false);
         assert_eq!(

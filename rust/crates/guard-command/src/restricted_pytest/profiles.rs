@@ -16,12 +16,23 @@ struct Input {
     allowed_executables: Vec<PathBuf>,
     read_only_roots: Vec<PathBuf>,
     output_roots: Vec<PathBuf>,
+    exec_roots: Vec<PathBuf>,
+    write_denials: Vec<PathBuf>,
     command: Vec<String>,
     backend_executable: PathBuf,
+    user_site_root: Option<PathBuf>,
+    linked_git: Option<super::workspace_linked::LinkedGit>,
     #[serde(rename = "search_path")]
     _search_path: String,
 }
 
+#[path = "workspace_profile.rs"]
+pub(super) mod workspace_profile;
+#[cfg(test)]
+#[path = "workspace_profile_tests.rs"]
+mod workspace_profile_tests;
+
+pub(super) const WORKSPACE_CONTAINED_PROFILE: &str = "workspace-contained-v1";
 const READONLY: &[&str] = &[
     "pytest-readonly-v2",
     "node-test-readonly-v1",
@@ -118,6 +129,9 @@ fn collection_link_metadata(input: &Input) -> Result<Vec<PathBuf>, RestrictedPyt
 }
 
 fn macos_profile(input: &Input) -> Result<String, RestrictedPytestError> {
+    if input.profile_version == WORKSPACE_CONTAINED_PROFILE {
+        return workspace_profile::compose(input, &existing(MAC_ROOTS), &existing(MAC_FILES));
+    }
     let mut files = existing(MAC_FILES);
     if matches!(
         input.profile_version.as_str(),
@@ -148,6 +162,15 @@ fn compose_macos_profile(
     let mut roots = vec![input.workspace.clone(), input.private_root.clone()];
     roots.extend_from_slice(&input.read_only_roots);
     roots.extend_from_slice(system_roots);
+    if let Some(root) = &input.user_site_root {
+        if !super::user_site::grantable(root) {
+            return Err(RestrictedPytestError::new(
+                PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+                "Unexpected user site grant.",
+            ));
+        }
+        roots.push(root.clone());
+    }
     roots.extend(runtime_roots(
         &input.allowed_executables,
         &input.workspace,
@@ -228,6 +251,14 @@ pub(super) fn replay_profile(input: &Value, grants: &Value) -> Value {
 }
 
 fn bubblewrap_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
+    // A non-read-only profile gets a writable workspace here, which would drop
+    // this profile's protected paths. Linux containment is a separate change.
+    if input.profile_version == WORKSPACE_CONTAINED_PROFILE {
+        return Err(RestrictedPytestError::new(
+            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+            "The workspace sandbox profile is not available on Linux.",
+        ));
+    }
     if READONLY.contains(&input.profile_version.as_str()) {
         return Err(RestrictedPytestError::new(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,

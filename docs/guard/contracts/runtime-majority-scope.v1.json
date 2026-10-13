@@ -516,9 +516,10 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/data_flow.py",
           "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
+          "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
           "src/codex_plugin_scanner/guard/runtime/kubernetes_*.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads and Kubernetes secret reads when it builds runtime artifacts. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads and Kubernetes secret reads when it builds runtime artifacts. github_actions_read_workflow imports github_command_capabilities, which returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
       },
       {
         "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -782,6 +783,12 @@
           "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py"
         ],
         "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so both are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
+        ],
+        "reason": "Reviewed: fail-closed bridge to the native GitHub CLI classifier. github_actions_read_workflow.py and github_shell_capabilities.py classify gh commands through it while a hook evaluates a shell request, so it is hook-path runtime and stays counted. When the resident cannot answer it returns the review floor instead of re-deriving the capability in Python."
       },
       {
         "path": [
@@ -1657,6 +1664,7 @@
         "path": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py",
         "symbols": [
           "install_cline_hooks",
+          "_bounded_hook_argv",
           "_slot_for_event",
           "_worker_path",
           "_write",
@@ -1676,6 +1684,7 @@
           "install_cline_plugin",
           "uninstall_cline_plugin",
           "cline_plugin_syntax_probe",
+          "_bounded_hook_argv",
           "_plugin_source",
           "_package_json",
           "_atomic_write"

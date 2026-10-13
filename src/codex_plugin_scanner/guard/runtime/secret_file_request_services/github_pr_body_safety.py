@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..github_command_capabilities import static_markdown_pr_body_file_operand
-from ..github_pr_body_file import github_pr_body_file_is_safe, static_markdown_pr_edit_body_file_operand
+from ...native_shell_request_authority import shell_request_authority
 from .constants_core import _FIND_EXEC_ACTION_FLAGS, _FIND_EXEC_PLACEHOLDER_TARGET, _FIND_EXEC_TERMINATOR_TOKENS
 from .constants_patterns import _FIND_PATH_VALUE_PREDICATES, _HEREDOC_PATTERN, _SHELL_LOCAL_READ_COMMANDS
 from .developer_inspection import _find_exec_sed_args_are_read_only
-from .github_pr_expansion import _gh_pr_create_body_args_start_index, _shell_token_has_active_expansion
-from .github_shell_capabilities import _shell_command_substitution_payloads, _ShellTokenWithQuoteContext
+from .github_pr_expansion import _shell_token_has_active_expansion
+from .github_shell_capabilities import _ShellTokenWithQuoteContext
 from .local_read_operands import _shell_segment_file_operand_tokens
 from .pytest_target_detection import _shell_token_has_active_glob
 from .request_models import (
@@ -19,7 +18,7 @@ from .request_models import (
     _SECRET_EXFILTRATION_SECRET_PATTERN,
     classify_sensitive_path,
 )
-from .shell_quote_parsing import _shell_token_segments, _shell_tokens_preserving_quote_context
+from .shell_quote_parsing import _shell_tokens_preserving_quote_context
 from .shell_tokenization import _shell_command_token_without_attached_redirection, _shell_segment_primary_command
 
 
@@ -29,26 +28,7 @@ def _gh_pr_create_uses_safe_static_body_file(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    if _shell_command_substitution_payloads(command_text):
-        return False
-    segment = _gh_pr_create_segment_with_bounded_output(command_text)
-    if segment is None:
-        return False
-    args_start_index = _gh_pr_create_body_args_start_index(segment)
-    if args_start_index is None:
-        return False
-    operand = static_markdown_pr_body_file_operand(tuple(token.plain for token in segment[args_start_index:]))
-    if (
-        operand is not None
-        and operand.startswith("~/")
-        and not any(token.plain == operand and token.raw.startswith("~/") for token in segment[args_start_index:])
-    ):
-        return False
-    return operand is not None and github_pr_body_file_is_safe(
-        operand,
-        cwd=cwd,
-        home_dir=home_dir,
-    )
+    return shell_request_authority("_gh_pr_create_uses_safe_static_body_file", locals())
 
 
 def _gh_pr_create_segment_with_bounded_output(
@@ -95,32 +75,7 @@ def _gh_pr_edit_uses_safe_static_body_file(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    if _shell_command_substitution_payloads(command_text):
-        return False
-    segments = _shell_token_segments(_shell_tokens_preserving_quote_context(command_text))
-    if len(segments) != 1:
-        return False
-    segment = segments[0]
-    if (
-        len(segment) < 4
-        or tuple(token.raw for token in segment[:3]) != ("gh", "pr", "edit")
-        or tuple(token.plain for token in segment[:3]) != ("gh", "pr", "edit")
-        or any(_shell_token_has_active_expansion(token.raw) for token in segment)
-    ):
-        return False
-    args_start_index = 3
-    operand = static_markdown_pr_edit_body_file_operand(tuple(token.plain for token in segment[args_start_index:]))
-    if (
-        operand is not None
-        and operand.startswith("~/")
-        and not any(token.plain == operand and token.raw.startswith("~/") for token in segment[args_start_index:])
-    ):
-        return False
-    return operand is not None and github_pr_body_file_is_safe(
-        operand,
-        cwd=cwd,
-        home_dir=home_dir,
-    )
+    return shell_request_authority("_gh_pr_edit_uses_safe_static_body_file", locals())
 
 
 def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:

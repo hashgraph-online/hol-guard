@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -16,6 +15,7 @@ from .claude_hook_config import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
 )
+from .native_hook_bridge import native_hook_bridge_executable
 
 NATIVE_CLAUDE_HOOK_COMMAND = "claude-hook-bridge"
 NATIVE_CLAUDE_HOOK_FEATURE = "claude-hook-bridge-v1"
@@ -35,20 +35,7 @@ def _native_bridge_executable() -> Path | None:
     skips the Python interpreter start. Windows keeps the Python bridge.
     """
 
-    if os.name == "nt":
-        return None
-    from ..native_runtime import native_runtime_status
-
-    status = native_runtime_status()
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or NATIVE_CLAUDE_HOOK_FEATURE not in status.capabilities.features
-    ):
-        return None
-    return status.identity.path
+    return native_hook_bridge_executable(NATIVE_CLAUDE_HOOK_FEATURE)
 
 
 def run_session_start_from_argv(

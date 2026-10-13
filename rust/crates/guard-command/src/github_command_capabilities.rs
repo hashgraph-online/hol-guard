@@ -372,6 +372,13 @@ pub fn classify_github_cli(args: &[String]) -> GitHubCommandAssessment {
             "The command creates a pull-request proposal without merging or changing repository controls.",
         );
     }
+    if top_level == "repo" && subcommand == "create" && private_repo_create(&tail) {
+        return assessment(
+            Cap::CreatePrivateRemote,
+            "github.command.private-repository-creation",
+            "The command creates a new private repository owned by the signed-in account.",
+        );
+    }
     if lookup(MAINTENANCE_SUBCOMMANDS, &top_level)
         .map(|t| t.contains(&subcommand.as_str()))
         .unwrap_or(false)
@@ -523,6 +530,84 @@ fn pr_create_has_static_inline_content(args: &[String]) -> bool {
     }
     has_explicit_option_value(args, "--title", "-t")
         && has_explicit_option_value(args, "--body", "-b")
+}
+
+/// `gh repo create NAME --private`, optionally connecting the current
+/// directory as a remote. The repository is new, private and owned by the
+/// signed-in account, so nothing that exists changes and nothing becomes
+/// public. `--push` stays at review: gh would run `git push` itself, outside
+/// the proof that admits a plain `git push`. Owners, templates, clones, teams,
+/// visibility other than private and every other option stay at review too.
+pub(crate) fn private_repo_create(args: &[String]) -> bool {
+    const FLAGS: &[&str] = &[
+        "--private",
+        "--add-readme",
+        "--disable-issues",
+        "--disable-wiki",
+    ];
+    const VALUED: &[&str] = &[
+        "--description",
+        "-d",
+        "--source",
+        "-s",
+        "--remote",
+        "-r",
+        "--gitignore",
+        "-g",
+        "--license",
+        "-l",
+    ];
+    if has_dynamic_value(args) {
+        return false;
+    }
+    let mut name: Option<&str> = None;
+    let mut private = false;
+    let mut index = 0;
+    while let Some(token) = args.get(index) {
+        index += 1;
+        if !token.starts_with('-') {
+            if name.replace(token).is_some() {
+                return false;
+            }
+            continue;
+        }
+        let (option, attached) = match token.split_once('=') {
+            Some((option, value)) if option.starts_with("--") => (option, Some(value)),
+            _ => (token.as_str(), None),
+        };
+        if FLAGS.contains(&option) {
+            if attached.is_some() {
+                return false;
+            }
+            private |= option == "--private";
+            continue;
+        }
+        if !VALUED.contains(&option) {
+            return false;
+        }
+        let value = match attached {
+            Some(value) => value,
+            None => match args.get(index) {
+                Some(value) => {
+                    index += 1;
+                    value.as_str()
+                }
+                None => return false,
+            },
+        };
+        let bounded = match option {
+            "--source" | "-s" => matches!(value, "." | "./"),
+            "--description" | "-d" => !value.starts_with('@'),
+            _ => repository_component_re().is_match(value),
+        };
+        if !bounded {
+            return false;
+        }
+    }
+    private
+        && name.is_some_and(|name| {
+            repository_component_re().is_match(name) && !matches!(name, "." | "..")
+        })
 }
 
 /// `static_markdown_pr_body_file_operand` (:321).

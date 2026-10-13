@@ -73,6 +73,7 @@ def run_case(
         root / scenario_fixture_name(scenario.id),
         realistic=first_contact and scenario.id != WORKTREE_CASE,
         linked_worktree=scenario.id == WORKTREE_CASE,
+        scenario_id=scenario.id,
     )
     stage_supply_chain(fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"

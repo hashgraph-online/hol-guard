@@ -771,6 +771,35 @@
     "rust/crates/guard-runtime/src/cli_runtime_support_op.rs",
     "rust/crates/guard-runtime/src/cli_copilot_resolution.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
+   "source_sha256": "d584623615ba075ac4ab57cc81f9db42a8c4448638308935dff08e5172484317",
+   "forbidden_symbols": [
+    "_SHELL_FUNCTION_DEFINITION",
+    "_SHELL_ALIAS_DEFINITION",
+    "_DEFERRED_GITHUB_EFFECT",
+    "GitHubShellAnalysis",
+    "parse_env_wrapper"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_request_authority.rs",
+    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
+   "source_sha256": "1d245cfc7dd004faba76f35dd631f1d6561945610a6f7e1f1e0236feeb74cf68",
+   "forbidden_symbols": [
+    "parse_env_wrapper",
+    "_SHELL_CONTROL_PREFIX_TOKENS",
+    "_SUDO_OPTION_VALUE_FLAGS",
+    "_leading_shell_redirection_tokens_consumed"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_request_authority.rs",
+    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
+   ]
   }
  ]
 }

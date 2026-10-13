@@ -54,6 +54,18 @@ mod binding_capture_receipt;
 mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
+#[cfg(unix)]
+mod bounded_hook_bridge;
+#[cfg(unix)]
+mod bounded_hook_bridge_grok;
+#[cfg(unix)]
+mod bounded_hook_bridge_grok_render;
+#[cfg(unix)]
+mod bounded_hook_bridge_grok_script;
+#[cfg(unix)]
+mod bounded_hook_bridge_hermes;
+#[cfg(unix)]
+mod bounded_hook_bridge_render;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -106,6 +118,16 @@ mod cloud_sync_privacy;
 mod codex_app_server_socket;
 mod codex_detect;
 mod codex_hook_artifacts;
+#[cfg(unix)]
+mod codex_hook_bridge;
+#[cfg(unix)]
+mod codex_hook_bridge_direct;
+#[cfg(unix)]
+mod codex_hook_bridge_transport;
+#[cfg(unix)]
+mod codex_hook_identity;
+#[cfg(unix)]
+mod codex_hook_response;
 mod codex_hooks;
 mod codex_identity;
 mod codex_proxy;
@@ -158,6 +180,10 @@ mod continuation_metadata;
 mod continuation_store;
 mod contributed_mcp_decision_op;
 mod critical_floor_op;
+#[cfg(unix)]
+mod cursor_hook_bridge;
+#[cfg(unix)]
+mod cursor_hook_bridge_script;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
@@ -324,6 +350,8 @@ mod hook_decision_native_facts;
 mod hook_decision_native_facts_tests;
 mod hook_decision_op;
 mod hook_decision_settle;
+mod hook_direct;
+mod hook_direct_evidence;
 #[cfg(unix)]
 mod hook_env_stamp;
 mod hook_policy_config;
@@ -468,6 +496,8 @@ mod sensitive_request_op;
 #[path = "../../guard-command/tests/sfrs_support/mod.rs"]
 mod sfrs_support;
 mod shell_helpers_op;
+mod shell_request_authority_op;
+mod shell_request_inspection_host;
 mod shim_op;
 mod signal_projection_approval;
 mod signal_projection_decode;

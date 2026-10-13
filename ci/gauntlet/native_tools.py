@@ -16,11 +16,29 @@ from .proofs import _edit_path, _path
 from .review_fixtures import WORKTREE_CASE, WORKTREE_NAME
 
 PRIVATE_TEMP_ROOTS = ("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/")
+# Git Bash ``mktemp -d`` on Windows prints a directory in the fixture profile's
+# own temp folder, redacted and written with backslashes.
+WINDOWS_TEMP_ROOT = "{{home}}/AppData/Local/Temp/"
 SCRATCH_NAME = "scratch-notes.txt"
 
 
 def _write_path(args: dict[str, Any]) -> str:
     return str(args.get("path", args.get("file_path", "")))
+
+
+def _profile_temp_path(text: str) -> str | None:
+    """Return a Windows profile-temp path in forward-slash form, or None.
+
+    Only paths strictly below the redacted profile temp folder qualify; a
+    parent step, a stream or drive colon, or mixed separators are refused.
+    """
+    if "/" in text or not text.startswith("{{home}}\\"):
+        return None
+    spelled = text.replace("\\", "/")
+    rest = spelled.removeprefix(WINDOWS_TEMP_ROOT)
+    if rest == spelled or not rest or ":" in rest or ".." in rest.split("/"):
+        return None
+    return posixpath.normpath(spelled)
 
 
 def _created_directory(result: Any) -> str | None:
@@ -34,7 +52,11 @@ def _created_directory(result: Any) -> str | None:
     if text is None:
         return None
     lines = text.strip().splitlines()
-    if len(lines) != 1 or not lines[0].startswith("/") or ".." in lines[0].split("/"):
+    if len(lines) != 1:
+        return None
+    if not lines[0].startswith("/"):
+        return _profile_temp_path(lines[0])
+    if ".." in lines[0].split("/"):
         return None
     return posixpath.normpath(lines[0])
 
@@ -46,6 +68,8 @@ def _temp_write_error(calls: list[dict[str, Any]]) -> str | None:
         return "the private temporary directory was not created exactly once"
     target = posixpath.join(created[0], SCRATCH_NAME)
     writes = [_write_path(c["args"]) for c in calls if c["name"] == "write"]
+    if created[0].startswith(WINDOWS_TEMP_ROOT):
+        writes = [_profile_temp_path(path) or path for path in writes]
     if len(writes) < 2:
         return "the model did not overwrite the scratch file"
     if any(".." in path.split("/") or posixpath.normpath(path) != target for path in writes):
