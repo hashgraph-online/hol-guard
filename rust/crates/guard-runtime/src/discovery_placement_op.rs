@@ -131,7 +131,9 @@ fn parse_utc_iso_ms(value: &str) -> Option<i64> {
     } else {
         0
     };
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60 {
+    let valid_month = (1..=12).contains(&month);
+    let valid_day = (1..=31).contains(&day);
+    if !valid_month || !valid_day || hour > 23 || minute > 59 || second > 60 {
         return None;
     }
     // Days-from-civil (Howard Hinnant's algorithm), valid for the supported
@@ -199,9 +201,10 @@ fn is_extension_id(value: &str) -> bool {
         Some(first) if first.is_ascii_lowercase() || first.is_ascii_digit() => {}
         _ => return false,
     }
-    rest.len() >= 3
-        && rest.len() <= 132
-        && rest.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
+    let allowed = |c: char| {
+        c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')
+    };
+    rest.len() >= 3 && rest.len() <= 132 && rest.chars().all(allowed)
 }
 
 /// Plain-text bound shared by creative fields and creative versions: no
@@ -218,7 +221,7 @@ fn is_safe_text(value: &str) -> bool {
     })
 }
 
-fn field_str(object: &Map<String, Value>, key: &str) -> Option<&str> {
+fn field_str<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     object.get(key).and_then(Value::as_str)
 }
 
@@ -255,7 +258,9 @@ fn validate_placement(
         "creativeVersion",
         "creative",
     ];
-    if object.len() != PLACEMENT_FIELDS.len() || !PLACEMENT_FIELDS.iter().all(|key| object.contains_key(*key)) {
+    if object.len() != PLACEMENT_FIELDS.len()
+        || !PLACEMENT_FIELDS.iter().all(|key| object.contains_key(*key))
+    {
         return Err(DiscoveryError::SnapshotInvalid);
     }
     let public_id = field_str(object, "publicPlacementId").ok_or(DiscoveryError::SnapshotInvalid)?;
@@ -271,7 +276,10 @@ fn validate_placement(
     if !matches!(product, "always" | "time_slot" | "sponsored") {
         return Err(DiscoveryError::SnapshotInvalid);
     }
-    let slot_index = object.get("slotIndex").and_then(Value::as_i64).ok_or(DiscoveryError::SnapshotInvalid)?;
+    let slot_index = object
+        .get("slotIndex")
+        .and_then(Value::as_i64)
+        .ok_or(DiscoveryError::SnapshotInvalid)?;
     let slot_max = match product {
         "always" => 9,
         "time_slot" => 4,
@@ -300,20 +308,25 @@ fn validate_placement(
         // The two-hour UTC window at the observation must match the carried
         // window index; a stale prior-window placement is not renderable.
         // Window index = floor(UTC hour / 2) over the 12 daily windows.
-        let utc_hour = (generated_ms / 3_600_000 % 24) as i64;
+        let utc_hour = generated_ms / 3_600_000 % 24;
         let expected = utc_hour / 2;
         if window != Some(expected) {
             return Err(DiscoveryError::SnapshotInvalid);
         }
     }
-    let starts = parse_utc_iso_ms(field_str(object, "startsAt").ok_or(DiscoveryError::SnapshotInvalid)?)
-        .ok_or(DiscoveryError::SnapshotInvalid)?;
-    let ends = parse_utc_iso_ms(field_str(object, "endsAt").ok_or(DiscoveryError::SnapshotInvalid)?)
-        .ok_or(DiscoveryError::SnapshotInvalid)?;
+    let starts = parse_utc_iso_ms(
+        field_str(object, "startsAt").ok_or(DiscoveryError::SnapshotInvalid)?,
+    )
+    .ok_or(DiscoveryError::SnapshotInvalid)?;
+    let ends = parse_utc_iso_ms(
+        field_str(object, "endsAt").ok_or(DiscoveryError::SnapshotInvalid)?,
+    )
+    .ok_or(DiscoveryError::SnapshotInvalid)?;
     if ends <= starts || starts > generated_ms || ends <= generated_ms {
         return Err(DiscoveryError::SnapshotInvalid);
     }
-    let creative_version = field_str(object, "creativeVersion").ok_or(DiscoveryError::SnapshotInvalid)?;
+    let creative_version =
+        field_str(object, "creativeVersion").ok_or(DiscoveryError::SnapshotInvalid)?;
     if creative_version.is_empty()
         || creative_version.chars().count() > 64
         || !is_safe_text(creative_version)
@@ -333,7 +346,9 @@ fn validate_offer(object: &Map<String, Value>) -> Result<(), DiscoveryError> {
         "checkedAt",
         "quoteRequired",
     ];
-    if object.len() != OFFER_FIELDS.len() || !OFFER_FIELDS.iter().all(|key| object.contains_key(*key)) {
+    if object.len() != OFFER_FIELDS.len()
+        || !OFFER_FIELDS.iter().all(|key| object.contains_key(*key))
+    {
         return Err(DiscoveryError::SnapshotInvalid);
     }
     if object.get("quoteRequired") != Some(&Value::Bool(true)) {
@@ -389,7 +404,9 @@ fn validate_snapshot(
         "placements",
         "offers",
     ];
-    if snapshot.len() != SNAPSHOT_FIELDS.len() || !SNAPSHOT_FIELDS.iter().all(|key| snapshot.contains_key(*key)) {
+    if snapshot.len() != SNAPSHOT_FIELDS.len()
+        || !SNAPSHOT_FIELDS.iter().all(|key| snapshot.contains_key(*key))
+    {
         return Err(DiscoveryError::SnapshotInvalid);
     }
     if field_str(snapshot, "schemaVersion") != Some(DISCOVERY_SNAPSHOT_SCHEMA) {
@@ -416,17 +433,25 @@ fn validate_snapshot(
         if enabled {
             return Err(DiscoveryError::SnapshotInvalid);
         }
-        if reason != Some("source_unavailable") && reason != Some("invalid_snapshot") && reason != Some("rate_limited") {
+        let terminal = matches!(
+            reason,
+            Some("source_unavailable" | "invalid_snapshot" | "rate_limited")
+        );
+        if !terminal {
             return Err(DiscoveryError::SnapshotInvalid);
         }
     } else if enabled != (reason.is_none()) || (!enabled && reason != Some("disabled")) {
         return Err(DiscoveryError::SnapshotInvalid);
     }
 
-    let generated = parse_utc_iso_ms(field_str(snapshot, "generatedAt").ok_or(DiscoveryError::SnapshotInvalid)?)
-        .ok_or(DiscoveryError::SnapshotInvalid)?;
-    let lease = parse_utc_iso_ms(field_str(snapshot, "leaseExpiresAt").ok_or(DiscoveryError::SnapshotInvalid)?)
-        .ok_or(DiscoveryError::SnapshotInvalid)?;
+    let generated = parse_utc_iso_ms(
+        field_str(snapshot, "generatedAt").ok_or(DiscoveryError::SnapshotInvalid)?,
+    )
+    .ok_or(DiscoveryError::SnapshotInvalid)?;
+    let lease = parse_utc_iso_ms(
+        field_str(snapshot, "leaseExpiresAt").ok_or(DiscoveryError::SnapshotInvalid)?,
+    )
+    .ok_or(DiscoveryError::SnapshotInvalid)?;
     if lease <= generated || lease - generated > MAX_DISCOVERY_LEASE_MS {
         return Err(DiscoveryError::SnapshotInvalid);
     }
@@ -470,19 +495,22 @@ fn validate_snapshot(
     if offers.len() != 3 {
         return Err(DiscoveryError::SnapshotInvalid);
     }
-    let mut products = Vec::with_capacity(3);
+    let mut products: Vec<&str> = Vec::with_capacity(3);
     for offer in offers {
         let object = offer.as_object().ok_or(DiscoveryError::SnapshotInvalid)?;
         validate_offer(object)?;
         products.push(field_str(object, "product").unwrap_or_default());
     }
-    if products.iter().any(|product| product.is_empty()) || products[0] == products[1] || products[0] == products[2] || products[1] == products[2] {
+    let distinct =
+        products[0] != products[1] && products[0] != products[2] && products[1] != products[2];
+    if products.iter().any(|product| product.is_empty()) || !distinct {
         return Err(DiscoveryError::SnapshotInvalid);
     }
     if state == "unavailable"
-        && offers
-            .iter()
-            .any(|offer| field_str(offer.as_object().unwrap_or(&Map::new()), "availability") != Some("unknown"))
+        && offers.iter().any(|offer| {
+            let object = offer.as_object();
+            field_str(object.unwrap_or(&Map::new()), "availability") != Some("unknown")
+        })
     {
         return Err(DiscoveryError::SnapshotInvalid);
     }
@@ -494,38 +522,52 @@ fn validate_snapshot(
 }
 
 /// Validate the upstream snapshot and project the Local response body.
-/// Returns the resident result frame; the Python adapter writes `body`
-/// verbatim and never interprets placements.
-pub fn evaluate_discovery_placement_project(request: &DiscoveryPlacementProjectRequest) -> Result<Value, String> {
+/// Returns the resident result frame as encoded bytes; the Python adapter
+/// writes `body` verbatim and never interprets placements.
+pub fn evaluate_discovery_placement_project(
+    request: &DiscoveryPlacementProjectRequest,
+) -> Result<Vec<u8>, String> {
+    let frame = match evaluate_discovery_placement_frame(request) {
+        Ok(frame) => frame,
+        Err(error) => error_frame(error),
+    };
+    serde_json::to_vec(&frame).map_err(|error| error.to_string())
+}
+
+fn evaluate_discovery_placement_frame(
+    request: &DiscoveryPlacementProjectRequest,
+) -> Result<Value, DiscoveryError> {
     if request.schema != DISCOVERY_PROJECT_REQUEST_SCHEMA {
-        return Ok(error_frame(DiscoveryError::RequestInvalid));
+        return Err(DiscoveryError::RequestInvalid);
     }
     if request.body.len() > 131_072 || request.now_wall_ms <= 0 {
-        return Ok(error_frame(DiscoveryError::RequestInvalid));
+        return Err(DiscoveryError::RequestInvalid);
     }
     let parsed: Value = match serde_json::from_str(&request.body) {
         Ok(parsed) => parsed,
-        Err(_) => return Ok(error_frame(DiscoveryError::BodyInvalid)),
+        Err(_) => return Err(DiscoveryError::BodyInvalid),
     };
     if json_depth(&parsed) > MAX_JSON_DEPTH {
-        return Ok(error_frame(DiscoveryError::BodyInvalid));
+        return Err(DiscoveryError::BodyInvalid);
     }
     let snapshot = match parsed.as_object() {
         Some(object) => object,
-        None => return Ok(error_frame(DiscoveryError::BodyInvalid)),
+        None => return Err(DiscoveryError::BodyInvalid),
     };
-    let authority_end = match validate_snapshot(snapshot, request) {
-        Ok(end) => end,
-        Err(error) => return Ok(error_frame(error)),
-    };
+    let authority_end = validate_snapshot(snapshot, request)?;
 
     // The projection removes items that ended while the snapshot was cached;
     // it can never extend the upstream lease.
     let mut projected = snapshot.clone();
-    let remaining_ms = (authority_end - request.now_wall_ms).max(0).min(MAX_DISCOVERY_LEASE_MS);
+    let remaining_ms = (authority_end - request.now_wall_ms)
+        .max(0)
+        .min(MAX_DISCOVERY_LEASE_MS);
     if !request.policy_allowed {
         projected.insert("enabled".to_owned(), Value::Bool(false));
-        projected.insert("reasonCode".to_owned(), Value::String("disabled".to_owned()));
+        projected.insert(
+            "reasonCode".to_owned(),
+            Value::String("disabled".to_owned()),
+        );
         projected.insert("placements".to_owned(), Value::Array(Vec::new()));
     } else if remaining_ms == 0 {
         projected.insert("placements".to_owned(), Value::Array(Vec::new()));
@@ -548,7 +590,7 @@ pub fn evaluate_discovery_placement_project(request: &DiscoveryPlacementProjectR
         "remainingLeaseMs": if request.policy_allowed { remaining_ms } else { 0 },
         "policyAllowed": request.policy_allowed,
     });
-    let body = serde_json::to_string(&projection).map_err(|error| error.to_string())?;
+    let body = serde_json::to_string(&projection).map_err(|_| DiscoveryError::BodyInvalid)?;
     Ok(json!({
         "schema": DISCOVERY_PROJECT_RESULT_SCHEMA,
         "outcome": "ok",

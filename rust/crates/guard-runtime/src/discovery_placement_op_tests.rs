@@ -53,15 +53,19 @@ fn request(body: Value, now_wall_ms: i64) -> DiscoveryPlacementProjectRequest {
     }
 }
 
-fn outcome(frame: &Result<Value, String>) -> (&'static str, Option<&str>) {
-    let frame = frame.as_ref().expect("frame");
-    let outcome = frame.get("outcome").and_then(Value::as_str).unwrap_or_default();
-    let error = frame.get("error_code").and_then(Value::as_str);
-    (outcome, error)
+fn run(request: DiscoveryPlacementProjectRequest) -> Value {
+    let bytes = evaluate_discovery_placement_project(&request).expect("frame bytes");
+    serde_json::from_slice(&bytes).expect("frame json")
 }
 
-fn projection_body(frame: &Result<Value, String>) -> Value {
-    let frame = frame.as_ref().expect("frame");
+fn outcome(frame: &Value) -> (&str, Option<&str>) {
+    (
+        frame.get("outcome").and_then(Value::as_str).unwrap_or_default(),
+        frame.get("error_code").and_then(Value::as_str),
+    )
+}
+
+fn projection_body(frame: &Value) -> Value {
     frame
         .get("body")
         .and_then(Value::as_str)
@@ -71,7 +75,7 @@ fn projection_body(frame: &Result<Value, String>) -> Value {
 
 #[test]
 fn accepts_a_ready_snapshot_and_projects_a_conservative_lease() {
-    let frame = evaluate_discovery_placement_project(&request(base_snapshot(), NOW_MS));
+    let frame = run(request(base_snapshot(), NOW_MS));
     assert_eq!(outcome(&frame), ("ok", None));
     let projection = projection_body(&frame);
     assert_eq!(projection.get("policyAllowed"), Some(&Value::Bool(true)));
@@ -93,7 +97,7 @@ fn accepts_a_ready_disabled_snapshot_without_placements() {
     snapshot["enabled"] = json!(false);
     snapshot["reasonCode"] = json!("disabled");
     snapshot["placements"] = json!([]);
-    let frame = evaluate_discovery_placement_project(&request(snapshot, NOW_MS));
+    let frame = run(request(snapshot, NOW_MS));
     assert_eq!(outcome(&frame), ("ok", None));
 }
 
@@ -102,13 +106,13 @@ fn rejects_wrong_schema_versions_and_unknown_fields() {
     let mut wrong_version = base_snapshot();
     wrong_version["schemaVersion"] = json!("guard.extensions.discovery.v2");
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(wrong_version, NOW_MS))),
+        outcome(&run(request(wrong_version, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
     let mut extra = base_snapshot();
     extra["targetUrl"] = json!("https://evil.example");
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(extra, NOW_MS))),
+        outcome(&run(request(extra, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 }
@@ -132,7 +136,7 @@ fn rejects_oversize_pools_and_duplicate_ids() {
     }
     oversize["placements"] = json!(pool);
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(oversize, NOW_MS))),
+        outcome(&run(request(oversize, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 
@@ -142,7 +146,7 @@ fn rejects_oversize_pools_and_duplicate_ids() {
     placements.push(placements[0].clone());
     duplicated["placements"] = json!(placements);
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(duplicated, NOW_MS))),
+        outcome(&run(request(duplicated, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 }
@@ -153,14 +157,14 @@ fn rejects_hostile_creative_and_bad_ids() {
         let mut snapshot = base_snapshot();
         snapshot["placements"][0]["creative"]["headline"] = json!(hostile);
         assert_eq!(
-            outcome(&evaluate_discovery_placement_project(&request(snapshot, NOW_MS))),
+            outcome(&run(request(snapshot, NOW_MS))),
             ("error", Some("discovery_snapshot_invalid"))
         );
     }
     let mut namespace = base_snapshot();
     namespace["placements"][0]["extensionId"] = json!("plugin.example-tool");
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(namespace, NOW_MS))),
+        outcome(&run(request(namespace, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 }
@@ -170,7 +174,7 @@ fn rejects_leases_beyond_thirty_seconds_and_unreasonably_future_observations() {
     let mut long_lease = base_snapshot();
     long_lease["leaseExpiresAt"] = json!("2026-10-13T12:00:45.000Z");
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(long_lease, NOW_MS))),
+        outcome(&run(request(long_lease, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 
@@ -180,7 +184,7 @@ fn rejects_leases_beyond_thirty_seconds_and_unreasonably_future_observations() {
     future["leaseExpiresAt"] = json!("2026-10-13T12:00:30.000Z");
     future["placements"] = json!([]);
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(future, NOW_MS))),
+        outcome(&run(request(future, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 }
@@ -189,7 +193,7 @@ fn rejects_leases_beyond_thirty_seconds_and_unreasonably_future_observations() {
 fn time_slot_placements_must_match_the_current_utc_window() {
     // 12:00 UTC is window 6 (two-hour windows).
     let mut matching = base_snapshot();
-    matching["placements"] = [json!({
+    matching["placements"] = json!([{
         "publicPlacementId": "55555555-5555-4555-8555-555555555555",
         "extensionId": "command.window-tool",
         "product": "time_slot",
@@ -199,14 +203,14 @@ fn time_slot_placements_must_match_the_current_utc_window() {
         "endsAt": LEASE,
         "creativeVersion": "cv-1-window01",
         "creative": {"headline": "H", "body": "B", "brandName": "P"}
-    })];
-    let frame = evaluate_discovery_placement_project(&request(matching.clone(), NOW_MS));
+    }]);
+    let frame = run(request(matching.clone(), NOW_MS));
     assert_eq!(outcome(&frame), ("ok", None));
 
     let mut stale = matching;
     stale["placements"][0]["windowIndex"] = json!(5);
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(stale, NOW_MS))),
+        outcome(&run(request(stale, NOW_MS))),
         ("error", Some("discovery_snapshot_invalid"))
     );
 }
@@ -216,7 +220,7 @@ fn policy_block_empties_paid_content_and_zeroes_the_lease() {
     let body = base_snapshot();
     let mut policy_request = request(body, NOW_MS);
     policy_request.policy_allowed = false;
-    let frame = evaluate_discovery_placement_project(&policy_request);
+    let frame = run(policy_request);
     assert_eq!(outcome(&frame), ("ok", None));
     let projection = projection_body(&frame);
     assert_eq!(projection.get("policyAllowed"), Some(&Value::Bool(false)));
@@ -260,19 +264,19 @@ fn expired_items_are_removed_without_extending_the_lease() {
 fn rejects_overdepth_and_malformed_bodies() {
     let deep: Value = serde_json::from_str("[[[[[[[[[[[[1]]]]]]]]]]]]").unwrap();
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&request(deep, NOW_MS))),
+        outcome(&run(request(deep, NOW_MS))),
         ("error", Some("discovery_body_invalid"))
     );
     let mut malformed = request(base_snapshot(), NOW_MS);
     malformed.body = "{\"not json".to_owned();
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&malformed)),
+        outcome(&run(malformed)),
         ("error", Some("discovery_body_invalid"))
     );
     let mut wrong_schema = request(base_snapshot(), NOW_MS);
     wrong_schema.schema = "guard-discovery-project-request.v2".to_owned();
     assert_eq!(
-        outcome(&evaluate_discovery_placement_project(&wrong_schema)),
+        outcome(&run(wrong_schema)),
         ("error", Some("discovery_request_invalid"))
     );
 }
