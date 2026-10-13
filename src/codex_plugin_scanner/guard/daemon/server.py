@@ -136,7 +136,6 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiService
 from .extension_discovery_read import (
     DISCOVERY_EVENTS_PATH,
-    DISCOVERY_PLACEMENTS_PATH,
     DISCOVERY_RENDERS_PATH,
     DISCOVERY_UNAVAILABLE,
     DiscoveryReadError,
@@ -201,6 +200,16 @@ from .sponsored_discovery_settings import (
     update_sponsored_discovery_settings,
 )
 from .startup_phase import flush_pending_phases, record_phase_since, timed_phase
+
+# Local daemon routes. The Cloud paths stay in the read module and are the
+# only paths relayed upstream.
+_LOCAL_DISCOVERY_PREFIX = "/v1/discovery/extensions/"
+_LOCAL_DISCOVERY_PLACEMENTS = "/v1/discovery/extensions/placements"
+_LOCAL_DISCOVERY_SETTINGS = "/v1/discovery/extensions/settings"
+_LOCAL_DISCOVERY_MEASUREMENT = {
+    "/v1/discovery/extensions/renders": DISCOVERY_RENDERS_PATH,
+    "/v1/discovery/extensions/events": DISCOVERY_EVENTS_PATH,
+}
 
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
@@ -1300,7 +1309,7 @@ class _GuardDaemonHandler(
                 return
             self._write_json({"error": "not_found"}, status=404)
             return
-        if parsed.path.startswith("/v1/discovery/extensions/"):
+        if parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX):
             if self._query_has_guard_token(parsed.query):
                 self._record_query_token_rejection()
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
@@ -1311,11 +1320,11 @@ class _GuardDaemonHandler(
             if not discovery_rollout_enabled():
                 self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
                 return
-            if parsed.path == "/v1/discovery/extensions/settings":
+            if parsed.path == _LOCAL_DISCOVERY_SETTINGS:
                 store = self.server.store  # type: ignore[attr-defined]
                 self._write_json(sponsored_discovery_settings(store))
                 return
-            if parsed.path != DISCOVERY_PLACEMENTS_PATH:
+            if parsed.path != _LOCAL_DISCOVERY_PLACEMENTS:
                 self._write_json({"error": "not_found"}, status=404)
                 return
             # Sponsored discovery is user/managed gated; a disabled preference
@@ -1416,10 +1425,15 @@ class _GuardDaemonHandler(
         except NativeDaemonRouteError:
             self._write_json(native_route_unavailable_body(), status=503)
             return
-        if route.route_class != "none" and not self._header_token_is_valid():
+        discovery_post = parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX)
+        if discovery_post and self._query_has_guard_token(parsed.query):
+            self._record_query_token_rejection()
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if route.route_class != "none":
+        if (route.route_class != "none" or discovery_post) and not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if route.route_class != "none" or discovery_post:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -1436,12 +1450,13 @@ class _GuardDaemonHandler(
             }.get(body_error, 400)
             self._write_json({"error": body_error}, status=status)
             return
-        if parsed.path.startswith("/v1/discovery/extensions/"):
+        if parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX):
             if not discovery_rollout_enabled():
                 self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
                 return
             store = self.server.store  # type: ignore[attr-defined]
-            if parsed.path in (DISCOVERY_RENDERS_PATH, DISCOVERY_EVENTS_PATH):
+            upstream = _LOCAL_DISCOVERY_MEASUREMENT.get(parsed.path)
+            if upstream is not None:
                 # Consent-gated relay: measurement off still allows discovery
                 # but emits no render/event POSTs and no persistent identity.
                 if not sponsored_discovery_measurement_allowed(store):
@@ -1454,7 +1469,7 @@ class _GuardDaemonHandler(
                 # local credential, identifier, or inventory is attached.
                 raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                 try:
-                    status, body = relay_discovery_measurement(path=parsed.path, payload=raw)
+                    status, body = relay_discovery_measurement(path=upstream, payload=raw)
                 except DiscoveryReadError as error:
                     self._write_json({"error": error.code}, status=error.status)
                     return
@@ -1464,7 +1479,7 @@ class _GuardDaemonHandler(
                     extra_headers={"Cache-Control": "no-store"},
                 )
                 return
-            if parsed.path == "/v1/discovery/extensions/settings":
+            if parsed.path == _LOCAL_DISCOVERY_SETTINGS:
                 update = payload if isinstance(payload, dict) else {}
                 enabled = update.get("sponsored_discovery_enabled")
                 measurement = update.get("sponsored_discovery_measurement_enabled")
