@@ -160,11 +160,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - name: Configure the dependency-compatible test profile
+      - name: Configure the checked test profile
         if: matrix.check != 'clippy'
         run: |
-          # Keep the cached third-party profile unchanged. Only workspace
-          # test executables use opt-level 0 in the nextest invocation below.
+          # Libraries keep their existing optimization and dependency fingerprints.
+          # The workspace wrapper lowers optimization only for --test compilations.
           echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
@@ -186,8 +186,13 @@ jobs:
         # every workspace crate stale. sccache keys on content, so crates a PR did
         # not touch are restored instead of recompiled.
         run: |
+          # A content-addressed wrapper path invalidates Cargo fingerprints when
+          # compiler behavior changes, without invalidating third-party crates.
+          wrapper_hash="$(sha256sum scripts/ci/rust_test_compiler.sh | cut -d ' ' -f 1)"
+          wrapper="$RUNNER_TEMP/hol-guard-rust-test-$wrapper_hash"
+          install -m 0755 scripts/ci/rust_test_compiler.sh "$wrapper"
           {
-            echo "RUSTC_WORKSPACE_WRAPPER=sccache"
+            echo "RUSTC_WORKSPACE_WRAPPER=$wrapper"
             echo "SCCACHE_GHA_ENABLED=on"
             echo "SCCACHE_GHA_VERSION=ci-workspace-test"
             echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
@@ -237,8 +242,8 @@ jobs:
                 test-runtime) packages=(--package hol-guard-runtime) ;;
               esac
               nextest_bin="$(python3 scripts/ci/install_nextest.py)"
-              CARGO_PROFILE_TEST_OPT_LEVEL=0 PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
-                --config 'profile.test.package."*".opt-level=1' --profile ci \
+              PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
+                --profile ci \
                 --test-threads 4 --retries 0 --no-fail-fast
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;

@@ -80,7 +80,7 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
     """Restore compatible dependencies before changing workspace test codegen."""
     steps = workflow("ci.yml")["jobs"]["native-workspace"]["steps"]
     configure = next(
-        step for step in steps if step.get("name") == "Configure the dependency-compatible test profile"
+        step for step in steps if step.get("name") == "Configure the checked test profile"
     )
     cache = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
     assert steps.index(configure) < steps.index(cache)
@@ -145,10 +145,10 @@ def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, 
         check=True, capture_output=True, timeout=5,
     )
     invocation = json.loads(capture.read_text())
-    assert invocation["opt"] == "0"
+    assert invocation["opt"] == "1"
     assert invocation["args"] == [
         "nextest", "run", "--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets",
-        *packages, "--config", 'profile.test.package."*".opt-level=1', "--profile", "ci",
+        *packages, "--profile", "ci",
         "--test-threads", "4", "--retries", "0", "--no-fail-fast",
     ]
 
