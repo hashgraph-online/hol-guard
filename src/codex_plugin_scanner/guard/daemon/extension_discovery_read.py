@@ -26,7 +26,8 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Protocol, cast
 
-from ..native_catalog_read import NativeCatalogReadResult
+from ...no_redirect import RejectRedirects
+from ..mdm.network_transport import managed_opener
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from ..strict_json_pairs import unique_json_object
@@ -74,11 +75,14 @@ class DiscoveryReadError(Exception):
         self.status = status
 
 
-class _NoRedirects(urllib.request.HTTPRedirectHandler):
-    """Redirects are refused: the upstream origin is fixed and trusted."""
+@dataclass(frozen=True, slots=True)
+class DiscoveryProjection:
+    """Native projection or a typed transport failure. This is not a catalog read."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
-        return None
+    status: int
+    etag: str | None = None
+    body: bytes | None = None
+    error_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,14 +120,11 @@ class DiscoveryOpener(Protocol):
 
 
 def _build_opener() -> DiscoveryOpener:
-    # urllib's opener uses a different positional signature than this adapter.
-    # Callers still pass timeout by keyword. The object hop is only there so
-    # the typed DiscoveryOpener boundary is an explicit cast.
-    built: object = urllib.request.build_opener(
-        _NoRedirects(),
-        urllib.request.HTTPSHandler(),
-    )
-    return cast(DiscoveryOpener, cast(object, built))
+    # urllib.request.build_opener stays inside the enterprise transport.
+    # Redirects stay refused. This route still cannot select a host, path,
+    # cookie, or credential.
+    opened: object = managed_opener(redirect_handler=RejectRedirects())
+    return cast(DiscoveryOpener, opened)
 
 
 def _parse_http_date_ms(value: str | None) -> int | None:
@@ -234,7 +235,7 @@ def fetch_discovery_snapshot(
         return cached
 
 
-def _validated_result(decoded: object) -> NativeCatalogReadResult | None:
+def _validated_result(decoded: object) -> DiscoveryProjection | None:
     if not isinstance(decoded, dict) or set(decoded) != _RESULT_FIELDS or decoded["schema"] != DISCOVERY_RESULT_SCHEMA:
         return None
     outcome, status = decoded["outcome"], decoded["http_status"]
@@ -245,13 +246,13 @@ def _validated_result(decoded: object) -> NativeCatalogReadResult | None:
         encoded = body.encode("utf-8")
         if len(encoded) > MAX_DISCOVERY_RESPONSE_BYTES:
             return None
-        return NativeCatalogReadResult(status=200, etag=None, body=encoded)
+        return DiscoveryProjection(status=200, etag=None, body=encoded)
     if outcome == "error":
         if not isinstance(error_code, str) or _ERROR_STATUS.get(error_code) != status:
             return None
         if body is not None:
             return None
-        return NativeCatalogReadResult(status=status, error_code=error_code)
+        return DiscoveryProjection(status=status, error_code=error_code)
     return None
 
 
@@ -261,7 +262,7 @@ def discovery_placement_projection(
     policy_allowed: bool,
     opener: DiscoveryOpener | None = None,
     timeout_seconds: float = 2.0,
-) -> NativeCatalogReadResult | None:
+) -> DiscoveryProjection | None:
     """Return the native-validated projection, or ``None`` for capability absence.
 
     ``None`` means no native runtime/capability/frame agreement: the caller
@@ -270,7 +271,7 @@ def discovery_placement_projection(
     """
 
     if not discovery_rollout_enabled():
-        return NativeCatalogReadResult(status=503, error_code=DISCOVERY_UNAVAILABLE)
+        return DiscoveryProjection(status=503, error_code=DISCOVERY_UNAVAILABLE)
     deadline = time.monotonic() + timeout_seconds
     status = native_runtime_status(deadline_monotonic=deadline)
     if not _supports_discovery(status) or status.identity is None:
@@ -281,7 +282,7 @@ def discovery_placement_projection(
             timeout_seconds=max(0.05, min(timeout_seconds, deadline - time.monotonic())),
         )
     except DiscoveryReadError as error:
-        return NativeCatalogReadResult(status=error.status, error_code=error.code)
+        return DiscoveryProjection(status=error.status, error_code=error.code)
     envelope = {
         "operation": "discovery_placement_project",
         "request": {
@@ -305,7 +306,7 @@ def discovery_placement_projection(
     # Discovery stays out of the shared resident health that gates hook
     # execution: an advertising fault must never open the protection circuit.
     if response is None:
-        return NativeCatalogReadResult(status=503, error_code=DISCOVERY_TRANSPORT_FAILED)
+        return DiscoveryProjection(status=503, error_code=DISCOVERY_TRANSPORT_FAILED)
     try:
         decoded = json.loads(response.decode("utf-8"), object_pairs_hook=unique_json_object)
     except (UnicodeDecodeError, ValueError):
