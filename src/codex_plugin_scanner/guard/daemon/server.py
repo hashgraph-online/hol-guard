@@ -115,22 +115,6 @@ from .audit_persistence import WRITTEN as AUDIT_WRITTEN
 from .audit_persistence import AuditPersistence
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
-from .extension_discovery_read import (
-    DISCOVERY_EVENTS_PATH,
-    DISCOVERY_PLACEMENTS_PATH,
-    DISCOVERY_RENDERS_PATH,
-    DISCOVERY_UNAVAILABLE,
-    DiscoveryReadError,
-    discovery_placement_projection,
-    discovery_rollout_enabled,
-    relay_discovery_measurement,
-)
-from .sponsored_discovery_settings import (
-    sponsored_discovery_allowed,
-    sponsored_discovery_measurement_allowed,
-    sponsored_discovery_settings,
-    update_sponsored_discovery_settings,
-)
 from .command_activity_api import (
     parse_command_activity_event_cursor,
     stream_command_activity_events,
@@ -150,6 +134,16 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiService
+from .extension_discovery_read import (
+    DISCOVERY_EVENTS_PATH,
+    DISCOVERY_PLACEMENTS_PATH,
+    DISCOVERY_RENDERS_PATH,
+    DISCOVERY_UNAVAILABLE,
+    DiscoveryReadError,
+    discovery_placement_projection,
+    discovery_rollout_enabled,
+    relay_discovery_measurement,
+)
 from .hook_managed_install_state import _hook_harness_is_unmanaged
 from .hook_policy_admission import prepare_native_hook_policy
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
@@ -199,6 +193,12 @@ from .service_lifecycle import (
     contain_failed_service_start,
     start_serve_thread,
     startup_generation_is_current,
+)
+from .sponsored_discovery_settings import (
+    sponsored_discovery_allowed,
+    sponsored_discovery_measurement_allowed,
+    sponsored_discovery_settings,
+    update_sponsored_discovery_settings,
 )
 from .startup_phase import flush_pending_phases, record_phase_since, timed_phase
 
@@ -1458,7 +1458,11 @@ class _GuardDaemonHandler(
                 except DiscoveryReadError as error:
                     self._write_json({"error": error.code}, status=error.status)
                     return
-                self._write_json_bytes(escape_json_for_html(body), status=status, extra_headers={"Cache-Control": "no-store"})
+                self._write_json_bytes(
+                    escape_json_for_html(body),
+                    status=status,
+                    extra_headers={"Cache-Control": "no-store"},
+                )
                 return
             if parsed.path == "/v1/discovery/extensions/settings":
                 update = payload if isinstance(payload, dict) else {}
@@ -1484,7 +1488,8 @@ class _GuardDaemonHandler(
             nonce = self._optional_string(payload.get("nonce")) if payload else None
             if not nonce:
                 self._write_json({"error": "missing_nonce"}, status=400)
-                return            auth_token = self.server.auth_token  # type: ignore[attr-defined]
+                return
+            auth_token = self.server.auth_token  # type: ignore[attr-defined]
             daemon_port = self.server.server_address[1]  # type: ignore[attr-defined]
             # Bind the proof to this daemon's listening port so a relay attacker
             # cannot proxy the nonce to the real daemon and reuse its proof from

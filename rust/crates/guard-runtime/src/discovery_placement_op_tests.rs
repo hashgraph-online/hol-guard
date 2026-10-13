@@ -60,7 +60,10 @@ fn run(request: DiscoveryPlacementProjectRequest) -> Value {
 
 fn outcome(frame: &Value) -> (&str, Option<&str>) {
     (
-        frame.get("outcome").and_then(Value::as_str).unwrap_or_default(),
+        frame
+            .get("outcome")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
         frame.get("error_code").and_then(Value::as_str),
     )
 }
@@ -153,7 +156,11 @@ fn rejects_oversize_pools_and_duplicate_ids() {
 
 #[test]
 fn rejects_hostile_creative_and_bad_ids() {
-    for hostile in ["<script>x</script>", "bad\u{0000}control", "rtl\u{202e}override"] {
+    for hostile in [
+        "<script>x</script>",
+        "bad\u{0000}control",
+        "rtl\u{202e}override",
+    ] {
         let mut snapshot = base_snapshot();
         snapshot["placements"][0]["creative"]["headline"] = json!(hostile);
         assert_eq!(
@@ -245,7 +252,7 @@ fn policy_block_empties_paid_content_and_zeroes_the_lease() {
 fn expired_items_are_removed_without_extending_the_lease() {
     // Project at a time after the item end but before the snapshot lease:
     // the placement disappears and the remaining lease shrinks accordingly.
-    let frame = evaluate_discovery_placement_project(&request(base_snapshot(), NOW_MS + 20_000));
+    let frame = run(request(base_snapshot(), NOW_MS + 20_000));
     assert_eq!(outcome(&frame), ("ok", None));
     let projection = projection_body(&frame);
     assert_eq!(
@@ -283,8 +290,14 @@ fn rejects_overdepth_and_malformed_bodies() {
 
 #[test]
 fn strict_utc_parser_handles_boundaries() {
-    assert_eq!(parse_utc_iso_ms("2026-10-13T12:00:00.000Z"), Some(1_791_892_800_000));
-    assert_eq!(parse_utc_iso_ms("2024-02-29T00:00:00Z"), Some(1_709_164_800_000));
+    assert_eq!(
+        parse_utc_iso_ms("2026-10-13T12:00:00.000Z"),
+        Some(1_791_892_800_000)
+    );
+    assert_eq!(
+        parse_utc_iso_ms("2024-02-29T00:00:00Z"),
+        Some(1_709_164_800_000)
+    );
     assert_eq!(parse_utc_iso_ms("2023-02-29T00:00:00Z"), None);
     assert_eq!(parse_utc_iso_ms("2026-13-01T00:00:00.000Z"), None);
     assert_eq!(parse_utc_iso_ms("2026-10-13T24:00:00.000Z"), None);
