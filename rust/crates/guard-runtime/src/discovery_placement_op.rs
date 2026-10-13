@@ -206,13 +206,16 @@ fn is_extension_id(value: &str) -> bool {
 }
 
 /// Plain-text bound shared by creative fields and creative versions: no
-/// control characters, bidi overrides, or markup-significant code points.
+/// C0/C1 controls, no bidi/format marks, no line/paragraph separators, and
+/// no markup-significant code points. Mirrors the Cloud contract's stricter
+/// creative class (see points-portal discovery contracts).
 fn is_safe_text(value: &str) -> bool {
     value.chars().all(|c| {
         !matches!(c,
             '\u{0000}'..='\u{001f}'
-                | '\u{007f}'
-                | '\u{202a}'..='\u{202e}'
+                | '\u{007f}'..='\u{009f}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{2028}'..='\u{202e}'
                 | '\u{2066}'..='\u{2069}'
                 | '<'
                 | '>')

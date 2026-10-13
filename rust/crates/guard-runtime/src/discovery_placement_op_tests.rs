@@ -160,6 +160,9 @@ fn rejects_hostile_creative_and_bad_ids() {
         "<script>x</script>",
         "bad\u{0000}control",
         "rtl\u{202e}override",
+        "zw\u{200b}zero-width",
+        "c1\u{0085}control",
+        "line\u{2028}separator",
     ] {
         let mut snapshot = base_snapshot();
         snapshot["placements"][0]["creative"]["headline"] = json!(hostile);
