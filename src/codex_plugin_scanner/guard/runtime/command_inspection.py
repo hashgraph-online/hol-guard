@@ -7,6 +7,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.native_context import bound_context_digest_home
 from codex_plugin_scanner.guard.native_rich_command_model import NativeCommandModelError
+from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 from codex_plugin_scanner.guard.risk import artifact_risk_signals_v2
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
@@ -265,7 +266,7 @@ def inspect_command(
                 "side_effects": "none",
             }
 
-        except NativeCommandModelError:
+        except (NativeCommandModelError, NativeSensitiveRequestError):
             return unavailable_command_inspection(command, native_evaluation_failed=True)
 
 

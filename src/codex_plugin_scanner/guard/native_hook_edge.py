@@ -25,6 +25,7 @@ from .native_runtime_resilience import (
 _EDGE_FEATURE = "hook-envelope-v2"
 _CLIENT_FEATURE = "native-resident-client-v1"
 _RESPONSE_FEATURE = "hook-harness-response-v1"
+_UNSUPPORTED_EVENT_CODE = "native_hook_event_unsupported"
 _GENERIC_PRE_TOOL_SCHEMA = "guard-pre-tool-result.v1"
 _GENERIC_PRE_TOOL_ACTION_SCHEMA = "guard-pre-tool-action.v1"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
@@ -72,6 +73,7 @@ _PRE_TOOL_ACTION_OPERATIONS = {
     "unknown": {"unknown"},
 }
 _UNCERTAIN_EXTENSION_FLOORS = frozenset({"review", "require-reapproval", "block"})
+_DESTRUCTIVE_SHELL_RULE = "command.shell-mutations.destructive-shell"
 _PRE_TOOL_RESULT_KEYS = {
     "schema",
     "version",
@@ -136,6 +138,18 @@ def _valid_pre_tool_result_fields(result: dict[str, Any]) -> bool:
     )
 
 
+def _contained_removal(result: dict[str, Any], extensions: dict[str, object]) -> bool:
+    """Whether every uncertain match is a removal or in-place edit Rust sent to the sandbox."""
+    observations = cast(list[dict[str, object]], extensions["observations"])
+    uncertain = [item for item in observations if item["uncertainty_reasons"]]
+    return (
+        result.get("minimum_action") == "sandbox-required"
+        and result.get("reason_code") == "native_workspace_containment_required"
+        and len(uncertain) == cast(dict[str, object], extensions["binding"])["uncertainty_count"]
+        and all(item["rule_id"] == _DESTRUCTIVE_SHELL_RULE for item in uncertain)
+    )
+
+
 def _valid_pre_tool_action(action: dict[str, Any], *, harness: str, event: str) -> bool:
     action_type = action.get("action_type")
     operation = action.get("operation")
@@ -180,7 +194,11 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         binding = cast(dict[str, object], extensions["binding"])
         if extensions["evaluation_error"] is not None and result.get("minimum_action") != "block":
             return False
-        if binding["uncertainty_count"] and result.get("minimum_action") not in _UNCERTAIN_EXTENSION_FLOORS:
+        if (
+            binding["uncertainty_count"]
+            and result.get("minimum_action") not in _UNCERTAIN_EXTENSION_FLOORS
+            and not _contained_removal(result, extensions)
+        ):
             return False
     if not _valid_pre_tool_result_fields(result):
         return False
@@ -396,9 +414,14 @@ def review_raw_hook_native(
             reason="native_hook_edge_unavailable",
         )
         return record_native_hook_result("native_fail_safe", None)
+    error_code: str | None = None
     try:
         response_payload = json.loads(output)
         error_code = _native_error_code(response_payload)
+        if error_code == _UNSUPPORTED_EVENT_CODE:
+            # A lifecycle event the edge does not review. The resident
+            # answered, so this neither counts against its health nor proves it.
+            return record_native_hook_result("native_fail_safe", None)
         if error_code is not None:
             record_native_resident_client_failure_code(error_code)
         decoded = _decode_edge(response_payload)

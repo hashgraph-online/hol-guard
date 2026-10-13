@@ -16,6 +16,7 @@ from .store_base import (
 )
 from .store_approval_facade import StoreApprovalsMixin
 from .store_approval_queries import StoreApprovalQueriesMixin
+from .store_advisory_cache import StoreAdvisoryCacheMixin
 from .store_cloud_events import StoreCloudEventsMixin
 from .store_command_activity import StoreCommandActivityMixin
 from .store_command_activity_api import StoreCommandActivityApiMixin
@@ -86,6 +87,7 @@ class GuardStore(
     StoreReviewPolicyMemoryMixin,
     StorePolicyIntegrityAdminMixin,
     StoreCloudEventsMixin,
+    StoreAdvisoryCacheMixin,
     StoreReceiptsRuntimeMixin,
     StoreApprovalQueriesMixin,
     StoreApprovalsMixin,

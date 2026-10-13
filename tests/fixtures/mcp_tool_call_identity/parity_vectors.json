@@ -122,7 +122,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -277,7 +276,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -436,7 +434,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -595,7 +592,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -720,8 +716,7 @@
       "entry": {
        "inputSchema": {
         "type": "object"
-       },
-       "name": "browser_navigate"
+       }
       },
       "kind": "catalog"
      },
@@ -733,6 +728,292 @@
       "requestId": "r",
       "timestamp": 1,
       "url": "https://example.com"
+     },
+     "config": {
+      "artifact_actions": null,
+      "default_action": "warn",
+      "harness_actions": null,
+      "harness_risk_actions": null,
+      "managed_locked_settings": [],
+      "managed_policy_hash": null,
+      "managed_policy_status": "absent",
+      "mode": "prompt",
+      "protection_posture": "protected",
+      "protection_posture_explicit": false,
+      "publisher_actions": null,
+      "risk_actions": null,
+      "sandbox_analysis": "off",
+      "security_level": "balanced"
+     },
+     "extension_control_digest": "20d45a0efad04c26d4bf5e490d0b1924cdc34bc4e2b8b09f4b732bdce8c49043",
+     "workspace": "/work/space"
+    }
+   }
+  },
+  "build_only_without_hash": {
+   "expected": {
+    "artifact": {
+     "artifact_id": "codex:runtime:project:workspace-tools:read_file",
+     "command": "read_file",
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "metadata": {
+      "mcpSkillFirewall": {
+       "mcpServer": {
+        "argsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "command": "workspace-tools",
+        "commandHash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+        "configPath": "/work/space/.codex/config.toml",
+        "dependencyHash": null,
+        "envKeys": [],
+        "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identityHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+        "packageName": null,
+        "packageSource": "default",
+        "packageVersion": null,
+        "publisherStableId": null,
+        "transport": "stdio",
+        "transportHash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+       },
+       "mcpTools": [
+        {
+         "descriptionHash": "9445e1d930264460cf49d30b0e4378c24ff81e22e168fd12d5f50dea441ae31e",
+         "descriptorHash": "9445e1d930264460cf49d30b0e4378c24ff81e22e168fd12d5f50dea441ae31e",
+         "hashScope": "full",
+         "identityHash": "77c6ccda052d1266430da39a2bfb7cd80ca47e85074ea02a571d02eb1e78dd1f",
+         "schemaHash": "973e888c41404f865c6e1bcefd41e6e8766567dbaafe182684411d0a3f640f67",
+         "serverHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+         "toolName": "read_file"
+        }
+       ]
+      },
+      "mcp_server_identity": {
+       "args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+       "command": "workspace-tools",
+       "command_hash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+       "config_path": "/work/space/.codex/config.toml",
+       "dependency_hash": null,
+       "env_keys": [],
+       "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+       "identity_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "package_name": null,
+       "package_source": "default",
+       "package_version": null,
+       "publisher_stable_id": null,
+       "transport": "stdio",
+       "transport_hash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+      },
+      "mcp_tool_authority_hash": null,
+      "mcp_tool_identity": {
+       "description_hash": "9445e1d930264460cf49d30b0e4378c24ff81e22e168fd12d5f50dea441ae31e",
+       "descriptor_hash": "9445e1d930264460cf49d30b0e4378c24ff81e22e168fd12d5f50dea441ae31e",
+       "identity_hash": "77c6ccda052d1266430da39a2bfb7cd80ca47e85074ea02a571d02eb1e78dd1f",
+       "schema_hash": "973e888c41404f865c6e1bcefd41e6e8766567dbaafe182684411d0a3f640f67",
+       "server_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "tool_name": "read_file"
+      },
+      "server_name": "workspace-tools",
+      "tool_description": "Read a file",
+      "tool_schema": {
+       "properties": {
+        "limit": {
+         "default": 1.5,
+         "type": "number"
+        },
+        "path": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "path"
+       ],
+       "type": "object"
+      }
+     },
+     "name": "workspace-tools:read_file",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio"
+    },
+    "artifact_hash": null,
+    "runtime_private_metadata": {
+     "mcp_tool_authority_hash": "6e18c70031359b582993de570a3af870137c27794984c7081ca2676ac04034f5"
+    }
+   },
+   "request": {
+    "artifact": null,
+    "build": {
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "provider_catalog_hash": null,
+     "server_fingerprint": null,
+     "server_id": null,
+     "server_identity": null,
+     "server_name": "workspace-tools",
+     "source_scope": "project",
+     "tool": {
+      "entry": {
+       "annotations": {
+        "readOnlyHint": true
+       },
+       "description": "  Read a file  ",
+       "inputSchema": {
+        "properties": {
+         "limit": {
+          "default": 1.5,
+          "type": "number"
+         },
+         "path": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "path"
+        ],
+        "type": "object"
+       },
+       "outputSchema": {
+        "type": "object"
+       }
+      },
+      "kind": "catalog"
+     },
+     "tool_name": "read_file",
+     "transport": "stdio"
+    },
+    "hash": null
+   }
+  },
+  "catalog_named_definition": {
+   "expected": {
+    "artifact": {
+     "artifact_id": "codex:runtime:project:workspace-tools:read_file",
+     "command": "read_file",
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "metadata": {
+      "mcpSkillFirewall": {
+       "mcpServer": {
+        "argsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "command": "workspace-tools",
+        "commandHash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+        "configPath": "/work/space/.codex/config.toml",
+        "dependencyHash": null,
+        "envKeys": [],
+        "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identityHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+        "packageName": null,
+        "packageSource": "default",
+        "packageVersion": null,
+        "publisherStableId": null,
+        "transport": "stdio",
+        "transportHash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+       },
+       "mcpTools": [
+        {
+         "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+         "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+         "hashScope": "full",
+         "identityHash": "79185a7754491af8c6f64fe2002b60a460065f5ef43920c490148094608041be",
+         "schemaHash": "973e888c41404f865c6e1bcefd41e6e8766567dbaafe182684411d0a3f640f67",
+         "serverHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+         "toolName": "read_file"
+        }
+       ]
+      },
+      "mcp_server_identity": {
+       "args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+       "command": "workspace-tools",
+       "command_hash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+       "config_path": "/work/space/.codex/config.toml",
+       "dependency_hash": null,
+       "env_keys": [],
+       "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+       "identity_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "package_name": null,
+       "package_source": "default",
+       "package_version": null,
+       "publisher_stable_id": null,
+       "transport": "stdio",
+       "transport_hash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+      },
+      "mcp_tool_authority_hash": "48f728e5d0fd348d1bc845b90a7f2b27995526e8cd134a370f03b21e866b2757",
+      "mcp_tool_identity": {
+       "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+       "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+       "identity_hash": "79185a7754491af8c6f64fe2002b60a460065f5ef43920c490148094608041be",
+       "schema_hash": "973e888c41404f865c6e1bcefd41e6e8766567dbaafe182684411d0a3f640f67",
+       "server_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "tool_name": "read_file"
+      },
+      "server_name": "workspace-tools",
+      "tool_schema": {
+       "properties": {
+        "limit": {
+         "default": 1.5,
+         "type": "number"
+        },
+        "path": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "path"
+       ],
+       "type": "object"
+      }
+     },
+     "name": "workspace-tools:read_file",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio"
+    },
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIyNjI0NzI2NjY3NTNmODg3YWZkMjQxNDczNGEyZmVkNzFkMTBkMDhkYzA3NGVlZDMzOTE4MDM4MjVmZGRiYjAzIiwiY29udGVudCI6ImExMmViYjkxNzEwNzgyMTBlNjVjNDJjZDJiNDQ5ZDc4OTk2ZTZhMjZhYWNhNTY1YWMyNzRmMTM1ZjMxNzI1YjkiLCJpZGVudGl0eSI6IjdjNjYwYWViYjM3MGNjYzE4ZjJjZTdiZTJkNjM4YTgwOTc3MDAxYzQ5OTBmNDQ3Nzk1NDI1YzdkZDZjY2RjYzMiLCJwb2xpY3kiOiIxMWUwNTgyMWU5YThjOTg1ZGE1Y2IyNGQwMWMyNmEzYjc2ZjNjYjZhN2QxNWViZjU1NTY5ODcwNDEyOWEzZmY5Iiwic2FuZGJveCI6IjE2ZDhhNjQ0ZGY3MGFhNmJmMjU2YTZjNGU4ZDQwZDgyMjFhNWEwNzU3ZGZlMGIxYjJjMzJiNTBkMmY0YmRhMzYiLCJ2ZXJzaW9uIjoxfQ",
+    "runtime_private_metadata": {
+     "mcp_tool_authority_hash": "48f728e5d0fd348d1bc845b90a7f2b27995526e8cd134a370f03b21e866b2757"
+    }
+   },
+   "request": {
+    "artifact": null,
+    "build": {
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "provider_catalog_hash": null,
+     "server_fingerprint": null,
+     "server_id": null,
+     "server_identity": null,
+     "server_name": "workspace-tools",
+     "source_scope": "project",
+     "tool": {
+      "entry": {
+       "annotations": {
+        "readOnlyHint": true
+       },
+       "inputSchema": {
+        "properties": {
+         "limit": {
+          "default": 1.5,
+          "type": "number"
+         },
+         "path": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "path"
+        ],
+        "type": "object"
+       },
+       "name": "read_file"
+      },
+      "kind": "catalog"
+     },
+     "tool_name": "read_file",
+     "transport": "stdio"
+    },
+    "hash": {
+     "arguments": {
+      "path": "a.txt"
      },
      "config": {
       "artifact_actions": null,
@@ -842,8 +1123,156 @@
      "source_scope": "project",
      "tool": {
       "entry": {
-       "inputSchema": null,
-       "name": "read_file"
+       "inputSchema": null
+      },
+      "kind": "catalog"
+     },
+     "tool_name": "read_file",
+     "transport": "stdio"
+    },
+    "hash": {
+     "arguments": {
+      "path": "a.txt"
+     },
+     "config": {
+      "artifact_actions": null,
+      "default_action": "warn",
+      "harness_actions": null,
+      "harness_risk_actions": null,
+      "managed_locked_settings": [],
+      "managed_policy_hash": null,
+      "managed_policy_status": "absent",
+      "mode": "prompt",
+      "protection_posture": "protected",
+      "protection_posture_explicit": false,
+      "publisher_actions": null,
+      "risk_actions": null,
+      "sandbox_analysis": "off",
+      "security_level": "balanced"
+     },
+     "extension_control_digest": "20d45a0efad04c26d4bf5e490d0b1924cdc34bc4e2b8b09f4b732bdce8c49043",
+     "workspace": "/work/space"
+    }
+   }
+  },
+  "catalog_other_named_definition": {
+   "expected": {
+    "artifact": {
+     "artifact_id": "codex:runtime:project:workspace-tools:read_file",
+     "command": "read_file",
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "metadata": {
+      "mcpSkillFirewall": {
+       "mcpServer": {
+        "argsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "command": "workspace-tools",
+        "commandHash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+        "configPath": "/work/space/.codex/config.toml",
+        "dependencyHash": null,
+        "envKeys": [],
+        "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identityHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+        "packageName": null,
+        "packageSource": "default",
+        "packageVersion": null,
+        "publisherStableId": null,
+        "transport": "stdio",
+        "transportHash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+       },
+       "mcpTools": [
+        {
+         "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+         "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+         "hashScope": "full",
+         "identityHash": "79185a7754491af8c6f64fe2002b60a460065f5ef43920c490148094608041be",
+         "schemaHash": "973e888c41404f865c6e1bcefd41e6e8766567dbaafe182684411d0a3f640f67",
+         "serverHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+         "toolName": "read_file"
+        }
+       ]
+      },
+      "mcp_server_identity": {
+       "args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+       "command": "workspace-tools",
+       "command_hash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+       "config_path": "/work/space/.codex/config.toml",
+       "dependency_hash": null,
+       "env_keys": [],
+       "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+       "identity_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "package_name": null,
+       "package_source": "default",
+       "package_version": null,
+       "publisher_stable_id": null,
+       "transport": "stdio",
+       "transport_hash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+      },
+      "mcp_tool_authority_hash": null,
+      "mcp_tool_identity": {
+       "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+       "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+       "identity_hash": "79185a7754491af8c6f64fe2002b60a460065f5ef43920c490148094608041be",
+       "schema_hash": "973e888c41404f865c6e1bcefd41e6e8766567dbaafe182684411d0a3f640f67",
+       "server_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "tool_name": "read_file"
+      },
+      "server_name": "workspace-tools",
+      "tool_schema": {
+       "properties": {
+        "limit": {
+         "default": 1.5,
+         "type": "number"
+        },
+        "path": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "path"
+       ],
+       "type": "object"
+      }
+     },
+     "name": "workspace-tools:read_file",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio"
+    },
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiI3NzE3Y2FmNGRlYmFmZGYzNTI1OGI4NDJhODQxY2I2MGJlM2M4MGViMzkwMGE5NWUxNDllNTliMjg4OTFjOTY4IiwiY29udGVudCI6ImExMmViYjkxNzEwNzgyMTBlNjVjNDJjZDJiNDQ5ZDc4OTk2ZTZhMjZhYWNhNTY1YWMyNzRmMTM1ZjMxNzI1YjkiLCJpZGVudGl0eSI6IjdjNjYwYWViYjM3MGNjYzE4ZjJjZTdiZTJkNjM4YTgwOTc3MDAxYzQ5OTBmNDQ3Nzk1NDI1YzdkZDZjY2RjYzMiLCJwb2xpY3kiOiIxMWUwNTgyMWU5YThjOTg1ZGE1Y2IyNGQwMWMyNmEzYjc2ZjNjYjZhN2QxNWViZjU1NTY5ODcwNDEyOWEzZmY5Iiwic2FuZGJveCI6IjE2ZDhhNjQ0ZGY3MGFhNmJmMjU2YTZjNGU4ZDQwZDgyMjFhNWEwNzU3ZGZlMGIxYjJjMzJiNTBkMmY0YmRhMzYiLCJ2ZXJzaW9uIjoxfQ",
+    "runtime_private_metadata": {
+     "mcp_tool_authority_hash": "faa9070ff5b80e11d6e9a23006d852a7cb417a7f92bfac174f2866896f62f4a2"
+    }
+   },
+   "request": {
+    "artifact": null,
+    "build": {
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "provider_catalog_hash": null,
+     "server_fingerprint": null,
+     "server_id": null,
+     "server_identity": null,
+     "server_name": "workspace-tools",
+     "source_scope": "project",
+     "tool": {
+      "entry": {
+       "inputSchema": {
+        "properties": {
+         "limit": {
+          "default": 1.5,
+          "type": "number"
+         },
+         "path": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "path"
+        ],
+        "type": "object"
+       },
+       "name": "other"
       },
       "kind": "catalog"
      },
@@ -968,8 +1397,7 @@
        "description": "",
        "input_schema": {
         "type": "object"
-       },
-       "name": "read_file"
+       }
       },
       "kind": "catalog"
      },
@@ -1155,7 +1583,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -1284,8 +1711,7 @@
        "description": "Lis le fichier \u00e9\u00e8 \u2603",
        "inputSchema": {
         "x": "\u00e9"
-       },
-       "name": "lire"
+       }
       },
       "kind": "catalog"
      },
@@ -1405,8 +1831,7 @@
      "source_scope": "project",
      "tool": {
       "entry": {
-       "description": "x",
-       "name": "read_file"
+       "description": "x"
       },
       "kind": "catalog"
      },
@@ -1676,7 +2101,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -2229,7 +2653,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -2486,7 +2909,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -2663,7 +3085,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -2792,8 +3213,7 @@
        "description": "Run a shell command",
        "inputSchema": {
         "type": "object"
-       },
-       "name": "shell_exec"
+       }
       },
       "kind": "catalog"
      },
@@ -2969,7 +3389,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }
@@ -3137,7 +3556,6 @@
         ],
         "type": "object"
        },
-       "name": "read_file",
        "outputSchema": {
         "type": "object"
        }

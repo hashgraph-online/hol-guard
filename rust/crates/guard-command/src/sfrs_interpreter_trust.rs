@@ -1,15 +1,14 @@
 //! Python interpreter and pytest configuration trust
 //! (`interpreter_trust.py`).
 //!
-//! Not ported here: `_contains_shell_network_file_upload` and
-//! `_curl_stdin_config_uses_file_upload`, which need the network-upload,
-//! credential-exfiltration and stdin-source services and feed the shell
-//! initial-risk stage rather than the benign-request closure.
+//! Also here: `_contains_shell_network_file_upload` and
+//! `_curl_stdin_config_uses_file_upload`, built on the network-upload,
+//! credential-exfiltration and stdin-source ports.
 
 // Consumed by the later classifier slices.
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -18,7 +17,13 @@ use crate::codex_output_fs as pyfs;
 use crate::codex_output_py::{py_strip, PyPath};
 use crate::false_positive_rules::fd_arg_requests_exec;
 use crate::sfrs_constants::{FIND_EXEC_ACTION_FLAGS, TRUSTED_INTERPRETER_INSTALL_ROOTS};
+use crate::sfrs_credential_exfil::local_shell_script_payloads;
 use crate::sfrs_gh_pr_expansion::is_pytest_python_interpreter_command;
+use crate::sfrs_interpreter_heredoc::shell_heredoc_payloads;
+use crate::sfrs_network_upload::{
+    command_uses_curl_stdin_heredoc, curl_segment_reads_config_from_stdin,
+    curl_segment_uses_file_upload, segment_uses_network_file_upload, UploadScan,
+};
 use crate::sfrs_patterns::{
     PYTEST_COMMAND_NAMES, PYTEST_COMMAND_RUNNER_SUBCOMMANDS, PYTEST_EXECUTOR_COMMANDS,
 };
@@ -30,7 +35,16 @@ use crate::sfrs_pytest_target::{
     segment_targets_pytest, shell_command_targets_pytest,
 };
 use crate::sfrs_selectors::pytest_args_from_python;
-use crate::sfrs_shell_tokens::{normalized_shell_command_name, shell_segment_primary_command};
+use crate::sfrs_shell_tokens::{
+    normalized_shell_command_name, shell_segment_primary_command, split_shell_parts,
+};
+use crate::sfrs_stdin_sources::{
+    shell_pipeline_stdin_payloads, shell_pipeline_stdin_uses_local_file,
+};
+use crate::sfrs_substitution::{
+    env_split_string_payloads, iter_shell_pipelines, shell_command_scripts,
+    shell_command_substitution_payloads,
+};
 use crate::shell_command_wrappers::is_trusted_absolute_command_path;
 use crate::shell_execution_context::{validate_shell_execution_segment, ShellExecutionContext};
 
@@ -294,4 +308,138 @@ pub(crate) fn interpreter_path_is_within(path: &PyPath, root: &PyPath, ctx: &Ctx
     absolute(ctx, path)
         .relative_to(&absolute(ctx, root))
         .is_some()
+}
+
+/// `_contains_shell_network_file_upload`.
+pub(crate) fn contains_shell_network_file_upload(
+    command_text: &str,
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+    allowed_roots: Option<&[PathBuf]>,
+) -> bool {
+    network_file_upload_at(command_text, cwd, home_dir, allowed_roots, 0, &[])
+}
+
+fn network_file_upload_at(
+    command_text: &str,
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+    allowed_roots: Option<&[PathBuf]>,
+    depth: usize,
+    visited_script_paths: &[String],
+) -> bool {
+    if depth > 4 {
+        return false;
+    }
+    let normalized = py_strip(command_text);
+    if normalized.is_empty() {
+        return false;
+    }
+    let parts = split_shell_parts(normalized);
+    if parts.is_empty() {
+        return false;
+    }
+    if curl_stdin_config_uses_file_upload(normalized, &parts, cwd, home_dir, allowed_roots) {
+        return true;
+    }
+    for pipeline in iter_shell_pipelines(&parts) {
+        for (index, segment) in pipeline.iter().enumerate() {
+            let stdin_uses_local_file =
+                shell_pipeline_stdin_uses_local_file(&pipeline, index, cwd, home_dir);
+            if segment_uses_network_file_upload(
+                segment,
+                cwd,
+                home_dir,
+                allowed_roots,
+                stdin_uses_local_file,
+            ) {
+                return true;
+            }
+        }
+    }
+    let nested = env_split_string_payloads(&parts)
+        .into_iter()
+        .chain(shell_command_substitution_payloads(normalized))
+        .chain(shell_command_scripts(&parts));
+    for text in nested {
+        if network_file_upload_at(
+            &text,
+            cwd,
+            home_dir,
+            allowed_roots,
+            depth + 1,
+            visited_script_paths,
+        ) {
+            return true;
+        }
+    }
+    for (script_text, script_cwd, script_path) in
+        local_shell_script_payloads(&parts, cwd, home_dir, allowed_roots, visited_script_paths)
+    {
+        let mut visited = visited_script_paths.to_vec();
+        visited.push(script_path);
+        if network_file_upload_at(
+            &script_text,
+            script_cwd.as_deref(),
+            home_dir,
+            allowed_roots,
+            depth + 1,
+            &visited,
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `_curl_stdin_config_uses_file_upload`.
+pub(crate) fn curl_stdin_config_uses_file_upload(
+    command_text: &str,
+    parts: &[String],
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+    allowed_roots: Option<&[PathBuf]>,
+) -> bool {
+    let heredoc_payloads = shell_heredoc_payloads(command_text);
+    for pipeline in iter_shell_pipelines(parts) {
+        for (index, segment) in pipeline.iter().enumerate() {
+            let (Some(command_name), Some(command_index)) = shell_segment_primary_command(segment)
+            else {
+                continue;
+            };
+            if command_name != "curl" {
+                continue;
+            }
+            let segment_args = &segment[command_index + 1..];
+            let stdin_payloads =
+                shell_pipeline_stdin_payloads(&pipeline, index, cwd, home_dir, allowed_roots);
+            let stdin_uses_local_file =
+                shell_pipeline_stdin_uses_local_file(&pipeline, index, cwd, home_dir);
+            if !stdin_payloads.is_empty() {
+                let mut scan = UploadScan::new(cwd, home_dir);
+                scan.allowed_roots = allowed_roots;
+                scan.stdin_config_payloads = &stdin_payloads;
+                scan.stdin_uses_local_file = stdin_uses_local_file;
+                if curl_segment_uses_file_upload(segment_args, &scan) {
+                    return true;
+                }
+            }
+            if !heredoc_payloads.is_empty()
+                && stdin_payloads.is_empty()
+                && curl_segment_reads_config_from_stdin(segment_args)
+                && command_uses_curl_stdin_heredoc(command_text)
+            {
+                let payloads: Vec<(String, Option<PathBuf>)> = heredoc_payloads
+                    .iter()
+                    .map(|payload| (payload.clone(), cwd.map(Path::to_path_buf)))
+                    .collect();
+                let mut scan = UploadScan::new(cwd, home_dir);
+                scan.stdin_config_payloads = &payloads;
+                if curl_segment_uses_file_upload(segment_args, &scan) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }

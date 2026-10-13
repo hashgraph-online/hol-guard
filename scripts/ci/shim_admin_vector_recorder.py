@@ -1,7 +1,9 @@
 """Record parity vectors for the package-shim admin operations.
 
 Run against the Python implementation that preceded the resident ``shim_admin``
-op (``codex_plugin_scanner.guard.shims`` at base commit ``78be1d8ba2``)::
+op (``codex_plugin_scanner.guard.shims`` at base commit ``78be1d8ba2``). The Python
+bodies were removed once the helpers moved to the resident op, so re-recording needs
+that commit checked out in a separate worktree::
 
     cd scripts/ci
     PYTHONPATH=../../src python shim_admin_vector_recorder.py [--work-base DIR]

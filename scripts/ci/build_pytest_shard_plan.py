@@ -80,6 +80,11 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability",
     }
 )
+# The benign and replay gates expect the Linux workspace sandbox. Coverage
+# deselects them; native-gates runs them with bubblewrap.
+SANDBOX_GATE_FILES = frozenset(
+    {"tests/test_guard_benign_false_positive_gate.py", "tests/test_guard_gauntlet_replay_gate.py"}
+)
 
 
 class _Arguments(Protocol):
@@ -177,7 +182,9 @@ def build_affinity_node_shards(
     nodes = [
         node_id
         for node_id in node_ids
-        if node_id not in SCHEDULING_ONLY_NODE_IDS and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        if node_id not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("::", maxsplit=1)[0] not in SANDBOX_GATE_FILES
     ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")

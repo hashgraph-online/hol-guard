@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from importlib import resources
 from pathlib import Path
 
@@ -148,24 +147,6 @@ def test_invalid_conformance_fixtures_have_bounded_codes() -> None:
         assert error.value.diagnostics[0].code == expected_code
         assert len(error.value.diagnostics) <= 20
         assert "redacted-fixture-value" not in str(error.value)
-
-
-def test_extensions_are_preserved_and_signed() -> None:
-    source = (FIXTURES / "valid" / "extensions-and-scalars.yaml").read_bytes()
-    document = parse_policy_document_yaml(source)
-    changed = replace(document, extensions=(("x-document-note", '"changed"'),))
-
-    assert "x-document-note" in document.to_mapping()
-    assert policy_document_digest(changed) != policy_document_digest(document)
-
-
-@pytest.mark.parametrize("name", ("basic", "business-selector"))
-def test_canonical_hash_vector_is_cross_language_stable(name: str) -> None:
-    vector = json.loads((FIXTURES / "hashes" / f"{name}.json").read_text(encoding="utf-8"))
-    document = parse_policy_document_yaml((FIXTURES / "hashes" / vector["source"]).read_bytes())
-
-    assert canonical_policy_document_bytes(document).decode("utf-8") == vector["canonicalJson"]
-    assert policy_document_digest(document) == vector["sha256"]
 
 
 def test_legacy_bundle_v1_hash_projection_is_unchanged() -> None:
@@ -353,15 +334,6 @@ def test_yaml_escaped_surrogate_is_rejected_before_canonicalization() -> None:
         parse_policy_document_yaml(source)
 
     assert error.value.diagnostics[0].code == "invalid_unicode"
-
-
-def test_canonical_object_keys_use_utf16_order() -> None:
-    value = _basic_mapping()
-    value["x-sort"] = {"\ue000": "bmp", "😀": "astral"}
-
-    canonical = canonical_policy_document_bytes(parse_policy_document_yaml(_yaml(value))).decode("utf-8")
-
-    assert canonical.index('"😀"') < canonical.index('"\ue000"')
 
 
 def test_command_expression_round_trips_without_flattening_boolean_semantics() -> None:

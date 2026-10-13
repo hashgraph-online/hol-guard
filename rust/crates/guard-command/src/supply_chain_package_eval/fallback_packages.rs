@@ -25,6 +25,10 @@ pub(super) fn fallback_package_results(
         .into_iter()
         .collect();
     let alternate_index = command_uses_alternate_package_index(artifact);
+    let script_free_install = script_free_registry_install(artifact, workspace_dir)
+        || script_free_git_free_tree_install(deps, artifact, workspace_dir, targets);
+    let scripts_guidance =
+        !script_free_install && registry_install_needs_flags(artifact, workspace_dir);
     let mut results: Vec<Map<String, Value>> = Vec::new();
     for target in targets {
         if !alternate_index {
@@ -33,6 +37,10 @@ pub(super) fn fallback_package_results(
                 continue;
             }
         }
+        let script_free_resolved = script_free_install
+            && registry_selector(target).is_some_and(|selector| {
+                registry_resolved_target_version(deps, target, &selector).is_some()
+            });
         let identity_resolved = (optional_string(target.get("ecosystem")).as_deref()
             == Some("npm")
             && flags.contains("--ignore-scripts")
@@ -42,13 +50,26 @@ pub(super) fn fallback_package_results(
             || (verify_registry_identity
                 && optional_string(target.get("range")).is_some_and(|range| {
                     registry_resolved_target_version(deps, target, &range).is_some()
-                }));
-        results.push(unknown_package_result(
-            deps,
-            target,
-            fail_closed_unidentified,
-            identity_resolved,
-        ));
+                }))
+            || script_free_resolved;
+        let mut result =
+            unknown_package_result(deps, target, fail_closed_unidentified, identity_resolved);
+        // Only this path proves no package code runs; other resolved
+        // identities still reach the same watched outcome.
+        if script_free_resolved
+            && optional_string(result.get("decision")).as_deref() == Some("monitor")
+        {
+            result.insert("scriptFreeRegistryInstall".to_string(), Value::Bool(true));
+        }
+        if scripts_guidance
+            && registry_selector(target).is_some()
+            && optional_string(result.get("decision")).as_deref() == Some("ask")
+        {
+            if let Some(Value::Array(reasons)) = result.get_mut("reasons") {
+                reasons.push(Value::Object(lifecycle_scripts_enabled_reason(artifact)));
+            }
+        }
+        results.push(result);
     }
     results
 }

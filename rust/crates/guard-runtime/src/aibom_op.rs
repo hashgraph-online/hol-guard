@@ -15,7 +15,7 @@ use super::aibom_skills::SkillSource;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
-fn absolute(value: Option<&Value>) -> Result<PathBuf, &'static str> {
+pub(crate) fn absolute(value: Option<&Value>) -> Result<PathBuf, &'static str> {
     let text = value.and_then(Value::as_str).ok_or(ERR_ROOT)?;
     if text.is_empty()
         || text.contains('\0')

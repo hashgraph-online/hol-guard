@@ -79,6 +79,44 @@ pub struct PolicyDecisionLookupRequestV1 {
     /// bundle source is unset → identity compare short-circuits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
+    /// Non-consuming saved-decision read over several probe groups. Each group
+    /// is one artifact hash and its candidate ids (direct, exact-command, then
+    /// memory-pattern); the payload is the most restrictive group's decision.
+    /// `artifact_id` names the action for the approval-reuse miss diagnostic
+    /// in this mode; with `reuse`, its hash is the current approval context
+    /// token the resident builds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probe_groups: Option<PolicyLookupProbeGroupsV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyLookupProbeGroupsV1 {
+    /// Git-derived portable workspace, when the workspace has one.
+    #[serde(default)]
+    pub portable_workspace: Option<String>,
+    pub groups: Vec<PolicyLookupProbeGroupV1>,
+    /// Also compose the approval-reuse verdict for the current action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse: Option<PolicyLookupReuseV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyLookupReuseV1 {
+    pub current_action: Value,
+    /// Generic-hook approval-context inputs; the resident builds the current
+    /// token from them and returns it as `current_token`.
+    pub approval_context_inputs: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyLookupProbeGroupV1 {
+    /// `None` means the current approval context token (requires `reuse`).
+    #[serde(default)]
+    pub artifact_hash: Option<String>,
+    pub candidate_artifact_ids: Vec<String>,
 }
 
 fn default_true() -> bool {

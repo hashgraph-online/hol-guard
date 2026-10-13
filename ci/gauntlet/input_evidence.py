@@ -48,8 +48,19 @@ def input_digest(value: dict) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _unverified_row(row: dict, code: str) -> dict:
+    """Keep an unverifiable observation as a failed attempt with its cause."""
+    kept = {key: row[key] for key in ("event", "tool", "tool_call_id", "elapsed_ms", "http_status") if key in row}
+    return {**kept, "observer_error": True, "observer_error_code": code}
+
+
 def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[dict]:
-    """Check original observer bytes before exporting comparable public inputs."""
+    """Check original observer bytes before exporting comparable public inputs.
+
+    A row whose input cannot be verified becomes an observer error naming the
+    check it failed. The judge counts it as a failed attempt, and the other
+    rows of the case stay available.
+    """
     result = []
     for row in rows:
         if row.get("observer_error") or row.get("transport_error"):
@@ -57,13 +68,19 @@ def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[
             continue
         raw = row.get("input_json")
         if not isinstance(raw, str) or len(raw.encode("utf-8")) > 256_000:
-            raise ValueError("missing or oversized original Guard input")
+            result.append(_unverified_row(row, "input_missing_or_oversized"))
+            continue
         observed_digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         if observed_digest != row.get("input_sha256"):
-            raise ValueError("original Guard input does not match its observed digest")
-        value = json.loads(raw)
+            result.append(_unverified_row(row, "input_digest_mismatch"))
+            continue
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = None
         if not isinstance(value, dict):
-            raise ValueError("Guard input must be a complete object")
+            result.append(_unverified_row(row, "input_not_object"))
+            continue
         public_input = redact_value(value, replacements)
         public_row = {key: item for key, item in row.items() if key not in {"input_json", "input_sha256"}}
         public_row.update(

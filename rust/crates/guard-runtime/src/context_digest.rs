@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use super::context_digest_json::{
     write_canonical_json, write_canonical_json_with_limit, write_json_string,
 };
+use super::context_digest_result_check::{check_result, gated, kind_name};
 use guard_contracts::{
     ContextDigestComponentsV1, ContextDigestKindV1, ContextDigestRequestV1, ContextDigestResultV1,
     PackageContextComponentV1, PackageContextEvidenceV1, APPROVAL_CONTEXT_TOKEN_PREFIX,
@@ -293,7 +294,7 @@ pub(crate) fn validate_context_tokens(saved: &Value, current: &Value) -> Option<
 
 /// CPython `str.strip()` whitespace set: the ASCII controls 0x09-0x0d and
 /// 0x1c-0x1f plus every Unicode code point whose `isspace` is true.
-fn is_python_space(ch: char) -> bool {
+pub(crate) fn is_python_space(ch: char) -> bool {
     matches!(
         ch,
         '\u{09}'..='\u{0d}'
@@ -384,6 +385,46 @@ pub(crate) fn configured_values_hash(
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// One MCP call's arguments as the proxy shows and binds them.
+pub(crate) struct McpArgumentsProjection {
+    /// `_safe_mcp_arguments`: secrets masked, `null` without arguments.
+    pub(crate) safe: Value,
+    /// `_launch_target`: tool name, safe arguments and the raw digest.
+    pub(crate) launch_target: String,
+}
+
+/// Project one MCP call's arguments. `None` means the request carried no
+/// arguments (absent and `null` alike). `default=str` is irrelevant at the
+/// JSON transport boundary: every surviving value is JSON already.
+pub(crate) fn mcp_arguments_projection(
+    tool_name: &str,
+    arguments: Option<&Value>,
+) -> Result<McpArgumentsProjection, &'static str> {
+    let safe = match arguments {
+        Some(inner) => {
+            guard_command::mcp_arguments::mcp_safe_arguments(inner).map_err(|_| ERR_ARGUMENTS)?
+        }
+        None => Value::Null,
+    };
+    let mut digest_material = Vec::with_capacity(256);
+    write_canonical_json(arguments.unwrap_or(&Value::Null), &mut digest_material)?;
+    let digest = digest_bytes(&digest_material);
+    let serialized = if arguments.is_some() {
+        let mut out = Vec::with_capacity(256);
+        write_canonical_json(&safe, &mut out)?;
+        String::from_utf8(out).map_err(|_| "canonical_json_unencodable")?
+    } else {
+        String::new()
+    };
+    let launch_target = format!("{tool_name} {serialized} [arguments-sha256:{digest}]")
+        .trim()
+        .to_owned();
+    Ok(McpArgumentsProjection {
+        safe,
+        launch_target,
+    })
+}
+
 fn evaluate_request(
     request: &ContextDigestRequestV1,
     result: &mut ContextDigestResultV1,
@@ -397,14 +438,6 @@ fn evaluate_request(
             current_token,
         } => {
             result.validation_reason = validate_context_tokens(saved_token, current_token);
-        }
-        ContextDigestKindV1::ValidateApprovalContext {
-            saved_token,
-            components,
-        } => {
-            let current = build_context_token(components)?;
-            result.validation_reason =
-                validate_context_tokens(saved_token, &Value::String(current));
         }
         ContextDigestKindV1::ConfiguredEnvironmentHash {
             values,
@@ -453,54 +486,9 @@ fn evaluate_request(
             // NO JSON serialization (module specifiers, source text, h:s:n).
             result.digest = Some(digest_bytes(material.as_bytes()));
         }
-        ContextDigestKindV1::McpArgumentsProjection {
-            tool_name,
-            arguments,
-        } => {
-            // _launch_target: safe arguments + display serialization +
-            // sha256 over the RAW arguments (default=str is irrelevant at
-            // the JSON transport boundary — every surviving value is a JSON
-            // scalar/container already).
-            let arguments_value = arguments.clone().unwrap_or(Value::Null);
-            let safe = match arguments {
-                Some(inner) => guard_command::mcp_arguments::mcp_safe_arguments(inner)
-                    .map_err(|_| ERR_ARGUMENTS)?,
-                None => Value::Null,
-            };
-            let mut digest_material = Vec::with_capacity(256);
-            write_canonical_json(&arguments_value, &mut digest_material)?;
-            result.digest = Some(digest_bytes(&digest_material));
-            let serialized = if arguments.is_some() {
-                let mut out = Vec::with_capacity(256);
-                write_canonical_json(&safe, &mut out)?;
-                String::from_utf8(out).map_err(|_| "canonical_json_unencodable")?
-            } else {
-                String::new()
-            };
-            result.mcp_serialized_arguments = Some(serialized.clone());
-            result.mcp_safe_arguments = Some(safe);
-            let label = format!(
-                "{tool_name} {serialized} [arguments-sha256:{}]",
-                result.digest.as_deref().unwrap_or("")
-            );
-            result.mcp_launch_target = Some(label.trim().to_owned());
-        }
         ContextDigestKindV1::McpRedactJson { material } => {
             result.mcp_redacted_value = Some(
                 guard_command::mcp_arguments::redact_json(material).map_err(|_| ERR_ARGUMENTS)?,
-            );
-        }
-        ContextDigestKindV1::PackageEnvironmentPolicy {
-            manager,
-            environment,
-            referenced_names,
-        } => {
-            result.environment_values = Some(
-                guard_command::package_context_environment::environment_policy_values(
-                    manager,
-                    environment,
-                    referenced_names,
-                ),
             );
         }
         ContextDigestKindV1::McpLaunchEnvironment {
@@ -574,50 +562,8 @@ fn evaluate_request(
                 identity_hash: identity.identity_hash,
             });
         }
-        ContextDigestKindV1::McpServerDescriptor { request } => {
-            result.mcp_descriptor = Some(
-                guard_command::mcp_decision::portal_mcp_server_descriptor(request),
-            );
-        }
-        ContextDigestKindV1::McpToolDescriptor { request } => {
-            result.mcp_descriptor = Some(guard_command::mcp_decision::portal_mcp_tool_descriptor(
-                request,
-            ));
-        }
-        ContextDigestKindV1::McpToolContentDigest { request } => {
-            result.digest = Some(guard_command::mcp_decision::mcp_tool_content_digest(
-                request,
-            )?);
-        }
         ContextDigestKindV1::BrowserMcp { request } => {
             result.browser_mcp = Some(guard_command::browser_mcp_intent::evaluate_browser_mcp(
-                request,
-            )?);
-        }
-        ContextDigestKindV1::McpToolRisk {
-            artifact,
-            arguments,
-        } => {
-            result.mcp_tool_risk = Some(guard_command::mcp_tool_risk::evaluate_tool_risk(
-                artifact, arguments,
-            )?);
-        }
-        ContextDigestKindV1::McpToolPolicy { request } => {
-            result.mcp_tool_policy = Some(guard_command::mcp_tool_policy::evaluate_tool_policy(
-                request,
-            )?);
-        }
-        ContextDigestKindV1::BuildMcpToolApprovalHash { request } => {
-            let built = build_mcp_tool_approval(request)?;
-            if request.config.is_some() {
-                result.token = Some(built.token_or_digest);
-            } else {
-                result.digest = Some(built.token_or_digest);
-            }
-            result.mcp_tool_risk = Some(built.risk_categories);
-        }
-        ContextDigestKindV1::McpToolApprovalDigest { request } => {
-            result.digest = Some(guard_command::mcp_decision::mcp_tool_approval_digest(
                 request,
             )?);
         }
@@ -666,15 +612,46 @@ fn evaluate_request(
                 },
             )?);
         }
+        ContextDigestKindV1::ClaudeGuardQuestion {
+            event,
+            tool_name,
+            tool_input,
+            tool_response,
+            response_answers,
+            pending,
+        } => {
+            result.claude_guard_question = Some(super::claude_guard_question::verdict(
+                &super::claude_guard_question::Question {
+                    event: event.as_deref(),
+                    tool_name,
+                    tool_input,
+                    tool_response,
+                    response_answers: response_answers.as_deref(),
+                    pending,
+                },
+            ));
+        }
+        ContextDigestKindV1::MemoryPattern {
+            command,
+            artifact_type,
+            artifact_id,
+            artifact_name,
+            harness,
+        } => {
+            result.memory_pattern = Some(super::memory_pattern::verdict(
+                &super::memory_pattern::MemoryRequest {
+                    command: command.as_deref(),
+                    artifact_type: artifact_type.as_deref(),
+                    artifact_id: artifact_id.as_deref(),
+                    artifact_name: artifact_name.as_deref(),
+                    harness: harness.as_deref(),
+                },
+            ));
+        }
         ContextDigestKindV1::CustomExtensionSuggestion { tools } => {
             result.custom_extension_suggestion = Some(
                 super::custom_extension_suggestion::suggestion_verdicts(tools)?,
             );
-        }
-        ContextDigestKindV1::PackageLauncherToken { command_name, args } => {
-            result.package_launcher = Some(guard_contracts::PackageLauncherResultV1 {
-                package: guard_command::mcp_decision::package_token(command_name, args),
-            });
         }
         ContextDigestKindV1::RuntimeExecutableIdentity {
             command,
@@ -840,19 +817,11 @@ fn evaluate_context_digest_request_inner(
         token: None,
         digest: None,
         validation_reason: None,
-        environment_values: None,
         mcp_launch_environment: None,
         package_context: None,
         mcp_server_identity: None,
         mcp_tool_identity: None,
-        package_launcher: None,
-        mcp_descriptor: None,
         browser_mcp: None,
-        mcp_tool_risk: None,
-        mcp_tool_policy: None,
-        mcp_launch_target: None,
-        mcp_safe_arguments: None,
-        mcp_serialized_arguments: None,
         mcp_redacted_value: None,
         runtime_identity: None,
         runtime_identity_match: None,
@@ -866,10 +835,19 @@ fn evaluate_context_digest_request_inner(
         package_json_scripts: None,
         local_cli_identities: None,
         custom_extension_suggestion: None,
+        claude_guard_question: None,
+        memory_pattern: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();
         result.code = code.to_owned();
+    }
+    // Fail closed on the result contract before anything is encoded: an answer
+    // that breaks it is a resident fault, not a result the caller may inspect.
+    if gated(&request.kind) {
+        let checked = serde_json::to_value(&result)
+            .map_err(|_| "native_response_encode_failed".to_owned())?;
+        check_result(kind_name(&request.kind), &checked).map_err(str::to_owned)?;
     }
     crate::encode_response(&result)
 }

@@ -18,12 +18,17 @@ pub(super) fn unsafe_search_value(
                 context.home_dir,
                 context.cwd,
                 false,
+            ) && !super::super::chain_temporary::absent_temporary_read_target(
+                value,
+                context.home_dir,
+                context.cwd,
             ) && (value.starts_with(['/', '~'])
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)
                 || glob_can_select_sensitive_path(value))
         }
-        SearchValueRole::Glob | SearchValueRole::Path => {
+        SearchValueRole::RgGlob if value.starts_with('!') => false,
+        SearchValueRole::Glob | SearchValueRole::RgGlob | SearchValueRole::Path => {
             value.starts_with(['/', '~'])
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)
@@ -39,7 +44,7 @@ pub(super) fn unsafe_search_value(
 
 pub(super) fn rg_value_role(name: &str) -> Option<SearchValueRole> {
     match name {
-        "--glob" | "--iglob" => Some(SearchValueRole::Glob),
+        "--glob" | "--iglob" => Some(SearchValueRole::RgGlob),
         "--regexp" => Some(SearchValueRole::Pattern),
         "--file" | "--ignore-file" => Some(SearchValueRole::Path),
         "--type-add" => Some(SearchValueRole::TypeGlob),

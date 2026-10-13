@@ -155,6 +155,16 @@ pub trait InspectionHost {
     fn direct_tool_authority(&self) -> Option<&dyn crate::direct_vitest::DirectToolAuthority> {
         None
     }
+    /// `os.path.exists(path)` on the caller's filesystem. Hosts that cannot
+    /// answer report the path as present, the fail-closed answer for the
+    /// "does not exist yet" allowances.
+    fn path_exists(&self, _path: &str) -> bool {
+        true
+    }
+    /// `os.path.realpath(path)` on the caller's filesystem; `None` refuses.
+    fn real_path(&self, _path: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Per-request context.

@@ -37,13 +37,21 @@ pub(crate) fn evaluate_consumer_artifact_compose_request(
     if request.schema != CONSUMER_ARTIFACT_COMPOSE_REQUEST_SCHEMA {
         return Err("native_consumer_artifact_compose_schema_mismatch".to_owned());
     }
+    let (status, code, payload) = match compose(&request.query) {
+        Ok(payload) => ("ok", "ok", payload),
+        Err(message) => (
+            "error",
+            "native_consumer_artifact_compose_validation_refused",
+            json!({"error_type": "ValueError", "message": message.chars().take(1024).collect::<String>()}),
+        ),
+    };
     crate::resident_protocol::encode_response(&ConsumerArtifactComposeResultV1 {
         schema: CONSUMER_ARTIFACT_COMPOSE_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
-        status: "ok".to_owned(),
-        code: "ok".to_owned(),
-        payload: Some(compose(&request.query)),
+        status: status.to_owned(),
+        code: code.to_owned(),
+        payload: Some(payload),
     })
 }
 
@@ -59,11 +67,39 @@ fn request_digest(request: &ConsumerArtifactComposeRequestV1) -> Result<String, 
     ))
 }
 
-pub(crate) fn compose(query: &ConsumerArtifactComposeQueryV1) -> Value {
-    match query {
+pub(crate) fn compose(query: &ConsumerArtifactComposeQueryV1) -> Result<Value, String> {
+    Ok(match query {
         ConsumerArtifactComposeQueryV1::CurrentAction(query) => current_action(query),
         ConsumerArtifactComposeQueryV1::RuntimeDecision(query) => runtime_decision(query),
-    }
+        ConsumerArtifactComposeQueryV1::RuntimeAuthoritative(query) => {
+            use guard_command::decisions::{build_authoritative_decision, parse_signals};
+            let invalid = || "native_consumer_artifact_compose_payload_invalid".to_owned();
+            let mut result = runtime_decision(&query.runtime);
+            let action = result["policy_action"]
+                .as_str()
+                .and_then(GuardAction::from_canonical)
+                .ok_or_else(invalid)?;
+            let reason = result["decision_reason"].as_str().ok_or_else(invalid)?;
+            let trace = result["policy_composition"]
+                .as_object()
+                .ok_or_else(invalid)?;
+            let finalized = result["authority_finalized"]
+                .as_bool()
+                .ok_or_else(invalid)?;
+            let signals = parse_signals(&query.signals).map_err(|error| error.to_string())?;
+            let decision = build_authoritative_decision(
+                action,
+                reason,
+                trace,
+                &signals,
+                finalized,
+                "composed-consumer-policy",
+            )
+            .map_err(|error| error.to_string())?;
+            result["authoritative_decision"] = decision.to_value();
+            result
+        }
+    })
 }
 
 /// The policy engine's configured/changed/default resolution; unknown values

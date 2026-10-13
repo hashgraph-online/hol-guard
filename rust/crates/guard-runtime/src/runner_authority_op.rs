@@ -17,9 +17,12 @@ use guard_policy_snapshot::digest_bytes;
 use serde_json::Value;
 
 use super::aibom_op as aibom;
+use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
+use super::hermes_detect;
 use super::oci_bundle_op as oci;
 use super::runner_authority_signature as signature;
+use super::zcode_detect;
 use super::{
     cloud_receipt_payload as receipt, cloud_request_snapshot as snapshot,
     cloud_sync_privacy as privacy,
@@ -59,7 +62,23 @@ fn request_digest(request: &RunnerAuthorityRequestV1) -> Result<String, &'static
 
 pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
+        "developer_inspection_authority" => {
+            crate::developer_inspection_authority_op::dispatch(args)
+        }
+        "continuation_authority" => crate::continuation_authority_op::evaluate(args),
+        "projection_approval"
+        | "projection_receipt"
+        | "projection_surfaces"
+        | "projection_surfaces_batch"
+        | "projection_artifact_surfaces" => crate::signal_projection_op::dispatch(kind, args),
+        "decision_v2_decode"
+        | "decision_enforcement_decode"
+        | "decision_authoritative_decode"
+        | "decision_artifact_decode"
+        | "decision_legacy"
+        | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
+        "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
         "skill_content_risk" => detector::skill_content_risk(args),
@@ -94,6 +113,9 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "aibom_workspace_plan" => aibom::workspace_merge_plan(args),
         "aibom_codex_skills" => aibom::codex_skills(args),
         "aibom_mcp_metadata" => aibom::mcp_metadata(args),
+        "zcode_detect" => zcode_detect::detect(args),
+        "hermes_detect" => hermes_detect::detect(args),
+        "codex_detect" => codex_detect::detect(args),
         _ => Err(ERR_KIND),
     }
 }

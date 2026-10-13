@@ -1451,10 +1451,6 @@
     max-width: var(--container-7xl);
   }
 
-  .max-w-56 {
-    max-width: calc(var(--spacing) * 56);
-  }
-
   .max-w-\[3\.25rem\] {
     max-width: 3.25rem;
   }
@@ -1658,6 +1654,10 @@
 
   .resize {
     resize: both;
+  }
+
+  .scroll-mt-24 {
+    scroll-margin-top: calc(var(--spacing) * 24);
   }
 
   .\[scrollbar-gutter\:stable\] {
@@ -2761,10 +2761,6 @@
 
   .bg-\[\#059669\] {
     background-color: #059669;
-  }
-
-  .bg-\[\#e8f7ee\] {
-    background-color: #e8f7ee;
   }
 
   .bg-\[\#f8fafc\] {
@@ -6488,6 +6484,10 @@
 
     .sm\:flex-none {
       flex: none;
+    }
+
+    .sm\:scroll-mt-4 {
+      scroll-margin-top: calc(var(--spacing) * 4);
     }
 
     .sm\:grid-cols-2 {

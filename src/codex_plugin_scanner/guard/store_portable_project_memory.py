@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 from .action_lattice import guard_action_severity
 from .project_identity import (
@@ -105,6 +107,68 @@ class StorePortableProjectMemoryMixin:
             "metadata": enrich_project_identity_metadata(metadata),
         }
 
+    def peek_saved_decision_groups(
+        self,
+        harness: str,
+        probes: Sequence[tuple[str, str | None]],
+        *,
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        memory_command: str | None,
+        memory_artifact_type: str | None,
+        memory_artifact_name: str | None,
+        current_action: str,
+        approval_context_inputs: Mapping[str, object],
+    ) -> dict[str, Any] | None:
+        """Peek saved decisions for several ``(artifact_id, artifact_hash)`` probes in one resident call.
+
+        Each probe composes its direct, exact-command and memory ids most
+        restrictive (with the portable Git workspace); across probes a strictly
+        more severe decision wins. Nothing is consumed. The first probe names
+        the current action: the resident also checks a saved allow's context
+        token against its hash, explains a miss, and composes the reuse verdict
+        for ``current_action``. Returns ``decision``, ``ignored_local_integrity``,
+        ``reuse`` (the verdict payload), ``saved_present`` and
+        ``saved_artifact_hash``. ``None`` means the home serves no saved
+        authority, so there is no saved decision to compose.
+        """
+        evidence = self.policy_lookup_evidence()
+        if evidence.degraded_trust_status is not None:
+            return None
+        groups: list[dict[str, object]] = []
+        for artifact_id, artifact_hash in probes:
+            exact_ids, memory_id = memory_lookup_candidates(
+                harness,
+                artifact_id,
+                memory_command=memory_command,
+                memory_artifact_type=memory_artifact_type,
+                memory_artifact_name=memory_artifact_name,
+                guard_home=Path(self.guard_home),
+            )
+            groups.append(
+                {
+                    "artifact_hash": artifact_hash,
+                    "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
+                }
+            )
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=harness,
+            artifact_id=probes[0][0],
+            artifact_hash=None,
+            workspace=workspace,
+            publisher=publisher,
+            runtime_exact_match_context=runtime_exact_match_context,
+            consume_one_shot=False,
+        )
+        request["probe_groups"] = {
+            "portable_workspace": self._portable_project_workspace(workspace),
+            "groups": groups,
+            "reuse": {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)},
+        }
+        return self.send_policy_decision_lookup(request)
+
     def mcp_policy_lookup_input(
         self,
         harness: str,
@@ -128,6 +192,7 @@ class StorePortableProjectMemoryMixin:
             memory_command=memory_command,
             memory_artifact_type=memory_artifact_type,
             memory_artifact_name=memory_artifact_name,
+            guard_home=Path(self.guard_home),
         )
         lookup: dict[str, object] = {
             "store_path": str(self.path),

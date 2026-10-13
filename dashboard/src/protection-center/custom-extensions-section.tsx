@@ -1,4 +1,4 @@
-import { type ChangeEvent, useCallback, useId, useMemo, useState } from "react";
+import { type ChangeEvent, type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { HiMiniMagnifyingGlass, HiMiniPlus, HiMiniXMark } from "react-icons/hi2";
 
 import {
@@ -60,7 +60,7 @@ function CustomExtensionEmptyState(props: {
   onClearSearch: () => void;
 }) {
   let title = "No custom extensions yet.";
-  let detail = "Add a tool you run yourself, or connect an MCP server. Guard also detects connectors from your host apps automatically.";
+  let detail = "Add a tool you run yourself or connect an MCP server. Connectors in your host apps appear here automatically.";
   if (props.search) {
     title = "No custom extensions match this search.";
     detail = "No connectors or custom tools match this search.";
@@ -71,7 +71,7 @@ function CustomExtensionEmptyState(props: {
   }
   return (
     <div
-      className="mt-4 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6"
+      className="mt-4 rounded-2xl border border-dashed border-[rgba(63,65,116,0.2)] px-4 py-5"
       data-testid={props.filteredOut ? "custom-extensions-filter-empty" : "custom-extensions-empty"}
     >
       <p className="text-sm font-semibold text-brand-dark">{title}</p>
@@ -121,6 +121,8 @@ interface CustomExtensionsSectionProps {
   discovering?: boolean;
   filteredOut?: boolean;
   onClearFilters?: () => void;
+  /** Host connector discovery status and retry, owned by the catalog page. */
+  discoveryControl?: ReactNode;
 }
 
 export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
@@ -155,6 +157,8 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   const visibleNeedsReview = grouped ? visible.filter(customExtensionNeedsReview) : visible;
   const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
   const unit = added.length === 1 ? "extension" : "extensions";
+  // With nothing added yet the empty state carries the one Add action.
+  const firstRun = all.length === 0 && search === "" && !filteredOut;
   return (
     <section className="mt-10" aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -162,11 +166,14 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
           <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
           <p className="mt-1 max-w-xl text-sm text-slate-500">Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
         </div>
-        <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
-          <HiMiniPlus className="size-4" aria-hidden="true" />
-          Add custom extension
-        </button>
+        {firstRun ? null : (
+          <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
+            <HiMiniPlus className="size-4" aria-hidden="true" />
+            Add custom extension
+          </button>
+        )}
       </div>
+      {props.discoveryControl ? <div className="mt-2">{props.discoveryControl}</div> : null}
       {searchable ? (
         <div className="mt-4">
           <label className="relative block w-full max-w-sm">

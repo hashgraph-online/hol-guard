@@ -15,6 +15,7 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
+use crate::guard_store_local_cli_grants as local_cli_grants;
 use crate::local_store_read;
 
 const OBSERVED_MCP_PREFIX: &str = "observed-mcp:";
@@ -187,7 +188,7 @@ fn compile_item(
         actions.insert(namespace_block, Value::from("block"));
         return Ok(());
     }
-    let states = command_states(connection, &grant_cli_id)?;
+    let states = local_cli_grants::command_states(connection, &grant_cli_id)?;
     if states.get(OTHER_COMMAND_ID).map(String::as_str) == Some("block") {
         actions.insert(namespace_block, Value::from("block"));
     }
@@ -253,40 +254,9 @@ fn granted_connector(
     Ok(Some((cli_id, text(&grant, "state"))))
 }
 
-/// `_read_command_states`: recognised states only.
-fn command_states(
-    connection: &Connection,
-    cli_id: &str,
-) -> StoreResult<std::collections::HashMap<String, String>> {
-    let rows = query_all(
-        connection,
-        "select command_id, state from local_cli_command_grant \
-         where cli_id = ? and typeof(command_id) = 'text' and typeof(state) = 'text'",
-        &[Value::from(cli_id)],
-    )?;
-    Ok(rows
-        .iter()
-        .filter_map(|row| {
-            let state = text(row, "state")?;
-            matches!(state.as_str(), "inherit" | "allow" | "block" | "review")
-                .then(|| text(row, "command_id").map(|command_id| (command_id, state)))?
-        })
-        .collect())
-}
-
-/// `_read_command_catalog`: well-formed commands in catalog order, as
-/// `(command_id, usage)`.
+/// Well-formed catalog commands in catalog order, as `(command_id, usage)`.
 fn command_catalog(connection: &Connection, cli_id: &str) -> StoreResult<Vec<(String, String)>> {
-    let rows = query_all(
-        connection,
-        "select command_id, usage from local_cli_command \
-         where cli_id = ? and typeof(command_id) = 'text' and typeof(usage) = 'text' \
-           and typeof(name) = 'text' and typeof(description) = 'text' \
-           and typeof(parent_id) in ('null', 'text') \
-         order by sort_index asc, command_id asc",
-        &[Value::from(cli_id)],
-    )?;
-    Ok(rows
+    Ok(local_cli_grants::command_catalog(connection, cli_id)?
         .iter()
         .filter_map(|row| Some((text(row, "command_id")?, text(row, "usage")?)))
         .collect())

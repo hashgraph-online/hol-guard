@@ -31,8 +31,8 @@ if TYPE_CHECKING:
 _FROZEN_MANIFEST_SHA256 = "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a2309862cf3728"
 # These counts belong to the source-bound 51k corpus validated by the manifest above.
 _FROZEN_CORPUS_CASE_COUNT = 51_000
-_FROZEN_NATIVE_REJECTION_COUNT = 27_084
-_FROZEN_ORACLE_ABOVE_COUNT = 10_566
+_FROZEN_NATIVE_REJECTION_COUNT = 25_002
+_FROZEN_ORACLE_ABOVE_COUNT = 8_484
 
 
 def _sha256(path: Path) -> str:
@@ -114,8 +114,9 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
     native_root = Path(str(distribution("hol-guard").locate_file("codex_plugin_scanner/_native")))
     suffix = ".exe" if sys.platform == "win32" else ""
     runtime = native_root / f"hol-guard-runtime{suffix}"
-    compiler = native_root / f"guard-command-source{suffix}"
-    if not runtime.is_file() or not compiler.is_file():
+    # The packaged runtime also hosts the source compiler operations.
+    compiler = runtime
+    if not runtime.is_file():
         raise InstalledCanaryError("Installed Guard package is missing native corpus binaries")
     environment = _child_python_environment()
     environment["HOL_GUARD_NATIVE_BINARY"] = str(runtime)

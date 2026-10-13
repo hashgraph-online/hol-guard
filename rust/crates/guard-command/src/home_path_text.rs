@@ -63,7 +63,7 @@ fn default_home() -> String {
 /// Device and verbatim prefixes (`\\?\`, `\\.\`) are split like any other
 /// drive, matching Python 3.13 and later.
 #[cfg(any(windows, test))]
-fn normpath_nt(path: &str) -> String {
+pub(crate) fn normpath_nt(path: &str) -> String {
     let text = path.replace('/', "\\");
     let (drive, root, tail) = split_root_nt(&text);
     let mut comps: Vec<&str> = Vec::new();

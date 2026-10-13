@@ -25,6 +25,11 @@ const POST_WARN_REASON: &str =
 const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not complete native prompt review safely.";
 const SILENT_WARNING_CODES: [&str; 2] = ["native_policy_observed", "native_policy_warning"];
 
+/// The execution profile a containment `reason_code` requires, if any.
+pub fn contained_execution_profile(reason_code: &str) -> Option<&'static str> {
+    containment::required_profile(reason_code)
+}
+
 /// Lower-cased, dash-normalised harness name used to select an envelope.
 pub fn canonical_hook_harness(harness: &str) -> String {
     harness.trim().to_lowercase().replace('_', "-")
@@ -397,8 +402,9 @@ pub fn post_tool(harness: &str, response: &Object) -> Object {
             .and_then(Value::as_str)
             .filter(|a| matches!(*a, "allow" | "warn"))
             .unwrap_or("allow");
+        let reason_code = text_or(response, "reason_code", "");
         let mut specific = hook_output("PostToolUse");
-        if action == "warn" {
+        if action == "warn" && !SILENT_WARNING_CODES.contains(&reason_code.as_str()) {
             specific = json!({
                 "hookEventName": "PostToolUse",
                 "permissionDecisionReason": text_or(response, "reason", POST_WARN_REASON),

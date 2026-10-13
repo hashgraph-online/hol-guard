@@ -9,6 +9,8 @@ from typing import Any
 from ..native_codex_tool_output import codex_tool_output_native
 from ..native_context import bound_context_digest_home
 from ..native_rich_command_model import NativeCommandModelError
+from ..native_sensitive_request import NativeSensitiveRequestError
+from ..native_shell_helpers import kubernetes_secret_read_source
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.direct_vitest import (
@@ -18,7 +20,6 @@ from ..runtime.direct_vitest import (
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..runtime.jsonc import loads_jsonc
-from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
@@ -543,7 +544,7 @@ def _hook_runtime_artifact(**kwargs: Any) -> GuardArtifact | None:
     try:
         with bound_context_digest_home(kwargs.get("guard_home")):
             return _hook_runtime_artifact_with_native(**kwargs)
-    except NativeCommandModelError:
+    except (NativeCommandModelError, NativeSensitiveRequestError):
         harness = _canonical_harness_name(kwargs["harness"])
         return GuardArtifact(
             artifact_id=f"{harness}:native-command-unavailable",

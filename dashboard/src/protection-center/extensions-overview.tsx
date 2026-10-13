@@ -72,26 +72,25 @@ function CatalogExtensionRow(props: {
 
 function ConnectorDiscoveryControl(props: {
   discovering: boolean;
+  showProgress: boolean;
   error: string | null;
   onRetry: () => void;
 }) {
-  if (props.discovering) {
-    return (
-      <p role="status" className="px-1 text-xs text-brand-dark/60">
-        Checking host connections…
-      </p>
-    );
-  }
+  const message = props.discovering
+    ? (props.showProgress ? "Checking host connections…" : "")
+    : (props.error ?? "");
   return (
-    <div className="flex items-center gap-2">
-      {props.error ? (
-        <p role="status" className="max-w-56 truncate text-xs text-brand-dark/60" title={props.error}>
-          {props.error}
-        </p>
-      ) : null}
-      <button type="button" className="guard-extensions-chip" onClick={props.onRetry}>
-        {props.error ? "Check for connectors again" : "Check host connections"}
-      </button>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <p aria-live="polite" aria-atomic="true" className="text-sm text-brand-dark/70">{message}</p>
+      {props.discovering ? null : (
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-brand-blue hover:text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+          onClick={props.onRetry}
+        >
+          {props.error ? "Check for connectors again" : "Check host connections"}
+        </button>
+      )}
     </div>
   );
 }
@@ -288,22 +287,13 @@ export function ExtensionsOverview(props: {
           onOpenExtension={props.onOpenExtension}
           actionSlot={searching ? <AddCustomExtensionButton onClick={handleAddCustom} /> : null}
           toolbarSlot={
-            <>
-              <CatalogFilterTrigger
-                open={filterPanelOpen}
-                activeCount={filters.trusts.length + filters.kinds.length + filters.areas.length}
-                panelId={filterPanelId}
-                buttonRef={filterTriggerRef}
-                onToggle={() => setFilterPanelOpen((open) => !open)}
+            <CatalogFilterTrigger
+              open={filterPanelOpen}
+              activeCount={filters.trusts.length + filters.kinds.length + filters.areas.length}
+              panelId={filterPanelId}
+              buttonRef={filterTriggerRef}
+              onToggle={() => setFilterPanelOpen((open) => !open)}
               />
-              {props.active ? (
-                <ConnectorDiscoveryControl
-                  discovering={discovering}
-                  error={[discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null}
-                  onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
-                />
-              ) : null}
-            </>
           }
           subtoolbarSlot={
             <CatalogFilterBar
@@ -330,10 +320,16 @@ export function ExtensionsOverview(props: {
             discovering={discovering}
             filteredOut={customItemsFilteredOut}
             onClearFilters={handleClearFilters}
+            discoveryControl={props.active ? (
+              <ConnectorDiscoveryControl
+                discovering={discovering}
+                showProgress={addedCustomItems.length > 0 || customItemsFilteredOut}
+                error={[discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null}
+                onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
+              />
+            ) : null}
           />
 
-          <LocalSkillsWorkspace />
-          <CodexHostConnectors inventory={props.hostInventory} />
           <section className="mt-10" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -365,6 +361,10 @@ export function ExtensionsOverview(props: {
               <CatalogFilterEmpty onClear={handleClearFilters} />
             )}
           </section>
+
+          {/* Inspect-only sources sit below the catalog: they inform, they do not change protection. */}
+          <CodexHostConnectors inventory={props.hostInventory} />
+          <LocalSkillsWorkspace />
         </>
       )}
 

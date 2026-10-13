@@ -26,9 +26,11 @@ _PROFILES = {
     "native_package_test_readonly_containment_required": "package-test-readonly-v1",
     "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
     "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
+    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
     "native_git_readonly_containment_required": "git-readonly-v1",
     "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
     "native_node_build_output_containment_required": "node-build-output-v1",
+    "native_workspace_containment_required": "workspace-contained-v1",
 }
 _ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
 # Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
@@ -105,6 +107,28 @@ def route_zcode_containment(
     return routed if routed is not None else response
 
 
+def contained_sink_command_prefix() -> tuple[str, ...]:
+    """The argv prefix ``route_zcode_containment`` starts the sink with."""
+    return _sink_command_prefix(
+        {"python_executable": sys.executable, "package_root": str(Path(__file__).resolve().parents[3])}
+    )
+
+
+def _sink_command_prefix(config: Mapping[str, object]) -> tuple[str, ...]:
+    if getattr(sys, "frozen", False):
+        from ..stable_guard_cli import resolve_frozen_guard_cli
+
+        return (resolve_frozen_guard_cli(),)
+    return isolated_guard_cli_command(str(config["python_executable"]), Path(str(config["package_root"])), ())
+
+
+def platform_contains(response: Mapping[str, object]) -> bool:
+    """macOS runs every contained profile; Linux runs the workspace sandbox."""
+    return sys.platform == "darwin" or (
+        sys.platform == "linux" and response.get("required_execution_profile") == "workspace-contained-v1"
+    )
+
+
 def contained_zcode_response(
     response: Mapping[str, object],
     *,
@@ -115,7 +139,7 @@ def contained_zcode_response(
     """Allow only the rewritten sink; native authority is rechecked at execution."""
     reason = response.get("reason_code")
     if (
-        sys.platform != "darwin"
+        not platform_contains(response)
         or config.get("harness") not in _SINK_HARNESSES
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
@@ -190,16 +214,7 @@ def contained_zcode_response(
         ]
         if "--home" in cli_args:
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
-        if getattr(sys, "frozen", False):
-            from ..stable_guard_cli import resolve_frozen_guard_cli
-
-            command = (resolve_frozen_guard_cli(), *args)
-        else:
-            command = isolated_guard_cli_command(
-                str(config["python_executable"]),
-                Path(str(config["package_root"])),
-                args,
-            )
+        command = (*_sink_command_prefix(config), *args)
         return {
             "policy_action": "allow",
             "reason_code": "native_contained_execution_routed",

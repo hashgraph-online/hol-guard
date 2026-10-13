@@ -24,6 +24,7 @@ use crate::native_command_catalog::packaged_command_catalog;
 use crate::package_intent_common::candidate_command_texts;
 use crate::sfrs_agent_guidance::is_benign_agent_guidance_read;
 use crate::sfrs_constants::SHELL_TOOL_NAMES;
+use crate::sfrs_destructive::shell_command_names_from_parts;
 use crate::sfrs_developer_graph::GraphInputs;
 use crate::sfrs_developer_routines::{
     looks_like_safe_cli_metadata_command, looks_like_safe_compound_developer_inspection,
@@ -295,14 +296,6 @@ pub(crate) fn looks_like_safe_existence_probe(
     roots
         .iter()
         .any(|root| resolved.relative_to(root).is_some())
-}
-
-/// `_shell_command_names_from_parts`.
-fn shell_command_names_from_parts(parts: &[String]) -> Vec<String> {
-    iter_shell_command_segments(parts)
-        .iter()
-        .filter_map(|segment| shell_segment_primary_command(segment).0)
-        .collect()
 }
 
 /// The ordered recognizers that follow the GitHub and guidance checks.

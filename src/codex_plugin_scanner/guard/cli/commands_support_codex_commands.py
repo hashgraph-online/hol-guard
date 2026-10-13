@@ -11,6 +11,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from ..native_codex_tool_output import codex_tool_output_native
+from ..native_sensitive_request import NativeSensitiveRequestError
 from ..runtime.secret_file_requests import (
     COMMAND_CANDIDATE_LIST_KEYS,
     COMMAND_SEQUENCE_KEYS,
@@ -55,7 +56,10 @@ def _codex_post_tool_command_is_read_only_source_inspection(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    command_texts = _codex_post_tool_command_texts(payload)
+    try:
+        command_texts = _codex_post_tool_command_texts(payload)
+    except NativeSensitiveRequestError:
+        return False
     if not command_texts:
         return False
     return codex_tool_output_native(
@@ -76,7 +80,9 @@ def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...
             candidate = tool_input.get(key)
             if isinstance(candidate, list):
                 candidates.extend(
-                    command_list_candidate_texts(candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS)
+                    command_list_candidate_texts(
+                        candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS
+                    )
                 )
         if not candidates and str(payload.get("tool_name", "")).strip().lower() in {
             "cat_file",

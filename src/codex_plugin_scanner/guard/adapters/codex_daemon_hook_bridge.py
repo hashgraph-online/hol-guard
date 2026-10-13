@@ -13,8 +13,12 @@ from urllib.parse import parse_qs
 
 if __package__:
     from ..approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    from ..codex_binding_capture import record_bridge_ingress
-    from ..codex_hook_bridge_runtime import BridgeConfig
+    from ..codex_hook_bridge_runtime import (
+        NATIVE_HANDOFF_FLAG,
+        BridgeConfig,
+        native_elapsed_seconds,
+        read_native_handoff,
+    )
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..codex_hook_launch_runtime import (
@@ -30,6 +34,7 @@ if __package__:
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from ..native_codex_binding_capture import record_bridge_ingress
     from .codex_contained_tests import route_codex_containment
     from .codex_daemon_bridge_failure_reason import AUTHENTICATION_FAILED_REASON, daemon_failure_reason
     from .codex_daemon_hook_bridge_flow import bridge_review_response
@@ -54,9 +59,11 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         codex_hook_response as _codex_hook_response,
     )
     from codex_plugin_scanner.guard.approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    from codex_plugin_scanner.guard.codex_binding_capture import record_bridge_ingress
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
+        NATIVE_HANDOFF_FLAG,
         BridgeConfig,
+        native_elapsed_seconds,
+        read_native_handoff,
     )
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         bounded_hook_input as _hook_input,
@@ -79,6 +86,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from codex_plugin_scanner.guard.native_codex_binding_capture import record_bridge_ingress
 
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1
@@ -283,6 +291,7 @@ def _bound_hook_input(
     input_ready_at = time.monotonic()
     event_name = _event_name(raw_data)
     timeout_seconds = _request_timeout(event_name, hook_timeouts)
+    input_ready_at -= native_elapsed_seconds(timeout_seconds)
     data = (
         _with_browser_wait_process(raw_data, wait_timeout_seconds=max(1.0, timeout_seconds - 1.0))
         if event_name == "PreToolUse"
@@ -459,11 +468,43 @@ def _bridge_output(
     return json.dumps(_codex_hook_response(payload, event_name=event_name), separators=(",", ":"))
 
 
+def native_handoff_main(*, state_path: str | Path, query: str, hook_timeouts: Mapping[str, int]) -> int:
+    """Render a daemon answer the native bridge received but left to Python."""
+
+    handoff = read_native_handoff(runtime_hook_event_name)
+    if handoff is None:
+        sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
+        return 0
+    timeout_seconds = _request_timeout(handoff.event_name, hook_timeouts)
+    deadline = time.monotonic() + timeout_seconds - min(handoff.elapsed_seconds, timeout_seconds)
+    _write_transition_observation(handoff.hook_input, handoff.response)
+    sys.stdout.write(
+        _bridge_output(
+            handoff.response,
+            event_name=handoff.event_name,
+            hook_input=handoff.hook_input,
+            state_path=state_path,
+            deadline=deadline,
+            query=query,
+        )
+    )
+    return 0
+
+
 def _bridge_config_from_argv(argv: Sequence[str]) -> BridgeConfig:
     return _parse_bridge_config(argv, timeout_grace_seconds=_HOOK_TIMEOUT_GRACE_SECONDS)
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == NATIVE_HANDOFF_FLAG:
+        _config = _bridge_config_from_argv([sys.argv[0], sys.argv[2]])
+        raise SystemExit(
+            native_handoff_main(
+                state_path=_config["state_path"],
+                query=_config["query"],
+                hook_timeouts=_config["hook_timeouts"],
+            )
+        )
     _config = _bridge_config_from_argv(sys.argv)
     raise SystemExit(
         main(

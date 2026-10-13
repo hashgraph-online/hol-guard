@@ -1,4 +1,5 @@
-//! Constant numeric expressions have no file, network, import or process effects.
+//! Constant numeric expressions and plain strings have no file, network,
+//! import or process effects.
 
 struct Expression<'a> {
     bytes: &'a [u8],
@@ -100,15 +101,53 @@ pub(super) fn safe_inline_expression(executable: &str, arguments: &[String]) -> 
     else {
         return false;
     };
-    let mut parser = Expression {
-        bytes: source.as_bytes(),
-        position: 0,
-    };
-    if !parser.expression(0) {
-        return false;
+    let arguments = top_level_arguments(source);
+    // A Python string print stays under review. The text can be a quoted
+    // command, and this proof does not attest the interpreter or its startup.
+    let strings_are_data = matches!(executable, "node" | "nodejs" | "bun");
+    arguments.len() <= 8
+        && arguments.iter().all(|argument| {
+            numeric_source(argument)
+                || (strings_are_data && plain_string_literal(argument))
+                || runtime_fact(executable, argument)
+        })
+}
+
+/// Splits a print argument list at commas outside string literals. A plain
+/// literal holds no quote, so the quote state is exact for every argument the
+/// checks below accept.
+fn top_level_arguments(source: &str) -> Vec<&str> {
+    let mut arguments = Vec::new();
+    let mut quote = None;
+    let mut start = 0;
+    for (index, character) in source.char_indices() {
+        match (quote, character) {
+            (None, '"' | '\'') => quote = Some(character),
+            (Some(open), _) if open == character => quote = None,
+            (None, ',') => {
+                arguments.push(&source[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
     }
-    parser.whitespace();
-    parser.position == parser.bytes.len()
+    arguments.push(&source[start..]);
+    arguments
+}
+
+/// Read-only runtime identity properties. Nothing can redefine them before the
+/// inline program starts unless a preload runs, which the caller excludes.
+fn runtime_fact(executable: &str, source: &str) -> bool {
+    let source = source.trim();
+    let javascript = matches!(
+        source,
+        "process.version" | "process.versions.node" | "process.platform" | "process.arch"
+    );
+    match executable {
+        "node" | "nodejs" => javascript,
+        "bun" => javascript || matches!(source, "Bun.version" | "Bun.revision"),
+        _ => false,
+    }
 }
 
 fn numeric_source(source: &str) -> bool {

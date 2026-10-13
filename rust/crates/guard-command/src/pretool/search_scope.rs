@@ -210,7 +210,11 @@ fn verified_directory_root(
     if !super::safe_reads::verified_path_context(home_dir, cwd) {
         return None;
     }
-    if !super::safe_reads::bounded_read_target(target, home_dir, cwd, true) {
+    // A recursive search through `..` reaches a sibling tree whose ignore
+    // rules were never inspected.
+    if target.split(['/', '\\']).any(|part| part == "..")
+        || !super::safe_reads::bounded_read_target(target, home_dir, cwd, true)
+    {
         return None;
     }
     let candidate = if Path::new(target).is_absolute() {

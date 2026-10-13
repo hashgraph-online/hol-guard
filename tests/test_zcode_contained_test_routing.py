@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
 from codex_plugin_scanner.guard.adapters.zcode_contained_tests import (
     cleanup_stale_zcode_requests,
     contained_zcode_response,
@@ -230,6 +231,11 @@ def test_frozen_routing_preserves_home_and_workspace_arguments(routing_inputs, m
     assert argv[0] == "guard-test-cli"
     assert argv[argv.index("--home") + 1] == str(tmp_path)
     assert argv[argv.index("--workspace") + 1] == str(tmp_path)
+    # The Desktop launcher runs as `hol-guard`; the rewritten command must parse there.
+    parsed = _build_parser("hol-guard", program_mode="hol-guard").parse_args(
+        _resolve_legacy_args(argv[1:], program_mode="hol-guard")
+    )
+    assert parsed.guard_command == "execute-contained-test"
 
 
 @pytest.mark.parametrize("failure", ["launch", "cleanup"])
@@ -325,3 +331,37 @@ def test_cli_fallback_applies_the_same_containment_rewrite(monkeypatch, tmp_path
         assert recorded[0]["event"] == "PreToolUse" and recorded[0]["harness"] == "claude-code"
     else:
         assert recorded == []
+
+
+@pytest.mark.parametrize(
+    ("reason", "profile", "routed"),
+    [
+        ("native_workspace_containment_required", "workspace-contained-v1", True),
+        ("native_vitest_readonly_containment_required", "vitest-readonly-v1", False),
+    ],
+)
+def test_linux_routes_only_the_workspace_sandbox(tmp_path, monkeypatch, reason, profile, routed):
+    import tempfile
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    receipt = {
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": reason,
+        "required_execution_profile": profile,
+    }
+    payload = {
+        "hookEventName": "PreToolUse",
+        "toolName": "Bash",
+        "cwd": str(tmp_path),
+        "toolInput": {"command": "python3 todo.py list > out.txt"},
+    }
+    config = {
+        "harness": "zcode",
+        "guard_home": str(tmp_path / "guard"),
+        "python_executable": sys.executable,
+        "package_root": str(tmp_path),
+    }
+    result = contained_zcode_response(receipt, input_text=json.dumps(payload), config=config, cli_args=[])
+    assert (result is not None) is routed

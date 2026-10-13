@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_harness_postures import recording_only_for_binding
+from ..native_resident_client import native_resident_client_failure_code
 from .hook_native_review_fence import native_review_fence
 
 if TYPE_CHECKING:
@@ -35,6 +36,44 @@ class NativePolicyBindingRefreshError(RuntimeError):
         # Posture of the rejected ACKed binding, so a refresh that cannot
         # complete keeps a Watch binding recording instead of stopping.
         self.recording_only = recording_only is True
+
+
+def superseded_post_tool_snapshot(
+    worker: _HookWorkerNativeHost,
+    policy_snapshot: Mapping[str, object] | None,
+    event_name: str,
+    *,
+    workspace: Path | None,
+    deadline: float | None,
+) -> Mapping[str, object] | None:
+    """Return a fresh ACKed binding after another publisher superseded this one.
+
+    A contained test run or other short-lived CLI hook publishes its own
+    snapshot while the tool runs, so the PostToolUse that follows can find the
+    worker's binding no longer current. Refresh once within the original
+    deadline; any other failure, including a refresh that cannot complete,
+    keeps the existing unavailable answer.
+    """
+    if (
+        event_name != "PostToolUse"
+        or policy_snapshot is None
+        or deadline is None
+        or time.monotonic() >= deadline
+        or native_resident_client_failure_code() != SNAPSHOT_NOT_CURRENT_ERROR
+        or getattr(worker, "_publish_native_policy", False) is not True
+    ):
+        return None
+    publisher = getattr(worker, "policy_snapshot_publisher", None)
+    request_refresh = getattr(publisher, "request_control_binding_refresh", None)
+    if not callable(request_refresh):
+        return None
+    generation = policy_snapshot.get("generation")
+    try:
+        request_refresh(generation if isinstance(generation, int) and not isinstance(generation, bool) else None)
+        refreshed = worker._native_policy_snapshot(workspace, deadline=deadline)
+    except (OSError, TimeoutError, NativePolicySnapshotError):
+        return None
+    return refreshed if refreshed is not None and time.monotonic() < deadline else None
 
 
 def review_native_edge(

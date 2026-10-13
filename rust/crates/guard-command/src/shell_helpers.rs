@@ -72,6 +72,9 @@ pub fn evaluate_with_deadline(
             .map(|p| json!({"left":p.left,"right":p.right}))
             .collect::<Vec<_>>())),
         "heredocs" => Ok(json!(shell_structure::extract_heredocs(command))),
+        "kubernetes_secret_read_source" => Ok(json!(
+            crate::sfrs_kubernetes_commands::kubernetes_secret_read_source(command)
+        )),
         "substitutions" => Ok(json!(shell_structure::extract_command_substitution_spans(
             command
         ))),

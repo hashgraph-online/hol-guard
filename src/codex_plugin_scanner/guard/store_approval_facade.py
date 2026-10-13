@@ -277,15 +277,7 @@ class StoreApprovalsMixin:
                 """,
                 params,
             ).fetchall()
-            matching_ids = [
-                str(row["request_id"])
-                for row in rows
-                if approval_request_surfaces_are_resolvable(
-                    row["policy_action"],
-                    row["decision_v2_json"],
-                    row["action_envelope_json"],
-                )
-            ]
+            matching_ids = resolvable_approval_request_ids(connection, rows)
             self._resolve_approval_request_ids(
                 connection,
                 matching_ids,
@@ -374,18 +366,14 @@ class StoreApprovalsMixin:
                 """,
                 (harness,),
             ).fetchall()
-            matching_ids = [
-                str(row["request_id"])
+            candidates = [
+                row
                 for row in rows
                 if _path_within_workspace(str(row["config_path"]), workspace)
                 and (artifact_id is None or row["artifact_id"] == artifact_id)
                 and (artifact_id is None or artifact_hash is None or row["artifact_hash"] == artifact_hash)
-                and approval_request_surfaces_are_resolvable(
-                    row["policy_action"],
-                    row["decision_v2_json"],
-                    row["action_envelope_json"],
-                )
             ]
+            matching_ids = resolvable_approval_request_ids(connection, candidates)
             self._resolve_approval_request_ids(
                 connection,
                 matching_ids,

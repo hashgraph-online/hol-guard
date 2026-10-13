@@ -1,0 +1,13 @@
+{
+  "builderVersion": "1.0.0",
+  "contributionId": "mcp.ftp",
+  "managedFiles": {
+    "contributions/authoring/mcp.ftp/README.md": "8e681f334e1903146ab4414e1528fc02c20f64f7d4d88a32f3ec2f4c00c52872",
+    "contributions/authoring/mcp.ftp/discovery.json": "b1877f013dc623afa987a90d5900491e40343479e23badb4f8fb9b575fbda7ba",
+    "contributions/authoring/mcp.ftp/report.json": "f2b3af2be67f8b632965aa04d318c5cbcf8665bc791fc2308003a7855138d51a",
+    "contributions/authoring/mcp.ftp/review.json": "dd4cba21090cd0840f89e5918a16f02987b42e3e798f9d27dca0c7222cb020d3",
+    "contributions/mcp-servers/mcp.ftp.json": "d3937f20e38988d8231e4faf6f70ca944cd3efa369441d29f18eb5220675c387"
+  },
+  "revisionDigest": "f9941d6854220b79194265d638ec267dc3c1d116ea8ce790123afb0ffad79546",
+  "schemaVersion": "guard.extension-authoring-install.v1"
+}

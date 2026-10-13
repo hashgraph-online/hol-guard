@@ -24,9 +24,20 @@ struct Input {
     search_path: String,
     read_only_workspace: bool,
     source: BTreeMap<String, String>,
+    user_site_root: Option<PathBuf>,
 }
 
 pub fn evaluate(operation: &str, input: &Value) -> Value {
+    if let Some(result) = crate::contained_argv::evaluate(operation, input)
+        .or_else(|| super::contained::evaluate(operation, input))
+        .or_else(|| super::profiles::evaluate(operation, input))
+        .or_else(|| super::workspace::evaluate(operation, input))
+        .or_else(|| super::workspace_linux::evaluate(operation, input))
+        .or_else(|| super::workspace_overlay::evaluate(operation, input))
+        .or_else(|| super::credentials::evaluate(operation, input))
+    {
+        return result;
+    }
     match serde_json::from_value::<Input>(input.clone()) {
         Ok(input) => match evaluate_inner(operation, &input) {
             Ok(value) => json!({"value": value}),
@@ -87,8 +98,13 @@ fn evaluate_inner(operation: &str, input: &Input) -> Result<Value, RestrictedPyt
             &input.cwd,
             &input.private_home,
             &input.private_tmp,
-            &input.allowed_executables
+            &input.allowed_executables,
+            input
+                .user_site_root
+                .as_deref()
+                .is_some_and(super::user_site::grantable)
         )?),
+        "user_site_link_target" => json!(super::user_site::link_target(&input.source)),
         "runtime_roots" => json!(runtime_roots(
             &input.allowed_executables,
             &input.workspace,
@@ -173,7 +189,7 @@ fn symlink_runtime_roots(executable: &Path) -> Vec<PathBuf> {
     roots
 }
 
-fn runtime_roots(
+pub(super) fn runtime_roots(
     executables: &[PathBuf],
     workspace: &Path,
     private: Option<&Path>,
@@ -213,7 +229,7 @@ fn runtime_roots(
     roots
 }
 
-fn dedupe_parent_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
+pub(super) fn dedupe_parent_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut sorted: Vec<PathBuf> = paths
         .iter()
         .filter_map(|path| resolve_nonstrict(path).ok())
@@ -229,7 +245,7 @@ fn dedupe_parent_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
     result
 }
 
-fn ancestor_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
+pub(super) fn ancestor_paths(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut result = Vec::new();
     for path in paths {
         for parent in path.ancestors() {

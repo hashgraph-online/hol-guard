@@ -15,6 +15,7 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 
 use crate::hook_artifact_compose_reuse as reuse;
+use crate::hook_policy_config::{artifact_policy_action, data_flow_configured_action};
 
 pub(crate) fn evaluate_hook_artifact_compose_request(
     request: &HookArtifactComposeRequestV1,
@@ -23,13 +24,21 @@ pub(crate) fn evaluate_hook_artifact_compose_request(
     if request.schema != HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA {
         return Err("native_hook_artifact_compose_schema_mismatch".to_owned());
     }
+    let (status, code, payload) = match compose(&request.query) {
+        Ok(payload) => ("ok", "ok", payload),
+        Err(message) => (
+            "error",
+            "native_hook_artifact_compose_validation_refused",
+            json!({"error_type": "ValueError", "message": message.chars().take(1024).collect::<String>()}),
+        ),
+    };
     crate::resident_protocol::encode_response(&HookArtifactComposeResultV1 {
         schema: HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
-        status: "ok".to_owned(),
-        code: "ok".to_owned(),
-        payload: Some(compose(&request.query)),
+        status: status.to_owned(),
+        code: code.to_owned(),
+        payload: Some(payload),
     })
 }
 
@@ -45,9 +54,14 @@ fn request_digest(request: &HookArtifactComposeRequestV1) -> Result<String, Stri
     ))
 }
 
-pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Value {
-    match query {
+pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Result<Value, String> {
+    Ok(match query {
         HookArtifactComposeQueryV1::PolicyStack(query) => policy_stack(query),
+        HookArtifactComposeQueryV1::ConfigAction(query) => {
+            let mut events = Vec::new();
+            let action = artifact_policy_action(&query.policy_config, &query.artifact, &mut events);
+            json!({"action": action.as_str(), "auto_stop_events": events})
+        }
         HookArtifactComposeQueryV1::ToolGrantApply => json!({
             "current_policy_action": "allow",
             "policy_action": "allow",
@@ -63,7 +77,8 @@ pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Value {
         HookArtifactComposeQueryV1::TrustedOverride(query) => reuse::trusted_override(query),
         HookArtifactComposeQueryV1::ClaimedReuse(query) => reuse::claimed_reuse(query),
         HookArtifactComposeQueryV1::DecisionCopy(query) => reuse::decision_copy(query),
-    }
+        HookArtifactComposeQueryV1::DecisionBuildCopy(query) => reuse::decision_build_copy(query)?,
+    })
 }
 
 pub(crate) fn act(value: &Value) -> GuardAction {
@@ -100,8 +115,14 @@ fn policy_stack(query: &PolicyStackQueryV1) -> Value {
     let payload = query.payload_action_present.then(|| {
         normalize_guard_action_result(&query.payload_action, GuardAction::RequireReapproval)
     });
-    let config_action = coerce(&query.config_action).unwrap_or(GuardAction::Warn);
-    let context_config = coerce(&query.approval_context_config_action).unwrap_or(GuardAction::Warn);
+    let mut auto_stop_events = Vec::new();
+    let config_action =
+        artifact_policy_action(&query.policy_config, &query.runtime, &mut auto_stop_events);
+    let context_config = artifact_policy_action(
+        &query.policy_config,
+        &query.approval_context,
+        &mut auto_stop_events,
+    );
     let native_floor = [present(&query.native_floor), present(&query.edge_floor)]
         .into_iter()
         .flatten()
@@ -127,7 +148,7 @@ fn policy_stack(query: &PolicyStackQueryV1) -> Value {
     let mut data_flow_action = None;
     let mut context_data_flow_action = None;
     if query.has_data_flow {
-        let configured = coerce(&query.data_flow_configured_action);
+        let configured = data_flow_configured_action(&query.policy_config, query.data_flow_strong);
         let flow = configured.unwrap_or(policy);
         let context_flow = configured.unwrap_or(context);
         policy = stricter(policy, flow);
@@ -191,6 +212,7 @@ fn policy_stack(query: &PolicyStackQueryV1) -> Value {
         "normalizer_evidence": normalizer_evidence,
         "risk_signals": risk_signals,
         "risk_summary": risk_summary,
+        "auto_stop_events": auto_stop_events,
     })
 }
 

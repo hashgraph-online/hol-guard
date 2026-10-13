@@ -523,6 +523,7 @@ class TestCorruptionRecovery:
 
         cases = (
             ("click", "page element", "browser interaction on"),
+            ("browser_click", "page element", "browser interaction on"),
             ("fill_form", "page elements", "browser interaction on"),
             ("new_page", "current page", "browser navigation to"),
             ("take_snapshot", "current page", "browser inspection of"),

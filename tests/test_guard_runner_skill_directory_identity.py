@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -63,15 +64,19 @@ def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
         return evaluation
 
     launch_calls: list[object] = []
+    native_subprocess_run = subprocess.run
     monkeypatch.setattr(wrapper_run, "detect_harness", detect)
     monkeypatch.setattr(
-        wrapper_run_finish.subprocess,
-        "run",
-        lambda *args, **kwargs: (
-            launch_calls.append((args, kwargs))
-            or subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        wrapper_run_finish,
+        "subprocess",
+        SimpleNamespace(
+            run=lambda *args, **kwargs: (
+                launch_calls.append((args, kwargs))
+                or subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            )
         ),
     )
+    assert subprocess.run is native_subprocess_run
 
     result = wrapper_run.guard_run(
         "gemini",

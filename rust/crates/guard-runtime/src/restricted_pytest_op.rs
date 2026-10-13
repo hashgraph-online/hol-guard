@@ -10,10 +10,21 @@ pub(crate) fn evaluate(
     if bytes.len() > 2 * 1024 * 1024 || operation.len() > 64 {
         return Err("native_restricted_pytest_input_invalid");
     }
+    if operation == "process_ceiling" {
+        let result = crate::restricted_process_ceiling::evaluate(budget.deadline());
+        budget.check()?;
+        return Ok(result);
+    }
     #[cfg(unix)]
-    let result = guard_command::restricted_pytest::evaluate(operation, input);
+    let result = guard_command::restricted_pytest::evaluate_with_deadline(
+        operation,
+        input,
+        budget.deadline(),
+    );
     #[cfg(not(unix))]
-    let result = if operation == "normalized_command" {
+    let result = if let Some(result) = guard_command::contained_argv::evaluate(operation, input) {
+        result
+    } else if operation == "normalized_command" {
         guard_command::restricted_command::evaluate_normalized(input)
     } else {
         serde_json::json!({

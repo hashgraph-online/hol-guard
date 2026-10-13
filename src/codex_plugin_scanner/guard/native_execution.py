@@ -1,4 +1,6 @@
-"""Resident bridge for contained-execution + shim-admin + MCP-probe ops (RTM-020).
+"""Resident bridge for contained-execution, MCP-probe and prompt ops (RTM-020).
+
+Package-shim administration lives in ``native_shim_admin``.
 
 Each helper sends a native request and decodes its response. A missing or
 malformed response returns ``None``; enforcement callers must treat that as
@@ -33,7 +35,6 @@ if TYPE_CHECKING:
 _MAX_REQUEST_BYTES = 256 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _CONTAINED_EXECUTION_FEATURE = "contained-execution-v1"
-_SHIM_ADMIN_FEATURE = "shim-admin-v1"
 _MCP_STDIO_PROBE_FEATURE = "mcp-stdio-probe-v1"
 _MCP_STDIO_SESSION_FEATURE = "mcp-stdio-session-v1"
 _MCP_STDIO_SESSION_OPEN_SCHEMA = "guard-mcp-stdio-session-open-request.v1"
@@ -76,6 +77,7 @@ def _resident_request(
     response_schema: str | None = None,
     max_request_bytes: int = _MAX_REQUEST_BYTES,
     record_success: bool = True,
+    record_resilience: bool = True,
     status: NativeRuntimeStatus | None = None,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops.
@@ -119,21 +121,24 @@ def _resident_request(
         timeout_seconds=timeout_seconds,
     )
     if response is None:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_transport")
+        if record_resilience:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_transport")
         return None
     try:
         decoded = json.loads(response.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
+        if record_resilience:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if not isinstance(decoded, dict):
-        if not record_success:
+        if record_resilience and not record_success:
             native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if "schema" not in decoded:
         record_native_resident_error_frame(decoded)
     if response_schema is not None and decoded.get("schema") != response_schema:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
+        if record_resilience:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
         return None
     result_schema = {
         "prompt_analyze": "guard-prompt-analyze-result.v1",
@@ -176,6 +181,9 @@ def _resident_request(
             "hook_authority_state",
             "hook_render",
             "protect_request",
+            "hook_artifact_compose",
+            "consumer_artifact_compose",
+            "mcp_tool_call_identity",
             "package_context_build",
         }:
             accepted = frozenset({"ok", "error"})
@@ -183,10 +191,10 @@ def _resident_request(
             accepted = frozenset({"ok", "need", "error"})
         accepted_statuses = accepted if accepted is not None else frozenset({"ok"})
         if decoded.get("status") not in accepted_statuses:
-            if not record_success:
+            if record_resilience and not record_success:
                 native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_status")
             return None
-    if record_success:
+    if record_resilience and record_success:
         native_record_resident_success(status.identity.sha256, guard_home)
     return decoded
 
@@ -369,48 +377,6 @@ def contained_workspace_write_execute_native(
         return _contained_workspace_write_result(result)
     except (KeyError, TypeError, ValueError):
         return None
-
-
-# ---------------------------------------------------------------------------
-# Shim admin op
-# ---------------------------------------------------------------------------
-
-
-def shim_admin_native(
-    subop: str,
-    *,
-    guard_home: Path,
-    managers: Sequence[str] | None = None,
-    workspace_dir: Path | None = None,
-    allow_inactive_path: bool = False,
-    timeout_seconds: int = 30,
-    path_env: str | None = None,
-    install_managers: Sequence[str] | None = None,
-    repair: bool = False,
-) -> dict[str, object] | list[object] | None:
-    request: dict[str, object] = {
-        "schema": "guard-shim-admin-request.v1",
-        "subop": subop,
-        "guard_home": str(guard_home),
-        "managers": list(managers) if managers else None,
-        "workspace_dir": str(workspace_dir) if workspace_dir else None,
-        "allow_inactive_path": allow_inactive_path,
-        "timeout_seconds": timeout_seconds,
-        "path_env": path_env,
-        "install_managers": list(install_managers) if install_managers else None,
-        "repair": repair,
-    }
-    decoded = _resident_request(
-        operation="shim_admin",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=float(timeout_seconds) + 5.0,
-        required_feature=_SHIM_ADMIN_FEATURE,
-    )
-    if decoded is None:
-        return None
-    result = decoded.get("result")
-    return result if isinstance(result, (dict, list)) else None
 
 
 # ---------------------------------------------------------------------------

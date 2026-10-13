@@ -14,6 +14,7 @@ from .codex_hook_command_line import (
     hook_token_name,
     plain_json_hook_argv,
 )
+from .codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_hook_command
@@ -153,10 +154,23 @@ _LIVE_OWNED_FALLBACK_REASONS = frozenset(
 )
 
 
+def _native_bridge_payload(tokens: Sequence[str]) -> Sequence[str] | None:
+    """The Python bridge argv a native ``codex-hook-bridge`` launcher delegates to."""
+    if len(tokens) > 2 and tokens[1] == NATIVE_CODEX_HOOK_COMMAND:
+        return tokens[2:]
+    return None
+
+
 def _is_live_guard_codex_hook_command(command: str, *, windows: bool | None = None) -> bool:
-    tokens = hook_command_tokens(command, windows=windows)
+    return _live_guard_codex_hook_tokens(hook_command_tokens(command, windows=windows), windows=windows)
+
+
+def _live_guard_codex_hook_tokens(tokens: Sequence[str], *, windows: bool | None) -> bool:
     if not tokens:
         return False
+    native_payload = _native_bridge_payload(tokens)
+    if native_payload is not None:
+        return _live_guard_codex_hook_tokens(native_payload, windows=windows)
     first_name = hook_token_name(tokens[0], windows=windows)
     first = first_name.lower()
     rest = tokens[1:]
@@ -181,6 +195,17 @@ def _is_live_guard_codex_hook_command(command: str, *, windows: bool | None = No
     return False
 
 
+def _hook_program_candidates(tokens: Sequence[str], *, windows: bool | None) -> list[str]:
+    candidates = [tokens[0]]
+    native_payload = _native_bridge_payload(tokens)
+    if native_payload is not None:
+        return [*candidates, *_hook_program_candidates(native_payload, windows=windows)]
+    payload = _skip_leading_flags(tokens[1:])
+    if payload and hook_token_name(payload[0], windows=windows) == "codex_daemon_hook_bridge.py":
+        candidates.append(payload[0])
+    return candidates
+
+
 def missing_guard_hook_program(command: str, *, windows: bool | None = None) -> str | None:
     """Return the absolute launcher or bridge path a Guard hook needs that no longer exists.
 
@@ -191,12 +216,7 @@ def missing_guard_hook_program(command: str, *, windows: bool | None = None) -> 
         return None
     if not _is_live_guard_codex_hook_command(command, windows=windows):
         return None
-    tokens = hook_command_tokens(command, windows=windows)
-    candidates = [tokens[0]]
-    payload = _skip_leading_flags(tokens[1:])
-    if payload and hook_token_name(payload[0], windows=windows) == "codex_daemon_hook_bridge.py":
-        candidates.append(payload[0])
-    for candidate in candidates:
+    for candidate in _hook_program_candidates(hook_command_tokens(command, windows=windows), windows=windows):
         path = Path(candidate)
         if path.is_absolute() and not path.exists():
             return candidate

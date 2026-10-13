@@ -12,28 +12,69 @@ pub struct PathContext<'a> {
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
     /// toolchain the rustup proxy runs. Literal contexts leave this false.
     pub rustup_override_absent: bool,
+    /// No inherited npm or Node variable can move npm's registry, config
+    /// files or loaded code. Literal contexts leave this false.
+    pub npm_config_inert: bool,
+    /// The shell expands `~` to `home_dir`: its HOME names the same
+    /// directory. Literal contexts leave this false.
+    pub shell_home_matches: bool,
 }
 
 mod contained_wrapper;
+pub(crate) mod curl_reads;
+pub(crate) mod docker_reads;
+pub(crate) mod kubectl_reads;
+pub(crate) mod port_probes;
+mod workspace_contained;
+#[cfg(unix)]
+pub(crate) use workspace_contained::PROFILE as WORKSPACE_PROFILE;
+pub(crate) use workspace_contained::{command_shape, init_arguments, Shape};
 pub(crate) mod directory_targets;
+pub(crate) mod workspace_git_config;
+pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
 mod base64_reads;
+mod brew_reads;
+mod bun_eval;
+mod chain_temporary;
+mod compound_reason;
+mod fanout_reads;
 mod find_reads;
+mod for_loop_unroll;
 pub(crate) mod git_branch_listing;
 mod git_config;
+pub(crate) mod git_config_reads;
+pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
+pub(crate) mod git_init_target;
+pub(crate) mod git_object_reads;
+mod git_read_floor;
 mod git_reads;
+mod git_search_text;
+mod repo_create_reason;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
+mod git_local_writes;
 mod git_probe;
+mod git_push;
+mod git_remote_config;
+mod git_remote_ops;
 mod git_routes;
+mod git_session_probe;
 mod git_worktree;
 mod guard_diagnostics;
 mod listing_reads;
+mod lookup_reads;
+mod metadata_reads;
+mod npm_environment;
+mod npm_reads;
+mod postgres_reads;
 mod pytest_contained;
+mod tool_bin_listing;
 mod trusted_location;
-pub(crate) use git_routes::git_route_within_workspace;
+pub(crate) use git_routes::{git_dir_route_within_scope, git_route_within_workspace};
 mod apply_patch_writes;
+mod lockfile_install;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
@@ -41,7 +82,8 @@ use source_reads::{plain_source_code_path, sensitive_command_input, source_file_
 mod recursive_copy;
 mod restricted_tests;
 mod rust_toolchain;
-mod safe_reads;
+mod safe_links;
+pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
 mod search;
@@ -49,22 +91,47 @@ mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+pub(crate) mod sed_edits;
 mod segment_proof;
 mod shell_script;
 mod stdin_filters;
+mod symlink_writes;
 mod version_probes;
+#[cfg(test)]
+#[path = "pretool/workspace_contained_runner_tests.rs"]
+mod workspace_contained_runner_tests;
+#[cfg(test)]
+#[path = "pretool/workspace_contained_sibling_tests.rs"]
+mod workspace_contained_sibling_tests;
+#[cfg(test)]
+#[path = "pretool/workspace_contained_tests.rs"]
+mod workspace_contained_tests;
 mod worktree_add;
+mod worktree_maintenance;
 mod worktree_writes;
 mod wrangler_reads;
 
 pub mod generic;
+mod package_scripts_disabled;
+pub use package_scripts_disabled::no_script_install_command;
 
 pub use generic::bounded_task_metadata_output;
 pub use generic::evaluate_pre_tool_envelope;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
-pub(crate) use segment_proof::benign_command_segments;
+pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
+pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub(crate) use worktree_add::verified_leading_cd;
+
+/// Whether this evaluation already proved `segment` as a safe `origin`
+/// refresh or feature push.
+pub(crate) fn verified_origin_operation(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    git_remote_ops::verified(segment, context)
+}
 
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
@@ -106,8 +173,13 @@ pub(super) fn normalized_haystack(value: &str) -> String {
 }
 
 pub(super) fn sensitive_command(value: &str) -> bool {
+    credential_keyword_text(value) || sensitive_location_text(value)
+}
+
+/// Credential words such as `password` or `api_key`, anywhere in `value`
+/// except a plain source-file path.
+pub(super) fn credential_keyword_text(value: &str) -> bool {
     let lowered = normalized_haystack(value);
-    let keywords_apply = !plain_source_code_path(value);
     let keyword_needles = [
         "aws_secret_access_key",
         "private_key",
@@ -117,13 +189,16 @@ pub(super) fn sensitive_command(value: &str) -> bool {
         "password",
         "secret",
     ];
-    if keywords_apply
+    !plain_source_code_path(value)
         && keyword_needles
             .iter()
             .any(|needle| lowered.contains(needle))
-    {
-        return true;
-    }
+}
+
+/// Credential locations and environment reads: `.env`, `~/.ssh`,
+/// `process.env` and the like.
+fn sensitive_location_text(value: &str) -> bool {
+    let lowered = normalized_haystack(value);
     let needles = [
         "/.ssh/",
         "~/.ssh",
@@ -150,7 +225,7 @@ pub(super) fn sensitive_command(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || lowered.contains("printenv")
+        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -222,6 +297,7 @@ fn exfiltration_command(value: &str) -> bool {
 fn safe_gh_arguments(arguments: &[String], text: &str) -> bool {
     matches!(arguments, [auth, status, flag]
         if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h"))
+        || repo_create_reason::private_create(arguments)
         || crate::command_compatibility::github_arguments_are_read_only(arguments, text)
 }
 
@@ -245,11 +321,23 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
-    if !safe_scalar::bounded_total_sleep(model) {
+    if !safe_scalar::bounded_total_sleep(model)
+        || !chain_temporary::absent_reads_bounded(model, context)
+    {
         return false;
     }
-    if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context) {
+    if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
+        || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
+    {
         return true;
+    }
+    if let Some(rest) = segment_proof::after_read_prefix(model, context) {
+        return segment_proof::exact_safe_cwd_compound(&rest, allow_git_helper_context, context);
+    }
+    if let Some(rest) =
+        git_read_floor::after_safe_git_read_prefix(model, allow_git_helper_context, context)
+    {
+        return segment_proof::exact_safe_cwd_compound(&rest, allow_git_helper_context, context);
     }
     model.segments.iter().all(|segment| {
         segment_proof::exact_safe_segment_with_context(
@@ -293,6 +381,48 @@ pub(super) fn evaluate_pre_tool_with_context(
 }
 
 pub(super) fn evaluate_pre_tool_with_execution_context(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    deadline: Option<std::time::Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Result<PreToolDecisionV1, String> {
+    let decision =
+        evaluate_single_command(request, home_dir, cwd, deadline, execution_environment)?;
+    if request.dialect != "posix" || decision.minimum_action != "review" {
+        return Ok(decision);
+    }
+    // A loop over literal words is its unrolled command list. The unrolled
+    // form goes through the same proofs and replaces the loop's decision: an
+    // allow there admits the loop, a block is never softened, and a review
+    // carries the unrolled model so later layers judge modeled commands.
+    let Some(unrolled) = for_loop_unroll::unroll(&request.command) else {
+        return Ok(decision);
+    };
+    let unrolled_request = CommandModelRequestV1 {
+        command: unrolled,
+        ..request.clone()
+    };
+    match evaluate_single_command(
+        &unrolled_request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+    ) {
+        Ok(unrolled)
+            if matches!(
+                unrolled.minimum_action.as_str(),
+                "allow" | "review" | "block"
+            ) =>
+        {
+            Ok(unrolled)
+        }
+        _ => Ok(decision),
+    }
+}
+
+fn evaluate_single_command(
     request: &CommandModelRequestV1,
     home_dir: Option<&str>,
     cwd: Option<&str>,
@@ -381,6 +511,14 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard requires fresh approval for the privileged execution context.",
         ));
     }
+    if bun_eval::exact_safe_command(&model, context, execution_environment) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this Bun program only prints constants and no preload can run first.",
+        ));
+    }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {
         return Ok(pretool_decision(
             model,
@@ -389,15 +527,50 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "The Rust command authority proved this bounded worktree creation has a fresh contained destination, a local ref, and no executable Git routes.",
         ));
     }
-    if exact_safe_command_with_context(&model, false, context) {
+    if let Some((reason_code, reason)) =
+        git_remote_ops::exact_safe_command(&model, context, deadline, execution_environment)
+            .or_else(|| {
+                let environment = execution_environment;
+                git_config_reads::writes::exact_safe_command(&model, context, deadline, environment)
+            })
+            .or_else(|| {
+                let environment = execution_environment;
+                git_init_target::exact_safe_command(&model, context, deadline, environment)
+            })
+    {
+        return Ok(pretool_decision(model, "allow", reason_code, reason));
+    }
+    if worktree_maintenance::exact_safe_command(&model, context, deadline, execution_environment) {
         return Ok(pretool_decision(
             model,
             "allow",
-            "native_exact_safe_command",
+            "native_exact_safe_worktree_maintenance",
+            "The Rust command authority proved this worktree maintenance targets an unlocked linked worktree of the routed checkout without force or executable Git routes.",
+        ));
+    }
+    if git_push::exact_safe_command(&model, context, deadline, execution_environment) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_git_push",
+            "The Rust command authority proved this push sends the checked-out branch to a credential-free GitHub HTTPS origin through trusted Git, credential helpers and hooks.",
+        ));
+    }
+    if exact_safe_command_with_context(&model, false, context)
+        && !bun_eval::node_inline_preload_configured(&model, execution_environment)
+    {
+        let reason_code = curl_reads::proven_reason_code(&model);
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            reason_code,
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if sensitive_command(normalized) {
+    if git_search_text::sensitive_beyond_patterns(
+        normalized,
+        git_search_text::command_without_patterns(&model),
+    ) {
         return Ok(pretool_decision(
             model,
             "review",
@@ -434,17 +607,29 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard is checking repository Git-helper configuration before allowing this read-only command.",
         ));
     }
+    let reason = repo_create_reason::private_alternative_reason(&model)
+        .or_else(|| repo_create_reason::created_remote_push_reason(&model))
+        .or_else(|| fanout_reads::whitespace_split_reason(&model))
+        .or_else(|| compound_reason::unproven_steps_reason(&model, context))
+        .or_else(|| worktree_add::outside_home_reason(&model, context));
     Ok(pretool_decision(
         model,
         "review",
         "native_command_review_required",
-        "HOL Guard requires review because the Rust authority could not prove this command explicitly benign.",
+        reason.as_deref().unwrap_or(
+            "HOL Guard requires review because this command could not be confirmed read-only. Approve it in the HOL Guard inbox (choose Always for a repeated read-only command), or split it into simpler commands.",
+        ),
     ))
 }
 
 #[cfg(test)]
+#[path = "pretool/for_loop_tests.rs"]
+mod for_loop_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_benign_probes;
+#[cfg(test)]
+mod tests_fanout_reads;
 #[cfg(test)]
 mod tests_listing_find_probes;

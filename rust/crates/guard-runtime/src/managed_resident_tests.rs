@@ -34,6 +34,7 @@ fn client_deadline_is_bounded() {
         "contained_node_execute",
         "contained_typescript_execute",
         "contained_package_script_execute",
+        "shim_admin",
     ] {
         let payload = format!(r#"{{"operation":"{operation}","deadline_budget_ms":130000}}"#);
         assert_eq!(client_timeout(payload.as_bytes()), Duration::from_secs(130));

@@ -23,12 +23,7 @@ def test_platform_feed_writer_queue_retains_pending_versions(name: str, publishe
     config = yaml.safe_load(workflow.read_text(encoding="utf-8"))
     assert "concurrency" not in config
     assert "concurrency" not in config["jobs"]["validate"]
-    # Only the macOS feed has an alpha channel; its group is chosen by the dispatch input.
-    group = (
-        f"desktop-core-${{{{ inputs.release_channel == 'alpha' && 'alpha' || 'stable' }}}}-feed-{platform}"
-        if name == "desktop-core-alpha-feed.yml"
-        else f"desktop-core-stable-feed-{platform}"
-    )
+    group = f"desktop-core-${{{{ inputs.release_channel == 'alpha' && 'alpha' || 'stable' }}}}-feed-{platform}"
     assert config["jobs"][publisher]["concurrency"] == {
         "group": group,
         "cancel-in-progress": False,

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use super::generate::{needs_shell_wrapper, package_shim_interpreter};
+use super::generate::{is_transient_appimage_path, needs_shell_wrapper, package_shim_interpreter};
 use super::values::{parse_py_str_list, py_repr_list, py_splitlines, py_strip, sha256_hex};
 use super::{ShimFacts, ShimResult};
 use crate::codex_output_py::shlex_split;
@@ -80,9 +80,24 @@ fn trusted_frozen_cli_path(facts: &ShimFacts, path: &str) -> bool {
     !path_aliases(facts, path).is_disjoint(&trusted)
 }
 
-fn interpreter_runnable(facts: &ShimFacts, wrapper: &[u8]) -> bool {
-    wrapper_interpreter(facts, wrapper)
-        .is_none_or(|interpreter| trusted_frozen_cli_path(facts, &interpreter))
+fn interpreter_runnable(facts: &ShimFacts, wrapper: &[u8]) -> ShimResult<bool> {
+    let Some(interpreter) = wrapper_interpreter(facts, wrapper) else {
+        return Ok(true);
+    };
+    if trusted_frozen_cli_path(facts, &interpreter) {
+        return Ok(true);
+    }
+    // A normal unfrozen shebang names `facts.executable`. A spaced path uses a
+    // shell wrapper, and an AppImage mount is ephemeral; both stay stale.
+    // Frozen builds remain limited to the trusted frozen CLI list above.
+    if needs_shell_wrapper(facts) || is_transient_appimage_path(facts, &interpreter)? {
+        return Ok(false);
+    }
+    // Like the trusted-CLI check, the interpreter must exist and be runnable now.
+    if !facts.is_file(&interpreter) || (!facts.windows && !facts.is_executable(&interpreter)) {
+        return Ok(false);
+    }
+    Ok(!path_aliases(facts, &interpreter).is_disjoint(&path_aliases(facts, &facts.executable)))
 }
 
 /// `_package_shim_base_command`: the first `base_command = [...]` line of the
@@ -306,7 +321,7 @@ fn integrity_ok(
     command: &str,
     installed_wrapper: &[u8],
 ) -> ShimResult<bool> {
-    if !interpreter_runnable(facts, installed_wrapper) {
+    if !interpreter_runnable(facts, installed_wrapper)? {
         return Ok(false);
     }
     let sidecar = sidecar_path(facts, shim_dir, command);
@@ -314,7 +329,7 @@ fn integrity_ok(
         let sidecar_bytes = facts
             .read_bytes(&sidecar)
             .map_err(|error| error.message(&sidecar))?;
-        if !interpreter_runnable(facts, &sidecar_bytes) {
+        if !interpreter_runnable(facts, &sidecar_bytes)? {
             return Ok(false);
         }
     }
@@ -345,7 +360,7 @@ pub(crate) fn classify_integrity(
         shim_dir,
         command,
     ));
-    if !interpreter_runnable(facts, installed_wrapper) {
+    if !interpreter_runnable(facts, installed_wrapper)? {
         return Ok("stale");
     }
     let binding = runtime_binding_is_current(facts, shim_dir, command, installed_wrapper);
@@ -366,4 +381,61 @@ pub(crate) fn classify_integrity(
         return Ok("unknown");
     }
     Ok("tampered")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::super::ShimFacts;
+    use super::interpreter_runnable;
+
+    fn facts(executable: &str, frozen: bool) -> ShimFacts {
+        ShimFacts {
+            environ: BTreeMap::new(),
+            home: "/Users/home".to_owned(),
+            cwd: "/Users/work".to_owned(),
+            executable: executable.to_owned(),
+            frozen,
+            frozen_cli: String::new(),
+            trusted_frozen_cli_paths: Vec::new(),
+            python_version: (3, 12),
+            import_root: "/Users/src".to_owned(),
+            argv0: None,
+            windows: false,
+            sqlite_connect_timeout_seconds: 30.0,
+            now: "2026-01-01T00:00:00+00:00".to_owned(),
+            shim_dir_transient: None,
+        }
+    }
+
+    fn runnable(executable: &str, frozen: bool, wrapper: &[u8]) -> bool {
+        interpreter_runnable(&facts(executable, frozen), wrapper).expect("no path error")
+    }
+
+    #[test]
+    fn unfrozen_shebang_is_runnable_only_for_the_current_executable() {
+        let executable = std::env::current_exe().expect("test executable");
+        let path = executable.to_str().expect("utf8");
+        let wrapper = format!("#!{path}\n");
+        assert!(runnable(path, false, wrapper.as_bytes()));
+        assert!(!runnable(
+            path,
+            false,
+            b"#!/tmp/not-the-guard-interpreter\n"
+        ));
+        assert!(!runnable(path, true, wrapper.as_bytes()));
+        assert!(!runnable(
+            "/Users/missing/python3",
+            false,
+            b"#!/Users/missing/python3\n"
+        ));
+        let spaced = "/Users/py bin/python3";
+        assert!(!runnable(spaced, false, format!("#!{spaced}\n").as_bytes()));
+        assert!(!runnable(
+            "/tmp/.mount_HOLabc123/usr/bin/python3",
+            false,
+            b"#!/tmp/.mount_HOLabc123/usr/bin/python3\n"
+        ));
+    }
 }

@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context;
 use guard_contracts::GuardExecutionEnvironmentV1;
@@ -112,6 +111,8 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                npm_config_inert: false,
+                shell_home_matches: false,
             },
             Some(&stamped),
         )

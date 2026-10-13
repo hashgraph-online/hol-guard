@@ -5,17 +5,20 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 
 from ..models import GuardAction
-from .command_permission_catalog import COMMAND_PERMISSION_SCHEMA_VERSION, CommandPermissionSpec, PermissionRiskTier
+
+if TYPE_CHECKING:
+    from .command_permission_catalog import PermissionRiskTier
 
 GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
     "propose_remote",
+    "create_private_remote",
     "routine_merge_remote",
     "routine_review_thread_remote",
     "routine_workflow_remote",
@@ -59,6 +62,7 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "read_local",
     "read_remote",
     "propose_remote",
+    "create_private_remote",
     "routine_merge_remote",
     "routine_review_thread_remote",
     "routine_workflow_remote",
@@ -82,6 +86,7 @@ _CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]]
         "read_local": "allow",
         "read_remote": "allow",
         "propose_remote": "allow",
+        "create_private_remote": "allow",
         "routine_merge_remote": "allow",
         "routine_review_thread_remote": "allow",
         "routine_workflow_remote": "require-reapproval",
@@ -102,6 +107,18 @@ _CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]]
 )
 
 
+# A new repository needs no approval when it is private and the push is a
+# separate `git push`, which Guard proves on its own.
+_CONTENT_GUIDANCE: Final[MappingProxyType[GitHubCommandCapability, tuple[str, ...]]] = MappingProxyType(
+    {
+        "content_remote": (
+            "To publish new work without approval, create the repository with "
+            "`gh repo create NAME --private --source=.` and then run `git push -u origin BRANCH`.",
+        ),
+    }
+)
+
+
 def _contract(
     capability: GitHubCommandCapability,
     permission_suffix: str,
@@ -116,6 +133,11 @@ def _contract(
     prompt_free = _CAPABILITY_FLOOR[capability] == "allow"
     if capability == "propose_remote":
         description = "Creates a pull-request proposal without merging it or changing repository controls."
+    elif capability == "create_private_remote":
+        description = (
+            "Creates a new private repository owned by the signed-in account, optionally adding it as a remote of "
+            "the current directory without pushing."
+        )
     elif capability == "routine_merge_remote":
         description = (
             "Completes a statically bounded squash pull-request merge, optionally cleaning up its merged head branch."
@@ -149,6 +171,7 @@ def _contract(
             "Keep the operation read-only or limited to opening a pull-request proposal."
             if prompt_free
             else "Inspect the exact repository, resource, and operation before confirming it.",
+            *_CONTENT_GUIDANCE.get(capability, ()),
         ),
         example_command=example_command,
         family=family,
@@ -175,6 +198,14 @@ _CONTRACTS: Final = MappingProxyType(
                 None,
                 "pull-request proposal",
                 example_command='gh pr create --title "Fix login" --body "Summary"',
+            ),
+            _contract(
+                "create_private_remote",
+                "create-private-remote",
+                None,
+                None,
+                "new private repository",
+                example_command="gh repo create todo-app --private --source=.",
             ),
             _contract(
                 "routine_merge_remote",
@@ -393,35 +424,4 @@ def combine_github_assessments(
         capabilities,
         "github.shell.combined-capabilities",
         "The shell composition contains multiple GitHub capabilities.",
-    )
-
-
-def github_permission_specs(implementation_version: str) -> tuple[CommandPermissionSpec, ...]:
-    return tuple(
-        CommandPermissionSpec(
-            permission_id=contract.permission_id,
-            schema_version=COMMAND_PERMISSION_SCHEMA_VERSION,
-            extension_id="command.github",
-            implementation_version=implementation_version,
-            label=contract.title,
-            description=contract.description,
-            risk_tier=contract.risk_tier,
-            baseline_floor=contract.action_floor,
-            default_enabled=True,
-            configurable=True,
-            fixed_reason=None,
-            typed_capabilities=(contract.capability,),
-            action_classes=() if contract.action_class is None else (contract.action_class,),
-            rule_ids=() if contract.rule_id is None else (contract.rule_id,),
-            dependencies=(),
-            conflicts=(),
-            implied_permissions=(),
-            introduced_version="2.2.0",
-            deprecated=False,
-            replacement_permission_id=None,
-            safer_guidance=contract.safer_alternatives,
-            example_command=contract.example_command,
-            family=contract.family,
-        )
-        for contract in github_capability_contracts()
     )

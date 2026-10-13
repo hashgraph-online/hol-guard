@@ -291,18 +291,17 @@ pub(crate) fn resolved_runtime_path(
         Some(r) => r.to_vec(),
         None => runtime_read_roots(cwd, home_dir),
     };
-    if !roots
-        .iter()
-        .any(|root| path_is_relative_to(&candidate, root))
-    {
+    if roots.is_empty() {
         return None;
     }
-    for root_text in runtime_read_root_texts(&roots) {
-        if let Some(entry) = runtime_file_entry_under_root(&normalized, &root_text) {
-            return Some(entry);
-        }
-    }
-    None
+    // `os.path.realpath`, then the containment check on the resolved text.
+    let path_text = weak_canonicalize(&candidate)?
+        .to_string_lossy()
+        .into_owned();
+    runtime_read_root_texts(&roots)
+        .iter()
+        .any(|root_text| path_text_is_within_root_text(&path_text, root_text))
+        .then(|| PathBuf::from(path_text))
 }
 
 /// `_read_small_runtime_text_file` (credential_exfiltration :286-333).

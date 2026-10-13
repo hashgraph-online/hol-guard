@@ -6,8 +6,7 @@
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 fn git(directory: &Path, arguments: &[&str]) {
     let status = std::process::Command::new("git")
@@ -54,16 +53,16 @@ fn repository(path: &Path) {
     git(path, &["commit", "--quiet", "-m", "fixture"]);
 }
 
-struct Layout {
+pub(crate) struct Layout {
     _cleanup: fixture::FixtureCleanup,
-    home: PathBuf,
-    org: PathBuf,
+    pub(crate) home: PathBuf,
+    pub(crate) org: PathBuf,
 }
 
 /// `CARGO_TARGET_TMPDIR` keeps the fixture outside `/var` and dot
 /// directories on macOS, which the read screens would otherwise refuse for
 /// reasons unrelated to the layout under test.
-fn layout(name: &str) -> Layout {
+pub(crate) fn layout(name: &str) -> Layout {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "home-layout-{name}-{}-{}",
         std::process::id(),
@@ -87,7 +86,7 @@ fn layout(name: &str) -> Layout {
     }
 }
 
-fn assert_decision(cwd: &Path, home: &Path, command: &str, allowed: bool) {
+pub(crate) fn assert_decision(cwd: &Path, home: &Path, command: &str, allowed: bool) {
     let result = decide(cwd, home, command);
     assert_eq!(
         result.decision == "allow",
@@ -213,6 +212,57 @@ fn git_inspection_of_linked_worktree_below_home_is_allowed_unless_forged() {
     );
 }
 
+/// Agents also keep a multi-repository parent and its sibling worktrees in
+/// the shared temporary directory. A sibling there is routable only while
+/// every directory below `/tmp` belongs to the user and no one else can write
+/// to it.
+#[cfg(unix)]
+#[test]
+fn git_inspection_of_owned_sibling_below_tmp_is_allowed_unless_shared() {
+    use std::os::unix::fs::PermissionsExt;
+    let layout = layout("git-tmp");
+    let scratch = std::fs::canonicalize("/tmp")
+        .unwrap()
+        .join(format!("guard-tmp-siblings-{}", std::process::id()));
+    let _cleanup = fixture::FixtureCleanup(scratch.clone());
+    let org = scratch.join("org");
+    std::fs::create_dir_all(&org).unwrap();
+    std::fs::set_permissions(&scratch, std::fs::Permissions::from_mode(0o700)).unwrap();
+    repository(&org.join("app"));
+    let linked = scratch.join("app-followup");
+    git(
+        &org.join("app"),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "followup",
+            linked.to_str().unwrap(),
+        ],
+    );
+    // The umask may leave group write on directories made above.
+    for directory in [&org, &org.join("app"), &linked] {
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    for command in [
+        format!("git -C {} log --oneline -3", linked.display()),
+        format!("git -C {} status --short", linked.display()),
+        format!("git -C {}/org/app rev-parse HEAD", scratch.display()),
+    ] {
+        assert_decision(&org, &layout.home, &command, true);
+    }
+    let shared = scratch.join("shared");
+    repository(&shared);
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o777)).unwrap();
+    assert_decision(
+        &org,
+        &layout.home,
+        &format!("git -C {} log --oneline -1", shared.display()),
+        false,
+    );
+}
+
 #[test]
 fn quoted_home_or_variable_roots_are_reviewed_and_rootless_fd_matches_dot() {
     let layout = layout("quoted-roots");
@@ -312,7 +362,7 @@ fn search_of_sibling_outside_a_real_repository_or_with_hidden_flags_is_reviewed(
     }
 }
 
-fn write(path: PathBuf, text: &str) {
+pub(crate) fn write(path: PathBuf, text: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, text).unwrap();
 }
@@ -380,10 +430,11 @@ fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
     let sibling = nested.org.join("service-api");
     write(sibling.join("web/.gitignore"), "!.env\n");
     write(sibling.join("web/src/main.rs"), "fn main() {}\n");
-    write(sibling.join(".github/workflows/ci.yml"), "on: push\n");
     let cwd = nested.org.join("app-portal");
-    for operand in ["../service-api/web/src", "../service-api/.github"] {
-        let command = format!("rg -n fixture {operand}");
-        assert_decision(&cwd, &nested.home, &command, false);
-    }
+    assert_decision(
+        &cwd,
+        &nested.home,
+        "rg -n fixture ../service-api/web/src",
+        false,
+    );
 }

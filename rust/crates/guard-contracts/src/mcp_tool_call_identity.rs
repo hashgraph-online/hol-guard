@@ -136,7 +136,9 @@ pub struct McpToolCallIdentityRequestV1 {
     /// `artifact` is present.
     #[serde(deserialize_with = "required")]
     pub artifact: Option<McpToolCallArtifactV1>,
-    pub hash: McpToolCallHashInputV1,
+    /// Absent: only build the artifact (no approval hash).
+    #[serde(deserialize_with = "required")]
+    pub hash: Option<McpToolCallHashInputV1>,
 }
 
 /// `ok` payload.
@@ -146,8 +148,9 @@ pub struct McpToolCallIdentityPayloadV1 {
     pub artifact: McpToolCallArtifactV1,
     /// Local-grant bindings that stay out of the hashed artifact metadata.
     pub runtime_private_metadata: Map<String, Value>,
-    /// The approval-context token (config present) or the digest row.
-    pub artifact_hash: String,
+    /// The approval-context token (config present) or the digest row; absent
+    /// when the request carried no hash input.
+    pub artifact_hash: Option<String>,
     pub risk_categories: Vec<String>,
 }
 

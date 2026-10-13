@@ -43,7 +43,7 @@ fn plain_tokens(segment: &[QuotedToken]) -> Vec<String> {
 /// `_gh_pr_create_body_has_shell_command_substitution`.
 pub(crate) fn gh_pr_create_body_has_shell_command_substitution(
     command_text: &str,
-    depth: usize,
+    depth: isize,
 ) -> bool {
     if depth > 2 || shell_command_substitution_payloads(command_text).is_empty() {
         return false;
@@ -78,7 +78,7 @@ pub(crate) fn gh_pr_edit_has_shell_command_substitution(command_text: &str) -> b
 }
 
 /// `_gh_pr_create_has_active_shell_expansion`.
-pub(crate) fn gh_pr_create_has_active_shell_expansion(command_text: &str, depth: usize) -> bool {
+pub(crate) fn gh_pr_create_has_active_shell_expansion(command_text: &str, depth: isize) -> bool {
     if depth > 2 || (!command_text.contains('$') && !command_text.contains('`')) {
         return false;
     }

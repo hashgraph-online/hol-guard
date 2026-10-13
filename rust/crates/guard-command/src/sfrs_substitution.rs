@@ -100,7 +100,7 @@ pub(crate) fn shell_command_substitution_payloads(command_text: &str) -> Vec<Str
 }
 
 /// `_read_command_substitution`.
-fn read_command_substitution(chars: &[char], start: usize) -> (String, usize) {
+pub(crate) fn read_command_substitution(chars: &[char], start: usize) -> (String, usize) {
     let mut index = start;
     let mut depth = 1usize;
     let mut payload = String::new();
@@ -169,7 +169,7 @@ fn read_command_substitution(chars: &[char], start: usize) -> (String, usize) {
 }
 
 /// `_read_backtick_command_substitution`.
-fn read_backtick_command_substitution(chars: &[char], start: usize) -> (String, usize) {
+pub(crate) fn read_backtick_command_substitution(chars: &[char], start: usize) -> (String, usize) {
     let mut index = start;
     let mut payload = String::new();
     while index < chars.len() {

@@ -10,6 +10,7 @@ benign case of the existing false-positive gate (read only), replayed for each h
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,8 @@ from ci.gauntlet.approval_rows import offers_always
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
+from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
+from tests.native_gate_retry import UNAVAILABLE_REASON
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
@@ -44,21 +47,15 @@ FIXED = {
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
 FAMILIES = {"shell": SHELL, "read": READ, "glob": GLOB, "grep": GREP, "write": WRITE}
 ENVIRONMENTS = ("clean", "realistic")
-# Containment receipts the OMP extension runs in Guard's read-only sandbox instead of showing the
-# denial (pi_extension_contained_tests_source.py), keyed by reason code. The route exists only on
-# macOS and only for bash. ZCode routes its receipts inside the hook path, so its replay result
-# already shows the contained run.
-OMP_CONTAINED_PROFILES = {
-    "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
-    "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
-    "native_package_test_readonly_containment_required": "package-test-readonly-v1",
-    "native_node_build_output_containment_required": "node-build-output-v1",
-    "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
-    "native_git_readonly_containment_required": "git-readonly-v1",
-    "native_pytest_readonly_containment_required": "pytest-readonly-v2",
-    "native_vitest_readonly_containment_required": "vitest-readonly-v1",
-    "native_node_test_readonly_containment_required": "node-test-readonly-v1",
-}
+# Profile and reason pairs the shipped OMP extension runs in Guard's sandbox instead of showing the
+# denial, read from its source. Every profile is contained on macOS and the workspace profile on Linux.
+# Z Code and Claude Code route inside the hook path, and Codex in its hook bridge (see
+# test_guard_gauntlet_replay_gate.py), so their replay result already shows the contained run.
+OMP_CONTAINED = frozenset(
+    re.findall(r'profile === "([^"]+)" &&\s*response\.reason_code === "([^"]+)"', CONTAINED_TEST_HELPERS_SOURCE)
+)
+# An empty set would silently stop modelling OMP routing if the extension's source changes shape.
+assert ("workspace-contained-v1", "native_workspace_containment_required") in OMP_CONTAINED
 
 
 @dataclass(frozen=True)
@@ -142,16 +139,15 @@ def write_global_gitconfig(kind: str, home: Path) -> None:
 
 def omp_contained(case: ReplayCase, result: dict[str, object]) -> bool:
     """Whether OMP's extension would run this receipt in the sandbox, so the user sees no denial."""
-    code = result.get("reason_code")
+    code, profile = result.get("reason_code"), result.get("required_execution_profile")
     return (
         case.harness == "omp"
         and case.tool == "shell"
-        and sys.platform == "darwin"
         and result.get("decision") == "deny"
         and result.get("policy_action") == "sandbox-required"
         and result.get("observe_mode") is not True
-        and isinstance(code, str)
-        and result.get("required_execution_profile") == OMP_CONTAINED_PROFILES.get(code)
+        and (profile, code) in OMP_CONTAINED
+        and (sys.platform == "darwin" or (sys.platform == "linux" and profile == "workspace-contained-v1"))
     )
 
 
@@ -172,12 +168,15 @@ def failure_reasons(case: ReplayCase, result: dict[str, object], approvals: list
 
 def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str, Any]]) -> str | None:
     """None when the case behaves as expected, otherwise a one-line failure."""
+    if result.get("reason_code") == UNAVAILABLE_REASON:
+        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case.
+        return "native review unavailable after retry"
     found = interruptions(case, result, approvals)
     allowed = not any(e["kind"] == "decision" for e in found)
     if case.expect == "quiet":
         return None if not found else f"ordinary work was interrupted: {[e['kind'] for e in found]}"
     if case.expect == "always":
-        routed = case.harness == "zcode" and result.get("reason_code") == "native_contained_execution_routed"
+        routed = result.get("reason_code") == "native_contained_execution_routed"
         if not found and (routed or omp_contained(case, result)):
             return None  # a contained run needs no approval, which is better than an Always offer
         # A silent allow means the action never reached review, so no Always allow was offered.

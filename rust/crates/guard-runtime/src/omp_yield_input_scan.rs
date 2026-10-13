@@ -2,6 +2,8 @@
 use guard_contracts::{NativeHookRequestV1, PreToolResultV1, NATIVE_PROTOCOL_VERSION};
 use serde_json::{json, Value};
 
+// Share the full report scan across enforcement and approval validation.
+#[inline(never)]
 pub(crate) fn scan(
     payload: &Value,
     deadline_budget_ms: Option<u64>,

@@ -178,6 +178,30 @@ def _artifact_from_wire(item: object) -> GuardArtifact:
     )
 
 
+def native_adapter_detection(
+    kind: str, request: Mapping[str, Any]
+) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...]]:
+    """Run a native adapter-detection kind and return its artifacts and found paths."""
+
+    artifacts, found_paths, _warnings = native_adapter_detection_with_warnings(kind, request)
+    return artifacts, found_paths
+
+
+def native_adapter_detection_with_warnings(
+    kind: str, request: Mapping[str, Any]
+) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
+    """Run a native adapter-detection kind and return artifacts, found paths and warnings."""
+
+    payload = _native(kind, request)
+    found_paths = payload.get("found_paths")
+    if not isinstance(found_paths, list) or not all(isinstance(path, str) for path in found_paths):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    warnings = payload.get("warnings", [])
+    if not isinstance(warnings, list) or not all(isinstance(warning, str) for warning in warnings):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    return _artifacts_from_payload(payload), tuple(found_paths), tuple(warnings)
+
+
 def _artifacts_from_payload(payload: Mapping[str, Any]) -> tuple[GuardArtifact, ...]:
     items = payload.get("artifacts")
     if not isinstance(items, list):

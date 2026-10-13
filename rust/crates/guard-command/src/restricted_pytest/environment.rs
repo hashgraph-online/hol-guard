@@ -85,6 +85,7 @@ pub(super) fn filter(
     private_home: &Path,
     private_tmp: &Path,
     allowed: &[PathBuf],
+    user_site: bool,
 ) -> Result<BTreeMap<String, String>, RestrictedPytestError> {
     let mut result = BTreeMap::new();
     for (key, value) in source {
@@ -121,12 +122,15 @@ pub(super) fn filter(
         ("HOME", private_home.to_string_lossy().into_owned()),
         ("PATH", dirs.join(":")),
         ("PWD", cwd.to_string_lossy().into_owned()),
-        ("PYTHONNOUSERSITE", "1".to_owned()),
         ("TEMP", private_tmp.to_string_lossy().into_owned()),
         ("TMP", private_tmp.to_string_lossy().into_owned()),
         ("TMPDIR", private_tmp.to_string_lossy().into_owned()),
     ] {
         result.insert(key.to_owned(), value);
+    }
+    // A linked user site is read through the private HOME; otherwise it stays off.
+    if !user_site {
+        result.insert("PYTHONNOUSERSITE".to_owned(), "1".to_owned());
     }
     Ok(result)
 }

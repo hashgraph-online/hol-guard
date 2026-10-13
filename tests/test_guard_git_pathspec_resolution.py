@@ -186,7 +186,9 @@ def test_git_pathspec_identity_for_non_repository_differs_from_repository(git_re
     (
         ("git status", "command.git.status", "allow"),
         ("git diff", "command.git.diff", "review"),
-        ("git diff --staged", "command.git.index-inspection", "review"),
+        # `--staged` only prints the index. That read uses the ordinary diff
+        # proof, the same owner as `git diff`, not an index-inspection ask.
+        ("git diff --staged", "command.git.diff", "review"),
         ("git diff HEAD~1", "command.git.diff", "review"),
         ("git diff -- src/", "command.git.diff", "review"),
         ('git diff -- ":(glob)src/**/*.py"', "command.git.diff", "review"),

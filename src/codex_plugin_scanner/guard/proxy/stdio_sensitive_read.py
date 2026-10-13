@@ -32,6 +32,7 @@ from ..native_mcp_sensitive_read import (
     sensitive_read_hint,
     sensitive_read_reuse,
 )
+from ..native_sensitive_request import NativeSensitiveRequestError
 from ..receipts import build_receipt
 from ..runtime.secret_file_request_services.request_models import FileReadRequestMatch
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
@@ -120,6 +121,15 @@ def _detection(proxy: StdioGuardProxy, artifact: GuardArtifact) -> HarnessDetect
 
 def _fail_closed(event: dict[str, Any], tool_name: str, request: FileReadRequestMatch) -> NotForwarded:
     event["path_summary"] = request.path_match.normalized_path
+    return _fail_closed_unclassified(event, tool_name)
+
+
+def _fail_closed_unclassified(event: dict[str, Any], tool_name: str) -> NotForwarded:
+    """Block a call when the resident cannot classify it.
+
+    An outage is not an allow. There is no path match to record.
+    """
+
     event["approval_reuse_reason_code"] = "native_unavailable"
     event["decision"] = "block"
     event["policy_action"] = "block"
@@ -139,11 +149,14 @@ def evaluate_sensitive_read(
 ) -> NotForwarded | None:
     """Evaluate one ``tools/call``; ``None`` means forward it to the child."""
 
-    request = extract_sensitive_file_read_request(
-        tool_name,
-        params.get("arguments") if isinstance(params, dict) else None,
-        cwd=proxy.cwd,
-    )
+    try:
+        request = extract_sensitive_file_read_request(
+            tool_name,
+            params.get("arguments") if isinstance(params, dict) else None,
+            cwd=proxy.cwd,
+        )
+    except NativeSensitiveRequestError:
+        return _fail_closed_unclassified(event, tool_name)
     if request is None:
         return None
     try:

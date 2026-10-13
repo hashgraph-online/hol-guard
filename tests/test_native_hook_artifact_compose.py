@@ -80,6 +80,20 @@ def test_bound_answer_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
     assert compose.native_hook_compose("tool_grant_apply", {}, guard_home=None) == _TOOL_GRANT_ANSWER
 
 
+def test_bound_validation_refusal_is_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    _resident_returning(
+        monkeypatch,
+        lambda request: _good(
+            request,
+            status="error",
+            code="native_hook_artifact_compose_validation_refused",
+            payload={"error_type": "ValueError", "message": "signal list required"},
+        ),
+    )
+    with pytest.raises(compose.NativeHookComposeValidationError, match="signal list required"):
+        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

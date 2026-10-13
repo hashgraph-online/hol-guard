@@ -13,9 +13,9 @@ use serde_json::{json, Value};
 use crate::git_execution_safety_binary as binary;
 use crate::request_context_op::Budget;
 
-struct Authority<'a> {
-    facts: &'a RequestContextDirectFactsV1,
-    budget: &'a Budget,
+pub(crate) struct Authority<'a> {
+    pub(crate) facts: &'a RequestContextDirectFactsV1,
+    pub(crate) budget: &'a Budget,
 }
 
 impl DirectToolAuthority for Authority<'_> {
@@ -80,7 +80,10 @@ impl DirectToolAuthority for Authority<'_> {
     }
 }
 
-fn admit(facts: &RequestContextDirectFactsV1, budget: &Budget) -> Result<(), &'static str> {
+pub(crate) fn admit(
+    facts: &RequestContextDirectFactsV1,
+    budget: &Budget,
+) -> Result<(), &'static str> {
     budget.check()?;
     for value in [
         &facts.cwd,

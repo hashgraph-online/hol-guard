@@ -2,18 +2,28 @@
 mod evaluate;
 use evaluate::evaluate_signals;
 
+#[path = "chain_literals.rs"]
+pub(crate) mod chain_literals;
 #[path = "generic_command_rewrite.rs"]
 mod command_rewrite;
+#[path = "contained_publish.rs"]
+pub(crate) mod contained_publish;
+#[path = "env_prefix_projection.rs"]
+mod env_prefix_projection;
 #[path = "generic_extract.rs"]
 mod extract;
 #[path = "generic_omp.rs"]
 mod omp;
+#[path = "open_quote.rs"]
+mod open_quote;
 #[path = "generic_pure_eval.rs"]
 mod pure_eval;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
+#[path = "workspace_redirects.rs"]
+pub(crate) mod workspace_redirects;
 use command_rewrite::payload_with_command;
 
 use crate::native_command_controls::CompiledNativeCommandControls;
@@ -82,6 +92,10 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) 
 }
 #[path = "generic_tools.rs"]
 mod tools;
+#[path = "generic_web_fetch.rs"]
+mod web_fetch;
+pub(in crate::pretool) use tools::is_package_tool;
+pub(in crate::pretool) use web_fetch::plain_public_url;
 
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
 /// separate from `evaluate_pre_tool`, the compatibility command-model
@@ -123,6 +137,8 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            npm_config_inert: false,
+            shell_home_matches: false,
         },
         None,
     )
@@ -137,18 +153,55 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
-    super::git_probe::with_memo(|| {
-        evaluate_envelope(
-            harness,
-            event,
-            payload,
-            controls,
-            deadline,
-            context,
-            execution_environment,
-            true,
-        )
-    })
+    let mut result = super::git_probe::with_memo(|| {
+        super::search::with_walk_memo(|| {
+            let evaluate = |payload: &Value| {
+                evaluate_envelope(
+                    harness,
+                    event,
+                    payload,
+                    controls,
+                    deadline,
+                    context,
+                    execution_environment,
+                    true,
+                )
+            };
+            let judged = chain_literals::rejudge(evaluate(payload), payload, context, evaluate);
+            contained_publish::rejudge(judged, payload, context, evaluate)
+        })
+    });
+    // Name what kept the extension controls from evaluating the command, a
+    // code-loading setting or an open quote, so the agent can fix it and retry
+    // instead of guessing.
+    if result.reason_code == "native_command_extension_evaluation_failed" {
+        let command = extract_generic_signals(payload)
+            .ok()
+            .and_then(|signals| signals.command);
+        // A code-loading setting refuses on its own, so name it before any
+        // expanded setting that may sit beside it.
+        if let Some(setting) = command
+            .as_deref()
+            .and_then(env_prefix_projection::code_loading_setting)
+        {
+            result.reason = format!(
+                "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
+            );
+        } else if let Some(setting) = command
+            .as_deref()
+            .and_then(env_prefix_projection::substituted_setting)
+        {
+            result.reason = format!(
+                "HOL Guard blocked this command because the {setting} setting is filled by a command substitution or variable expansion, which Guard does not allow in an environment prefix. Do not capture credentials or other output into a setting. Rely on the tool's own login (for example gh's active account), or run the commands separately without passing the output through the environment."
+            );
+        } else if command
+            .as_deref()
+            .is_some_and(open_quote::leaves_quote_open)
+        {
+            result.reason = "HOL Guard blocked this command because it leaves a quote open, so the shell cannot run it as written. Close or remove the stray quote and run it again.".into();
+        }
+    }
+    result
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -195,6 +248,148 @@ fn evaluate_envelope(
         && signals.command.as_deref().is_some_and(|patch| {
             super::apply_patch_writes::routine_apply_patch(patch, home_dir, cwd)
         });
+    // Exporting only Git-config isolation (`GIT_CONFIG_GLOBAL=/dev/null`)
+    // removes configuration sources, so the remaining command's allow carries.
+    if let Some(projected) = signals
+        .command
+        .as_deref()
+        .filter(|_| !search_scope_proven && !apply_patch_proven)
+        .and_then(env_prefix_projection::project_git_config_isolation)
+    {
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &projected,
+        );
+        if projected_payload != *payload {
+            let projected = evaluate_envelope(
+                harness,
+                event,
+                &projected_payload,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+                project_redirects,
+            );
+            if projected.minimum_action == "allow" {
+                return projected;
+            }
+        }
+    }
+    if let Some(contained) = signals
+        .command
+        .as_deref()
+        .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
+        .and_then(|command| {
+            workspace_redirects::contained(
+                harness,
+                event,
+                payload,
+                command,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+            )
+        })
+    {
+        return contained;
+    }
+    // An inert environment prefix cannot change how the rest of the command
+    // runs, so the command without it carries the whole verdict.
+    if let Some(projected) = signals
+        .command
+        .as_deref()
+        .filter(|_| !search_scope_proven && !apply_patch_proven)
+        .and_then(env_prefix_projection::project)
+    {
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &projected,
+        );
+        if projected_payload != *payload {
+            let projected = evaluate_envelope(
+                harness,
+                event,
+                &projected_payload,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+                project_redirects,
+            );
+            // Inert settings cannot widen what an extension rule already
+            // allows, but a rule that gates the plain form keeps its own
+            // fail-closed answer for wrapped forms.
+            if projected.minimum_action == "allow" || !extension_rule_matched(&projected) {
+                return projected;
+            }
+        }
+    }
+    // A setting that may change behavior (`NODE_PATH=... node x.mjs`) leaves
+    // the command unmodeled, which the extension controls cannot bound. Judge
+    // the command without it, keep the full command's intrinsic verdict, and
+    // never settle below review. The unprojected pass runs without controls,
+    // so it cannot recurse here.
+    if let Some(reviewed) = signals
+        .command
+        .as_deref()
+        .filter(|_| controls.is_some() && !search_scope_proven && !apply_patch_proven)
+        .and_then(|command| env_prefix_projection::project_reviewed(command, context))
+    {
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &reviewed.command,
+        );
+        let projected = (projected_payload != *payload).then(|| {
+            evaluate_envelope(
+                harness,
+                event,
+                &projected_payload,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+                project_redirects,
+            )
+        });
+        // An extension rule that governs the command was written for its
+        // plain form; a setting in front can change what it acts on (a target
+        // org, a profile), so that command keeps failing closed.
+        if let Some(projected) = projected.filter(|result| !extension_rule_matched(result)) {
+            let raw = evaluate_envelope(
+                harness,
+                event,
+                payload,
+                None,
+                deadline,
+                context,
+                execution_environment,
+                false,
+            );
+            // The workspace sandbox runs the exact text, settings included,
+            // so a contained verdict needs no review for them.
+            let mut projected = projected;
+            if matches!(raw.minimum_action.as_str(), "allow" | "warn" | "review")
+                && !raw.action.sensitive_target
+                && super::workspace_contained::carry_settings(
+                    &mut projected,
+                    signals.command.as_deref().unwrap_or_default(),
+                    context,
+                    execution_environment,
+                    harness,
+                    event,
+                )
+            {
+                return projected;
+            }
+            return env_prefix_projection::join_reviewed(projected, raw, &reviewed.setting);
+        }
+    }
+
     if let Some(projection) = signals
         .command
         .as_deref()
@@ -227,7 +422,12 @@ fn evaluate_envelope(
                 execution_environment,
                 false,
             );
-            return redirect_projection::join(projected, raw, projection.writes_file);
+            return redirect_projection::join(
+                projected,
+                raw,
+                projection.writes_file,
+                projection.bounded_writes,
+            );
         }
     }
     let task_metadata = event == "PreToolUse"
@@ -240,6 +440,7 @@ fn evaluate_envelope(
         payload,
         &signals,
         &omp::OmpContext {
+            yield_report_verified: yield_payload.is_some(),
             harness,
             event,
             controls,
@@ -375,39 +576,18 @@ fn evaluate_envelope(
         ),
         _ => result,
     };
+    let pre_floor = (result.reason_code.clone(), result.minimum_action.clone());
     if event == "PreToolUse"
         // Existing helper-context review may delegate only to enforced
         // read-only containment below; do not replace that protection.
         && result.reason_code != "native_git_helper_context_review"
         && command_model.is_some_and(|model| {
-            let destination =
-                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd, ..context });
-            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd), ..context };
-            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd, ..context });
-            model.segments.iter().enumerate().any(|(index, segment)| {
-                segment.executable.as_deref().is_some_and(|executable| {
-                    if super::executable_basename(executable) != "git" {
-                        return false;
-                    }
-                    let inspection = super::git_config::execution_free(
-                        executable,
-                        &segment.arguments,
-                        context,
-                        deadline,
-                        execution_environment,
-                        super::git_helper_context::stdout_piped(model, index),
-                    );
-                    !segment.environment_names.is_empty()
-                        || !super::directory_targets::drive_targets_quoted(segment)
-                        || inspection == Some(false)
-                        // Only inspection operations have a configuration proof
-                        // to invalidate. Other Git operations retain their own
-                        // native review/permission floors, not this read floor.
-                        || (inspection.is_some()
-                            && index > 0
-                            && (0..index).any(|prior| !benign.contains(&prior)))
-                })
-            })
+            super::git_read_floor::requires_review(
+                model,
+                super::PathContext { home_dir, cwd, ..context },
+                deadline,
+                execution_environment,
+            )
         })
         && matches!(
             result.minimum_action.as_str(),
@@ -484,14 +664,9 @@ fn evaluate_envelope(
                     .permission_observations
                     .iter()
                     .all(|observation| {
-                        matches!(
+                        super::restricted_tests::package_permission_contained(
                             contained_test_reason,
-                            Some(
-                                "native_vitest_readonly_containment_required"
-                                    | "native_package_test_readonly_containment_required"
-                                    | "native_node_tool_readonly_containment_required"
-                                    | "native_node_build_output_containment_required"
-                            )
+                            command_model,
                         ) && observation.extension_id == "command.package.node"
                             && observation.permission_id
                                 == "command.package.node.permission.package-protection"
@@ -511,5 +686,55 @@ fn evaluate_envelope(
         )
         .into();
     }
+    super::workspace_contained::convert(
+        &mut result,
+        &pre_floor,
+        command_model,
+        controls,
+        super::PathContext {
+            home_dir,
+            cwd,
+            ..context
+        },
+        execution_environment,
+        harness,
+        event,
+        signals.command.as_deref(),
+    );
+    super::git_local_writes::settle(
+        &mut result,
+        &pre_floor,
+        command_model,
+        controls,
+        super::PathContext {
+            home_dir,
+            cwd,
+            ..context
+        },
+        deadline,
+        execution_environment,
+    );
+    if event == "PreToolUse" {
+        super::lockfile_install::settle(
+            &mut result,
+            command_model,
+            super::PathContext {
+                home_dir,
+                cwd,
+                ..context
+            },
+            deadline,
+            execution_environment,
+        );
+    }
     result
+}
+
+fn extension_rule_matched(result: &PreToolResultV1) -> bool {
+    result.command_extensions.as_ref().is_some_and(|batch| {
+        batch
+            .observations
+            .iter()
+            .any(|row| !row.effective_segment_indexes.is_empty())
+    })
 }

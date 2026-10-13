@@ -55,19 +55,11 @@ _RESULT_OPTIONAL_KEYS = {
     "token",
     "digest",
     "validation_reason",
-    "environment_values",
     "package_context",
     "mcp_server_identity",
     "mcp_tool_identity",
-    "package_launcher",
-    "mcp_descriptor",
     "browser_mcp",
-    "mcp_tool_risk",
-    "mcp_tool_policy",
     "mcp_launch_environment",
-    "mcp_launch_target",
-    "mcp_safe_arguments",
-    "mcp_serialized_arguments",
     "mcp_redacted_value",
     "runtime_identity",
     "runtime_identity_match",
@@ -81,6 +73,8 @@ _RESULT_OPTIONAL_KEYS = {
     "local_cli_identities",
     "custom_extension_suggestion",
     "managed_controls_policy_fields",
+    "claude_guard_question",
+    "memory_pattern",
 }
 _RESULT_CODES = {
     "ok",
@@ -319,7 +313,9 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
         from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
         from .store import GuardStore
 
-        store = GuardStore(guard_home)
+        # Provisioning the resident key must not prime policy decisions or
+        # refresh signed store state on the evaluation hot path.
+        store = GuardStore(guard_home, prime_policy_integrity=False)
         phase = "provision_key"
         provision_native_verifier_key_for_store(store)
     except Exception as error:
@@ -365,105 +361,8 @@ def _canonical_request_sha256(request: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-# Successful results must carry the output the kind's callers index; an `ok`
-# response missing it is an incomplete (and therefore invalid) result.
-# ``validation_reason`` is legitimately null when context is unchanged, so
-# validation kinds require field presence rather than a truthy value.
-_OK_OUTPUT_FIELD: dict[str, str] = {
-    "build_approval_context_token": "token",
-    "configured_environment_hash": "digest",
-    "configured_headers_hash": "digest",
-    "launch_argv_digest": "digest",
-    "canonical_sha256": "digest",
-    "opaque_material_digest": "digest",
-    "package_environment_policy": "environment_values",
-    "mcp_server_identity": "mcp_server_identity",
-    "mcp_tool_identity": "mcp_tool_identity",
-    "mcp_server_descriptor": "mcp_descriptor",
-    "mcp_tool_descriptor": "mcp_descriptor",
-    "mcp_tool_content_digest": "digest",
-    "browser_mcp": "browser_mcp",
-    "package_launcher_token": "package_launcher",
-}
-_OK_NULLABLE_OUTPUT_FIELD: dict[str, str] = {
-    "custom_extension_continuity": "custom_extension_continuity",
-    "managed_controls_policy_fields": "managed_controls_policy_fields",
-    "validate_approval_context": "validation_reason",
-    "validate_approval_context_tokens": "validation_reason",
-    "package_execution_context_from_evidence": "package_context",
-    "package_execution_context_from_scanner_evidence": "package_context",
-    "mcp_tool_risk": "mcp_tool_risk",
-    "mcp_tool_policy": "mcp_tool_policy",
-    # Either ``digest`` or ``token`` is present depending on the request's
-    # config; ``mcp_tool_risk`` is always populated — the adapter validates.
-    "build_mcp_tool_approval_hash": "mcp_tool_risk",
-    "local_cli_identify": "local_cli_identities",
-}
-
-
 def _is_sha256_digest(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and len(value) == 64 and all(character in "0123456789abcdef" for character in value)
-
-
-def _valid_browser_projection(browser: Any) -> bool:
-    if not isinstance(browser, dict):
-        return False
-    operation = browser.get("operation")
-    intents = {"browser.navigation", "browser.inspect", "browser.interact", "browser.transfer", "browser.privileged"}
-    if operation == "server":
-        return set(browser) == {"operation", "is_browser"} and type(browser["is_browser"]) is bool
-    if operation == "display":
-        return set(browser) == {"operation", "target"} and isinstance(browser["target"], str)
-    if operation == "classify":
-        return set(browser) == {"operation", "intent"} and (
-            browser["intent"] is None or (isinstance(browser["intent"], str) and browser["intent"] in intents)
-        )
-    if operation != "normalize" or set(browser) != {"operation", "intent"}:
-        return False
-    model = browser["intent"]
-    if model is None:
-        return True
-    strings = {"intent", "operation", "method", "profile_mode", "mcp_server_name", "mcp_tool_name"}
-    optional = {
-        "target_url",
-        "target_origin",
-        "target_domain",
-        "target_path_prefix",
-        "mcp_server_identity_hash",
-        "mcp_tool_identity_hash",
-        "mcp_schema_hash",
-    }
-    lists = {"sensitive_surface_flags", "volatile_fields_dropped"}
-    if (
-        not isinstance(model, dict)
-        or set(model) != strings | optional | lists | {"version"}
-        or type(model["version"]) is not int
-        or model["version"] != 1
-        or any(not isinstance(model[key], str) for key in strings)
-        or any(model[key] is not None and not isinstance(model[key], str) for key in optional)
-        or any(not isinstance(model[key], list) for key in lists)
-        or any(not isinstance(item, str) for key in lists for item in model[key])
-    ):
-        return False
-    surfaces = {
-        "cookies",
-        "storage",
-        "auth_headers",
-        "cdp",
-        "script_eval",
-        "upload",
-        "download",
-        "clipboard",
-        "network_intercept",
-        "password_field",
-    }
-    return (
-        model["intent"] in intents
-        and model["method"] in {"navigate", "read", "interact", "upload", "privileged"}
-        and model["profile_mode"] in {"isolated", "dedicated", "remote-debugging", "shared", "unknown"}
-        and set(model["sensitive_surface_flags"]) <= surfaces
-        and all(len(model[key]) == len(set(model[key])) for key in lists)
-    )
 
 
 _LAST_RESULT_REJECTION: ContextVar[str | None] = ContextVar("_LAST_RESULT_REJECTION", default=None)
@@ -490,8 +389,15 @@ def _decode_result(
     *,
     request_id: str,
     request_sha256: str,
-    kind: str,
 ) -> dict[str, Any] | None:
+    """Bind a result to the request that produced it.
+
+    Only the requester can check the binding (its own id and request digest),
+    so that stays here. Field shapes, vocabularies and kind-specific required
+    output are the resident's result contract: it refuses to emit a result
+    that breaks them, so a broken one reaches this side as an error envelope.
+    """
+
     if not isinstance(payload, dict):
         return _reject("payload_not_object")
     keys = set(payload)
@@ -516,174 +422,6 @@ def _decode_result(
             f"sha_matches={payload.get('request_sha256') == request_sha256} "
             f"status={payload.get('status')!r} code={payload.get('code')!r}"
         )
-    for field in ("token", "digest", "validation_reason"):
-        value = payload.get(field)
-        if value is not None and not isinstance(value, str):
-            return None
-    launcher = payload.get("package_launcher")
-    if launcher is not None and (
-        not isinstance(launcher, dict)
-        or set(launcher) != {"package"}
-        or (launcher["package"] is not None and not isinstance(launcher["package"], str))
-    ):
-        return None
-    launch_environment = payload.get("mcp_launch_environment")
-    if launch_environment is not None and (
-        not isinstance(launch_environment, dict)
-        or any(not isinstance(name, str) or not isinstance(value, str) for name, value in launch_environment.items())
-    ):
-        return None
-    values = payload.get("environment_values")
-    if values is not None and (
-        not isinstance(values, dict)
-        or any(
-            not isinstance(name, str) or (digest is not None and not _is_sha256_digest(digest))
-            for name, digest in values.items()
-        )
-    ):
-        return None
-    context = payload.get("package_context")
-    if context is not None:
-        if (
-            not isinstance(context, dict)
-            or set(context) != {"digest", "portable", "components", "non_portable_reason"}
-            or not _is_sha256_digest(context["digest"])
-            or not isinstance(context["portable"], bool)
-            or not isinstance(context["components"], list)
-            or not context["components"]
-            or (context["non_portable_reason"] is not None and not isinstance(context["non_portable_reason"], str))
-        ):
-            return None
-        for component in context["components"]:
-            if (
-                not isinstance(component, dict)
-                or set(component) != {"name", "digest"}
-                or not isinstance(component["name"], str)
-                or not _is_sha256_digest(component["digest"])
-            ):
-                return None
-    for field, string_fields, optional_fields, digest_fields in (
-        (
-            "mcp_server_identity",
-            {"config_path", "command", "args_hash", "package_source", "transport", "env_values_hash", "identity_hash"},
-            {"package_name", "package_version"},
-            {"args_hash", "env_values_hash", "identity_hash"},
-        ),
-        (
-            "mcp_tool_identity",
-            {"server_hash", "tool_name", "schema_hash", "description_hash", "identity_hash"},
-            set(),
-            {"schema_hash", "description_hash", "identity_hash"},
-        ),
-    ):
-        identity = payload.get(field)
-        if identity is None:
-            continue
-        expected_fields = string_fields | optional_fields
-        if field == "mcp_server_identity":
-            expected_fields = expected_fields | {"env_keys"}
-        if (
-            not isinstance(identity, dict)
-            or set(identity) != expected_fields
-            or any(not isinstance(identity[key], str) for key in string_fields)
-            or any(identity[key] is not None and not isinstance(identity[key], str) for key in optional_fields)
-            or any(not _is_sha256_digest(identity[key]) for key in digest_fields)
-        ):
-            return None
-        if field == "mcp_server_identity" and (
-            not isinstance(identity["env_keys"], list) or any(not isinstance(key, str) for key in identity["env_keys"])
-        ):
-            return None
-    descriptor = payload.get("mcp_descriptor")
-    if descriptor is not None:
-        if kind == "mcp_server_descriptor":
-            strings = {
-                "argsHash",
-                "command",
-                "commandHash",
-                "configPath",
-                "envValuesHash",
-                "identityHash",
-                "packageSource",
-                "transport",
-                "transportHash",
-            }
-            optional = {"dependencyHash", "packageName", "packageVersion", "publisherStableId"}
-            hashes = {"argsHash", "commandHash", "envValuesHash", "identityHash", "transportHash"}
-            optional_hashes = {"dependencyHash"}
-            extra = {"envKeys"}
-        elif kind == "mcp_tool_descriptor":
-            strings = {"hashScope", "identityHash", "serverHash", "toolName"}
-            optional = {"descriptionHash", "descriptorHash", "schemaHash"}
-            hashes = {"identityHash"}
-            optional_hashes = optional
-            extra = set()
-        else:
-            return None
-        if (
-            not isinstance(descriptor, dict)
-            or set(descriptor) != strings | optional | extra
-            or any(not isinstance(descriptor[key], str) for key in strings)
-            or any(descriptor[key] is not None and not isinstance(descriptor[key], str) for key in optional)
-            or any(not _is_sha256_digest(descriptor[key]) for key in hashes)
-            or any(descriptor[key] is not None and not _is_sha256_digest(descriptor[key]) for key in optional_hashes)
-        ):
-            return None
-        if kind == "mcp_server_descriptor":
-            publisher = descriptor["publisherStableId"]
-            if (
-                not isinstance(descriptor["envKeys"], list)
-                or any(not isinstance(key, str) for key in descriptor["envKeys"])
-                or (
-                    publisher is not None
-                    and (
-                        not publisher.startswith("publisher:")
-                        or not _is_sha256_digest(publisher.removeprefix("publisher:"))
-                    )
-                )
-            ):
-                return None
-        elif descriptor["hashScope"] not in {"full", "manifest"}:
-            return None
-    browser = payload.get("browser_mcp")
-    if browser is not None and (kind != "browser_mcp" or not _valid_browser_projection(browser)):
-        return None
-    categories = payload.get("mcp_tool_risk")
-    if categories is not None and (
-        kind not in {"mcp_tool_risk", "build_mcp_tool_approval_hash"}
-        or not isinstance(categories, list)
-        or any(not isinstance(category, str) or category not in _MCP_RISK_CATEGORIES for category in categories)
-        or len(categories) != len(set(categories))
-    ):
-        return None
-    policy = payload.get("mcp_tool_policy")
-    if policy is not None and (kind != "mcp_tool_policy" or not _valid_mcp_tool_policy(policy)):
-        return None
-    # Shape is checked by ``native_local_cli_identity``; absent means not applicable.
-    if "local_cli_identity" in payload and kind != "local_cli_identity":
-        return None
-    # Shape is checked by ``managed_controls_policy_fields``.
-    if "managed_controls_policy_fields" in payload and kind != "managed_controls_policy_fields":
-        return None
-    # Shape is checked by ``package_json_scripts``; absent means not applicable.
-    if "package_json_scripts" in payload and kind != "package_json_scripts":
-        return None
-    # Shape is checked by ``native_local_cli_identify``; absent means not applicable.
-    if "local_cli_identities" in payload and kind != "local_cli_identify":
-        return None
-    # Shape is checked by ``custom_extension_suggestion``; absent means not applicable.
-    if "custom_extension_suggestion" in payload and kind != "custom_extension_suggestion":
-        return None
-    # Shape is checked by ``custom_extension_continuity``.
-    if "custom_extension_continuity" in payload and kind != "custom_extension_continuity":
-        return None
-    if payload.get("status") == "ok":
-        required_output = _OK_OUTPUT_FIELD.get(kind)
-        nullable_output = _OK_NULLABLE_OUTPUT_FIELD.get(kind)
-        if required_output is not None and not payload.get(required_output):
-            return None
-        if nullable_output is not None and nullable_output not in payload:
-            return None
     return payload
 
 
@@ -855,7 +593,7 @@ def native_context_digest(
         return _digest_failed(error_code)
     # A rejection is only meaningful for the result that produced it.
     _LAST_RESULT_REJECTION.set(None)
-    decoded = _decode_result(payload, request_id=request_id, request_sha256=request_sha256, kind=kind)
+    decoded = _decode_result(payload, request_id=request_id, request_sha256=request_sha256)
     if decoded is None:
         native_record_resident_failure(
             status.identity.sha256,
@@ -1209,23 +947,6 @@ _MCP_RISK_CATEGORIES = frozenset(
 )
 
 
-def _valid_mcp_tool_policy(policy: object) -> bool:
-    if not isinstance(policy, dict) or set(policy) != {"action", "source", "summary_code", "risk_categories"}:
-        return False
-    categories = policy["risk_categories"]
-    return (
-        isinstance(policy["action"], str)
-        and policy["action"] in {"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"}
-        and isinstance(policy["source"], str)
-        and policy["source"] in {"heuristic", "browser-routine", "policy", "risk-policy"}
-        and isinstance(policy["summary_code"], str)
-        and policy["summary_code"] in {"no_risk", "risk", "configuration_stricter"}
-        and isinstance(categories, list)
-        and all(isinstance(category, str) and category in _MCP_RISK_CATEGORIES for category in categories)
-        and len(categories) == len(set(categories))
-    )
-
-
 def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
     """Project native browser semantics; native absence is not a negative match."""
     result = native_context_digest(
@@ -1234,81 +955,9 @@ def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
         guard_home=_resolve_digest_home(None),
     )
     browser = result.get("browser_mcp") if isinstance(result, dict) and result.get("status") == "ok" else None
-    if (
-        not isinstance(browser, dict)
-        or not _valid_browser_projection(browser)
-        or browser["operation"] != request.get("operation")
-    ):
+    if not isinstance(browser, dict) or browser.get("operation") != request.get("operation"):
         raise _unavailable("native_browser_mcp_intent_unavailable")
     return browser
-
-
-def context_mcp_tool_approval_hash(request: dict[str, Any], *, expect_token: bool) -> tuple[str, tuple[str, ...]]:
-    """Compose the full MCP approval hash natively; no local fallback.
-
-    Requests must be plain JSON types — the worker owns canonicalization, so
-    no ``default=str`` coercion here (that would silently re-materialize big
-    ints/sets as strings and change persisted digests).  Unencodable argument
-    values hit the same ``component_invalid`` boundary the per-op adapters
-    raised before.
-    """
-    try:
-        fields = json.loads(json.dumps({"request": request}))
-    except (TypeError, ValueError) as exc:
-        _LAST_DIGEST_FAILURE.set(None)
-        raise ValueError("native_mcp_tool_approval_hash_unavailable") from exc
-    result = native_context_digest(
-        "build_mcp_tool_approval_hash",
-        fields,
-        guard_home=_resolve_digest_home(None),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        raise _unavailable("native_mcp_tool_approval_hash_unavailable")
-    categories = result.get("mcp_tool_risk")
-    if (
-        not isinstance(categories, list)
-        or any(not isinstance(category, str) or category not in _MCP_RISK_CATEGORIES for category in categories)
-        or len(categories) != len(set(categories))
-    ):
-        raise _unavailable("native_mcp_tool_approval_hash_unavailable")
-    if expect_token:
-        token = result.get("token")
-        if not isinstance(token, str) or not token.startswith("guard-approval-context:v1:"):
-            raise _unavailable("native_mcp_tool_approval_hash_unavailable")
-        return token, tuple(categories)
-    digest = result.get("digest")
-    if not isinstance(digest, str) or not _is_sha256_digest(digest):
-        raise _unavailable("native_mcp_tool_approval_hash_unavailable")
-    return digest, tuple(categories)
-
-
-def context_mcp_arguments_projection(tool_name: str, arguments: object) -> tuple[object, str, str]:
-    """`_safe_mcp_arguments` + `_mcp_arguments_digest` + `_launch_target`, one op.
-
-    Returns ``(safe_arguments, launch_target, digest)``. ``arguments`` may be
-    any JSON value; ``None`` means the JSON-RPC params carried no ``arguments``
-    key. Unencodable/non-JSON material fails at the transport boundary, the
-    same rejection the JSON-RPC layer already applied.
-    """
-    fields = json.loads(json.dumps({"tool_name": tool_name, "arguments": arguments}))
-    result = native_context_digest(
-        "mcp_arguments_projection",
-        fields,
-        guard_home=_resolve_digest_home(None),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        raise _unavailable("native_mcp_arguments_projection_unavailable")
-    launch_target = result.get("mcp_launch_target")
-    serialized = result.get("mcp_serialized_arguments")
-    digest = result.get("digest")
-    if (
-        "mcp_safe_arguments" not in result
-        or not isinstance(launch_target, str)
-        or not isinstance(serialized, str)
-        or not _is_sha256_digest(digest)
-    ):
-        raise _unavailable("native_mcp_arguments_projection_unavailable")
-    return result["mcp_safe_arguments"], launch_target, digest
 
 
 def context_mcp_redact_json(value: object) -> object:
@@ -1329,10 +978,8 @@ __all__ = [
     "bound_context_digest_home",
     "context_browser_mcp",
     "context_digest_guard_home",
-    "context_mcp_arguments_projection",
     "context_mcp_identity",
     "context_mcp_redact_json",
-    "context_mcp_tool_approval_hash",
     "context_mcp_tool_catalog_fingerprint",
     "context_opaque_digest",
     "context_package_evidence",

@@ -38,6 +38,12 @@ fn recorded_original_restricted_execution_outcomes() {
     let pytest_executable = workspace.join("bin/pytest");
     fs::write(&pytest_executable, "#!/bin/sh\n").unwrap();
     fs::set_permissions(&pytest_executable, fs::Permissions::from_mode(0o755)).unwrap();
+    // The recorded cases need `bin/python` and `bin/Python` to be different
+    // files. On a case-insensitive volume (the macOS default) they are one
+    // file, so the case-sensitive recording cannot be replayed there.
+    if workspace.join("bin/PYTHON").exists() {
+        return;
+    }
     let upper_python = workspace.join("bin/Python");
     fs::write(&upper_python, "#!/usr/bin/python3\n").unwrap();
     fs::set_permissions(&upper_python, fs::Permissions::from_mode(0o755)).unwrap();

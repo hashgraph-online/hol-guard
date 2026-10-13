@@ -2,6 +2,13 @@ use super::*;
 
 /// `_resolve_workspace` (:52-77).
 pub(super) fn resolve_workspace(workspace: &Path) -> Result<PathBuf, RestrictedPytestError> {
+    resolve_workspace_with_home(workspace, None)
+}
+
+pub(super) fn resolve_workspace_with_home(
+    workspace: &Path,
+    home: Option<&Path>,
+) -> Result<PathBuf, RestrictedPytestError> {
     let resolved = expand_user(workspace).canonicalize().map_err(|error| {
         RestrictedPytestError::new(
             PYTEST_INVALID_WORKSPACE_REASON_CODE,
@@ -14,7 +21,11 @@ pub(super) fn resolve_workspace(workspace: &Path) -> Result<PathBuf, RestrictedP
             "Restricted pytest workspace must be an existing directory.",
         ));
     }
-    if workspace_is_broad_or_sensitive(&resolved) {
+    let sensitive = match home {
+        Some(home) => workspace_is_broad_or_sensitive_for_home(&resolved, Some(home)),
+        None => workspace_is_broad_or_sensitive(&resolved),
+    };
+    if sensitive {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_WORKSPACE_REASON_CODE,
             "Restricted pytest workspace cannot be a filesystem, home, temporary, or credential-directory root.",
@@ -23,6 +34,7 @@ pub(super) fn resolve_workspace(workspace: &Path) -> Result<PathBuf, RestrictedP
     if !PROJECT_WORKSPACE_MARKERS
         .iter()
         .any(|marker| resolved.join(marker).exists())
+        && !holds_root_test_module(&resolved)
     {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_WORKSPACE_REASON_CODE,
@@ -32,8 +44,36 @@ pub(super) fn resolve_workspace(workspace: &Path) -> Result<PathBuf, RestrictedP
     Ok(resolved)
 }
 
+/// pytest treats a directory holding `conftest.py` or a `test_*.py` module as
+/// its root when no configuration file exists, so a fresh project with only
+/// source and tests still counts. The broad and sensitive roots are refused
+/// before this runs. Only regular files count, and the scan stops early.
+fn holds_root_test_module(workspace: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(workspace) else {
+        return false;
+    };
+    entries.take(512).flatten().any(|entry| {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            return false;
+        };
+        let test_module = name == "conftest.py"
+            || name.strip_suffix(".py").is_some_and(|stem| {
+                stem.len() > 5 && (stem.starts_with("test_") || stem.ends_with("_test"))
+            });
+        test_module && entry.file_type().is_ok_and(|kind| kind.is_file())
+    })
+}
+
 /// `_workspace_is_broad_or_sensitive` (:78-104).
 pub(super) fn workspace_is_broad_or_sensitive(workspace: &Path) -> bool {
+    workspace_is_broad_or_sensitive_for_home(workspace, None)
+}
+
+pub(super) fn workspace_is_broad_or_sensitive_for_home(
+    workspace: &Path,
+    home: Option<&Path>,
+) -> bool {
     let broad_roots: HashSet<PathBuf> = [
         "/",
         "/Users",
@@ -52,19 +92,39 @@ pub(super) fn workspace_is_broad_or_sensitive(workspace: &Path) -> bool {
     if broad_roots.contains(workspace) {
         return true;
     }
-    let home = host_home_directory();
-    let home = match home {
-        Some(h) => h,
-        None => return true,
-    };
-    if workspace == home || home.ancestors().skip(1).any(|p| p == workspace) {
+    // The caller home is an extra root. It must not replace the account home
+    // from the password database, or a different `$HOME` would hide that root.
+    let mut homes = Vec::new();
+    if let Some(host) = host_home_directory() {
+        homes.push(host);
+    }
+    if let Some(path) = home {
+        let caller = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if !homes.iter().any(|existing| existing == &caller) {
+            homes.push(caller);
+        }
+    }
+    if homes.is_empty() {
         return true;
     }
-    let relative_to_home = match workspace.strip_prefix(&home) {
-        Ok(rel) => rel,
-        Err(_) => return false,
+    homes
+        .iter()
+        .any(|home| sensitive_under_home(workspace, home))
+}
+
+fn sensitive_under_home(workspace: &Path, home: &Path) -> bool {
+    if workspace == home
+        || home
+            .ancestors()
+            .skip(1)
+            .any(|ancestor| ancestor == workspace)
+    {
+        return true;
+    }
+    let Ok(relative) = workspace.strip_prefix(home) else {
+        return false;
     };
-    match relative_to_home.components().next() {
+    match relative.components().next() {
         Some(component) => {
             SENSITIVE_HOME_ROOT_NAMES.contains(component.as_os_str().to_string_lossy().as_ref())
         }

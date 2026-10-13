@@ -13,11 +13,12 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import store_review_event_outbox
+from codex_plugin_scanner.guard import store_command_activity_privacy, store_review_event_outbox
 from codex_plugin_scanner.guard.native_guard_store import _raise_for_code
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_wire import shadow_wire
@@ -38,6 +39,57 @@ ERROR_CODES = {
 SCENARIO_STEPS = {scenario["name"]: scenario["steps"] for scenario in SCENARIOS}
 SCENARIO_SEED = {scenario["name"]: scenario["seed"] for scenario in SCENARIOS}
 NOT_FOUND = "CommandActivityNotFoundError"
+
+
+@pytest.fixture
+def recorded_diagnostic_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replay the catalog inputs recorded with the historical store vectors."""
+    catalogs = [
+        step["wire_args"]
+        for scenario in VECTORS["scenarios"]
+        for step in scenario["steps"]
+        if step["method"] == "command_activity_diagnostics"
+    ]
+    catalog = catalogs[0]
+    assert all(item == catalog for item in catalogs)
+    extensions = tuple(
+        SimpleNamespace(
+            extension_id=extension_id,
+            rules=tuple(
+                SimpleNamespace(rule_id=rule_id)
+                for rule_id in catalog["rule_ids"]
+                if rule_id.startswith(extension_id + ".")
+            ),
+        )
+        for extension_id in catalog["extension_ids"]
+    )
+    monkeypatch.setattr(
+        store_command_activity_privacy,
+        "BUILT_IN_COMMAND_EXTENSION_REGISTRY",
+        SimpleNamespace(extensions=extensions),
+    )
+    monkeypatch.setattr(store_command_activity_privacy, "COMMAND_ACTIVITY_HARNESSES", catalog["harnesses"])
+
+
+def test_diagnostics_allowlists_include_new_catalog_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Historical replay must not freeze the production catalog projection."""
+    extension = SimpleNamespace(
+        extension_id="command.new-contribution",
+        rules=(SimpleNamespace(rule_id="command.new-contribution.write"),),
+    )
+    registry = store_command_activity_privacy.BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    monkeypatch.setattr(
+        store_command_activity_privacy,
+        "BUILT_IN_COMMAND_EXTENSION_REGISTRY",
+        SimpleNamespace(extensions=(*registry.extensions, extension)),
+    )
+    allowlists = store_command_activity_privacy._allowlists()
+    assert allowlists["extension_ids"] == sorted(
+        {item.extension_id for item in registry.extensions} | {extension.extension_id}
+    )
+    assert allowlists["rule_ids"] == sorted(
+        {rule.rule_id for item in registry.extensions for rule in item.rules} | {"command.new-contribution.write"}
+    )
 
 
 def _cases() -> list[tuple[str, int, dict[str, Any], dict[str, Any]]]:
@@ -81,6 +133,7 @@ def test_wrappers_send_the_recorded_wire_arguments(
     step: dict[str, Any],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    recorded_diagnostic_catalog: None,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     captured: list[tuple[str, object]] = []
@@ -125,7 +178,9 @@ def _dump(path: Path) -> dict[str, list[dict[str, object]]]:
 
 
 @pytest.mark.parametrize("scenario", VECTORS["scenarios"], ids=lambda scenario: scenario["name"])
-def test_recorded_scenarios_replay_through_the_resident(scenario: dict[str, Any], tmp_path: Path) -> None:
+def test_recorded_scenarios_replay_through_the_resident(
+    scenario: dict[str, Any], tmp_path: Path, recorded_diagnostic_catalog: None
+) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     path = Path(store.path)
     _seed(path, scenario["name"])

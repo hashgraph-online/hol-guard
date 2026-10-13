@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
+import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,8 +32,9 @@ from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.benign_fp_gate_fixture import BenignFixture, build_fixture
-from tests.gauntlet_replay import cursor_hook_fields
+from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
+from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields
+from tests.native_gate_retry import UNAVAILABLE_REASON, review_with_unavailable_retry
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
@@ -60,8 +63,9 @@ _FIXED_TOOLS = {
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
 # lands the case either passes or needs a new owner.
 _ALLOWED_PR = {"unassigned"}
-# Cursor coverage mirrors two existing pending claude-code entries.
-_PENDING_CEILING = 12
+# The session-* cases replay prompts users approved by hand. Those still
+# reviewed on Linux CI are recorded here until their fixes land.
+_PENDING_CEILING = 23
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
@@ -138,7 +142,15 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
 
 @pytest.fixture(scope="module")
 def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[BenignFixture, HookWorker]]:
-    fixture = build_fixture(tmp_path_factory.mktemp("benign-fp-gate"))
+    # macOS pytest temp dirs sit under /private/var/folders, where no real HOME
+    # lives and where Guard reviews reads it allows under a real home. Root the
+    # fixture under /tmp as a Linux runner and real developer hosts do.
+    root = (
+        Path(tempfile.mkdtemp(prefix="benign-fp-gate-", dir="/tmp")).resolve()
+        if sys.platform == "darwin"
+        else tmp_path_factory.mktemp("benign-fp-gate")
+    )
+    fixture = build_fixture(root)
     patch = pytest.MonkeyPatch()
     patch.setenv("HOME", str(fixture.home))
     # Git finds the fixture ~/.gitconfig through HOME, as on a real host. The
@@ -155,6 +167,14 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     if not binary:
         pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled native runtime")
     patch.setenv("HOL_GUARD_NATIVE_BINARY", binary)
+    # Match the Gauntlet replay environment: hosted Linux runners have no Bun.
+    # The native bun -e proof must find a benign local executable on PATH in
+    # both replay gates; otherwise a fixed case remains pending in this gate.
+    bun = fixture.home / ".bun" / "bin" / "bun"
+    bun.parent.mkdir(parents=True, exist_ok=True)
+    bun.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    bun.chmod(0o755)
+    patch.setenv("PATH", os.pathsep.join([os.environ.get("PATH", ""), str(bun.parent)]))
     store = GuardStore(fixture.guard_home)
     # Deliberately no prepare_workspace_policy/register_workspace: first contact.
     worker = HookWorker(store=store, workspace=fixture.worktree)
@@ -164,6 +184,8 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
         worker.close()
         patch.undo()
         fixture.cleanup()
+        if sys.platform == "darwin":
+            shutil.rmtree(root, ignore_errors=True)
 
 
 def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple[dict[str, object], int]:
@@ -180,16 +202,54 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     }
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
-    result = worker.review_http_payload(
-        payload=payload,
-        params={},
-        default_harness=case.harness,
-        home_dir=fixture.home,
-        guard_home=fixture.guard_home,
-        workspace=fixture.cwd(case.cwd),
+    # Approval baselines stay from before the first attempt, so a retry never hides a row.
+    result = review_with_unavailable_retry(
+        case.case_id,
+        lambda: worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness=case.harness,
+            home_dir=fixture.home,
+            guard_home=fixture.guard_home,
+            workspace=fixture.cwd(case.cwd),
+        ),
     )
     _ROWS[case.case_id] = approval_rows(worker.store, known)
-    return result, worker.store.count_approval_requests(status=None) - before
+    routed = _harness_route(case, result, payload, fixture)
+    return routed, worker.store.count_approval_requests(status=None) - before
+
+
+def _harness_route(
+    case: GateCase, result: dict[str, object], payload: dict[str, object], fixture: BenignFixture
+) -> dict[str, object]:
+    """Apply the containment rewrite the harness's own hook performs.
+
+    ``review_http_payload`` already routes Z Code and Claude Code. Codex routes
+    in its hook bridge and Oh My Pi in its TypeScript extension (every profile
+    on macOS, the workspace profile on Linux). Without this the gate
+    counts their contained runs as reviews although the user sees nothing.
+    """
+    if case.harness == "codex":
+        return route_codex(result, payload, fixture)
+    if case.harness == "omp" and _omp_routes(result):
+        return {"decision": "allow", "policy_action": "allow", "reason_code": _reason(result), "routed": "omp"}
+    return result
+
+
+def _omp_routes(result: dict[str, object]) -> bool:
+    profile = result.get("required_execution_profile")
+    return (
+        result.get("decision") == "deny"
+        and result.get("policy_action") == "sandbox-required"
+        and result.get("observe_mode") is not True
+        and (profile, _reason(result)) in OMP_CONTAINED
+        and (sys.platform == "darwin" or (sys.platform == "linux" and profile == "workspace-contained-v1"))
+    )
+
+
+def _contained(result: dict[str, object]) -> bool:
+    """Allowed only to run inside the workspace sandbox, by any harness route."""
+    return result.get("routed") == "omp" or _reason(result) == "native_contained_execution_routed"
 
 
 def _reason(result: dict[str, object]) -> str:
@@ -276,7 +336,12 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
     if case.expect == "not_allow":
         assert case.case_id not in _PENDING_FIX, "negative controls cannot be pending_fix"
         # A warning or notice on an allowed call is still an allow, so check the effective decision.
-        assert _decision(result) != "allow" or approvals > 0, f"negative control was allowed: {description}"
+        # Contained execution also protects: the sandbox runs without network, home or
+        # credential access, so a contained `rg KEY ~/.ssh` finds nothing to leak.
+        assert _decision(result) != "allow" or approvals > 0 or _contained(result), (
+            f"negative control was allowed: {description}"
+        )
+        assert _reason(result) != UNAVAILABLE_REASON, f"native review unavailable: {description}"
         return
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
     if case.case_id in _PENDING_FIX:

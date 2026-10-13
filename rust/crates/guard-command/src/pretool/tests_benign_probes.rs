@@ -28,6 +28,9 @@ fn bounded_waits_and_read_only_probes_need_no_approval() {
         "uptime",
         "pgrep -f guard",
         "pgrep -fi hol-guard",
+        "pgrep -fl hol-guard",
+        "pgrep -la guard",
+        "pgrep -a .",
         "node --version",
         "node -v",
         "python3 --version",
@@ -51,9 +54,8 @@ fn unbounded_waits_and_mutating_variants_keep_review() {
         "pgrep",
         "pgrep -f a b",
         "pgrep -F pidfile",
-        "pgrep -a .",
-        "pgrep -fl hol-guard",
-        "pgrep -la guard",
+        "pgrep -fl",
+        "pgrep -u root guard",
         "pgrep --signal KILL guard",
         "pkill -f guard",
         "python -v",
@@ -83,6 +85,8 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                     cwd: Some("/tmp"),
                     cdpath_unset: false,
                     rustup_override_absent: false,
+                    npm_config_inert: false,
+                    shell_home_matches: false,
                 },
             )
             .is_empty(),
@@ -98,6 +102,8 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                npm_config_inert: false,
+                shell_home_matches: false,
             },
         ),
         vec![0, 1]
@@ -244,6 +250,8 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         cwd: Some(root),
         cdpath_unset: false,
         rustup_override_absent: false,
+        npm_config_inert: false,
+        shell_home_matches: false,
     };
     let cover = |command: &str| {
         benign_command_segments(&parse_command(&request(command)).unwrap(), context)

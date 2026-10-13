@@ -44,6 +44,24 @@ pub(crate) fn scope_skill_artifacts(
     native::skills(harness, scope_dir, roots, scope)
 }
 
+/// A skill directory identity and the facts a caller reports about it.
+pub(crate) struct DirectoryIdentity {
+    pub(crate) metadata: serde_json::Map<String, Value>,
+    pub(crate) complete: bool,
+    pub(crate) failure_reason: Option<String>,
+}
+
+/// `inspect_skill_directory` plus `skill_directory_identity_metadata`, walked
+/// natively. Platforms without a native walk refuse; the caller supplies the
+/// finished identity instead.
+pub(crate) fn directory_identity(
+    skill_md: &Path,
+    scope_root: &Path,
+    version_label: &str,
+) -> Result<DirectoryIdentity, &'static str> {
+    native::directory_identity(skill_md, scope_root, version_label)
+}
+
 #[cfg(unix)]
 mod native {
     use std::ffi::OsStr;
@@ -112,6 +130,26 @@ mod native {
             }),
         );
         Ok(metadata)
+    }
+
+    /// The identity of one skill directory: its metadata and completeness.
+    pub(super) fn directory_identity(
+        skill_md: &Path,
+        scope_root: &Path,
+        version_label: &str,
+    ) -> Result<super::DirectoryIdentity, &'static str> {
+        let identity = inspect_skill_directory(skill_md, scope_root, &LIMITS);
+        let failure_reason = match identity.failure_reason {
+            Some(reason) => serde_json::to_value(reason)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned)),
+            None => None,
+        };
+        Ok(super::DirectoryIdentity {
+            metadata: identity_metadata(&identity, version_label)?,
+            complete: identity.status == "complete",
+            failure_reason,
+        })
     }
 
     fn skill_metadata(
@@ -209,6 +247,14 @@ mod native {
     use std::path::Path;
 
     use serde_json::Value;
+
+    pub(super) fn directory_identity(
+        _skill_md: &Path,
+        _scope_root: &Path,
+        _version_label: &str,
+    ) -> Result<super::DirectoryIdentity, &'static str> {
+        Err("native_runner_authority_aibom_skills_unsupported")
+    }
 
     pub(super) fn skills(
         _harness: &str,

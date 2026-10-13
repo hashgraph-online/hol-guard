@@ -146,6 +146,16 @@ pub(crate) fn workspace_policy_key(workspace: Option<&str>) -> Option<String> {
     if ws.starts_with("workspace:") {
         return Some(ws.to_string());
     }
+    computed_workspace_policy_key(Some(ws))
+}
+
+/// `_workspace_policy_key` (`store_base.py`) exactly: always hashes the
+/// normalized path, with no passthrough for already-keyed input.
+pub(crate) fn computed_workspace_policy_key(workspace: Option<&str>) -> Option<String> {
+    let ws = workspace?;
+    if ws.trim().is_empty() {
+        return None;
+    }
     Some(format!(
         "workspace:{}",
         sha256_hex(normalized_workspace_path(ws).as_bytes())
@@ -1317,6 +1327,9 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
 fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
     if request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
         return Err("native_policy_decision_lookup_schema_mismatch".to_owned());
+    }
+    if let Some(groups) = &request.probe_groups {
+        return crate::policy_lookup_groups::evaluate(request, groups);
     }
     let current_time = canonical_utc_timestamp(&request.now)
         .ok_or_else(|| "native_policy_decision_lookup_invalid_now".to_owned())?;

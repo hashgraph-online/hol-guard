@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -144,6 +143,8 @@ fn decide_with(
             cwd: cwd.to_str(),
             cdpath_unset: false,
             rustup_override_absent: false,
+            npm_config_inert: false,
+            shell_home_matches: false,
         },
         Some(&environment),
     )

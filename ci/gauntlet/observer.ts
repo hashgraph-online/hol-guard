@@ -1,5 +1,6 @@
 // Telemetry only. Probe metadata is diagnostic-only; Guard decisions and responses are unchanged.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
 const logPath = process.env.GUARD_GAUNTLET_OBSERVER_LOG;
@@ -149,6 +150,39 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   return response;
 }) as typeof fetch;
 
+// Each argument is single-quoted with embedded apostrophes written as '\'' (canonical shell argv).
+const QUOTED = String.raw`'(?:[^']|'\\'')+'`;
+const CONTAINED_WRAPPER = new RegExp(
+  `^${QUOTED} 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
+    `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}'(?: '--home' ${QUOTED})?$`,
+);
+
+// Guard's adapter deletes its contained-test request once the wrapper runs. Read only the exact
+// owner-only file the executing wrapper names, before it runs; the judge binds the bytes by digest.
+function containedRequest(event: JsonRecord): JsonRecord | undefined {
+  const command = (event.args as JsonRecord | undefined)?.command;
+  if (event.toolName !== "bash" || typeof command !== "string") return undefined;
+  const path = CONTAINED_WRAPPER.exec(command)?.[1]?.slice(1, -1).replaceAll("'\\''", "'");
+  if (!path || basename(path) !== "request.json" || !basename(dirname(path)).startsWith("hol-guard-contained-test-")) {
+    return undefined;
+  }
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const info = fstatSync(descriptor);
+    if (!info.isFile() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600 || info.size > 1_048_576) {
+      return undefined;
+    }
+    const request = readFileSync(descriptor);
+    if (request.length > 1_048_576) return undefined;
+    return { type: "contained_request_capture", toolCallId: event.toolCallId, request: request.toString("base64") };
+  } catch {
+    return undefined;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
 export default function (api: {
   on(event: string, handler: (event: JsonRecord) => void): void;
 }): void {
@@ -165,7 +199,9 @@ export default function (api: {
   const bridges = new Map<string, string[]>();
   api.on("tool_execution_start", event => {
     if (event.toolName === "eval" && typeof event.toolCallId === "string") evals.add(event.toolCallId);
+    const request = containedRequest(event);
     observe(event);
+    if (request) observe(request);
   });
   api.on("tool_execution_end", event => {
     observe(event);

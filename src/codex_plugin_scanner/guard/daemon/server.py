@@ -27,7 +27,6 @@ from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from ...version import __version__
 from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
 from ..approval_gate import (
     ApprovalGateError,
@@ -35,7 +34,6 @@ from ..approval_gate import (
 )
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..browser_opener import open_browser_url
-from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..config import (
@@ -45,7 +43,6 @@ from ..directory_path_authority import (
     DirectoryPathTrustError,
     trusted_guard_directory_roots,
     validate_guard_directory_path,
-    validated_owned_temporary_workspace,
 )
 from ..fork_safety import forget_in_child
 from ..json_transport import escape_json_for_html
@@ -60,6 +57,7 @@ from ..local_dashboard_session import (
 from ..models import (
     GuardRuntimeRegistration,
 )
+from ..native_codex_binding_capture import start_codex_binding_capture_writer
 from ..native_daemon_handler import (
     HandlerDecision,
     NativeDaemonHandlerError,
@@ -98,9 +96,6 @@ from ..runtime.runner import (
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_artifact_reconciliation import (
     reconcile_runtime_artifacts,
-)
-from ..shims import (
-    package_shim_status,
 )
 from ..sqlite_recovery import quarantined_store_summary
 from ..store import GuardStore
@@ -198,20 +193,6 @@ class _HookPathValidationError(ValueError):
         parameter_slug = parameter.replace("-", "_")
         super().__init__(f"invalid_hook_{parameter_slug}_path")
         self.code = f"invalid_hook_{parameter_slug}_path"
-
-
-def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
-    """Return a lightweight snapshot dict including package manager shim coverage."""
-    status = package_shim_status(context)
-    return {
-        "package_manager_coverage": {
-            "detected_managers": status.get("detected_managers", []),
-            "path_active": status.get("active_managers", []),
-            "shims_installed": status.get("active_managers", []),
-            "undetected_managers": status.get("undetected_managers", []),
-            "unsupported_managers": [],
-        }
-    }
 
 
 _MAX_CONCURRENT_DAEMON_REQUESTS = 32
@@ -512,6 +493,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.hook_worker = HookWorker(
                 store=self.store,
                 workspace=self.workspace_dir,
+                home_dir=self.home_dir,
                 activity_writer=self.runtime_hook_evidence_writer,
                 capture_writer=self.codex_binding_capture_writer,
             )
@@ -1660,6 +1642,7 @@ class _GuardDaemonHandler(
         )
 
     def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
+        from .hook_direct_pi_transport import pi_direct_answer
         from .hook_request_parsing import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
@@ -1680,6 +1663,7 @@ class _GuardDaemonHandler(
         )
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
+        paths_validated = False
         try:
             home_dir = self._validated_hook_directory_string(
                 "home",
@@ -1698,6 +1682,7 @@ class _GuardDaemonHandler(
                 workspace_candidate,
                 roots=self._hook_safe_roots(),
             )
+            paths_validated = True
         except _HookPathValidationError as error:
             # The Rust edge still receives the complete raw payload. Use
             # daemon-owned metadata when an optional caller context is
@@ -1707,6 +1692,20 @@ class _GuardDaemonHandler(
             home_dir = str(daemon_server.home_dir)
             guard_home = str(daemon_server.store.guard_home)
             workspace = None
+
+        if paths_validated:
+            # Oh My Pi has no bridge to ask the resident first, so ask it here.
+            direct_response = pi_direct_answer(
+                getattr(daemon_server, "hook_worker", None),
+                default_harness=default_harness,
+                params=params,
+                payload=payload,
+                home_dir=home_dir,
+                deadline=hook_deadline.expires_at,
+            )
+            if direct_response is not None:
+                self._write_json(direct_response)
+                return
 
         if not prepare_native_hook_policy(
             self, daemon_server, payload, params, default_harness, workspace, hook_deadline.expires_at
@@ -2712,14 +2711,6 @@ class _GuardDaemonHandler(
         except DirectoryPathTrustError as error:
             raise _HookPathValidationError(parameter, error.reason) from error
 
-    @staticmethod
-    def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
-        return _GuardDaemonHandler._validated_owned_temporary_hook_workspace(candidate) is not None
-
-    @staticmethod
-    def _validated_owned_temporary_hook_workspace(candidate: str) -> Path | None:
-        return validated_owned_temporary_workspace(candidate)
-
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
             return None
@@ -3294,13 +3285,6 @@ class GuardDaemonServer:
         if self._command_activity_maintenance_thread.is_alive():
             raise RuntimeError("command activity maintenance is still stopping")
         self._command_activity_maintenance_thread = None
-
-    def _join_command_activity_maintenance(self) -> None:
-        if self._command_activity_maintenance_thread is None:
-            return
-        self._command_activity_maintenance_thread.join(timeout=5)
-        if not self._command_activity_maintenance_thread.is_alive():
-            self._command_activity_maintenance_thread = None
 
     def _command_activity_maintenance_loop(self) -> None:
         if self._shutdown_started.is_set():

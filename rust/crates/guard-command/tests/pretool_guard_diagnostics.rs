@@ -41,6 +41,9 @@ fn guard_read_only_diagnostics_are_explicitly_benign() {
             "hol-guard doctor --json",
             "hol-guard settings",
             "hol-guard settings --json",
+            "hol-guard command explain \"bun run build\" 2>&1 | head -30",
+            "hol-guard command test 'cargo test --workspace' --json",
+            "hol-guard command extensions",
         ] {
             let (decision, minimum_action) = evaluate(harness, command);
             assert_eq!(decision, "allow", "{harness}: {command}");
@@ -61,6 +64,11 @@ fn guard_repairs_controls_and_unbound_launches_stay_reviewed() {
             "hol-guard daemon start",
             "hol-guard daemon stop",
             "hol-guard settings set mode off",
+            "hol-guard command controls",
+            "hol-guard command setup --detect",
+            "hol-guard command explain \"bun run build\" --home /tmp/evil",
+            "hol-guard approvals approve req-1",
+            "hol-guard allow \"bun run build\"",
             "hol-guard daemon status; rm -rf /tmp/x",
             "./hol-guard status",
             "/tmp/hol-guard status",

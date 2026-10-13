@@ -11,6 +11,9 @@ use guard_contracts::PreToolResultV1;
 pub(super) struct RedirectProjection {
     pub(super) command: String,
     pub(super) writes_file: bool,
+    /// Every file the redirects write passes the check a file-edit tool's
+    /// write gets.
+    pub(super) bounded_writes: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -34,6 +37,8 @@ pub(super) fn project(
     let mut saw_heredoc = false;
     let mut removed = false;
     let mut writes_file = false;
+    let mut bounded_writes = true;
+    let mut temporary_writes = true;
     let mut index = 0usize;
     while index < chars.len() {
         let current = chars[index];
@@ -74,7 +79,15 @@ pub(super) fn project(
                 continue;
             }
             '>' => {
-                index = remove_output_redirect(&chars, index, &mut out, context, &mut writes_file)?;
+                index = remove_output_redirect(
+                    &chars,
+                    index,
+                    &mut out,
+                    context,
+                    &mut writes_file,
+                    &mut bounded_writes,
+                    &mut temporary_writes,
+                )?;
                 removed = true;
                 continue;
             }
@@ -93,6 +106,13 @@ pub(super) fn project(
         return None;
     }
     let command = out.trim().to_owned();
+    // Only kept descriptor copies (`2>&1`, `2>/dev/null`) were seen. The
+    // parser models those, and the command as written already gets the full
+    // evaluation with every control, so a join with an uncontrolled raw
+    // evaluation could only lose a proven allow or a configured denial.
+    if command.split_whitespace().eq(raw.split_whitespace()) {
+        return None;
+    }
     let model = crate::parse_command(&CommandModelRequestV1 {
         command: command.clone(),
         dialect: "posix".to_owned(),
@@ -100,12 +120,13 @@ pub(super) fn project(
         extraction_provenance: "pre-tool-generic".to_owned(),
     })
     .ok()?;
-    // An earlier segment could change directory or create a symlink before
-    // the shell opens the target, so file writes need a single segment.
+    // An earlier segment could cd or create a symlink before the shell opens
+    // a target, so a chain may only write absolute temp files beside peers.
+    let temporary_chain = temporary_writes && super::super::chain_temporary::peers_only(&model);
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (writes_file && model.segments.len() != 1)
+        || (writes_file && model.segments.len() != 1 && !temporary_chain)
     {
         return None;
     }
@@ -122,21 +143,30 @@ pub(super) fn project(
     Some(RedirectProjection {
         command,
         writes_file,
+        bounded_writes,
     })
 }
 
 /// Keep the projected command's floors and raise them by any independent
 /// floor of the raw command. The raw text's generic "unparsed command"
 /// review is the only floor the projection discharges, except that a file
-/// write still requires review.
+/// write still requires review unless its target passes the same check as a
+/// file-edit tool's write and the command itself is allowed.
 fn redirect_disqualifies_containment(reason: &str) -> bool {
-    // A file redirect is a shell effect. Pytest and inline-eval profiles are
-    // only valid for the exact command, so the projection must not inherit them.
+    // A file redirect is a shell effect. Pytest and inline-eval profiles and
+    // the proofs of Git's own writes are only valid for the exact command, so
+    // the projection must not inherit them.
+    // A network read's body is remote content, never a reviewed workspace edit.
     matches!(
         reason,
         "native_pytest_readonly_containment_required"
             | "native_python_eval_readonly_containment_required"
             | "native_node_eval_readonly_containment_required"
+            | "native_bun_eval_readonly_containment_required"
+            | "native_workspace_containment_required"
+            | crate::pretool::git_config_reads::writes::REASON
+            | crate::pretool::git_init_target::REASON
+            | crate::pretool::curl_reads::NETWORK_READ_REASON
     )
 }
 
@@ -144,6 +174,7 @@ pub(super) fn join(
     mut projected: PreToolResultV1,
     raw: PreToolResultV1,
     writes_file: bool,
+    bounded_writes: bool,
 ) -> PreToolResultV1 {
     // Stripping a benign descriptor copy must not replace an allow the raw
     // command already earned. A file write still goes through the floors below.
@@ -174,7 +205,12 @@ pub(super) fn join(
         projected.reason_code = raw.reason_code;
         projected.reason = raw.reason;
     }
-    if writes_file && rank(&projected.minimum_action) < rank("review") {
+    // `echo done > notes.txt` is the same edit an agent's own write tool makes.
+    let bounded = bounded_writes
+        && projected.minimum_action == "allow"
+        && projected.decision == "allow"
+        && !projected.action.sensitive_target;
+    if writes_file && !bounded && rank(&projected.minimum_action) < rank("review") {
         projected.minimum_action = "review".into();
         projected.policy_action = "review".into();
         projected.decision = "deny".into();
@@ -204,6 +240,8 @@ fn remove_output_redirect(
     out: &mut String,
     context: super::super::PathContext<'_>,
     writes_file: &mut bool,
+    bounded_writes: &mut bool,
+    temporary_writes: &mut bool,
 ) -> Option<usize> {
     let mut index = start + 1;
     let descriptor = trailing_word(out).to_owned();
@@ -257,11 +295,17 @@ fn remove_output_redirect(
         return None;
     }
     *writes_file = true;
+    *bounded_writes &= bounded_write(&target, context);
+    *temporary_writes &= super::super::chain_temporary::temporary_file_target(
+        &target,
+        context.home_dir,
+        context.cwd,
+    );
     out.push(' ');
     Some(index)
 }
 
-fn remove_quoted_heredoc(
+pub(super) fn remove_quoted_heredoc(
     chars: &[char],
     start: usize,
     out: &mut String,
@@ -306,7 +350,7 @@ fn remove_quoted_heredoc(
     Some(index + 1)
 }
 
-fn skip_heredoc_bodies(
+pub(super) fn skip_heredoc_bodies(
     chars: &[char],
     mut index: usize,
     heredocs: &mut Vec<(String, bool)>,
@@ -336,14 +380,14 @@ fn skip_heredoc_bodies(
     Some(index.min(chars.len()))
 }
 
-fn trailing_word(out: &str) -> &str {
+pub(super) fn trailing_word(out: &str) -> &str {
     let start = out
         .rfind(|value: char| value.is_whitespace() || matches!(value, ';' | '|'))
         .map_or(0, |position| position + 1);
     &out[start..]
 }
 
-fn boundary(value: Option<&char>) -> bool {
+pub(super) fn boundary(value: Option<&char>) -> bool {
     value.is_none_or(|value| value.is_whitespace() || matches!(value, ';' | '|' | '&'))
 }
 
@@ -418,6 +462,21 @@ fn safe_output_target(target: &str, context: super::super::PathContext<'_>) -> b
         });
     }
     cwd.is_some_and(|cwd| no_symlink_components(cwd, path))
+}
+
+fn bounded_write(target: &str, context: super::super::PathContext<'_>) -> bool {
+    use super::super::safe_writes::{
+        bounded_native_file_write_target, bounded_native_temporary_write_target,
+    };
+    // Home is outside the workspace even when it sits below a temporary
+    // directory, as it does for disposable and CI accounts.
+    let path = std::path::Path::new(target);
+    let under = |base: Option<&str>| base.is_some_and(|base| path.starts_with(base));
+    if path.is_absolute() && under(context.home_dir) && !under(context.cwd) {
+        return false;
+    }
+    bounded_native_file_write_target(target, context.home_dir, context.cwd)
+        || bounded_native_temporary_write_target(target, context.home_dir, context.cwd)
 }
 
 /// Writing through an existing symlink could reach any file the user owns.

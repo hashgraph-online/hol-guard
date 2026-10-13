@@ -24,7 +24,23 @@ pub(super) fn plain_origin_refresh(segment: &CommandSegmentV1, command_index: us
     origin_shaped_arguments(rest)
 }
 
-fn origin_shaped_arguments(arguments: &[String]) -> bool {
+/// The same refresh after leading `-C` routes the caller already proved stay
+/// within the workspace; the remote, flags and refs follow the same shape.
+pub(super) fn routed_origin_refresh(segment: &CommandSegmentV1, command_index: usize) -> bool {
+    segment.executable.as_deref() == Some("git")
+        && !segment.path_overridden
+        && segment.wrapper_chain.is_empty()
+        && segment.environment_names.is_empty()
+        && segment.arguments[..command_index]
+            .chunks(2)
+            .all(|pair| matches!(pair, [flag, _] if flag == "-C"))
+        && segment
+            .arguments
+            .get(command_index + 1..)
+            .is_some_and(origin_shaped_arguments)
+}
+
+pub(super) fn origin_shaped_arguments(arguments: &[String]) -> bool {
     if arguments.is_empty() || arguments.len() > MAX_ARGUMENTS {
         return false;
     }

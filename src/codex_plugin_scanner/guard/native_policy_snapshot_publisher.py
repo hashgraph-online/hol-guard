@@ -153,6 +153,9 @@ class NativePolicySnapshotPublisher(
         self._failure_count = 0
         self._workspace_paths: set[Path] = set()
         self._pending_workspace_paths: set[Path] = set()
+        # Pending workspaces the current ACK already covers. They compile with
+        # the next publish but never queue one of their own.
+        self._deferred_workspace_paths: set[Path] = set()
         self._command_control_runtime = None
         self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
         self._input_fingerprint: (

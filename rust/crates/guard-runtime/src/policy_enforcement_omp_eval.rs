@@ -1,16 +1,18 @@
-//! Recheck bounded OMP eval reads and result reports after output scanning.
+//! Recheck bounded OMP eval reads, result reports and names-only listings after
+//! output scanning.
 use guard_contracts::{NativeHookRequestV1, PreToolActionTypeV1};
 use serde_json::Value;
 
 pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<PreToolActionTypeV1> {
-    if request.harness != "omp" {
-        return None;
-    }
     let root = request.payload.as_object()?;
-    if !matches!(
-        root.get("tool_name").and_then(Value::as_str),
-        Some("eval" | "yield")
-    ) {
+    let tool = root.get("tool_name").and_then(Value::as_str)?;
+    // Pi ships the same `find` and `ls` built-ins and gets the same listing proof.
+    let proved_tool = match request.harness.as_str() {
+        "omp" => matches!(tool, "eval" | "yield" | "find" | "ls"),
+        "pi" => matches!(tool, "find" | "ls"),
+        _ => false,
+    };
+    if !proved_tool {
         return None;
     }
     let input = Value::Object(
@@ -39,7 +41,8 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
         return None;
     }
     match (proof.reason_code.as_str(), proof.action.action_type) {
-        ("native_omp_eval_bounded_tools", PreToolActionTypeV1::FileRead) => {
+        ("native_omp_eval_bounded_tools", PreToolActionTypeV1::FileRead)
+        | ("native_omp_directory_listing", PreToolActionTypeV1::FileRead) => {
             Some(PreToolActionTypeV1::FileRead)
         }
         ("native_omp_yield_metadata", PreToolActionTypeV1::Harness) => {

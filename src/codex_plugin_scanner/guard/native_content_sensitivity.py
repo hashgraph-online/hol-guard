@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home
 from .native_context import _is_sha256_digest as _digest
-from .native_resident_client import native_resident_client_request
+from .native_resident_client import native_resident_client_ready, native_resident_client_request
 from .native_runtime import (
     NativeRuntimeStatus,
     _isolated_environment,
@@ -56,6 +56,16 @@ def _binary_signature(status: NativeRuntimeStatus) -> tuple[int, ...] | None:
     )
 
 
+# A small query to a resident that has to be spawned first, a small query to
+# one that is already running, and a large one. The warm bound still has to
+# hold a round trip on a loaded machine and the resident's first query after
+# it starts, which builds its matchers; a shorter bound fails those checks
+# closed although nothing is wrong.
+_COLD_START_SECONDS = 4.0
+_WARM_QUERY_SECONDS = 2.0
+_LARGE_QUERY_SECONDS = 30.0
+
+
 def _status(deadline: float) -> NativeRuntimeStatus:
     global _status_memo
     if time.monotonic() >= deadline:
@@ -86,8 +96,12 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
         raise NativeContentSensitivityError("native_content_sensitivity_request_invalid") from exc
     if len(body_bytes) > 12 * 1024 * 1024:
         raise NativeContentSensitivityError("native_content_sensitivity_request_invalid")
+    # Without a caller deadline, runtime discovery and a resident spawn get
+    # their own bound; a resident that is already running gets the warm one.
     deadline = (
-        deadline_monotonic if deadline_monotonic is not None else started + (30 if len(body_bytes) > 65536 else 0.5)
+        deadline_monotonic
+        if deadline_monotonic is not None
+        else started + (_LARGE_QUERY_SECONDS if len(body_bytes) > 65536 else _COLD_START_SECONDS)
     )
     if len(body_bytes) > 128 * 1024:
         body = {
@@ -99,6 +113,14 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
     status = _status(deadline)
     if time.monotonic() >= deadline:
         raise NativeContentSensitivityDeadlineError("native_content_sensitivity_deadline_exceeded")
+    home = _resolve_digest_home(None)
+    if (
+        deadline_monotonic is None
+        and len(body_bytes) <= 65536
+        and status.identity is not None
+        and native_resident_client_ready(status.identity.path, home)
+    ):
+        deadline = min(deadline, time.monotonic() + _WARM_QUERY_SECONDS)
     if (
         not status.available
         or not status.compatible
@@ -107,7 +129,6 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
         or not {"resident-protocol-v2", "request-context-v1"} <= set(status.capabilities.features)
     ):
         raise NativeContentSensitivityError("native_content_sensitivity_unavailable")
-    home = _resolve_digest_home(None)
     owner_uid = None if sys.platform == "win32" else os.geteuid()
     memo_key = (query, body_bytes, status.identity.sha256, str(home), owner_uid)
     memo = _path_memo if query == "path" else _resolution_memo

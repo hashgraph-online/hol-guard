@@ -189,7 +189,7 @@ def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
     if workspace is None:
         return None
     result = _native_cli_support("workspace_root", {
-        "workspace": str(workspace) if workspace is not None else None,
+        "workspace": str(workspace),
         "caller_cwd": str(Path.cwd()),
     })
     return Path(result) if result is not None else None

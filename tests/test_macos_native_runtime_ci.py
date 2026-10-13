@@ -79,9 +79,27 @@ def test_required_aggregate_includes_the_macos_native_lane() -> None:
     required = workflow["jobs"]["required"]
     assert "macos-native-runtime" in required["needs"]
     assert "macos-skill-identity" in required["needs"]
+    assert "macos-gates" in required["needs"]
     run = "\n".join(step.get("run", "") for step in required["steps"])
     lane_gated = re.search(r"required\s*=\s*(\[[^]]*\])", run)
     assert lane_gated is not None
     gated = ast.literal_eval(lane_gated.group(1))
     assert "macos-native-runtime" in gated
     assert "macos-skill-identity" in gated
+    assert "macos-gates" in gated
+
+
+def test_macos_gates_run_the_benign_and_replay_gates_on_the_ci_runtime() -> None:
+    """Run the false-positive gates against the macOS runtime, not only on Linux."""
+    job = load_ci_workflow()["jobs"]["macos-gates"]
+    needs = job["needs"] if isinstance(job["needs"], list) else [job["needs"]]
+    assert {"native-command-evaluators", "macos-native-runtime"} <= set(needs)
+    steps = job["steps"]
+    expose = step_index(steps, "Expose the CI-built macOS runtime")
+    gates = step_index(steps, "Benign false-positive and Gauntlet replay gates on macOS")
+    assert expose < gates
+    assert set(_pytest_files(steps[gates])) == {
+        "tests/test_guard_benign_false_positive_gate.py",
+        "tests/test_guard_gauntlet_replay_gate.py",
+        "tests/test_guard_command_corpus_benign_allow.py",
+    }

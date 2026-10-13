@@ -24,6 +24,12 @@ pub mod business_source_authority;
 mod canonical;
 #[path = "policy_snapshot_crypto.rs"]
 mod crypto;
+mod direct_lane;
+pub use direct_lane::{
+    DirectLaneBindingV1, DirectLaneEnvironmentV1, DirectLaneInputV1,
+    DirectLanePolicyIntegrityStateV1, DirectLaneSecretV1, DirectLaneStatV1, DIRECT_LANE_MAX_INPUTS,
+    DIRECT_LANE_MAX_PATH_BYTES, DIRECT_LANE_MAX_WORKSPACES,
+};
 #[path = "policy_snapshot_validation.rs"]
 mod validation;
 pub use validation::{inspect_unverified_content, validate_v3};
@@ -178,6 +184,11 @@ pub struct PolicySnapshotV3 {
 pub struct PolicySnapshotPushV1 {
     pub schema: String,
     pub snapshot: PolicySnapshotV3,
+    /// Freshness binding for the direct resident hook lane. When absent the
+    /// lane stays closed for this snapshot and every hook takes the daemon
+    /// path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct_lane: Option<DirectLaneBindingV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

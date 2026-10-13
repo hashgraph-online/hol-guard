@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,11 +16,7 @@ from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .native_approval_proof import (
     ApprovalReuseClaimDisposition,
 )
-from .native_context import (
-    context_mcp_tool_approval_hash,
-    context_opaque_digest,
-)
-from .native_mcp_tool_evidence import native_tool_risk_evidence
+from .native_mcp_tool_call_identity import NativeToolCallIdentity, native_tool_call_identity, server_identity_dto
 from .receipts import build_receipt
 from .runtime.approval_context import (
     current_extension_control_binding_digest,
@@ -33,11 +28,7 @@ from .runtime.approval_reuse import (
 from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
-    build_mcp_tool_identity,
-    mcp_server_identity_metadata,
-    mcp_tool_identity_metadata,
 )
-from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .store import GuardStore
 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
@@ -101,8 +92,74 @@ def resolve_tool_call_policy_action(
     return normalized
 
 
-def build_tool_call_artifact(
+def _build_dto(
     *,
+    harness: str,
+    server_name: str,
+    tool_name: str,
+    source_scope: str,
+    config_path: str,
+    transport: str,
+    server_id: str | None,
+    server_fingerprint: object | None,
+    server_identity: McpServerIdentity | None,
+    tool_schema: object | None,
+    tool_description: str | None,
+    tool_definition: Mapping[str, object] | None,
+    provider_catalog_hash: str | None,
+) -> dict[str, object]:
+    if tool_definition is None:
+        tool: dict[str, object] = {"kind": "explicit", "schema": tool_schema, "description": tool_description}
+    else:
+        entry = dict(tool_definition)
+        if tool_schema is not None:
+            entry.pop("input_schema", None)
+            entry["inputSchema"] = tool_schema
+        if tool_description is not None:
+            entry["description"] = tool_description
+        tool = {"kind": "catalog", "entry": entry or None}
+    return {
+        "harness": harness,
+        "server_name": server_name,
+        "tool_name": tool_name,
+        "source_scope": source_scope,
+        "config_path": config_path,
+        "transport": transport,
+        "server_id": server_id,
+        "server_fingerprint": server_fingerprint,
+        "server_identity": server_identity_dto(server_identity),
+        "provider_catalog_hash": provider_catalog_hash,
+        "tool": tool,
+    }
+
+
+def _hash_input(
+    arguments: object,
+    *,
+    workspace: Path | str | None,
+    config: GuardConfig | None,
+) -> dict[str, object]:
+    return {
+        "arguments": arguments,
+        "config": None
+        if config is None
+        else {
+            **_tool_call_configuration(config),
+            "managed_policy_hash": config.managed_policy_hash,
+            "managed_policy_status": config.managed_policy_status,
+            "sandbox_analysis": config.sandbox_analysis,
+        },
+        "workspace": _normalized_tool_call_workspace(workspace) if workspace is not None else None,
+        "extension_control_digest": None if config is None else current_extension_control_binding_digest(),
+    }
+
+
+def build_tool_call_identity(
+    *,
+    arguments: object,
+    workspace: Path | str | None,
+    config: GuardConfig | None,
+    guard_home: Path | None = None,
     harness: str,
     server_name: str,
     tool_name: str,
@@ -116,58 +173,43 @@ def build_tool_call_artifact(
     tool_description: str | None = None,
     tool_definition: Mapping[str, object] | None = None,
     provider_catalog_hash: str | None = None,
-) -> GuardArtifact:
-    metadata: dict[str, object] = {"server_name": server_name}
-    if provider_catalog_hash is not None:
-        if not re.fullmatch(r"[0-9a-f]{64}", provider_catalog_hash):
-            raise ValueError("invalid provider catalog authority hash")
-        metadata["mcp_provider_catalog_hash"] = provider_catalog_hash
-    if server_id is not None:
-        metadata["server_id"] = server_id
-    if server_fingerprint is not None:
-        metadata["server_fingerprint"] = server_fingerprint
-    if server_identity is not None:
-        metadata["mcp_server_identity"] = mcp_server_identity_metadata(server_identity)
-    if server_id is not None:
-        server_hash = server_id
-    elif server_identity is not None:
-        server_hash = server_identity.identity_hash
-    else:
-        server_hash = server_id or context_opaque_digest(
-            f"{harness}:{source_scope}:{server_name}",
-            unbound_label="mcp-server",
-            strict=False,  # identity hash; stored rows share this producer
-        )
-    tool_identity = build_mcp_tool_identity(
-        server_hash=server_hash,
-        tool_name=tool_name,
-        schema=tool_schema,
-        description=tool_description,
-    )
-    metadata["mcp_tool_identity"] = mcp_tool_identity_metadata(tool_identity)
-    if tool_schema is not None:
-        metadata["tool_schema"] = tool_schema
-    if tool_definition is not None:
-        from .store_mcp_catalog import tool_definition_authority_hash
-
-        metadata["mcp_tool_authority_hash"] = (
-            tool_definition_authority_hash(dict(tool_definition)) if tool_definition.get("name") == tool_name else None
-        )
-    if isinstance(tool_description, str) and tool_description.strip():
-        metadata["tool_description"] = tool_description.strip()
-    return enrich_artifact_with_mcp_skill_firewall(
-        GuardArtifact(
-            artifact_id=f"{harness}:runtime:{source_scope}:{server_name}:{tool_name}",
-            name=f"{server_name}:{tool_name}",
+) -> NativeToolCallIdentity:
+    """The artifact, its private bindings and approval hash in one resident call."""
+    return native_tool_call_identity(
+        build=_build_dto(
             harness=harness,
-            artifact_type="tool_call",
+            server_name=server_name,
+            tool_name=tool_name,
             source_scope=source_scope,
             config_path=config_path,
-            command=tool_name,
             transport=transport,
-            metadata=metadata,
+            server_id=server_id,
+            server_fingerprint=server_fingerprint,
+            server_identity=server_identity,
+            tool_schema=tool_schema,
+            tool_description=tool_description,
+            tool_definition=tool_definition,
+            provider_catalog_hash=provider_catalog_hash,
+        ),
+        hash_input=_hash_input(arguments, workspace=workspace, config=config),
+        guard_home=guard_home,
+    )
+
+
+def build_tool_call_artifact(**facts: Any) -> GuardArtifact:
+    """Build the artifact only (native); see :func:`build_tool_call_identity`."""
+    unset: dict[str, Any] = dict.fromkeys(
+        (
+            "server_id",
+            "server_fingerprint",
+            "server_identity",
+            "tool_schema",
+            "tool_description",
+            "tool_definition",
+            "provider_catalog_hash",
         )
     )
+    return native_tool_call_identity(build=_build_dto(**{**unset, **facts})).artifact
 
 
 def build_tool_call_hash(
@@ -177,33 +219,12 @@ def build_tool_call_hash(
     workspace: Path | str | None = None,
     config: GuardConfig | None = None,
 ) -> str:
-    request: dict[str, object] = {
-        "artifact": {
-            "name": artifact.name,
-            "command": artifact.command,
-            "metadata": dict(artifact.metadata),
-        },
-        "artifact_id": artifact.artifact_id,
-        "config_path": artifact.config_path,
-        "harness": artifact.harness,
-        "publisher": artifact.publisher,
-        "source_scope": artifact.source_scope,
-        "transport": artifact.transport,
-        "arguments": arguments,
-        "config": None
-        if config is None
-        else {
-            **_tool_call_configuration(config),
-            "managed_policy_hash": config.managed_policy_hash,
-            "managed_policy_status": config.managed_policy_status,
-            "sandbox_analysis": config.sandbox_analysis,
-        },
-        "workspace": _normalized_tool_call_workspace(workspace) if workspace is not None else None,
-    }
-    if config is not None:
-        request["extension_control_digest"] = current_extension_control_binding_digest()
-    token_or_digest, _risk_categories = context_mcp_tool_approval_hash(request, expect_token=config is not None)
-    return token_or_digest
+    identity = native_tool_call_identity(
+        artifact=artifact, hash_input=_hash_input(arguments, workspace=workspace, config=config)
+    )
+    if identity.artifact_hash is None:
+        raise ValueError("native_mcp_tool_approval_hash_unavailable")
+    return identity.artifact_hash
 
 
 def _tool_call_configuration(config: GuardConfig) -> dict[str, object]:
@@ -259,16 +280,6 @@ def evaluate_tool_call(
         proxy_input=proxy_input,
         proxy_out=proxy_out,
     )
-
-
-def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    """Return Rust-owned Cloud risk categories for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[0]
-
-
-def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    """Return the Rust-owned risk summary for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[2]
 
 
 _INLINE_SOURCES = frozenset({"inline-approved", "inline-denied", "native-approved", "claude-native-approved"})

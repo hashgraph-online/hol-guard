@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -65,5 +65,31 @@ test("overlapping eval calls are observed without changing execution", () => {
   const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
   expect(events.slice(-2).map(event => [event.parentToolCallId, event.parentToolCallIds])).toEqual([
     [null, ["first", "second"]], [null, ["first", "second"]],
+  ]);
+});
+
+test("contained wrapper request bytes are captured beside the start event", () => {
+  const handlers = new Map<string, (event: Record<string, unknown>) => void>();
+  install({ on: (name, callback) => { handlers.set(name, callback); } });
+  const folder = join(root, "dev's work", "hol-guard-contained-test-unit");
+  mkdirSync(folder, { mode: 0o700, recursive: true });
+  const request = join(folder, "request.json");
+  writeFileSync(request, '{"schema":"guard-contained-test-request.v1"}', { mode: 0o600 });
+  const wrapper = (file: string) => ["/venv/bin/hol-guard", "execute-contained-test", "--guard-home", "/g",
+    "--workspace", "/w", "--request-file", file, "--request-sha256", "a".repeat(64), "--home", "/h"]
+    .map(value => `'${value.replaceAll("'", "'\\''")}'`).join(" ");
+  const start = (id: string, command: string) =>
+    ({ type: "tool_execution_start", toolCallId: id, toolName: "bash", args: { command } });
+  handlers.get("tool_execution_start")!(start("bound", wrapper(request)));
+  chmodSync(request, 0o644);
+  handlers.get("tool_execution_start")!(start("loose-mode", wrapper(request)));
+  handlers.get("tool_execution_start")!(start("foreign", wrapper(join(root, "request.json"))));
+  const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  expect(events.slice(-4)).toEqual([
+    start("bound", wrapper(request)),
+    { type: "contained_request_capture", toolCallId: "bound",
+      request: Buffer.from('{"schema":"guard-contained-test-request.v1"}').toString("base64") },
+    start("loose-mode", wrapper(request)),
+    start("foreign", wrapper(join(root, "request.json"))),
   ]);
 });

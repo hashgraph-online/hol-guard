@@ -57,8 +57,6 @@ from .policy_integrity import (
     REMOTE_POLICY_SOURCES,
     PolicyIntegrityVerificationResult,
     is_remote_policy_source,
-    sign_local_policy_row,
-    verify_local_policy_row,
 )
 from .runtime.actions import GuardActionEnvelope
 from .runtime.approval_context import parse_approval_context_token
@@ -74,10 +72,10 @@ from .sqlite_tuning import (
 from .store_approvals import (
     _json_object,
     _json_object_list,
-    approval_request_surfaces_are_resolvable,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
+    resolvable_approval_request_ids,
 )
 from .store_approval_writes import (
     add_approval_request as persist_approval_request,
@@ -156,18 +154,12 @@ from .store_supply_chain import (
     get_supply_chain_bundle as load_supply_chain_bundle,
 )
 from .store_supply_chain import (
-    get_supply_chain_evaluation as load_supply_chain_evaluation,
-)
-from .store_supply_chain import (
     supply_chain_bundle_schema_statement,
     supply_chain_eval_cache_schema_statement,
     supply_chain_index_statements,
 )
 from .store_supply_chain import (
     upsert_supply_chain_bundle as persist_supply_chain_bundle,
-)
-from .store_supply_chain import (
-    upsert_supply_chain_evaluation as persist_supply_chain_evaluation,
 )
 from .store_threat_intel import (
     threat_intel_bundle_schema_statement,

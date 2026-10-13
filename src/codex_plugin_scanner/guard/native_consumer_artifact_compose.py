@@ -96,6 +96,9 @@ _ANSWERS: dict[str, dict[str, str]] = {
     },
 }
 
+_FIELDS["runtime_authoritative"] = frozenset({"runtime", "signals"})
+_ANSWERS["runtime_authoritative"] = {**_ANSWERS["runtime_decision"], "authoritative_decision": "d"}
+
 
 def _answer_valid(kind: str, payload: dict[str, object]) -> bool:
     shape = _ANSWERS[kind]
@@ -108,6 +111,10 @@ class NativeConsumerComposeError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+class NativeConsumerComposeValidationError(ValueError):
+    """The bound healthy owner refused inconsistent composition facts."""
 
 
 def native_consumer_compose(kind: str, fields: Mapping[str, object], *, guard_home: Path | None) -> dict[str, object]:
@@ -156,6 +163,14 @@ def native_consumer_compose(kind: str, fields: Mapping[str, object], *, guard_ho
     if not bound:
         raise NativeConsumerComposeError(_UNAVAILABLE)
     if status == "error":
+        if (
+            code == "native_consumer_artifact_compose_validation_refused"
+            and isinstance(payload, dict)
+            and payload.get("error_type") == "ValueError"
+            and isinstance(payload.get("message"), str)
+            and len(payload["message"].encode("utf-8")) <= 4096
+        ):
+            raise NativeConsumerComposeValidationError(payload["message"])
         reason = code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
         raise NativeConsumerComposeError(reason)
     if not usable or not isinstance(payload, dict):
@@ -163,14 +178,25 @@ def native_consumer_compose(kind: str, fields: Mapping[str, object], *, guard_ho
     return payload
 
 
-def _record_health(home: Path, *, healthy: bool) -> None:
+def record_binding_health(home: Path, *, healthy: bool, reason: str) -> None:
+    """Record one resident answer-binding outcome against the running native identity."""
+
     identity = native_runtime_status().identity
     if identity is None:
         return
     if healthy:
         native_record_resident_success(identity.sha256, home)
     else:
-        native_record_resident_failure(identity.sha256, home, reason="native_consumer_artifact_compose_binding")
+        native_record_resident_failure(identity.sha256, home, reason=reason)
 
 
-__all__ = ["CONSUMER_ARTIFACT_COMPOSE_FEATURE", "NativeConsumerComposeError", "native_consumer_compose"]
+def _record_health(home: Path, *, healthy: bool) -> None:
+    record_binding_health(home, healthy=healthy, reason="native_consumer_artifact_compose_binding")
+
+
+__all__ = [
+    "CONSUMER_ARTIFACT_COMPOSE_FEATURE",
+    "NativeConsumerComposeError",
+    "NativeConsumerComposeValidationError",
+    "native_consumer_compose",
+]

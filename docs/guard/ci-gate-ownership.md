@@ -2,10 +2,19 @@
 
 The required `CI` workflow validates the complete locked Linux Rust workspace once.
 `native-workspace` runs Clippy (with warnings denied) and all workspace test targets
-in parallel matrix jobs. The existing five-minute `native-command-evaluators` job
-still checks formatting, builds the release compiler/runtime and supplies matching
-artifacts to Python tests. Rust lint/tests do not delay that artifact producer or
-its 128-shard Python fan-out. The required `ci (3.12)` aggregate directly requires
+in parallel matrix jobs. The `native-command-evaluators` producer checks formatting,
+builds and verifies the release compiler/runtime, regenerates the public
+extension directory from its current trust bindings, and uploads both matching
+artifacts. The locked Python setup and directory generation still run before
+upload so downstream consumers cannot receive stale catalogs. The native
+contract group no longer delays artifact upload. Its ten-second phase moved
+to the required `native-gates` job, targeting a producer under five minutes
+on normal cached CI runners without changing the Rust release profile.
+The `native-gates` job retains the complete native contract group in shard 0
+and distributes every collected benign/Gauntlet/corpus replay test over eight
+required parallel shards. A failed shard fails `native-gates` and the required
+aggregate. Rust lint/tests do not delay artifact production or its 256-shard
+Python fan-out. The required `ci (3.12)` aggregate directly requires
 the complete Rust matrix as well as Python checks; failed, cancelled or skipped
 Rust validation cannot turn the aggregate green. No test failures are ignored.
 

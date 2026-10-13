@@ -273,6 +273,12 @@ def _still_broken_after_reinstall(context: HarnessContext, store: GuardStore, re
 
 
 def repair_package_shims(context: HarnessContext, *, dry_run: bool) -> dict[str, object]:
+    package_shims = context.guard_home / "package-shims"
+    # An empty home has nothing to regenerate. Asking the resident first would
+    # fail a repair that only had stale runtime state when the runtime dir is
+    # not yet owner-private.
+    if not (package_shims / "manifest.json").exists() and not (package_shims / "bin").exists():
+        return _step("package_shims", "ok", "No package-manager shims installed.")
     try:
         from .shims import activate_package_shims, package_shim_dashboard_status
 

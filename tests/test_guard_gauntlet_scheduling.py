@@ -14,6 +14,12 @@ from ci.gauntlet import parallel
 from tests.test_guard_gauntlet_parallel import FakeWorker, _no_sleep
 
 
+@pytest.mark.parametrize("cpus,expected", [(None, 1), (1, 1), (4, 2), (8, 4), (16, 8), (64, 8)])
+def test_qualification_jobs_respects_host_headroom_and_worker_ceiling(monkeypatch, cpus, expected):
+    monkeypatch.setattr(parallel.os, "cpu_count", lambda: cpus)
+    assert parallel.qualification_jobs() == expected
+
+
 def test_spawn_order_follows_the_order_parameter() -> None:
     spawned: list[str] = []
     results = parallel.run_scheduled(

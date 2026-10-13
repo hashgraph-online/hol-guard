@@ -15,10 +15,9 @@ from ..runtime.package_request_evaluation import strip_review_evidence_tail as _
 
 if TYPE_CHECKING:
     from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
-    from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
+    from .commands_support_prompts import _prompt_request_classes
 
 
-from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
 from ..native_data_flow import detect_data_flow_exfiltration
 from ..native_hook_approval_context import native_hook_approval_context_token, runtime_hook_approval_context_inputs
@@ -34,9 +33,7 @@ from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_runtime_artifact_policy import (
-    _resolve_configured_risk_action,
     _runtime_artifact_command_action_floor,
-    _runtime_artifact_guard_default_action,
     _runtime_artifact_policy_action,
 )
 
@@ -561,37 +558,6 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
     )
 
 
-def _apply_explicit_posture_action(
-    config: GuardConfig,
-    artifact: GuardArtifact,
-    risk_class: str,
-    action: str | None,
-) -> GuardAction:
-    from ..protection_posture import apply_posture_confidence
-
-    resolved = coerce_guard_action(action) or "require-reapproval"
-    confidence = _artifact_risk_confidence(artifact)
-    next_action = apply_posture_confidence(
-        posture=config.protection_posture,
-        explicit=config.protection_posture_explicit,
-        risk_class=risk_class,
-        action=resolved,
-        confidence=confidence,
-        persistence_writes_launch_agent=_artifact_writes_launch_agent(artifact),
-        injection_disables_guard=_prompt_requires_hard_block(artifact),
-        skill_is_known_bad=_artifact_skill_is_known_bad(artifact),
-    )
-    if next_action == "block" and resolved != "block":
-        from ..protection_events import record_protection_event
-
-        record_protection_event(
-            config.guard_home,
-            "guard.protection.auto_stop",
-            {"risk_class": risk_class, "confidence": str(confidence or "")},
-        )
-    return next_action
-
-
 def _artifact_risk_confidence(artifact: GuardArtifact) -> object:
     confidence = artifact.metadata.get("risk_confidence")
     if confidence is None:
@@ -826,9 +792,8 @@ __all__ = [
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
-    "_native_hook_reason_for_harness", "_resolve_configured_risk_action", "_runtime_action_data_flow_signals",
-    "_runtime_artifact_command_action_floor", "_runtime_artifact_guard_default_action",
-    "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
+    "_native_hook_reason_for_harness", "_runtime_action_data_flow_signals",
+    "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
     "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_runtime_stored_policy_action", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",

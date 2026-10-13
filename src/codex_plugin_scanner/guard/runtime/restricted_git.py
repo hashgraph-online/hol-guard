@@ -127,7 +127,11 @@ def prepare_restricted_git(command: Sequence[str], *, workspace: Path, cwd: Path
 
 
 def run_restricted_git(
-    plan: RestrictedPytestPlan, *, timeout_seconds: int, env: Mapping[str, str] | None = None
+    plan: RestrictedPytestPlan,
+    *,
+    timeout_seconds: int,
+    env: Mapping[str, str] | None = None,
+    merge_stderr: bool = False,
 ) -> int:
     if (
         plan.profile_version != GIT_READ_ONLY_PROFILE_VERSION
@@ -165,5 +169,9 @@ def run_restricted_git(
             }
         )
         return _run_backend_process(
-            _backend_argv(plan, private_root=root), env=launch_env, timeout_seconds=timeout_seconds, cwd=plan.cwd
+            _backend_argv(plan, private_root=root),
+            env=launch_env,
+            timeout_seconds=timeout_seconds,
+            cwd=plan.cwd,
+            merge_stderr=merge_stderr,
         )

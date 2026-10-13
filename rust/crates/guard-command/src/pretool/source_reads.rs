@@ -110,6 +110,11 @@ pub(super) fn sensitive_command_input(value: &str) -> bool {
     };
     // Only parsed, bounded search data may shed the raw keyword signal.
     // Structured paths, prompts, URLs and arbitrary executable text keep it.
-    !parse_command(&request)
-        .is_ok_and(|model| exact_safe_search_command(&model) || exact_source_file_read(&model))
+    !parse_command(&request).is_ok_and(|model| {
+        exact_safe_search_command(&model)
+            || exact_source_file_read(&model)
+            || super::git_search_text::command_without_patterns(&model).is_some_and(|rest| {
+                !super::git_search_text::sensitive_beyond_patterns(value, Some(rest))
+            })
+    })
 }

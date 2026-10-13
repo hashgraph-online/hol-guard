@@ -202,14 +202,14 @@
       "variant_remainder": 1
     },
     {
-      "basis": "sed sink contains arbitrary output redirection unsupported by inherited parser; selected solely by immutable generator variant modulo four",
+      "basis": "sed sink redirects only to a literal path, so the unmodeled command stays reviewable instead of failing evaluation; host cat pipeline floor requires reapproval, equal to the original oracle; selected solely by immutable generator variant modulo four",
       "expected": {
-        "decision_plane_floor": "block",
-        "evaluation_error": "native_command_evaluation_failed",
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
         "model_confidence": "uncertain",
         "model_uncertainty": "command_redirect_not_yet_supported",
-        "native_floor": "block",
-        "native_reason": "native_command_extension_evaluation_failed",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -224,14 +224,14 @@
       "variant_remainder": 2
     },
     {
-      "basis": "base64 sink contains arbitrary output redirection unsupported by inherited parser; selected solely by immutable generator variant modulo four",
+      "basis": "base64 sink redirects only to a literal path, so the unmodeled command stays reviewable instead of failing evaluation; host cat pipeline floor requires reapproval, equal to the original oracle; selected solely by immutable generator variant modulo four",
       "expected": {
-        "decision_plane_floor": "block",
-        "evaluation_error": "native_command_evaluation_failed",
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
         "model_confidence": "uncertain",
         "model_uncertainty": "command_redirect_not_yet_supported",
-        "native_floor": "block",
-        "native_reason": "native_command_extension_evaluation_failed",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1405,14 +1405,14 @@
   "totals": {
     "below_original_oracle": 0,
     "cases": 51000,
-    "equal_to_original_oracle": 40434,
+    "equal_to_original_oracle": 42516,
     "groups": 58,
     "improved_bounded_git_cases": 50,
     "improved_bounded_git_sources": 2,
     "improved_upstream_benign_cases": 75,
     "improved_upstream_benign_sources": 3,
-    "native_evaluation_errors": 27084,
+    "native_evaluation_errors": 25002,
     "sources": 52,
-    "stronger_than_original_oracle": 10566
+    "stronger_than_original_oracle": 8484
   }
 }

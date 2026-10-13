@@ -2466,9 +2466,7 @@ impl ResidentEvalDeps {
                 entitlement_override,
             },
             config: ResidentConfigLoader,
-            registry: ResidentRegistryMetadata {
-                metadata_override: None,
-            },
+            registry: ResidentRegistryMetadata::default(),
             saved_policy: SavedPolicyProbe::Unsupported,
         }
     }

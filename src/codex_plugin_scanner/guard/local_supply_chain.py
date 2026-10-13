@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import uuid4
 
-from . import native_execution as _native_execution
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .adapters.base import HarnessContext
 from .approval_scope_support import package_request_runtime_workspace_scope
@@ -41,6 +40,7 @@ from .native_package_protect_projection import (
     NativePackageProtectProjection,
     native_package_protect_projection,
 )
+from .native_shim_admin import NativeShimAdminError
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import native_workspace_inventory
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
@@ -1305,20 +1305,17 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         workspace_dir=None,
         guard_home=store.guard_home,
     )
-    status = package_shim_dashboard_status(context)
+    try:
+        status = package_shim_dashboard_status(context)
+    except NativeShimAdminError as error:
+        # Posture still renders when the resident cannot answer; the shim
+        # fields read as unavailable instead of failing the whole projection.
+        status = {"path_status": "unavailable", "error": error.code}
     shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
     installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
     active_managers = sorted(set(_string_items(status.get("active_managers"))))
     missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
-    _native_managers = _native_execution.shim_admin_native(
-        "supported_managers",
-        guard_home=store.guard_home,
-    )
-    supported_managers = (
-        list(_native_managers)
-        if isinstance(_native_managers, list) and all(isinstance(item, str) for item in _native_managers)
-        else list(package_shim_supported_managers())
-    )
+    supported_managers = list(package_shim_supported_managers(store.guard_home))
     detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
     protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
     protected_set = set(protected_managers)

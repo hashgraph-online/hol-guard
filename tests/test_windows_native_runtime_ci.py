@@ -6,6 +6,8 @@ import ast
 import re
 from pathlib import Path
 
+import yaml
+
 from tests.support.ci_workflow import composite_action_steps, load_ci_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,12 +136,43 @@ def test_required_aggregate_includes_the_windows_native_lane() -> None:
 
 
 def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> None:
-    """Keep the Windows shim path model verified on a real Windows host."""
+    """Run both Windows shim contract families, fail closed and require both."""
     job = load_ci_workflow()["jobs"]["windows-shim-admin"]
     assert job["runs-on"] == "windows-latest"
-    commands = "\n".join(step.get("run", "") for step in composite_action_steps("ci-job-windows-shim-admin"))
-    assert "-p guard-command --test shim_admin_vectors" in commands
-    assert "-p hol-guard-runtime --bin hol-guard-runtime shim_op" in commands
+    assert job["strategy"]["fail-fast"] is False
+    assert job["strategy"]["matrix"]["shim-gate"] == ["vectors", "native-op"]
+    assert job["timeout-minutes"] >= 10
+    # load_ci_workflow() deliberately expands in-tree composites, so inspect
+    # the raw YAML when checking the call-site binding.
+    raw = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    raw_steps = raw["jobs"]["windows-shim-admin"]["steps"]
+    invoke = next(step for step in raw_steps if step.get("uses") == "./.github/actions/ci-job-windows-shim-admin")
+    assert invoke["with"]["shim-gate"] == "${{ matrix.shim-gate }}"
+
+    steps = composite_action_steps("ci-job-windows-shim-admin")
+    check = next(step for step in steps if step.get("name") == "Validate the selected Windows shim contract gate")
+    assert check["env"]["SHIM_GATE"] == "${{ inputs.shim-gate }}"
+    assert "'vectors', 'native-op'" in check["run"]
+    assert "throw" in check["run"]
+    assert not check.get("continue-on-error", False)
+
+    rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert rust["with"]["cache-key"] == "windows-shim-${{ inputs.shim-gate }}"
+    assert rust["with"]["cache-fallback-key"] == "native-wheel"
+    vector = next(step for step in steps if step.get("name") == "Replay the recorded Windows shim vectors")
+    native_op = next(
+        step for step in steps if step.get("name") == "Install and report shims through the native op on Windows"
+    )
+    assert vector["if"] == "inputs.shim-gate == 'vectors'"
+    assert native_op["if"] == "inputs.shim-gate == 'native-op'"
+    assert not vector.get("continue-on-error", False)
+    assert not native_op.get("continue-on-error", False)
+    assert "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors" in vector["run"]
+    assert "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op" in native_op["run"]
+
+    required = load_ci_workflow()["jobs"]["required"]
+    assert "windows-shim-admin" in required["needs"]
+    assert '"windows-shim-admin"' in "\n".join(step.get("run", "") for step in required["steps"])
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

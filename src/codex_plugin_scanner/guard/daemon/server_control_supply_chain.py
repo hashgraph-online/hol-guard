@@ -310,7 +310,9 @@ class _SupplyChainRoutes:
             )
             audit_payload["exit_code"] = exit_code
             if exit_code == 0:
-                record_package_shim_audit_result(context, audited_at=now)
+                proof = record_package_shim_audit_result(context, audited_at=now)
+                if isinstance(proof, dict):
+                    audit_payload.update(proof)
             return audit_payload
         if operation == "sync":
             return _sync_supply_chain_cloud_state_with_optional_auth_context(

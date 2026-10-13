@@ -37,7 +37,49 @@
   "src/codex_plugin_scanner/guard/runtime/offline_archive_worker.py",
   "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py",
   "src/codex_plugin_scanner/guard/runtime/command_critical_floors.py",
-  "src/codex_plugin_scanner/guard/runtime/command_launcher_floors.py"
+  "src/codex_plugin_scanner/guard/runtime/command_launcher_floors.py",
+  "src/codex_plugin_scanner/guard/runtime/command_action_risk_classes.py",
+  "src/codex_plugin_scanner/guard/runtime/command_backup_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_blitcp_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_builtin_extension_catalog.py",
+  "src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry.py",
+  "src/codex_plugin_scanner/guard/runtime/command_builtin_rules.py",
+  "src/codex_plugin_scanner/guard/runtime/command_cicd_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_cloud_aws_operation_matrix.py",
+  "src/codex_plugin_scanner/guard/runtime/command_cloud_azure_operation_matrix.py",
+  "src/codex_plugin_scanner/guard/runtime/command_cloud_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_cloud_gcp_operation_matrix.py",
+  "src/codex_plugin_scanner/guard/runtime/command_common_extension_helpers.py",
+  "src/codex_plugin_scanner/guard/runtime/command_container_common_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_curl_parsing.py",
+  "src/codex_plugin_scanner/guard/runtime/command_database_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_database_matchers.py",
+  "src/codex_plugin_scanner/guard/runtime/command_dns_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_domain_extension_specs.py",
+  "src/codex_plugin_scanner/guard/runtime/command_domain_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_extension_matchers.py",
+  "src/codex_plugin_scanner/guard/runtime/command_framework_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_git_porcelain_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_github_rules.py",
+  "src/codex_plugin_scanner/guard/runtime/command_infrastructure_matcher_support.py",
+  "src/codex_plugin_scanner/guard/runtime/command_kubernetes_common_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_managed_service_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_noodle_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_ollama_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_operand_matchers.py",
+  "src/codex_plugin_scanner/guard/runtime/command_package_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_platform_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_probe_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_remote_essh_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_remote_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_repo2nb_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_search_messaging_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_skill_sunset_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_storage_aws_s3.py",
+  "src/codex_plugin_scanner/guard/runtime/command_storage_common.py",
+  "src/codex_plugin_scanner/guard/runtime/command_storage_extensions.py",
+  "src/codex_plugin_scanner/guard/runtime/command_structured_matchers.py",
+  "src/codex_plugin_scanner/guard/runtime/command_tui_runner_extensions.py"
  ],
  "retired_tests": [
   {
@@ -5045,6 +5087,362 @@
    ],
    "status": "native_behavior_ported_requires_ci",
    "rationale": "Exact original portable outcomes and source hashes are frozen; compiled native encoded requests replace the retired executable Python oracle. Native public-caller tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_extensions_are_preserved_and_signed",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::extensions_round_trip_and_change_the_native_document_digest",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_canonical_hash_vector_is_cross_language_stable[basic]",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::normative_policy_hashes_and_utf16_order_are_cross_language_stable",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_canonical_hash_vector_is_cross_language_stable[business-selector]",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::normative_policy_hashes_and_utf16_order_are_cross_language_stable",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_policy_document_yaml.py::test_canonical_object_keys_use_utf16_order",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/policy_document_tests.rs::normative_policy_hashes_and_utf16_order_are_cross_language_stable",
+    "rust/crates/guard-command/src/policy_document_tests.rs::original_python_policy_document_outcomes_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Canonical JSON, portable hashes and extension semantics are checked against frozen original outcomes and normative cross-language vectors in Rust; YAML loader and route integration tests remain."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_trailing_operand_matcher_ignores_prefixes_in_earlier_operands",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_trailing_operand_matcher_consumes_separate_long_option_value",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_trailing_operand_matcher_requires_a_source_and_a_destination",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_trailing_operand_matcher_honours_required_and_forbidden_flags",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_host_target_matcher_reads_direction_and_excludes_drive_letters",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandHostTargetMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_remote_alias_matcher_mirrors_blitcp_connection_grammar",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandRemoteAliasMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_remote_alias_matcher_bare_names_are_opt_in",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandRemoteAliasMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_operand_gated_flag_matcher_requires_the_shape_of_a_copy",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (OperandGatedFlagMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_trailing_matchers_skip_blitcp_style_subcommand_dispatch",
+   "source_sha256": "de254b791283a34df36f23f9c66cacfef39eafcfc1644b3b986ed02ced632092",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (TrailingOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_aws_batch_1.py::test_aws_batches_compile_to_one_combined_path_set_matcher",
+   "source_sha256": "7de4757f15c53c89e2c509f8db06170fa1fd2b0f55ec753a0b4e21cc25bd672e",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (aws_destructive_command_matchers), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_aws_batch_4.py::test_aws_batch_4_compiles_into_the_combined_path_set_matcher",
+   "source_sha256": "cd985cea406630844fc64d68fdf00ed617ba912f8c66e3192f5d301a6c58658d",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (aws_destructive_command_matchers), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_aws_batch_5.py::test_aws_batch_5_compiles_into_the_combined_path_set_matcher",
+   "source_sha256": "d5512ccbe67d55374f4c67f138c1869da5dcd93480d7e7bf7ea855195a64079b",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (aws_destructive_command_matchers), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_azure_batch_3.py::test_azure_matrix_compiles_to_one_path_set_matcher",
+   "source_sha256": "5a05eb48cd7b858741d0667e791bc734975fe365cd2f0a760cb5d1c4c4ea5741",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (azure_destructive_command_matchers), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_extensions.py::test_cloud_safe_variant_rejects_unsupported_matcher_nesting",
+   "source_sha256": "a64a70499e58aa5ab15b78f9312ab29325fe8396a15662dc7a5562b9da855886",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (safe_flag_variant, safe_option_variant, with_required_flag), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_extensions.py::test_cloud_safe_option_variant_requires_allowed_values",
+   "source_sha256": "a64a70499e58aa5ab15b78f9312ab29325fe8396a15662dc7a5562b9da855886",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (safe_option_variant), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_extensions.py::test_cloud_safe_variants_clone_path_set_matcher_constraints",
+   "source_sha256": "a64a70499e58aa5ab15b78f9312ab29325fe8396a15662dc7a5562b9da855886",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (executable_path_set_matcher, safe_flag_variant, safe_option_variant), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_extensions.py::test_cloud_safe_flag_variant_clones_executable_matcher_constraints",
+   "source_sha256": "a64a70499e58aa5ab15b78f9312ab29325fe8396a15662dc7a5562b9da855886",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (safe_flag_variant), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_cloud_gcp_batch_2.py::test_gcp_matrix_compiles_to_one_path_set_matcher",
+   "source_sha256": "0fcf014bef73fdd57c5ac504e4932bd5d5120f930ccdb12c668dcd855646a974",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (gcp_destructive_command_matchers), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_database_matcher_does_not_treat_attached_option_values_as_flags",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (LeadingSubcommandMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_database_matcher_rejects_combined_exit_flag_before_execution",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (LeadingSubcommandMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_argument_command_matcher_rejects_invalid_configuration",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (ArgumentCommandMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_argument_command_matcher_requires_a_minimum_abbreviation_and_payload",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (ArgumentCommandMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_command_sequence_matcher_rejects_invalid_grammar",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (CommandSequenceMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_command_sequence_matcher_skips_declared_arguments_and_rejects_ambiguous_or_forbidden_commands",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (CommandSequenceMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_database_extensions.py::test_database_matcher_index_hints_cover_each_supported_matcher",
+   "source_sha256": "cf960d49ab5c554d5d1448f38c058144257ac4ca4838def4934eb558282d7371",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (ArgumentCommandMatcher, CommandSequenceMatcher, LeadingSubcommandMatcher, database_matcher_index_hints), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_leading_operand_matcher_consumes_separate_long_option_value",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (LeadingOperandCountMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_leading_operand_matcher_parses_numeric_clustered_flags",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (LeadingOperandCountMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_option_key_matcher_prefers_longest_overlapping_option",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (OptionValueKeyMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_subcommand_operand_prefix_matcher_ignores_option_values_and_skips_leading_operands",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (SubcommandOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_structured_matchers_reject_invalid_operand_and_value_key_contracts",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::matches_python_specialized_oracle_for_all_eight_operations",
+    "rust/crates/guard-command/src/command_structured_matchers/tests.rs::rejects_unknown_fields_and_invalid_matcher_grammars_before_admission"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (LeadingOperandCountMatcher, OptionValueKeyMatcher, SubcommandOperandPrefixMatcher), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_storage_extensions.py::test_storage_read_permissions_keep_executable_matchers",
+   "source_sha256": "e4506663fb5c05bb959c3a15fe6a48df1ca18ac6754ca378e154593e53b3023b",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/native_command_source_cli.rs::portable_fixtures_use_native_policy_and_report_failed_expectations"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the removed Python matcher construction, metadata, or match API (STORAGE_COMMAND_RULES), not the supported Rust-generated command registry. Native admission/oracle suites and this file's native command behavior cases remain; cloud operation inputs are preserved independently as inert JSON."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_leading_subcommand_matcher_ignores_interleaved_options_by_default",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python LeadingSubcommandMatcher constructor and match API. Native specialized matcher parity, admission, parser integration, and remote-command behavior suites remain."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_leading_subcommand_matcher_exit_flags_stop_before_delimiter",
+   "source_sha256": "7ec7a5bcf9883d6b7e0fb02ebb4f23b7a4e775332ce1b57d8f0c11f0fdf32134",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::eight_operations_match_python_or_report_declared_capability_misses",
+    "rust/crates/guard-command/src/command_specialized_matchers_tests.rs::config_admission_rejects_unknown_or_invalid_semantics"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python LeadingSubcommandMatcher constructor and match API. Native specialized matcher parity, admission, parser integration, and remote-command behavior suites remain."
   }
  ],
  "preserved_tests": [
@@ -5340,6 +5738,108 @@
  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188",
  "replaced_implementations": [
   {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_node_test.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "1188bd505740a12b2507284217f00481bdad5d87df6badae296aa7646f6da3b3",
+   "remaining_role": "Native launch-plan projection and Node process orchestration; argv and executable admission are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-command/src/restricted_pytest/contained.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_vitest.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "9d1684406dc67261a3813b6194fd69fd060fee76e3d8cf6318ffed246a7dafc0",
+   "remaining_role": "Native launch-plan projection and Vitest process orchestration; dependency admission and Bun/Node invocation construction are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-command/src/restricted_pytest/contained.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_inline_eval.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "9eea9ae400dc6631696401f84d02bf6ae4009218a250500288e02d0652e81ad9",
+   "remaining_role": "Native launch-plan projection and inline process orchestration; command admission and Python isolation flags are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-command/src/restricted_pytest/contained.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_credential_patterns.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "ee4457fac77d70e091e7786c9436d942749a6a6ef8004460b8d23c84150d9908",
+   "remaining_role": "Native transport projection of credential patterns and Seatbelt denials only; pattern construction and string escaping are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/credentials.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_mapping_plan.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "0b7d2c667b1da815b33870865be842e46702a96a9bd8271dcafa1e98329a4e4a",
+   "remaining_role": "Bounded owner-only mapping input/result snapshot handoff and path-based ELF projection; ELF parsing and dependency-closure evidence are native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/mapping.rs",
+    "rust/crates/guard-command/src/restricted_pytest/mapping_elf.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
+   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
+   "source_sha256": "fe10f99e29110692288aa3c162ca745d1def40f843eced5036376cb565b3d6be",
+   "remaining_role": "Authorization receipt checks, wrapper peeling and runner dispatch; contained-command classification is native.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/contained_argv.rs",
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+   ],
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/decision_projection_boundaries.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "7882c11404caa5388afbf8f2262b6fa1804b76ad824a59f8f823387f80cad8cd",
+   "remaining_role": "Immutable public approval DTO and resident transport; native owner validates and canonicalizes action, signals and presentation fields.",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/signal_projection_approval.rs"
+   ],
+   "parity_fixture": "tests/fixtures/signal_projection_vectors.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/decision_boundaries.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "411d6e1e3a400955c466de1338c3725c60fb8458d321342c7f448cd3c64eca2f",
+   "remaining_role": "Immutable receipt/approval DTOs and bounded batch framing; Rust validates aliases, preserves Watch observations and synchronizes canonical surfaces.",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/signal_projection_receipt.rs",
+    "rust/crates/guard-runtime/src/signal_projection_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/signal_projection_vectors.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/decisions.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "deff9f12e7d0be568f1e0531627d3b41479fdce4690f118d7293053bbb53bded",
+   "remaining_role": "Immutable public DTOs, serialization and resident transport only; native decision builders and action/schema/composition/approval/scanner validators replace Python semantic bodies.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/decisions.rs",
+    "rust/crates/guard-runtime/src/decision_authority_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/decision_authority_vectors.json"
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py",
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "cf9143df681b5db68cd5f03f12028dda0ad4e88ad9a9f7c9e09c330af7f2dd68",
@@ -5356,7 +5856,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "193d26d4434ac4b7a079f3ec311ee9dcfd4d097a5cfec2a1cec63ebbf273d17f",
    "remaining_role": "Public option payload DTO and bound resident projection only; option and operand admission retired.",
-   "native_replacements": ["rust/crates/guard-command/src/shell_interpreter_options.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_interpreter_options.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5364,7 +5867,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09",
    "remaining_role": "Public structures and native transport only; segmentation, pipe and redirect semantics retired.",
-   "native_replacements": ["rust/crates/guard-command/src/data_flow.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/data_flow.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5372,7 +5878,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "01fb4f0525876ab940cb5f3480254d112a46e3a4b823459a28247c9a005bb65e",
    "remaining_role": "Source-span DTOs and native scan-trace projection only; quote, heredoc, substitution and masking algorithms retired.",
-   "native_replacements": ["rust/crates/guard-command/src/shell_structure.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_structure.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5380,7 +5889,10 @@
    "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
    "source_sha256": "5b9cfa2345ffbbcb059220d97e3b70df74612dfc49b3804cd2a2701477579842",
    "remaining_role": "Public normalization DTO and resident transport only; wrapper parsing and path trust authority retired.",
-   "native_replacements": ["rust/crates/guard-command/src/shell_command_wrappers.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_command_wrappers.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
   },
   {
@@ -5512,13 +6024,15 @@
    "path": "src/codex_plugin_scanner/guard/runtime/restricted_pytest_sandbox.py",
    "base_commit": "d75f7f7c590536b3116bd03643033e19ca4117f9",
    "source_sha256": "b7fa65965fee0f3cb4e4bd10f64a2f9a42fc5fdd7065d6478c07b0364599faa6",
-   "remaining_role": "Immutable plan DTOs, bounded resident transport, shared hook-path predicate and process/output handling remain; restricted launch validation, environment filtering and runtime read-root derivation are native.",
+   "remaining_role": "Native sandbox-policy projection plus environment and process orchestration; policy construction and process-budget measurement are native. Linux namespace and mount enforcement remain in Python.",
    "native_replacements": [
     "rust/crates/guard-command/src/restricted_pytest/authority.rs",
     "rust/crates/guard-command/src/restricted_pytest/validation.rs",
     "rust/crates/guard-command/src/restricted_pytest/executables.rs",
     "rust/crates/guard-command/src/restricted_pytest/environment.rs",
-    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
+    "rust/crates/guard-runtime/src/restricted_pytest_op.rs",
+    "rust/crates/guard-command/src/restricted_pytest/profiles.rs",
+    "rust/crates/guard-runtime/src/restricted_process_ceiling.rs"
    ],
    "parity_fixture": "rust/crates/guard-command/tests/fixtures/restricted_pytest_parity.json"
   },
@@ -5592,6 +6106,129 @@
     "rust/crates/guard-runtime/src/skill_identity_canon.rs"
    ],
    "parity_fixture": "rust/crates/guard-runtime/tests/fixtures/skill_directory_portable_vectors.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "c20051517d9e4c1a4ead1dea82e80bbc348adbc3082d8ae6baf7cc430157c3d3",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_compile.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "fe49be0d05d452542b306f91b42dac6df04a8c7036a62870a5b8ef508e59a0d6",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_diff.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "bb64b381dc4ae89e0a2597215dff08738b4c35627bff7216d866e092b71a3fa9",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_business_bounds.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "5a042e1dafd502452d6884640fcefa449e7059c666db742c3e0b982dbea43c5c",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_document_yaml.py",
+   "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
+   "source_sha256": "f2011f8a4153dfabb2bb97572ae1b5edf8afb60accfa2082c53b1dbd5e5113c2",
+   "remaining_role": "Public DTOs and resident transport, with YAML/text presentation retained where applicable; portable-policy semantics run in Rust.",
+   "native_replacements": [
+    "rust/crates/guard-command/src/policy_document.rs",
+    "rust/crates/guard-runtime/src/policy_document_op.rs"
+   ],
+   "parity_fixture": "tests/fixtures/policy_document_parity.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
+   "source_sha256": "f6d0184abba2aae634007a8480cbfc4d30e2715c1bfb0c166e421d73d886f2cc",
+   "forbidden_symbols": [
+    "_READ_ONLY_SEARCH_FILE_INPUT_FLAGS",
+    "_GREP_SHORT_VALUE_FLAGS",
+    "_READ_ONLY_SEARCH_SHORT_VALUE_FLAGS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/developer_inspection_authority.rs",
+    "rust/crates/guard-runtime/src/developer_inspection_authority_op.rs"
+   ],
+   "base_commit": "225df27eac6b8291eebd00f6722540cd33dbd872",
+   "remaining_role": "Public DTOs and bound transport; one command-level native request composes existing Git and direct-tool proofs, graph effects and source-edit semantics.",
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/developer_inspection_authority.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
+   "source_sha256": "895e59d8fb5e9d1f275a2c4eb5ae27c4e61cc4662ac4645dba98bec79263bc1c",
+   "forbidden_symbols": [
+    "index_inspection_execution_context",
+    "model_shell_execution_context",
+    "_without_safe_inspection_redirections",
+    "_leading_literal_cd_workspace_root"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/developer_inspection_authority.rs",
+    "rust/crates/guard-runtime/src/developer_inspection_authority_op.rs"
+   ],
+   "base_commit": "225df27eac6b8291eebd00f6722540cd33dbd872",
+   "remaining_role": "Public DTOs and bound transport; one command-level native request composes existing Git and direct-tool proofs, graph effects and source-edit semantics.",
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/developer_inspection_authority.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
+   "source_sha256": "d584623615ba075ac4ab57cc81f9db42a8c4448638308935dff08e5172484317",
+   "forbidden_symbols": [
+    "_SHELL_FUNCTION_DEFINITION",
+    "_SHELL_ALIAS_DEFINITION",
+    "_DEFERRED_GITHUB_EFFECT",
+    "GitHubShellAnalysis",
+    "parse_env_wrapper"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_request_authority.rs",
+    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
+   ],
+   "base_commit": "68558a59d9e8b6d4a8a86ef9de9263de41248068",
+   "remaining_role": "Public DTO facades and unchanged live Python AST helpers; all GitHub shell and PR expansion semantics run in the existing bound resident. Pure PR flags are reused by command/depth/runtime binary identity, never filesystem verdicts.",
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/shell_request_authority.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
+   "source_sha256": "1d245cfc7dd004faba76f35dd631f1d6561945610a6f7e1f1e0236feeb74cf68",
+   "forbidden_symbols": [
+    "parse_env_wrapper",
+    "_SHELL_CONTROL_PREFIX_TOKENS",
+    "_SUDO_OPTION_VALUE_FLAGS",
+    "_leading_shell_redirection_tokens_consumed"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_request_authority.rs",
+    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
+   ],
+   "base_commit": "68558a59d9e8b6d4a8a86ef9de9263de41248068",
+   "remaining_role": "Public DTO facades and unchanged live Python AST helpers; all GitHub shell and PR expansion semantics run in the existing bound resident. Pure PR flags are reused by command/depth/runtime binary identity, never filesystem verdicts.",
+   "parity_fixture": "rust/crates/guard-command/tests/fixtures/shell_request_authority.json"
   }
  ],
  "retired_bodies": [
@@ -5614,6 +6251,62 @@
    "source_sha256": "f75a612d86365e85f4e37c0ef395d92622414c29e9d552667b54b6a9c19fce20",
    "replacement_nodes": [
     "rust/crates/guard-command/src/content_sensitivity_tests.rs::original_python_sensitivity_and_mediation_vectors_replay"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/continuation_payload.py",
+   "source_sha256": "59edb10a1c1aa0fdc1f5a8e646a928a573e817ca457344a525ea3b0bfb755d5a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/continuation_contract.py",
+   "source_sha256": "720a603a64ba01ccd95bfc86921337c82821db686148c0761e44140f2666c3bc",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/continuation_runtime.py",
+   "source_sha256": "1b0d650716f78bf3d48564323e02874b8015c7c7fdccf395ad25b09c3497893a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/store_continuation.py",
+   "source_sha256": "4d60d9eb2881d6d45d0ac6f7f1a27c17277cb34a79f1c798375bb6db7535c580",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/continuation_authority_op.rs::pinned_python_projection_vectors"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
+   "source_sha256": "f6d0184abba2aae634007a8480cbfc4d30e2715c1bfb0c166e421d73d886f2cc",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/developer_inspection_authority.rs::pinned_original_python_helpers"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
+   "source_sha256": "895e59d8fb5e9d1f275a2c4eb5ae27c4e61cc4662ac4645dba98bec79263bc1c",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/developer_inspection_authority.rs::pinned_original_python_helpers"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
+   "source_sha256": "d584623615ba075ac4ab57cc81f9db42a8c4448638308935dff08e5172484317",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/shell_request_authority.rs::pinned_original_python_helpers"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
+   "source_sha256": "1d245cfc7dd004faba76f35dd631f1d6561945610a6f7e1f1e0236feeb74cf68",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/shell_request_authority.rs::pinned_original_python_helpers"
    ]
   }
  ]

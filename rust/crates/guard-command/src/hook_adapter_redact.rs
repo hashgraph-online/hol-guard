@@ -154,10 +154,19 @@ fn redacted_value(
         ),
         OValue::Str(text) => {
             let redacted = redacted_string_value(key, text, home_dir, env)?;
-            OValue::str(py_prefix_chars(&redacted, EXCERPT_LIMIT))
+            OValue::str(bounded_excerpt(&redacted))
         }
         other => other.clone(),
     })
+}
+
+/// Marks a cut value so a reviewer never mistakes the excerpt for the full
+/// tool input. The marked result still fits in `EXCERPT_LIMIT` characters.
+fn bounded_excerpt(text: &str) -> String {
+    if text.chars().nth(EXCERPT_LIMIT).is_none() {
+        return text.to_owned();
+    }
+    format!("{}…", py_prefix_chars(text, EXCERPT_LIMIT - 1))
 }
 
 /// `_redacted_payload`.

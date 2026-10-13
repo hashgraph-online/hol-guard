@@ -2,7 +2,7 @@ pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
     match tool {
         "sort" => arguments
             .iter()
-            .all(|argument| short_flags(argument, "bnrufdMVs")),
+            .all(|argument| short_flags(argument, "bnrufdhMVs")),
         "uniq" => arguments
             .iter()
             .all(|argument| short_flags(argument, "cdui")),

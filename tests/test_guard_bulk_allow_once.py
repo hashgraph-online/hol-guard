@@ -741,3 +741,38 @@ def test_bulk_allow_splits_large_prompts_and_skips_one_that_cannot_fit(tmp_path:
     assert split["failed"] == []
     for request_id in request_ids:
         assert store.get_approval_request(request_id)["status"] == "resolved"
+
+
+def test_bulk_allow_stops_on_native_scope_outage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import approvals
+    from codex_plugin_scanner.guard.native_approval_scope import UNAVAILABLE, ApprovalScopeUnavailableError
+
+    store = _store(tmp_path)
+    _enable_gate(store)
+    for request_id in ("req-plain-1", "req-plain-2", "req-plain-3"):
+        store.add_approval_request(_file_read_request(request_id), "2026-06-16T00:00:00+00:00")
+    original = approvals.apply_approval_resolution
+    attempted: list[str] = []
+
+    def resolve_until_outage(**kwargs: object) -> object:
+        attempted.append(str(kwargs["request_id"]))
+        if len(attempted) > 1:
+            raise ApprovalScopeUnavailableError
+        return original(**kwargs)
+
+    monkeypatch.setattr(approvals, "apply_approval_resolution", resolve_until_outage)
+    result = bulk_allow_read_only_once(
+        store=store,
+        request_ids=["req-plain-1", "req-plain-2", "req-plain-3"],
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        now="2026-06-16T00:01:00+00:00",
+    )
+
+    # The outage stops the batch: no per-row retries, and the approved row stays counted.
+    assert attempted == ["req-plain-1", "req-plain-2"]
+    assert result["resolved_count"] == 1
+    assert result["error"] == UNAVAILABLE
+    assert result["failed"] == [
+        {"request_id": "req-plain-2", "error": UNAVAILABLE},
+        {"request_id": "req-plain-3", "error": UNAVAILABLE},
+    ]

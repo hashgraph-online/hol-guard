@@ -105,6 +105,16 @@ pub(crate) fn evaluate_resident_bytes(
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 policy_store.push(&request)
             }
+            ResidentOperationV1::HookDirect(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::hook_direct::evaluate(request, policy_store)
+            }
+            ResidentOperationV1::HookDirectEvidenceDrain(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::hook_direct_evidence::drain(&request, policy_store.direct_evidence())
+            }
             ResidentOperationV1::ApprovalChallenge(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -323,6 +333,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::HookAuthorityState(request) => {
                 crate::hook_authority_state_op::evaluate_hook_authority_state_request(&request)
             }
+            ResidentOperationV1::PolicyIntegrityRows(request) => {
+                crate::policy_integrity_rows_op::evaluate_policy_integrity_rows_request(&request)
+            }
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
             }
@@ -346,6 +359,11 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::ConsumerArtifactProject(request) => {
+                crate::consumer_artifact_project_op::evaluate_consumer_artifact_project_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::LocalMcpGrantDecide(request) => {
                 crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
             }
@@ -359,6 +377,10 @@ pub(crate) fn evaluate_resident_bytes(
                 crate::skill_directory_identity_op::evaluate_skill_directory_identity_request(
                     &request,
                 )
+            }
+            #[cfg(unix)]
+            ResidentOperationV1::CodexBindingCapture(request) => {
+                crate::binding_capture_op::evaluate_codex_binding_capture_request(&request)
             }
             ResidentOperationV1::ContributedMcpDecide(request) => {
                 crate::contributed_mcp_decision_op::evaluate_contributed_mcp_decision_request(
@@ -490,6 +512,8 @@ pub(crate) fn evaluate_resident_bytes(
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ArchiveAcquisition(request) => Some(&request.guard_home),
+        ResidentOperationV1::HookDirect(request) => Some(&request.guard_home),
+        ResidentOperationV1::HookDirectEvidenceDrain(request) => Some(&request.guard_home),
         ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.guard_home),
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
         ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),
@@ -526,6 +550,8 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::RichCommandModel(request) => Some(&request.guard_home),
         ResidentOperationV1::RequestContextBuild(request) => Some(&request.guard_home),
         ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
+        #[cfg(unix)]
+        ResidentOperationV1::CodexBindingCapture(request) => Some(&request.guard_home),
         ResidentOperationV1::ProtectRequest(request) => Some(&request.guard_home),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.guard_home),
         _ => None,

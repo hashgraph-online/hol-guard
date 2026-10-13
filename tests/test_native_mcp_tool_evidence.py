@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.native_mcp_tool_evidence import (
     NativeMcpToolEvidenceError,
     firewall_input,
     native_firewall_metadata_patch,
-    native_tool_risk_evidence,
     risk_input,
 )
 
@@ -91,22 +90,6 @@ def test_firewall_projection_matches_shared_vector(name: str) -> None:
     assert firewall_input(_firewall_artifact(case["source"])) == case["input"]
 
 
-@pytest.mark.parametrize("name", sorted(_RISK))
-def test_risk_resident_answer_matches_shared_vector(name: str) -> None:
-    case = _RISK[name]
-    source = case["source"]
-    expected = case["expected"]
-    categories, signals, summary = native_tool_risk_evidence(
-        _risk_artifact(source),
-        source["arguments"],
-        risk_categories=None if case["input"]["risk_categories"] is None else tuple(case["input"]["risk_categories"]),
-        summary_code=case["input"]["summary_code"],
-    )
-    assert list(categories) == expected["risk_categories"]
-    assert list(signals) == expected["signals"]
-    assert summary == expected["summary"]
-
-
 @pytest.mark.parametrize("name", sorted(_FIREWALL))
 def test_firewall_resident_patch_matches_shared_vector(name: str) -> None:
     case = _FIREWALL[name]
@@ -126,9 +109,6 @@ def test_unavailable_native_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
         capabilities = None
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    case = _RISK[sorted(_RISK)[0]]
-    with pytest.raises(NativeMcpToolEvidenceError, match="unavailable"):
-        native_tool_risk_evidence(_risk_artifact(case["source"]), case["source"]["arguments"])
     fw = _FIREWALL[sorted(_FIREWALL)[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="unavailable"):
         native_firewall_metadata_patch(_firewall_artifact(fw["source"]))
@@ -136,7 +116,7 @@ def test_unavailable_native_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
-    case = _RISK[sorted(_RISK)[0]]
+    case = _FIREWALL[sorted(_FIREWALL)[0]]
     for error in (RuntimeError("thread"), OSError("pipe"), TimeoutError("slow")):
 
         def client(error: Exception = error, **_kwargs: object) -> bytes:
@@ -144,7 +124,7 @@ def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) 
 
         monkeypatch.setattr(module, "native_resident_client_request", client)
         with pytest.raises(NativeMcpToolEvidenceError, match="resident_unavailable"):
-            native_tool_risk_evidence(_risk_artifact(case["source"]), case["source"]["arguments"])
+            native_firewall_metadata_patch(_firewall_artifact(case["source"]))
 
 
 def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -154,20 +134,20 @@ def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
         "native_resident_client_request",
         lambda **_: (
             b'{"schema":"guard-mcp-tool-evidence-result.v1","request_id":"x","request_sha256":"y",'
-            b'"status":"ok","code":"ok","payload":{"risk_categories":[],"signals":[],"summary":"s"}}'
+            b'"status":"ok","code":"ok","payload":{"metadata_patch":null}}'
         ),
     )
-    case = _RISK[sorted(_RISK)[0]]
+    case = _FIREWALL[sorted(_FIREWALL)[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="result_invalid"):
-        native_tool_risk_evidence(_risk_artifact(case["source"]), case["source"]["arguments"])
+        native_firewall_metadata_patch(_firewall_artifact(case["source"]))
 
 
 @pytest.mark.parametrize(
     "raw_payload",
     (
-        '{"risk_categories":["not-a-category"],"signals":["x"],"summary":"s"}',
-        '{"risk_categories":[],"signals":[],"summary":7}',
-        '{"risk_categories":[],"signals":["extra"],"summary":"s"}',
+        '{"metadata_patch":5}',
+        '{"metadata_patch":["server_name"]}',
+        "{}",
     ),
 )
 def test_malformed_operation_payload_counts_as_a_resident_failure(
@@ -193,9 +173,9 @@ def test_malformed_operation_payload_counts_as_a_resident_failure(
         ).encode()
 
     monkeypatch.setattr(module, "native_resident_client_request", client)
-    case = _RISK[sorted(_RISK)[0]]
+    case = _FIREWALL[sorted(_FIREWALL)[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="result_invalid"):
-        native_tool_risk_evidence(_risk_artifact(case["source"]), case["source"]["arguments"])
+        native_firewall_metadata_patch(_firewall_artifact(case["source"]))
     assert failures == ["native_mcp_tool_evidence_result_invalid"]
     assert successes == []
 
@@ -215,6 +195,6 @@ def test_unsupported_artifact_type_is_typed_error() -> None:
 
 def test_oversized_request_is_rejected_client_side(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
-    case = _RISK[sorted(_RISK)[0]]
+    case = _FIREWALL[sorted(_FIREWALL)[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="request_too_large"):
-        native_tool_risk_evidence(_risk_artifact(case["source"]), {"command": "x" * (3 * 1024 * 1024)})
+        native_firewall_metadata_patch(_firewall_artifact({**case["source"], "args": ["x" * (3 * 1024 * 1024)]}))

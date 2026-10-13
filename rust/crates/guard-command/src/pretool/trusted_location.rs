@@ -33,7 +33,7 @@ pub(super) fn trusted_location(path: &Path, home: &Path, cwd: &Path) -> bool {
     true
 }
 
-fn temporary_location(path: &Path) -> bool {
+pub(super) fn temporary_location(path: &Path) -> bool {
     let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
     path.starts_with(std::env::temp_dir())
         || canonical_temp
@@ -88,6 +88,17 @@ pub(super) fn trusted_library_search_path(value: &str, home: &Path, cwd: &Path) 
         && value
             .split(':')
             .all(|entry| trusted_loader_entry(Path::new(entry), home, cwd))
+}
+
+/// The Windows loader resolves DLLs through its own search order and never
+/// reads the Unix loader search paths, and only a Git from the system install
+/// roots is trusted, so on Windows a search path cannot load a library into
+/// Git. Injection variables such as `LD_PRELOAD` stay refused everywhere.
+pub(super) fn inert_loader_search_path(name: &str, windows: bool) -> bool {
+    windows
+        && guard_contracts::LIBRARY_SEARCH_PATH_NAMES
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(name))
 }
 
 fn trusted_loader_entry(entry: &Path, home: &Path, cwd: &Path) -> bool {
@@ -189,6 +200,24 @@ fn agent_writable_loader_tree(_path: &Path, _home: &Path) -> bool {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn search_paths_are_inert_only_on_windows() {
+        for name in guard_contracts::LIBRARY_SEARCH_PATH_NAMES {
+            assert!(inert_loader_search_path(name, true));
+            assert!(inert_loader_search_path(&name.to_ascii_lowercase(), true));
+            assert!(!inert_loader_search_path(name, false));
+        }
+        for name in [
+            "LD_PRELOAD",
+            "DYLD_INSERT_LIBRARIES",
+            "LD_AUDIT",
+            "GIT_EXEC_PATH",
+        ] {
+            assert!(!inert_loader_search_path(name, true));
+            assert!(!inert_loader_search_path(name, false));
+        }
+    }
 
     fn proof_root() -> PathBuf {
         std::env::current_dir()

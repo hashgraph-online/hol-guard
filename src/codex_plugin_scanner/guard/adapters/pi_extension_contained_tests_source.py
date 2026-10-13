@@ -75,6 +75,8 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
         response.reason_code === "native_python_eval_readonly_containment_required") ||
       (profile === "node-eval-readonly-v1" &&
         response.reason_code === "native_node_eval_readonly_containment_required") ||
+      (profile === "node-eval-readonly-v1" &&
+        response.reason_code === "native_bun_eval_readonly_containment_required") ||
       (profile === "package-test-readonly-v1" &&
         response.reason_code === "native_package_test_readonly_containment_required") ||
       (profile === "node-build-output-v1" &&
@@ -84,12 +86,15 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
       (profile === "git-readonly-v1" && response.reason_code === "native_git_readonly_containment_required") ||
       (profile === "pytest-readonly-v2" && response.reason_code === "native_pytest_readonly_containment_required") ||
       (profile === "vitest-readonly-v1" && response.reason_code === "native_vitest_readonly_containment_required") ||
-      (profile === "node-test-readonly-v1" && response.reason_code === "native_node_test_readonly_containment_required")
+      (profile === "node-test-readonly-v1" &&
+        response.reason_code === "native_node_test_readonly_containment_required") ||
+      (profile === "workspace-contained-v1" && response.reason_code === "native_workspace_containment_required")
     );
     if (
       response.decision !== "deny" || response.policy_action !== "sandbox-required" ||
       !profileMatches || response.observe_mode === true ||
-      process.platform !== "darwin" || GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS ||
+      (process.platform !== "darwin" && !(process.platform === "linux" && profile === "workspace-contained-v1")) ||
+      GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS ||
       !GUARD_CLI_WRAPPER_COMMAND.startsWith("/") ||
       snapshot.payload.tool_name !== "bash" || !key || containedTestRequests.has(key) ||
       !input || typeof input !== "object" || Array.isArray(input) ||

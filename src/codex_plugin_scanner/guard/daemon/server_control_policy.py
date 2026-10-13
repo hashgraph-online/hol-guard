@@ -22,6 +22,7 @@ from ..codex_resume import ResumeUnavailableError, get_request_resume_status, re
 from ..models import (
     PolicyDecision,
 )
+from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..native_daemon_handler import (
     native_body_handler,
 )
@@ -118,6 +119,9 @@ class _ControlPolicyRoutes:
                 request_ids=normalized_ids,
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
+        except ApprovalScopeUnavailableError as error:
+            self._write_json({"error": str(error), "resolved_count": 0, "failed": []}, status=503)
+            return
         except ValueError as error:
             if str(error) == "bulk_approve_gate_required":
                 self._write_json(
@@ -136,7 +140,8 @@ class _ControlPolicyRoutes:
             error_payload.setdefault("failed", [])
             self._write_json(error_payload, status=error.status)
             return
-        self._write_json(result)
+        # A resident outage stops the batch; rows approved before it stay in resolved_count.
+        self._write_json(result, status=503 if "error" in result else 200)
 
     def _approval_persist_policy(self, payload: dict[str, object]) -> bool | None:
         if "persist_policy" in payload:

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.proxy import runtime_mcp
+from codex_plugin_scanner.guard.proxy import native_mcp_child_io, runtime_mcp
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -54,16 +54,14 @@ def test_write_rejects_non_json_frame(child_io, monkeypatch):
 
 
 def test_write_raises_on_send_transport_loss(child_io, monkeypatch):
-    monkeypatch.setattr(
-        runtime_mcp, "mcp_stdio_session_send_native", _send(None)
-    )
+    monkeypatch.setattr(native_mcp_child_io, "mcp_stdio_session_send_native", _send(None))
     with pytest.raises(RuntimeError):
         child_io.write(json.dumps({"jsonrpc": "2.0", "method": "x"}) + "\n")
 
 
 def test_write_raises_on_send_not_sent_status(child_io, monkeypatch):
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_send_native",
         _send({"status": "rejected"}),
     )
@@ -75,9 +73,7 @@ def test_write_raises_on_send_not_sent_status(child_io, monkeypatch):
 
 
 def test_next_frame_transport_loss_surfaces_error(child_io, monkeypatch):
-    monkeypatch.setattr(
-        runtime_mcp, "mcp_stdio_session_recv_native", _recv(None)
-    )
+    monkeypatch.setattr(native_mcp_child_io, "mcp_stdio_session_recv_native", _recv(None))
     frame = child_io.next_frame(timeout_seconds=1.0, required=True)
     assert frame is not None
     assert frame.error is not None
@@ -87,7 +83,7 @@ def test_next_frame_transport_loss_surfaces_error(child_io, monkeypatch):
 def test_next_frame_event_payload_becomes_line(child_io, monkeypatch):
     payload = {"jsonrpc": "2.0", "result": {"tools": []}}
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "event", "payload": payload}),
     )
@@ -99,7 +95,7 @@ def test_next_frame_event_payload_becomes_line(child_io, monkeypatch):
 
 def test_next_frame_child_exit_records_code_and_eof(child_io, monkeypatch):
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "exited", "exit_code": 7}),
     )
@@ -111,7 +107,7 @@ def test_next_frame_child_exit_records_code_and_eof(child_io, monkeypatch):
 
 def test_next_frame_eof_status(child_io, monkeypatch):
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "eof"}),
     )
@@ -123,7 +119,7 @@ def test_next_frame_eof_status(child_io, monkeypatch):
 
 def test_next_frame_timeout_required_raises_io_timeout(child_io, monkeypatch):
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "timeout"}),
     )
@@ -133,7 +129,7 @@ def test_next_frame_timeout_required_raises_io_timeout(child_io, monkeypatch):
 
 def test_next_frame_timeout_not_required_returns_none(child_io, monkeypatch):
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "timeout"}),
     )
@@ -143,7 +139,7 @@ def test_next_frame_timeout_not_required_returns_none(child_io, monkeypatch):
 
 def test_next_frame_error_status_fails_closed(child_io, monkeypatch):
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "error", "payload": "frame-too-large"}),
     )
@@ -158,7 +154,7 @@ def test_pending_injection_seam_delivered_first(child_io, monkeypatch):
     frames are delivered before any resident recv."""
     child_io._pending.append(json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}) + "\n")
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "timeout"}),  # would block if reached
     )
@@ -174,7 +170,7 @@ def test_malformed_event_payload_not_dict_still_frames(child_io, monkeypatch):
     """A non-dict event payload is serialized verbatim — the downstream JSON
     parser owns malformed-frame rejection, not the transport."""
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "event", "payload": [1, 2, 3]}),
     )
@@ -186,7 +182,7 @@ def test_malformed_event_payload_not_dict_still_frames(child_io, monkeypatch):
 def test_exit_code_bool_not_treated_as_int(child_io, monkeypatch):
     """`True` is a bool, not an int — must not set exit_code."""
     monkeypatch.setattr(
-        runtime_mcp,
+        native_mcp_child_io,
         "mcp_stdio_session_recv_native",
         _recv({"status": "exited", "exit_code": True}),
     )
@@ -209,9 +205,7 @@ def test_native_process_open_not_opened_is_terminal(guard_home, monkeypatch):
         "mcp_stdio_session_open_native",
         lambda *a, **k: _open_result("rejected"),
     )
-    monkeypatch.setattr(
-        runtime_mcp, "mcp_stdio_session_close_native", lambda *a, **k: None
-    )
+    monkeypatch.setattr(runtime_mcp, "mcp_stdio_session_close_native", lambda *a, **k: None)
     monkeypatch.setattr(
         runtime_mcp,
         "resolved_runtime_launch_executable",
@@ -239,9 +233,7 @@ def test_native_process_open_not_opened_is_terminal(guard_home, monkeypatch):
     def fail_on_subprocess_fallback(*args, **kwargs):
         raise AssertionError("Python subprocess fallback")
 
-    monkeypatch.setattr(
-        subprocess, "Popen", fail_on_subprocess_fallback
-    )
+    monkeypatch.setattr(subprocess, "Popen", fail_on_subprocess_fallback)
 
     with pytest.raises(RuntimeError, match="native MCP session open failed"):
         proxy._start_process()

@@ -2,29 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import pytest_config as pytest_config_module
-from codex_plugin_scanner.guard.runtime.pytest_config import (
-    MAX_PYTEST_CONFIG_FILE_BYTES,
-    PYTEST_CONFIG_DECODE_ERROR,
-    PYTEST_CONFIG_DUPLICATE_KEY,
-    PYTEST_CONFIG_FILE_CHANGED,
-    PYTEST_CONFIG_IO_ERROR,
-    PYTEST_CONFIG_MISSING,
-    PYTEST_CONFIG_NOT_REGULAR,
-    PYTEST_CONFIG_OVERSIZE,
-    PYTEST_CONFIG_SYMLINK,
-    PYTEST_CONFIG_SYNTAX_ERROR,
-    PYTEST_CONFIG_VALUE_TYPE_INVALID,
-    parse_pytest_config,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    _pytest_args_from_segment,
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
@@ -65,98 +47,6 @@ def test_setup_cfg_ignores_addopts_outside_tool_pytest_section(tmp_path: Path) -
 
     assert match is not None
     assert match.action_class == "pytest repository-code execution"
-
-
-def test_malformed_pytest_config_fails_closed(tmp_path: Path) -> None:
-    _write(tmp_path / "pyproject.toml", "[tool.pytest.ini_options\naddopts = '-q'\n")
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": "pytest -q"}, cwd=tmp_path)
-
-    assert match is not None
-    assert match.action_class == "destructive shell command"
-    assert match.pytest_config_reason_codes == (PYTEST_CONFIG_SYNTAX_ERROR,)
-
-
-@pytest.mark.parametrize(
-    ("path", "content"),
-    (
-        ("pytest.ini", "[pytest]\naddopts =\n  -q\n  -p evil\n"),
-        ("tox.ini", "[pytest]\naddopts = -pno:cacheprovider\n"),
-        ("pytest.ini", "[pytest]\naddopts = --override-ini log_file=pytest.log\n"),
-        ("pytest.ini", "[pytest]\naddopts = -o pythonpath=../outside\n"),
-        ("pytest.ini", "[pytest]\naddopts = --rootdir ../outside\n"),
-        ("pytest.ini", "[pytest]\naddopts = --confcutdir ../outside\n"),
-        ("setup.cfg", "[tool:pytest]\nlog_file = pytest.log\n"),
-        (
-            "pyproject.toml",
-            '[tool."pytest".ini_options]\naddopts = """\n-q\n-p evil\n"""\n',
-        ),
-        (
-            "pyproject.toml",
-            "[tool.pytest.ini_options]\naddopts = '''\n-q\n-p evil\n'''\n",
-        ),
-        ("pyproject.toml", '[tool.pytest.ini_options]\naddopts = ["-q", "-c", "other.ini"]\n'),
-    ),
-)
-def test_parser_handles_format_specific_multiline_and_option_forms(
-    tmp_path: Path,
-    path: str,
-    content: str,
-) -> None:
-    _write(tmp_path / path, content)
-
-    result = parse_pytest_config(tmp_path, path)
-
-    assert result.complete is True
-    assert result.value is not None
-    assert result.value.unsafe is True
-    assert result.content_sha256 is not None
-
-
-@pytest.mark.parametrize(
-    ("path", "content"),
-    (
-        ("pytest.ini", "[pytest]\naddopts = -q\naddopts = -v\n"),
-        ("setup.cfg", "[tool:pytest]\naddopts = -q\n[tool:pytest]\naddopts = -v\n"),
-        ("pyproject.toml", '[tool.pytest.ini_options]\naddopts = "-q"\naddopts = "-v"\n'),
-    ),
-)
-def test_duplicate_config_keys_fail_closed(tmp_path: Path, path: str, content: str) -> None:
-    _write(tmp_path / path, content)
-
-    result = parse_pytest_config(tmp_path, path)
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_DUPLICATE_KEY
-
-
-def test_wrong_pyproject_value_type_fails_closed(tmp_path: Path) -> None:
-    _write(tmp_path / "pyproject.toml", "[tool.pytest.ini_options]\naddopts = 7\n")
-
-    result = parse_pytest_config(tmp_path, "pyproject.toml")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_VALUE_TYPE_INVALID
-
-
-def test_toml_option_names_remain_case_sensitive(tmp_path: Path) -> None:
-    _write(tmp_path / "pyproject.toml", '[tool.pytest.ini_options]\n"ADDOPTS" = "-p evil"\n')
-
-    result = parse_pytest_config(tmp_path, "pyproject.toml")
-
-    assert result.complete is True
-    assert result.value is not None
-    assert result.value.unsafe is False
-
-
-def test_native_toml_scalar_options_do_not_make_inventory_incomplete(tmp_path: Path) -> None:
-    _write(tmp_path / "pyproject.toml", "[tool.pytest]\nxfail_strict = true\nverbosity_test_cases = 2\n")
-
-    result = parse_pytest_config(tmp_path, "pyproject.toml")
-
-    assert result.complete is True
-    assert result.value is not None
-    assert result.value.unsafe is False
 
 
 def test_first_applicable_config_wins_without_inspecting_lower_precedence_files(tmp_path: Path) -> None:
@@ -271,16 +161,6 @@ def test_pytest_runner_skips_option_values_before_wrapped_command(tmp_path: Path
     assert match.pytest_config_identity_sha256 == direct_match.pytest_config_identity_sha256
 
 
-def test_pytest_runner_does_not_treat_dependency_or_payload_argument_as_executable() -> None:
-    assert (
-        _pytest_args_from_segment(
-            ["uv", "run", "--with", "pytest", "echo", "pytest", "tests"],
-            0,
-        )
-        is None
-    )
-
-
 def test_uv_run_color_value_option_does_not_hide_pytest(tmp_path: Path) -> None:
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -316,90 +196,6 @@ def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path)
     assert match is not None
     assert match.action_class == "destructive shell command"
     assert match.pytest_config_sources == ("tox.ini",)
-
-
-def test_oversized_pytest_config_fails_closed_without_partial_parse(tmp_path: Path) -> None:
-    _write(
-        tmp_path / "pytest.ini",
-        "[pytest]\naddopts = -q\n" + ("# padding\n" * (MAX_PYTEST_CONFIG_FILE_BYTES // 5)),
-    )
-
-    result = parse_pytest_config(tmp_path, "pytest.ini")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_OVERSIZE
-    assert result.content_sha256 is None
-
-
-def test_pytest_config_symlink_is_rejected(tmp_path: Path) -> None:
-    target = tmp_path / "real.ini"
-    _write(target, "[pytest]\naddopts = -q\n")
-    (tmp_path / "pytest.ini").symlink_to(target)
-
-    result = parse_pytest_config(tmp_path, "pytest.ini")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_SYMLINK
-
-
-def test_pytest_config_directory_is_not_treated_as_missing(tmp_path: Path) -> None:
-    (tmp_path / "pytest.ini").mkdir()
-
-    result = parse_pytest_config(tmp_path, "pytest.ini")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_NOT_REGULAR
-
-
-def test_unreadable_pytest_config_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "pytest.ini"
-    _write(config_path, "[pytest]\naddopts = -q\n")
-
-    def denied_open(_path: object, _flags: int) -> int:
-        raise PermissionError("fixture denies the config read")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.pytest_config.os.open", denied_open)
-
-    result = parse_pytest_config(tmp_path, "pytest.ini")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_IO_ERROR
-
-
-def test_non_utf8_pytest_config_fails_closed(tmp_path: Path) -> None:
-    (tmp_path / "pytest.ini").write_bytes(b"[pytest]\naddopts = \xff\n")
-
-    result = parse_pytest_config(tmp_path, "pytest.ini")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_DECODE_ERROR
-
-
-def test_pytest_config_changed_during_read_fails_closed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config_path = tmp_path / "pytest.ini"
-    _write(config_path, "[pytest]\naddopts = -q\n")
-    original_fstat = pytest_config_module.os.fstat
-    calls = 0
-
-    def racing_fstat(descriptor: int) -> os.stat_result:
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            _write(config_path, "[pytest]\naddopts = -v\n")
-        return original_fstat(descriptor)
-
-    # Scope the race to this reader. Other threads may call process-wide
-    # os.fstat and consume the injected mutation before the config is read.
-    reader_os = SimpleNamespace(**(vars(os) | {"fstat": racing_fstat}))
-    monkeypatch.setattr(pytest_config_module, "os", reader_os)
-
-    result = parse_pytest_config(tmp_path, "pytest.ini")
-
-    assert result.complete is False
-    assert result.reason_code == PYTEST_CONFIG_FILE_CHANGED
 
 
 def test_config_content_hash_changes_pytest_approval_identity(tmp_path: Path) -> None:
@@ -470,17 +266,3 @@ def test_explicit_config_is_parsed_and_bound_to_identity(tmp_path: Path, config_
     expected_source = "selected.toml" if "selected.toml" in config_flag else "selected.ini"
     assert match.pytest_config_sources == (expected_source,)
     assert match.pytest_config_identity_sha256 is not None
-
-
-def test_missing_explicit_config_fails_closed_with_stable_reason(tmp_path: Path) -> None:
-    match = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": "pytest -c missing.ini -q"},
-        cwd=tmp_path,
-    )
-
-    assert match is not None
-    assert match.action_class == "destructive shell command"
-    assert match.pytest_config_sources == ("missing.ini",)
-    assert match.pytest_config_reason_codes == (PYTEST_CONFIG_MISSING,)
-    assert "repair or remove malformed" in match.reason

@@ -52,6 +52,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arraydeque"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,6 +641,7 @@ dependencies = [
  "ring",
  "roxmltree 0.21.1",
  "rsa",
+ "rustix",
  "rustls",
  "serde",
  "serde_json",
@@ -669,6 +676,7 @@ dependencies = [
  "ring",
  "roxmltree 0.20.0",
  "rsa",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
@@ -885,6 +893,7 @@ dependencies = [
  "ring",
  "rsa",
  "rusqlite",
+ "saphyr-parser",
  "scrypt",
  "seccompiler",
  "security-framework",
@@ -894,6 +903,7 @@ dependencies = [
  "sha2",
  "sysinfo",
  "toml 0.8.23",
+ "toml_edit",
  "unicode-normalization",
  "windows-permissions",
  "zeroize",
@@ -1839,6 +1849,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
 dependencies = [
  "cipher",
+]
+
+[[package]]
+name = "saphyr-parser"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7429158804c36e705d9423b7848018e535b3e92d439a763e364ee12670ef473b"
+dependencies = [
+ "arraydeque",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

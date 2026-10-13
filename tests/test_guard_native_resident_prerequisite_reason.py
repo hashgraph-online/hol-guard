@@ -28,6 +28,24 @@ def test_fresh_home_provisions_its_own_verifier_key(tmp_path: Path) -> None:
     )
 
 
+def test_prerequisite_provisioning_never_refreshes_policy_integrity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    refreshed: list[bool] = []
+
+    def refresh(*args: object, **kwargs: object) -> None:
+        refreshed.append(True)
+        raise AssertionError("resident prerequisite must not refresh policy decisions")
+
+    monkeypatch.setattr(GuardStore, "_refresh_policy_integrity_state", refresh)
+    home = tmp_path / "prerequisite-home"
+    assert native_context.ensure_resident_prerequisite(home), prerequisite_failure_for_home(home)
+    assert refreshed == []
+    assert (home / "native-runtime" / "policy-verifier.key").is_file()
+
+
 def test_provisioning_failure_stays_closed_and_names_a_bounded_reason(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -30,6 +30,25 @@ fn bounded_yield_reports_preserve_file_and_envelope_checks() {
     let good = evaluate("omp", report.clone());
     assert_eq!(good.minimum_action, "allow", "{}", good.reason_code);
     assert_eq!(good.reason_code, "native_omp_yield_metadata");
+    let oversized = json!({"tool_name":"yield", "tool_input":{
+        "data":{"contents":"x".repeat(16 * 1024)}
+    }});
+    assert_ne!(evaluate("omp", oversized).minimum_action, "allow");
+    let contents = json!({"tool_name":"yield", "tool_input":{
+        "data":{"contents":"synthetic reference\nsecond-line\n"}
+    }});
+    let good = evaluate("omp", contents.clone());
+    assert_eq!(good.minimum_action, "allow", "{}", good.reason_code);
+    assert_eq!(good.reason_code, "native_omp_yield_metadata");
+    for value in [
+        json!({"command":"extra operation"}),
+        json!(["unexpected"]),
+        json!(null),
+    ] {
+        let mut bad = contents.clone();
+        bad["tool_input"]["data"]["contents"] = value;
+        assert_ne!(evaluate("omp", bad).minimum_action, "allow");
+    }
     for path in [".env", "linked.md", "https://example.com", "proc://job"] {
         let mut bad = report.clone();
         bad["tool_input"]["data"]["files"][0]["path"] = json!(path);

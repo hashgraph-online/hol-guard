@@ -124,11 +124,18 @@ pub(crate) fn literal_sed_substitution_is_safe(script: &str) -> bool {
 
 /// `_sed_pattern_is_literal`.
 pub(crate) fn sed_pattern_is_literal(pattern: &str, delimiter: char) -> bool {
+    sed_pattern_is_literal_with_delimiter(pattern, Some(delimiter))
+}
+
+pub(crate) fn sed_pattern_is_literal_with_delimiter(
+    pattern: &str,
+    delimiter: Option<char>,
+) -> bool {
     let mut escaped = false;
     for character in pattern.chars() {
         if escaped {
             if !(REGEX_METACHARACTERS.contains(character)
-                || character == delimiter
+                || Some(character) == delimiter
                 || character == '\\')
             {
                 return false;
@@ -145,10 +152,17 @@ pub(crate) fn sed_pattern_is_literal(pattern: &str, delimiter: char) -> bool {
 
 /// `_sed_replacement_is_literal`.
 pub(crate) fn sed_replacement_is_literal(replacement: &str, delimiter: char) -> bool {
+    sed_replacement_is_literal_with_delimiter(replacement, Some(delimiter))
+}
+
+pub(crate) fn sed_replacement_is_literal_with_delimiter(
+    replacement: &str,
+    delimiter: Option<char>,
+) -> bool {
     let mut escaped = false;
     for character in replacement.chars() {
         if escaped {
-            if !(character == delimiter || matches!(character, '\\' | '&' | '$')) {
+            if !(Some(character) == delimiter || matches!(character, '\\' | '&' | '$')) {
                 return false;
             }
             escaped = false;

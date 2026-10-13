@@ -40,6 +40,7 @@ _EXTERNAL_SOURCE_SENSITIVE_PARTS = _SENSITIVE_SEARCH_BASENAMES | frozenset(
         "id_ecdsa",
         "id_ed25519",
         "id_rsa",
+        "kubeconfig",
         "passwd",
         "password",
         "private-key",

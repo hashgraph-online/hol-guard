@@ -47,7 +47,7 @@ from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support import *
 from .commands_support_claude_approval import (
-    _is_claude_guard_approval_question,
+    _claude_guard_question_verdict,
     _persist_claude_guard_question_decision,
 )
 from .commands_support_connect import _synced_policy_payload
@@ -126,9 +126,11 @@ def run_native_hook_pipeline(
 
     if _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PostToolUse":
         pending_pair = _load_single_claude_pending_permission(store, payload)
-        if pending_pair is not None and _is_claude_guard_approval_question(payload, pending_pair[1]):
-            _persist_claude_guard_question_decision(store, payload)
-            return 0
+        if pending_pair is not None:
+            verdict = _claude_guard_question_verdict(payload, pending_pair[1])
+            if verdict.is_question:
+                _persist_claude_guard_question_decision(store, payload, pending_pair=pending_pair, verdict=verdict)
+                return 0
 
     edge = worker.review_native_edge_decision(
         payload=payload,

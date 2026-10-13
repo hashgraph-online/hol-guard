@@ -22,6 +22,7 @@ base checkout recomposes the same inputs with the retired helpers.
 from __future__ import annotations
 
 import argparse
+import importlib
 import itertools
 import json
 import os
@@ -70,10 +71,14 @@ def _bind_resident(binary: str) -> None:
 
 
 def _scoring_objects(scoring: dict) -> tuple:
-    from codex_plugin_scanner.guard.types import CapabilityDelta, GuardSignal, HistoryContext, ProvenanceBundle
+    # Resolved at run time from the base checkout (``PYTHONPATH=--base-src``): the
+    # delta/provenance/history dataclasses no longer exist in the working tree.
+    types = importlib.import_module("codex_plugin_scanner.guard.types")
+    capability_delta, guard_signal = types.CapabilityDelta, types.GuardSignal
+    history_context, provenance_bundle = types.HistoryContext, types.ProvenanceBundle
 
     signals = tuple(
-        GuardSignal(
+        guard_signal(
             signal_id=f"signal-{index}",
             family=family,
             severity=severity,
@@ -87,7 +92,7 @@ def _scoring_objects(scoring: dict) -> tuple:
         for index, (family, severity, confidence, source, explanation) in enumerate(scoring["signals"])
     )
     deltas = tuple(
-        CapabilityDelta(delta_type=kind, before=None, after=None, severity=severity, explanation=explanation)
+        capability_delta(delta_type=kind, before=None, after=None, severity=severity, explanation=explanation)
         for kind, severity, explanation in scoring["deltas"]
     )
     source_kind, trust = scoring["provenance"]
@@ -95,9 +100,25 @@ def _scoring_objects(scoring: dict) -> tuple:
     return (
         signals,
         deltas,
-        ProvenanceBundle(source_kind=source_kind, publisher_trust=trust),
-        HistoryContext(prior_approvals=approvals, prior_incidents=incidents),
+        provenance_bundle(source_kind=source_kind, publisher_trust=trust),
+        history_context(prior_approvals=approvals, prior_incidents=incidents),
     )
+
+
+def _scoring_evidence(objects: tuple) -> tuple:
+    """The signals and the evidence-op scoring dict of the working tree."""
+
+    signals, deltas, provenance, history = objects
+    return signals, {
+        "deltas": [
+            {"delta_type": delta.delta_type, "severity": int(delta.severity), "explanation": delta.explanation}
+            for delta in deltas
+        ],
+        "provenance_source_kind": provenance.source_kind,
+        "publisher_trust": provenance.publisher_trust,
+        "prior_approvals": int(history.prior_approvals),
+        "prior_incidents": int(history.prior_incidents),
+    }
 
 
 class _Store:
@@ -321,16 +342,17 @@ def _capture(kind: str, fields: dict, *, guard_home: object) -> dict:
 
 def _capture_query(case: dict) -> dict:
     from codex_plugin_scanner.guard.consumer import service as svc
-    from codex_plugin_scanner.guard.types import HistoryContext, ProvenanceBundle
 
     original = svc.native_consumer_compose
     svc.native_consumer_compose = _capture
     try:
         if case["kind"] == "current_action":
-            scoring = (
-                svc._scoring_inputs((), (), ProvenanceBundle(), HistoryContext())
-                if case["removed"]
-                else svc._scoring_inputs(*_scoring_objects(case["scoring"]))
+            scoring = svc._scoring_inputs(
+                *(
+                    ((), svc._REMOVED_SCORING)
+                    if case["removed"]
+                    else _scoring_evidence(_scoring_objects(case["scoring"]))
+                )
             )
             guard_default_action = case["guard_default_action"]
             svc._native_current_action(

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import os
 import re
 import stat
@@ -213,9 +214,17 @@ class _FixedDatetime(datetime):
 
 
 def install_facts(facts: dict[str, object]) -> list[tuple[object, str, object]]:
-    """Patch the process facts the Python implementation reads; returns undo records."""
+    """Patch the process facts the pre-cutover Python implementation reads; returns undo records.
 
-    from codex_plugin_scanner.guard import package_shim_frozen, shell_profile_cleanup, shims
+    Only meaningful against the recorded base commit (see the recorder), where
+    ``shell_profile_cleanup`` and the Python admin bodies still exist.
+    """
+
+    # Resolved at run time: these modules exist only at the recorded base commit.
+    package_shim_frozen, shell_profile_cleanup, shims = (
+        importlib.import_module(f"codex_plugin_scanner.guard.{name}")
+        for name in ("package_shim_frozen", "shell_profile_cleanup", "shims")
+    )
 
     argv0 = facts["argv0"]
     sys_overrides: dict[str, object] = {

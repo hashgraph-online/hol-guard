@@ -33,6 +33,18 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     if context.home_dir.is_none() || context.cwd.is_none() || !safe_directory_target(value) {
         return None;
     }
+    // An unquoted leading `~` expands from the shell's HOME, so it is proved
+    // only when that HOME is the declared one.
+    let expanded;
+    let value = if value == "~" || value.starts_with("~/") {
+        if cfg!(windows) || !context.shell_home_matches {
+            return None;
+        }
+        expanded = super::read_paths::expand_home_read_path(value, context.home_dir)?;
+        expanded.as_str()
+    } else {
+        value
+    };
     let supplied = std::path::Path::new(value);
     let joined;
     let supplied = if supplied.is_absolute() {
@@ -60,9 +72,15 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
 /// check rejects symlinked components. `..` is never proved: the shell
 /// resolves it against its logical `$PWD`, which may name a symlinked
-/// parent the reported cwd does not show.
+/// parent the reported cwd does not show. On Windows a `:` can name a
+/// drive-relative path (`C:src`) or an alternate data stream, and Git Bash
+/// resolves a root-relative `/etc` against its own root rather than the
+/// cwd's drive, so neither is joined; the caller's exact-spelling check
+/// covers case, short names and junctions there.
 fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
-    if cfg!(windows) || value.starts_with('~') {
+    if value.starts_with('~')
+        || (cfg!(windows) && (value.contains(':') || value.starts_with(['/', '\\'])))
+    {
         return None;
     }
     let dotted = value == "." || value.starts_with("./");
@@ -172,23 +190,66 @@ pub(crate) fn search_home_targets_safe(
 fn shell_keeps_tilde_literal(text: &str) -> bool {
     let mut quote = None;
     let mut escaped = false;
-    for character in text.chars() {
+    let mut word_start = true;
+    let chars: Vec<char> = text.chars().collect();
+    for (index, character) in chars.iter().copied().enumerate() {
         if escaped {
             escaped = false;
             if character == '~' {
                 return true;
             }
+            word_start = false;
             continue;
+        }
+        // `~"/project"` keeps the tilde literal: the slash is quoted, so the
+        // shell does not expand it to home. The quote-stripped argument is
+        // still `~/project`, which must not be proved as that home path.
+        if quote.is_none()
+            && word_start
+            && character == '~'
+            && mixed_tilde_prefix(&chars[index + 1..])
+        {
+            return true;
         }
         match (quote, character) {
             (Some(_), '~') => return true,
             (None | Some('"'), '\\') => escaped = true,
             (None, '\'' | '"') => quote = Some(character),
             (Some(open), _) if character == open => quote = None,
+            (None, character) if is_shell_word_boundary(character) => {
+                word_start = true;
+                continue;
+            }
+            _ => {}
+        }
+        if quote.is_none() {
+            word_start = false;
+        }
+    }
+    false
+}
+
+/// A quote or escape between a word-initial `~` and the first unquoted `/`
+/// means the shell will not perform the home expansion the path proof assumes.
+fn mixed_tilde_prefix(rest: &[char]) -> bool {
+    let mut escaped = false;
+    for character in rest.iter().copied() {
+        if escaped {
+            return true;
+        }
+        match character {
+            '\\' => escaped = true,
+            '\'' | '"' => return true,
+            '/' => return false,
+            character if is_shell_word_boundary(character) => return false,
             _ => {}
         }
     }
     false
+}
+
+fn is_shell_word_boundary(character: char) -> bool {
+    character.is_whitespace() || matches!(character, ';' | '|' | '&' | '(' | ')' | '<' | '>' | '\n')
 }
 
 /// A backslash the shell would remove or reinterpret: any unquoted backslash,
@@ -257,7 +318,7 @@ impl<'a> super::PathContext<'a> {
                 && !environment
                     .environment_names
                     .iter()
-                    .any(|name| name == "CDPATH")
+                    .any(|name| name.eq_ignore_ascii_case("CDPATH"))
         });
         // rustup reads these before any toolchain file, and either one can
         // name a toolchain directory. Without a stamped environment, the
@@ -273,17 +334,78 @@ impl<'a> super::PathContext<'a> {
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
         };
+        let npm_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        npm_selector(name)
+                            && !super::npm_environment::inert_npm_config_name(name)
+                            && !super::npm_environment::trusted_stamped_loader(
+                                environment,
+                                name,
+                                home_dir,
+                                cwd.as_slice(),
+                            )
+                    })
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
+                !value.is_empty()
+                    && npm_selector(&name)
+                    && !super::npm_environment::inert_npm_config_name(&name)
+            }),
+        };
+        // The shell expands `~` from its own HOME: the stamped one, or the
+        // runtime's when no environment was stamped.
+        let shell_home = match execution_environment {
+            Some(environment) if environment.has_valid_shape() => environment.home.clone(),
+            Some(_) => None,
+            None => std::env::var("HOME").ok(),
+        };
+        let canonical = |path: &str| {
+            std::path::Path::new(path)
+                .is_absolute()
+                .then(|| std::fs::canonicalize(path).ok())
+                .flatten()
+        };
+        let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
+            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
+        });
         Self {
             home_dir,
             cwd,
             cdpath_unset,
             rustup_override_absent,
+            npm_config_inert,
+            shell_home_matches,
         }
     }
 }
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
+}
+
+/// npm reads every `npm_config_*` variable as configuration, including the
+/// registry and the paths of its other config files. Node reads the rest
+/// before npm's own code runs, and `NODE_TLS_REJECT_UNAUTHORIZED=0` turns off
+/// certificate checks. `NODE_EXTRA_CA_CERTS` only adds to the trusted set,
+/// usually for a company's TLS-inspecting proxy that already sees all of the
+/// user's traffic; it leaves the registry where it was, and the agent's own
+/// command cannot set the hook's environment.
+fn npm_selector(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper.starts_with("NPM_CONFIG_")
+        || matches!(
+            upper.as_str(),
+            "NODE_OPTIONS"
+                | "NODE_PATH"
+                | "NODE_TLS_REJECT_UNAUTHORIZED"
+                | "LD_PRELOAD"
+                | "LD_LIBRARY_PATH"
+                | "DYLD_INSERT_LIBRARIES"
+                | "DYLD_LIBRARY_PATH"
+        )
 }
 
 #[cfg(test)]
@@ -324,3 +446,7 @@ mod tests {
 #[cfg(test)]
 #[path = "tests_relative_cd.rs"]
 mod tests_relative_cd;
+
+#[cfg(test)]
+#[path = "tests_relative_cd_windows.rs"]
+mod tests_relative_cd_windows;

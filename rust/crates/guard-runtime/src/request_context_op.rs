@@ -29,6 +29,12 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
+    pub(crate) fn bounded_milliseconds(milliseconds: u64) -> Self {
+        Self {
+            started: Instant::now(),
+            limit: Duration::from_millis(milliseconds.min(9_000)),
+        }
+    }
     pub(crate) fn check(&self) -> Result<(), &'static str> {
         if self.started.elapsed() >= self.limit {
             return Err(BUDGET_EXCEEDED);
@@ -296,6 +302,9 @@ fn decide(
 ) -> Result<Value, &'static str> {
     let budget = admit(request)?;
     let payload = match &request.action {
+        RequestContextKindV1::PolicyDocument(body) => {
+            crate::policy_document_op::evaluate(body, &budget, &request.guard_home)?
+        }
         RequestContextKindV1::ContentSensitivity(body) => crate::content_sensitivity_op::evaluate(
             body,
             &budget,
@@ -314,6 +323,9 @@ fn decide(
         }
         RequestContextKindV1::TrustedTool(body) => {
             crate::direct_tool_context_op::trusted(body, &budget)?
+        }
+        RequestContextKindV1::SensitiveRequest(body) => {
+            crate::sensitive_request_op::evaluate(request, body, &budget)?
         }
         RequestContextKindV1::ValidateSegment {
             context,

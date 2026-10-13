@@ -279,34 +279,6 @@ VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
 VALID_APPROVAL_SURFACE_POLICIES = {"attention-aware", "auto-open-once", "native-only", "approval-center"}
 VALID_APPROVAL_BROWSER_SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
-WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
-    {
-        "blocked_request_mode",
-        "mode",
-        "presentation_mode",
-        "presentation_mode_explicit",
-        "presentation_schema_version",
-        "presentation_revision",
-        "presentation_density",
-        "display_density",
-        "density",
-        "protection_posture",
-        "watch_auto_revert_hours",
-        "harness_postures",
-        "harness_watch_entered_at",
-        "default_action",
-        "unknown_publisher_action",
-        "changed_hash_action",
-        "new_network_domain_action",
-        "subprocess_action",
-        "security_level",
-        "risk_actions",
-        "harness_risk_actions",
-        "harnesses",
-        "publishers",
-        "artifacts",
-    }
-)
 
 
 class GuardHomeMigrationError(RuntimeError):
@@ -890,9 +862,6 @@ def _coerce_loaded_bool(value: object) -> bool:
     return value if isinstance(value, bool) else False
 
 
-_VALID_SANDBOX_MODES = {"off", "suspicious", "strict"}
-
-
 def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
     if not isinstance(value, dict):
         raise ValueError("Risk actions must be a table.")
@@ -1346,26 +1315,6 @@ def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
 def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
     if time.monotonic() >= deadline:
         raise TimeoutError("guard.db migration timed out")
-
-
-def _sanitize_workspace_guard_config(payload: dict[str, object]) -> dict[str, object]:
-    return {key: value for key, value in payload.items() if key not in WORKSPACE_BLOCKED_POLICY_KEYS}
-
-
-def _merge_config_payload(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
-    merged = dict(base)
-    for key, value in override.items():
-        existing = merged.get(key)
-        if isinstance(existing, dict) and isinstance(value, dict):
-            nested_existing = {name: nested_value for name, nested_value in existing.items() if isinstance(name, str)}
-            nested_override = {name: nested_value for name, nested_value in value.items() if isinstance(name, str)}
-            if "action" in nested_override or "default_action" in nested_override:
-                nested_existing.pop("action", None)
-                nested_existing.pop("default_action", None)
-            merged[key] = _merge_config_payload(nested_existing, nested_override)
-            continue
-        merged[key] = value
-    return merged
 
 
 def _guard_home_has_state(path: Path) -> bool:

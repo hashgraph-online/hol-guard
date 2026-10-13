@@ -174,8 +174,28 @@ fn npm_registry_resolved_version(
     if versions.is_empty() {
         return None;
     }
+    if let Some(tagged) = npm_dist_tag_version(&document.object, &versions, requested_range) {
+        return tagged;
+    }
     deps.semver
         .highest_js_version_for_selector(&versions, requested_range)
+}
+
+/// npm reads a selector that names a dist-tag as that tag, so a bare name
+/// installs whatever `latest` points at, even below the highest release.
+/// `Some(None)` is a tag whose version the document does not list.
+fn npm_dist_tag_version(
+    document: &Map<String, Value>,
+    versions: &[String],
+    selector: &str,
+) -> Option<Option<String>> {
+    let tagged = document.get("dist-tags")?.as_object()?.get(selector)?;
+    Some(
+        tagged
+            .as_str()
+            .filter(|version| versions.iter().any(|listed| listed == version))
+            .map(str::to_owned),
+    )
 }
 
 fn pypi_registry_resolved_version(
@@ -277,5 +297,30 @@ mod split_namespace_tests {
             split_namespace_name("single", "packagist"),
             (None, "single".to_owned())
         );
+    }
+}
+
+#[cfg(test)]
+mod dist_tag_tests {
+    use super::npm_dist_tag_version;
+    use serde_json::{json, Map, Value};
+
+    fn document(tags: Value) -> Map<String, Value> {
+        json!({"dist-tags": tags}).as_object().unwrap().clone()
+    }
+
+    #[test]
+    fn a_dist_tag_selects_its_own_version_not_the_highest() {
+        let versions = ["1.0.0".to_owned(), "2.0.0".to_owned()];
+        let tags = document(json!({"latest": "1.0.0", "next": "3.0.0"}));
+        assert_eq!(
+            npm_dist_tag_version(&tags, &versions, "latest"),
+            Some(Some("1.0.0".to_owned()))
+        );
+        // A tag pointing at an unlisted version resolves to nothing.
+        assert_eq!(npm_dist_tag_version(&tags, &versions, "next"), Some(None));
+        // Ranges and missing tags fall through to semver resolution.
+        assert_eq!(npm_dist_tag_version(&tags, &versions, "^2"), None);
+        assert_eq!(npm_dist_tag_version(&Map::new(), &versions, "latest"), None);
     }
 }

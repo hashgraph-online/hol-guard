@@ -21,7 +21,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Exten
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
-    mcp_server_identity_metadata,
 )
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     load_mcp_contribution_payloads,
@@ -267,9 +266,6 @@ def test_copilot_remote_identity_redacts_query_credentials_and_still_matches(tmp
         server_config={"url": f"https://app.instapods.com/api/mcp?token={secret}"},
     )
     identity, fingerprint, transport = _copilot_runtime_server_identity(server, launch_cwd=tmp_path)
-    serialized_identity = mcp_server_identity_metadata(identity)
-    assert serialized_identity["command"] == "https://app.instapods.com/api/mcp"
-    assert secret not in str(serialized_identity)
     artifact = build_tool_call_artifact(
         harness="copilot",
         server_name="instapods",
@@ -280,6 +276,7 @@ def test_copilot_remote_identity_redacts_query_credentials_and_still_matches(tmp
         server_fingerprint=fingerprint,
         server_identity=identity,
     )
+    assert artifact.metadata["mcp_server_identity"]["command"] == "https://app.instapods.com/api/mcp"
     assert secret not in str(artifact.to_dict())
     assert instapods_matches(artifact)
 

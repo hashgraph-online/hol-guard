@@ -54,8 +54,10 @@ const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
 const MAX_STARTUP_LOCK_BYTES: u64 = 4 * 1024;
 
-#[allow(unused_imports)]
-pub(crate) use resident_state_discovery::{discover_home_states, discover_home_states_prefer};
+#[cfg(test)]
+pub(crate) use resident_state_discovery::discover_home_states;
+pub(crate) use resident_state_discovery::discover_home_states_prefer;
+pub(crate) use resident_state_discovery::discover_same_executable_states;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -124,7 +126,7 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
 pub(crate) use crate::resident_process_identity::{
     parent_process_id, process_is_definitively_gone, process_start_marker,
     validate_package_process_identity, validate_process_start_marker,
-    validate_runtime_process_identity,
+    validate_runtime_process_identity, validate_same_executable_process_identity,
 };
 
 pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> {

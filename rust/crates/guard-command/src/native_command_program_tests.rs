@@ -401,6 +401,11 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
             "command.github.permission.propose-remote",
             "gh pr create --title title --body body",
         ),
+        (
+            "permission",
+            "command.github.permission.create-private-remote",
+            "gh repo create todo-app --private --source=.",
+        ),
     ] {
         let controlled = binding(&[(kind, target, "disabled")], false);
         assert_eq!(
@@ -416,7 +421,7 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         .permission_observations
         .iter()
         .any(|item| item.permission_id == "command.github.permission.read-remote"));
-    for command in ["git cat-file -p HEAD", "docker compose ps"] {
+    for command in ["git cat-file --batch-check", "docker compose ps"] {
         let result = decision(command, &unrestricted);
         assert_eq!(result.minimum_action, "review", "{command}");
         assert!(!result.explicitly_benign, "{command}");

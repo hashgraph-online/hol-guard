@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.consumer.service import _scoring_inputs, build_provenance_bundle
+from codex_plugin_scanner.guard.consumer import projection
+from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_consumer_artifact_compose import native_consumer_compose
-from codex_plugin_scanner.guard.types import HistoryContext, ProvenanceBundle
 
 _HOL_REGISTRY_PUBLISHER = "@hol-org/registry"
 _HOL_REGISTRY_ADVISORY_CLEAN = {
@@ -42,12 +42,58 @@ class _FakeStore:
     def __init__(self, advisories: list[dict]) -> None:
         self._advisories = advisories
 
+    guard_home: Path | None = None
+
     def list_cached_advisories(self, *, limit: int = 200) -> list[dict]:
         return self._advisories[:limit]
 
+    def get_artifact_capability(self, harness: str, artifact_id: str) -> None:
+        return None
 
-def _verdict(guard_home: Path, provenance: ProvenanceBundle, history: HistoryContext) -> dict:
+    def find_inventory_item(self, artifact_id: str) -> None:
+        return None
+
+    def receipt_decision_counts(self, harness: str, artifact_id: str) -> dict[str, int]:
+        return {}
+
+    def list_events(self, *, limit: int = 100) -> list[dict]:
+        return []
+
+
+def _evidence(guard_home: Path, advisories: list[dict], publisher: str | None = _HOL_REGISTRY_PUBLISHER) -> dict:
+    """The resident's evidence for a bare artifact of ``publisher`` with the given advisories."""
+
+    store = _FakeStore(advisories)
+    store.guard_home = guard_home
+    artifact = GuardArtifact(
+        artifact_id="codex:project:registry",
+        name="registry",
+        harness="codex",
+        artifact_type="skill",
+        source_scope="project",
+        config_path="/tmp/registry/SKILL.md",
+        publisher=publisher,
+    )
+    return projection.artifact_evidence(
+        store,  # type: ignore[arg-type]
+        artifact,
+        payload=artifact.to_dict(),
+        content_hash="hash",
+        previous=None,
+    )
+
+
+def _provenance(guard_home: Path, advisories: list[dict], publisher: str | None = _HOL_REGISTRY_PUBLISHER) -> dict:
+    provenance = _evidence(guard_home, advisories, publisher)["provenance"]
+    assert isinstance(provenance, dict)
+    return provenance
+
+
+def _verdict(guard_home: Path, advisories: list[dict], prior_approvals: int) -> dict:
     """The resident's scoring recommendation for an artifact with no signals or deltas."""
+
+    scoring = dict(_evidence(guard_home, advisories)["scoring"])
+    scoring["prior_approvals"] = prior_approvals
 
     answer = native_consumer_compose(
         "current_action",
@@ -62,7 +108,8 @@ def _verdict(guard_home: Path, provenance: ProvenanceBundle, history: HistoryCon
             "config_changed_hash_action": "require-reapproval",
             "config_default_action": "warn",
             "skill_directory_identity_reusable": None,
-            **_scoring_inputs((), (), provenance, history),
+            "signals": [],
+            **scoring,
         },
         guard_home=guard_home,
     )
@@ -74,97 +121,66 @@ def _verdict(guard_home: Path, provenance: ProvenanceBundle, history: HistoryCon
 class TestRegistryBrokerSkillsAttested:
     """Attested scenario: attestationVerified=True → curated + known-good."""
 
-    def _provenance(self) -> ProvenanceBundle:
-        store = _FakeStore([_HOL_REGISTRY_ADVISORY_CLEAN])
-        return build_provenance_bundle(store, _HOL_REGISTRY_PUBLISHER)  # type: ignore[arg-type]
+    _advisories = (_HOL_REGISTRY_ADVISORY_CLEAN,)
 
-    def test_source_kind_is_curated(self) -> None:
-        assert self._provenance().source_kind == "curated"
+    def test_provenance_is_curated_known_good_and_attested(self, native_approval_reuse_runtime: Path) -> None:
+        provenance = _provenance(native_approval_reuse_runtime, list(self._advisories))
+        assert provenance["source_kind"] == "curated"
+        assert provenance["publisher_trust"] == "known-good"
+        assert provenance["attestation_verified"] is True
 
-    def test_publisher_trust_is_known_good(self) -> None:
-        assert self._provenance().publisher_trust == "known-good"
-
-    def test_attestation_verified_is_true(self) -> None:
-        assert self._provenance().attestation_verified is True
-
-    def test_evidence_refs_contains_advisory_id(self) -> None:
-        refs = self._provenance().evidence_refs
+    def test_evidence_refs_contains_advisory_id(self, native_approval_reuse_runtime: Path) -> None:
+        refs = _provenance(native_approval_reuse_runtime, list(self._advisories))["evidence_refs"]
         assert "HOL-2025-REGISTRY-001" in refs
 
     def test_verdict_action_is_allow_for_clean_artifact(self, native_approval_reuse_runtime: Path) -> None:
-        verdict = _verdict(
-            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=3, prior_incidents=0)
-        )
+        verdict = _verdict(native_approval_reuse_runtime, self._advisories, 3)
         assert verdict["action"] == "allow"
 
     def test_evidence_sources_includes_cloud(self, native_approval_reuse_runtime: Path) -> None:
-        verdict = _verdict(
-            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=0, prior_incidents=0)
-        )
+        verdict = _verdict(native_approval_reuse_runtime, self._advisories, 0)
         assert "cloud" in verdict["evidence_sources"]
 
 
 class TestRegistryBrokerSkillsNonAttested:
     """Non-attested scenario: no advisory for publisher → self-declared + unknown."""
 
-    def _provenance(self) -> ProvenanceBundle:
-        store = _FakeStore([])
-        return build_provenance_bundle(store, _HOL_REGISTRY_PUBLISHER)  # type: ignore[arg-type]
+    def test_provenance_is_self_declared_unknown_and_unattested(self, native_approval_reuse_runtime: Path) -> None:
+        provenance = _provenance(native_approval_reuse_runtime, [])
+        assert provenance["source_kind"] == "self-declared"
+        assert provenance["publisher_trust"] == "unknown"
+        assert provenance["attestation_verified"] is False
 
-    def test_source_kind_is_self_declared(self) -> None:
-        assert self._provenance().source_kind == "self-declared"
-
-    def test_publisher_trust_is_unknown(self) -> None:
-        assert self._provenance().publisher_trust == "unknown"
-
-    def test_attestation_verified_is_false(self) -> None:
-        assert self._provenance().attestation_verified is False
-
-    def test_evidence_refs_contains_publisher_label(self) -> None:
-        refs = self._provenance().evidence_refs
+    def test_evidence_refs_contains_publisher_label(self, native_approval_reuse_runtime: Path) -> None:
+        refs = _provenance(native_approval_reuse_runtime, [])["evidence_refs"]
         assert any("publisher:" in ref for ref in refs)
 
-    def test_none_publisher_returns_empty_bundle(self) -> None:
-        store = _FakeStore([_HOL_REGISTRY_ADVISORY_CLEAN])
-        bundle = build_provenance_bundle(store, None)  # type: ignore[arg-type]
-        assert bundle.source_kind == "none"
-        assert bundle.publisher_trust == "unknown"
+    def test_none_publisher_returns_empty_bundle(self, native_approval_reuse_runtime: Path) -> None:
+        bundle = _provenance(native_approval_reuse_runtime, [_HOL_REGISTRY_ADVISORY_CLEAN], None)
+        assert bundle["source_kind"] == "none"
+        assert bundle["publisher_trust"] == "unknown"
 
 
 class TestRegistryBrokerSkillsRemediationRequired:
     """Remediation scenario: critical advisory → flagged trust → severity≥9 verdict."""
 
-    def _provenance(self) -> ProvenanceBundle:
-        store = _FakeStore([_HOL_REGISTRY_ADVISORY_CRITICAL])
-        return build_provenance_bundle(store, _HOL_REGISTRY_PUBLISHER)  # type: ignore[arg-type]
+    _advisories = (_HOL_REGISTRY_ADVISORY_CRITICAL,)
 
-    def test_source_kind_is_curated(self) -> None:
-        assert self._provenance().source_kind == "curated"
-
-    def test_publisher_trust_is_flagged(self) -> None:
-        assert self._provenance().publisher_trust == "flagged"
+    def test_provenance_is_curated_and_flagged(self, native_approval_reuse_runtime: Path) -> None:
+        provenance = _provenance(native_approval_reuse_runtime, list(self._advisories))
+        assert provenance["source_kind"] == "curated"
+        assert provenance["publisher_trust"] == "flagged"
 
     def test_verdict_severity_is_nine_or_more(self, native_approval_reuse_runtime: Path) -> None:
-        verdict = _verdict(
-            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=5, prior_incidents=0)
-        )
-        assert verdict["severity"] >= 9
+        assert _verdict(native_approval_reuse_runtime, self._advisories, 5)["severity"] >= 9
 
     def test_verdict_action_is_not_allow(self, native_approval_reuse_runtime: Path) -> None:
-        verdict = _verdict(
-            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=5, prior_incidents=0)
-        )
-        assert verdict["action"] != "allow"
+        assert _verdict(native_approval_reuse_runtime, self._advisories, 5)["action"] != "allow"
 
     def test_verdict_reasons_mention_flagged_trust(self, native_approval_reuse_runtime: Path) -> None:
-        verdict = _verdict(
-            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=0, prior_incidents=0)
-        )
+        verdict = _verdict(native_approval_reuse_runtime, self._advisories, 0)
         combined = " ".join(verdict["reasons"]).lower()
         assert "flagged" in combined or "advisory" in combined or "trust" in combined
 
     def test_suppressible_is_false_for_flagged_publisher(self, native_approval_reuse_runtime: Path) -> None:
-        verdict = _verdict(
-            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=0, prior_incidents=0)
-        )
-        assert verdict["suppressible"] is False
+        assert _verdict(native_approval_reuse_runtime, self._advisories, 0)["suppressible"] is False

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_saved_allow_validation_reason
-from codex_plugin_scanner.guard.memory_pattern_fingerprint import build_exact_command_memory_artifact_id
 from codex_plugin_scanner.guard.models import (
     GUARD_ACTION_VALUES,
     DecisionScope,
@@ -31,6 +31,11 @@ from codex_plugin_scanner.guard.runtime.approval_reuse import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+
+def _exact_command_id(command: str) -> str:
+    return "memory:exact-command:" + hashlib.sha256(command.encode("utf-8")).hexdigest()
+
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 
@@ -933,7 +938,7 @@ def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_b
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:shell"
     command = "deploy production"
-    exact_command_id = build_exact_command_memory_artifact_id(command)
+    exact_command_id = _exact_command_id(command)
     assert exact_command_id is not None
     approval_hash = _approval_context_token(content="sha256:deploy")
     store.upsert_policy(
@@ -1162,7 +1167,7 @@ def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(
     )
     selected = lookup["decision"]
     assert selected is not None
-    memory_artifact_id = build_exact_command_memory_artifact_id(command)
+    memory_artifact_id = _exact_command_id(command)
     assert memory_artifact_id is not None
 
     store.upsert_policy(

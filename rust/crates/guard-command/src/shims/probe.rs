@@ -143,16 +143,19 @@ struct ProbeRun {
     stdout: Vec<u8>,
 }
 
-fn spawn_reader<R: Read + Send + 'static>(mut stream: R) -> mpsc::Receiver<Vec<u8>> {
+/// Reads a child pipe to EOF. `None` means the output passed the cap, so the
+/// kept prefix is not the whole stream and must not be parsed as evidence.
+fn spawn_reader<R: Read + Send + 'static>(mut stream: R) -> mpsc::Receiver<Option<Vec<u8>>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let mut kept = Vec::new();
         let _ = stream
             .by_ref()
-            .take(PROBE_OUTPUT_CAP)
+            .take(PROBE_OUTPUT_CAP + 1)
             .read_to_end(&mut kept);
         let _ = std::io::copy(&mut stream, &mut std::io::sink());
-        let _ = sender.send(kept);
+        let within_cap = u64::try_from(kept.len()).is_ok_and(|len| len <= PROBE_OUTPUT_CAP);
+        let _ = sender.send(within_cap.then_some(kept));
     });
     receiver
 }
@@ -233,13 +236,16 @@ fn run_probe(
     // `communicate()` waits for EOF on both pipes within the same timeout; a
     // descendant that keeps a pipe open past it is a timeout, and the whole
     // group is reaped so nothing lingers in the resident.
-    let drain = |receiver: &mpsc::Receiver<Vec<u8>>| {
+    let drain = |receiver: &mpsc::Receiver<Option<Vec<u8>>>| {
         receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
     };
     let (Ok(stdout), Ok(_)) = (drain(&stdout), drain(&stderr)) else {
         kill_tree(&mut child);
         return None;
     };
+    // Evidence larger than the cap cannot be read whole; report the probe as
+    // failed rather than parse a truncated object as "no evaluator ran".
+    let stdout = stdout?;
     Some(ProbeRun {
         exit_code: exit_code(status),
         stdout,
@@ -384,4 +390,31 @@ pub fn probe_package_shim_intercepts(
     result.insert("path_repair_required".into(), json!(path_repair_required));
     result.insert("tested_managers".into(), json!(tested));
     Ok(result)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn sh(script: &str) -> Option<ProbeRun> {
+        run_probe(
+            Path::new("/bin/sh"),
+            &["-c".to_owned(), script.to_owned()],
+            &std::env::temp_dir(),
+            &BTreeMap::from([("PATH".to_owned(), "/usr/bin:/bin".to_owned())]),
+            Duration::from_secs(20),
+        )
+    }
+
+    #[test]
+    fn output_within_the_cap_is_kept_whole() {
+        let run = sh("printf '{\"verdict\": {}}'").expect("probe runs");
+        assert_eq!(run.stdout, br#"{"verdict": {}}"#);
+    }
+
+    #[test]
+    fn output_past_the_cap_fails_the_probe() {
+        let script = format!("head -c {} /dev/zero", PROBE_OUTPUT_CAP + 1);
+        assert!(sh(&script).is_none());
+    }
 }

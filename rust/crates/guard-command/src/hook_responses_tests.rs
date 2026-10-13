@@ -123,3 +123,87 @@ fn edge_dispatch_routes_each_event_and_watch_posture() {
     assert!(render_edge_response("codex", "SessionStart", &allow, false).is_none());
     assert!(render_edge_response("codex", "PreToolUse", &json!("x"), false).is_none());
 }
+
+#[test]
+fn post_tool_policy_floor_warning_on_a_proven_allow_renders_no_text() {
+    let response = obj(&json!({
+        "decision": "allow",
+        "model_output_action": "allow_original",
+        "policy_action": "warn",
+        "reason_code": "native_policy_warning",
+        "notice": "none",
+    }));
+    for harness in [
+        "claude-code",
+        "codex",
+        "zcode",
+        "omp",
+        "pi",
+        "grok",
+        "cursor",
+    ] {
+        let rendered = Value::Object(post_tool(harness, &response));
+        assert_eq!(rendered["policy_action"], "warn", "{harness}");
+        let text = rendered.to_string();
+        assert!(
+            !text.contains("permissionDecisionReason"),
+            "{harness}: {text}"
+        );
+        assert!(
+            !text.contains("\"notice\":\"warning\""),
+            "{harness}: {text}"
+        );
+    }
+}
+
+#[test]
+fn bun_eval_package_permission_keeps_the_node_eval_receipt() {
+    let response = |reason_code: &str| {
+        obj(&json!({
+            "schema": "guard-pre-tool-result.v1",
+            "authority": "rust",
+            "decision": "deny",
+            "minimum_action": "sandbox-required",
+            "policy_action": "sandbox-required",
+            "reason_code": reason_code,
+            "reason": "protected",
+            "command_extensions": {
+                "binding": {"uncertainty_count": 0},
+                "evaluation_error": null,
+                "observations": [],
+                "permission_observations": [{
+                    "extension_id": "command.package.node",
+                    "permission_id": "command.package.node.permission.package-protection",
+                    "uncertainty_reasons": [],
+                }],
+            },
+        }))
+    };
+    let rendered = pre_tool(
+        "zcode",
+        &response("native_bun_eval_readonly_containment_required"),
+    );
+    assert_eq!(
+        rendered.get("required_execution_profile"),
+        Some(&json!("node-eval-readonly-v1"))
+    );
+    assert_eq!(
+        rendered.get("reason_code"),
+        Some(&json!("native_bun_eval_readonly_containment_required"))
+    );
+    // `node -e` and Python evaluation never run a package-manager image, so
+    // the permission keeps them blocked.
+    for (harness, reason) in [
+        ("zcode", "native_node_eval_readonly_containment_required"),
+        ("omp", "native_node_eval_readonly_containment_required"),
+        ("zcode", "native_python_eval_readonly_containment_required"),
+    ] {
+        let rendered = pre_tool(harness, &response(reason));
+        assert_eq!(rendered.get("required_execution_profile"), None, "{reason}");
+        assert_eq!(
+            rendered.get("policy_action"),
+            Some(&json!("block")),
+            "{reason}"
+        );
+    }
+}

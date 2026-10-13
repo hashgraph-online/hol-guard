@@ -4,7 +4,9 @@
 //! The inline-Python half walks a `ast.parse` tree in Python. Rust has no
 //! Python parser, so `inline_python_payload_runs_pytest` answers `false` only
 //! when a lexical argument proves the payload cannot reach pytest (no call,
-//! or no route that names it) and `true` otherwise. That is exact for the
+//! or no route that names it) and `true` otherwise. Every route Python
+//! recognizes is a name in code, so text inside plain string literals is
+//! not a route. That is exact for the
 //! `false` answers and stricter than Python for a payload that merely
 //! mentions one of the routes without running pytest.
 
@@ -259,6 +261,7 @@ const STRING_ROUTE_WORDS: &[&str] = &[
     "system",
     "popen",
     "call",
+    "check_call",
     "check_output",
     "run",
     "eval",
@@ -297,13 +300,87 @@ pub(crate) fn inline_python_payload_runs_pytest(payload: &str, depth: usize) -> 
     if !normalized.contains('(') {
         return false;
     }
-    normalized.contains("pytest")
-        || normalized.contains("py.test")
-        || normalized.contains('\\')
-        || has_adjacent_quotes(&normalized)
-        || STRING_ROUTE_WORDS
-            .iter()
-            .any(|word| normalized.contains(word))
+    let stripped = code_outside_plain_literals(&folded);
+    let code: String = match &stripped {
+        Some(code) => code.nfkc().collect(),
+        None => normalized.clone(),
+    };
+    // A triple-quoted delimiter is one literal. Adjacent quotes and
+    // backslashes fail closed only when that split is uncertain.
+    let uncertain = stripped.is_none();
+    code.contains("pytest")
+        || code.contains("py.test")
+        || (uncertain && (normalized.contains('\\') || has_adjacent_quotes(&normalized)))
+        || STRING_ROUTE_WORDS.iter().any(|word| code.contains(word))
+}
+
+fn is_line_end(character: char) -> bool {
+    character == '\n' || character == '\r'
+}
+
+/// `payload` with the contents of its plain string literals removed, so only
+/// code and comments remain. `None` when the split is not certain: an f- or
+/// t-string (its fields are code), any backslash, an unterminated literal,
+/// or another literal after only whitespace (implicit concatenation).
+/// Python's tokenizer only opens strings on ASCII quotes, so this runs
+/// before NFKC folding, which could otherwise mint new quotes.
+fn code_outside_plain_literals(payload: &str) -> Option<String> {
+    if payload.contains('\\') {
+        return None;
+    }
+    let chars: Vec<char> = payload.chars().collect();
+    let mut code = String::new();
+    let mut index = 0;
+    while index < chars.len() {
+        let character = chars[index];
+        if character == '#' {
+            while index < chars.len() && !is_line_end(chars[index]) {
+                code.push(chars[index]);
+                index += 1;
+            }
+            continue;
+        }
+        if character != '\'' && character != '"' {
+            code.push(character);
+            index += 1;
+            continue;
+        }
+        let prefix_has_fields = code
+            .chars()
+            .rev()
+            .take_while(|letter| letter.is_alphanumeric() || *letter == '_')
+            .any(|letter| letter == 'f' || letter == 't');
+        if prefix_has_fields {
+            return None;
+        }
+        let quoted_at = |at: usize| chars.get(at) == Some(&character);
+        let triple = quoted_at(index + 1) && quoted_at(index + 2);
+        let quote_len = if triple { 3 } else { 1 };
+        let mut cursor = index + quote_len;
+        loop {
+            let current = *chars.get(cursor)?;
+            if !triple && is_line_end(current) {
+                return None;
+            }
+            if current == character && (!triple || (quoted_at(cursor + 1) && quoted_at(cursor + 2)))
+            {
+                break;
+            }
+            cursor += 1;
+        }
+        code.push_str("\"\"");
+        index = cursor + quote_len;
+        let mut look = index;
+        while look < chars.len() && chars[look].is_whitespace() {
+            look += 1;
+        }
+        // Implicit concatenation can assemble a route from pieces this
+        // splitter would otherwise delete.
+        if matches!(chars.get(look), Some('\'' | '"')) {
+            return None;
+        }
+    }
+    Some(code)
 }
 
 #[cfg(test)]
@@ -318,6 +395,47 @@ mod tests {
             "import pytest; pytest.main()",
             0
         ));
+    }
+
+    #[test]
+    fn plain_string_literals_are_not_routes() {
+        assert!(!inline_python_payload_runs_pytest(
+            r#"print("pytest.main()")"#,
+            0
+        ));
+        assert!(!inline_python_payload_runs_pytest(
+            "print('''run\nsystem''', b'exec')",
+            0
+        ));
+        assert!(!inline_python_payload_runs_pytest(
+            "print('run system', b'exec')",
+            0
+        ));
+        // A quote inside a comment does not open a string.
+        assert!(inline_python_payload_runs_pytest(
+            "# it's\nimport pytest; pytest.main()",
+            0
+        ));
+        // Routes in code still count with the target inside a literal.
+        assert!(inline_python_payload_runs_pytest(
+            "import subprocess; subprocess.check_call('pytest')",
+            0
+        ));
+        assert!(inline_python_payload_runs_pytest(
+            "import os; os.system('pytest')",
+            0
+        ));
+        assert!(inline_python_payload_runs_pytest(
+            "__import__('pytest').main()",
+            0
+        ));
+        // Uncertain splits keep the full text.
+        assert!(inline_python_payload_runs_pytest(
+            r#"print(f"{__import__('pytest').main()}")"#,
+            0
+        ));
+        assert!(inline_python_payload_runs_pytest("print('pytest", 0));
+        assert!(inline_python_payload_runs_pytest(r"print('pyt\x65st')", 0));
     }
 
     #[test]

@@ -34,9 +34,9 @@ from typing import TYPE_CHECKING, Protocol, cast, final
 from ..cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
 )
-from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
@@ -53,6 +53,7 @@ from .hook_worker_readiness import prepare_workspace_policy
 if TYPE_CHECKING:
     from ..config import GuardConfig
     from ..store import GuardStore
+    from .hook_direct_evidence_drain import DirectHookEvidenceDrain
 
 
 class CommandActivityWriter(Protocol):
@@ -75,12 +76,17 @@ _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0
 # Session setup uses this bounded window before any timed runtime hook starts.
 WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS = _NATIVE_POLICY_READY_TIMEOUT_SECONDS
+# The publisher retries these on its own: another writer re-committed the
+# command-control authority, or a late renewal let the snapshot expire. A hook
+# waits for that fresh ACK within its deadline instead of failing at once.
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {
         "native_policy_snapshot_resident_changed",
         "native_resident_restart_budget_busy",
         "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
         "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
     }
 )
 
@@ -94,6 +100,7 @@ class HookWorker(HookWorkerNativeMixin):
         *,
         store: GuardStore,
         workspace: Path | None = None,
+        home_dir: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
@@ -117,9 +124,14 @@ class HookWorker(HookWorkerNativeMixin):
 
         _ = list_adapters()
         self._owns_policy_snapshot_publisher = publish_native_policy
+        self._direct_evidence_drain: DirectHookEvidenceDrain | None = None
         if self._owns_policy_snapshot_publisher and start_native_policy:
+            bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
+            if home_dir is not None and callable(bind_daemon_home):
+                bind_daemon_home(home_dir)
             if workspace is not None:
                 self.policy_snapshot_publisher.register_workspace(workspace)
+            self._start_direct_evidence_drain()
             self.policy_snapshot_publisher.start()
         if wait_for_native_policy and start_native_policy:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
@@ -181,9 +193,33 @@ class HookWorker(HookWorkerNativeMixin):
 
         return self.close_contained(deadline_monotonic=deadline_monotonic)
 
+    def _start_direct_evidence_drain(self) -> None:
+        # Direct answers are bound only while their evidence has a writer.
+        enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
+        if self.activity_writer is None or not callable(enable):
+            return
+        from .hook_direct_evidence_drain import DirectHookEvidenceDrain
+
+        self._direct_evidence_drain = DirectHookEvidenceDrain(self)
+        enable(True)
+        self._direct_evidence_drain.start()
+
+    def _stop_direct_evidence_drain(self) -> None:
+        drain = self._direct_evidence_drain
+        if drain is None:
+            return
+        self._direct_evidence_drain = None
+        # Close the lane first, then collect what the resident already queued.
+        enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
+        if callable(enable):
+            with suppress(Exception):
+                enable(False)
+        drain.stop()
+
     def close_contained(self, *, deadline_monotonic: float | None = None) -> bool:
         """Confirm this worker's publisher has stopped before releasing ownership."""
 
+        self._stop_direct_evidence_drain()
         if self._owns_policy_snapshot_publisher:
             close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
             if callable(close_contained):
@@ -249,6 +285,12 @@ class HookWorker(HookWorkerNativeMixin):
             from .claude_permission_request import claude_permission_request_response
 
             return claude_permission_request_response(self.store, payload)
+        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "codex":
+            # Codex asks this only for an escalation of a call its PreToolUse
+            # hook, with the same matcher, already sent to Guard. A deny here
+            # would refuse every approval Codex asks for, so the decision
+            # stays with Codex's own approval prompt.
+            return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
         # Send even unknown or malformed event labels to Rust. The edge
         # returns no semantic result for unsupported events, which this
         # method turns into a deterministic deny/fail-safe response.

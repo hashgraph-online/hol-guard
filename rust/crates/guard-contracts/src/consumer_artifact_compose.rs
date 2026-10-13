@@ -39,6 +39,15 @@ pub enum ConsumerArtifactComposeQueryV1 {
     CurrentAction(Box<ConsumerCurrentActionQueryV1>),
     /// Compose saved/claimed reuse, override and runtime authority.
     RuntimeDecision(Box<ConsumerRuntimeDecisionQueryV1>),
+    /// Compose and build its canonical decision in one resident request.
+    RuntimeAuthoritative(Box<ConsumerRuntimeAuthoritativeQueryV1>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ConsumerRuntimeAuthoritativeQueryV1 {
+    pub runtime: ConsumerRuntimeDecisionQueryV1,
+    pub signals: Value,
 }
 
 /// One structured risk signal of the scored artifact.

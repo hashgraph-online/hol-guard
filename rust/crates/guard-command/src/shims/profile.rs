@@ -285,7 +285,12 @@ fn upsert_managed_profile_block(
 pub fn ensure_package_shim_path_in_shell_profile(context: &ShimContext) -> ShimResult<Value> {
     let facts = &context.facts;
     let shim_dir = context.shim_dir();
-    if facts.windows || is_transient_path(facts, &shim_dir) {
+    // Honor the caller's `_is_transient_path` judgment when it sent one.
+    // Vector runs and any request that omits the bit still use the resident check.
+    let transient = facts
+        .shim_dir_transient
+        .unwrap_or_else(|| is_transient_path(facts, &shim_dir));
+    if facts.windows || transient {
         return Ok(json!({
             "changed": false,
             "profile_path": null,
@@ -378,4 +383,89 @@ pub fn remove_guard_profile_blocks(context: &ShimContext) -> ShimResult<Value> {
         "removed_paths": removed_paths,
         "markers_removed": markers,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::super::{ShimContext, ShimFacts};
+    use super::{ensure_package_shim_path_in_shell_profile, is_transient_path};
+
+    fn facts(shim_dir_transient: Option<bool>) -> ShimFacts {
+        ShimFacts {
+            environ: BTreeMap::from([
+                ("SHELL".to_owned(), "/bin/zsh".to_owned()),
+                ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
+            ]),
+            home: "/Users/home".to_owned(),
+            cwd: "/Users/work".to_owned(),
+            executable: "/usr/bin/python3".to_owned(),
+            frozen: false,
+            frozen_cli: String::new(),
+            trusted_frozen_cli_paths: Vec::new(),
+            python_version: (3, 12),
+            import_root: "/Users/src".to_owned(),
+            argv0: None,
+            windows: false,
+            sqlite_connect_timeout_seconds: 30.0,
+            now: "2026-01-01T00:00:00+00:00".to_owned(),
+            shim_dir_transient,
+        }
+    }
+
+    fn context(guard_home: &str, home_dir: &str, shim_dir_transient: Option<bool>) -> ShimContext {
+        ShimContext::new(guard_home, Some(home_dir), None, facts(shim_dir_transient))
+    }
+
+    #[test]
+    fn caller_transient_bit_governs_profile_writes_without_changing_the_path_check() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!("hol-guard-shim-profile-{stamp}"));
+        let profile = home.join(".zshrc");
+        let transient_home = format!("/tmp/hol-guard-shim-profile-{stamp}");
+        let durable_home = format!("/Users/hol-guard-shim-profile-{stamp}");
+        fs::create_dir_all(&home).expect("home");
+
+        let transient_context = context(&transient_home, home.to_str().expect("utf8"), None);
+        let shim_dir = transient_context.shim_dir();
+        assert!(is_transient_path(&transient_context.facts, &shim_dir));
+
+        let refused =
+            ensure_package_shim_path_in_shell_profile(&transient_context).expect("refuse");
+        assert_eq!(refused["changed"], false);
+        assert_eq!(refused["manual_path_required"], true);
+        assert!(!profile.exists());
+
+        let allowed = ensure_package_shim_path_in_shell_profile(&context(
+            &transient_home,
+            home.to_str().expect("utf8"),
+            Some(false),
+        ))
+        .expect("allow");
+        assert_eq!(allowed["changed"], true);
+        let written = fs::read_to_string(&profile).expect("profile");
+        assert!(written.contains(&shim_dir));
+
+        fs::remove_file(&profile).expect("cleanup profile");
+        let caller_refused = ensure_package_shim_path_in_shell_profile(&context(
+            &durable_home,
+            home.to_str().expect("utf8"),
+            Some(true),
+        ))
+        .expect("caller refuse");
+        assert_eq!(caller_refused["changed"], false);
+        assert_eq!(caller_refused["manual_path_required"], true);
+        assert!(!is_transient_path(
+            &facts(Some(true)),
+            &format!("{durable_home}/package-shims/bin")
+        ));
+        assert!(!profile.exists());
+        fs::remove_dir_all(&home).expect("cleanup home");
+    }
 }

@@ -178,19 +178,26 @@ def snapshot_bytes_v3(snapshot: Mapping[str, object]) -> bytes:
     return encoded
 
 
-def _policy_snapshot_push_bytes_v3(snapshot: Mapping[str, object], *, deadline_budget_ms: int | None = None) -> bytes:
+def _policy_snapshot_push_bytes_v3(
+    snapshot: Mapping[str, object],
+    *,
+    deadline_budget_ms: int | None = None,
+    direct_lane: Mapping[str, object] | None = None,
+) -> bytes:
     """Build the strict resident push envelope; the resident validates the snapshot."""
 
     _validate_json_limits_v3(snapshot)
     budget = int(_PUBLISH_TIMEOUT_SECONDS * 1_000) if deadline_budget_ms is None else deadline_budget_ms
     if type(budget) is not int or not 1 <= budget <= 9_000:
         raise NativePolicySnapshotError("native_policy_snapshot_push_invalid")
-    envelope = {
-        "operation": "policy_snapshot_push",
-        "deadline_budget_ms": budget,
-        "request": {"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": snapshot},
-    }
+    request: dict[str, object] = {"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": snapshot}
+    if direct_lane is not None:
+        request["direct_lane"] = direct_lane
+    envelope = {"operation": "policy_snapshot_push", "deadline_budget_ms": budget, "request": request}
     encoded = _canonical_json_bytes_v3(envelope)
     if len(encoded) > POLICY_SNAPSHOT_MAX_BYTES:
+        if direct_lane is not None:
+            # The binding is optional; never let it cost the publication.
+            return _policy_snapshot_push_bytes_v3(snapshot, deadline_budget_ms=budget)
         raise NativePolicySnapshotError("native_policy_snapshot_too_large")
     return encoded

@@ -27,6 +27,35 @@ def test_invalid_or_missing_timings_are_not_zero(value):
     assert result["p99_ms"] is None
 
 
+@pytest.mark.parametrize(
+    ("row", "code"),
+    [
+        ({"input_sha256": "0" * 64}, "input_missing_or_oversized"),
+        ({"input_json": "{}", "input_sha256": "0" * 64}, "input_digest_mismatch"),
+        ({"input_json": "null"}, "input_not_object"),
+    ],
+)
+def test_unverifiable_input_is_a_failed_attempt_not_a_lost_case(row, code):
+    import hashlib
+
+    if "input_json" in row and code != "input_digest_mismatch":
+        row["input_sha256"] = hashlib.sha256(row["input_json"].encode()).hexdigest()
+    good = {"event": "PreToolUse", "input_json": "{}", "elapsed_ms": 2, "http_status": 200}
+    good["input_sha256"] = hashlib.sha256(b"{}").hexdigest()
+    bad = {"event": "PreToolUse", "tool": "eval", "elapsed_ms": 3, "http_status": 200, **row}
+    exported = public_observations([good, bad], {})
+    assert exported[0]["input"] == {}
+    assert exported[1] == {
+        "event": "PreToolUse",
+        "tool": "eval",
+        "elapsed_ms": 3,
+        "http_status": 200,
+        "observer_error": True,
+        "observer_error_code": code,
+    }
+    assert summarize_hook_latency(exported)["failed_attempts"] == 1
+
+
 def test_transport_failure_survives_public_export():
     row = {"transport_error": True, "elapsed_ms": 1000}
     assert public_observations([row], {}) == [row]

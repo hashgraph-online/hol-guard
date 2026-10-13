@@ -28,6 +28,7 @@ pub(super) struct OmpContext<'a> {
     pub(super) deadline: Option<Instant>,
     pub(super) path: super::super::PathContext<'a>,
     pub(super) execution_environment: Option<&'a guard_contracts::GuardExecutionEnvironmentV1>,
+    pub(super) yield_report_verified: bool,
 }
 
 /// The acknowledgement of a delegated task adds no executable operation.
@@ -36,15 +37,32 @@ pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
     let Ok(signals) = super::extract::extract_generic_signals(payload) else {
         return false;
     };
-    matches!(
-        signals.tool_name.as_deref(),
-        Some("task" | "wait" | "todo" | "todo_write")
-    ) && !signals.sensitive_target
+    let Some(input) = strict_tool_input(payload) else {
+        return false;
+    };
+    let known_tool = match signals.tool_name.as_deref() {
+        Some("task" | "wait" | "todo" | "todo_write") => true,
+        Some("learn") => learn_input(input),
+        _ => false,
+    };
+    known_tool
+        && !signals.sensitive_target
         && signals.command.is_none()
         && !signals.package_present
         && signals.url_values.is_empty()
         && signals.path_values.is_empty()
-        && strict_tool_input(payload).is_some()
+}
+
+/// `learn` stores one memory note and returns the store's acknowledgement.
+/// Its PreToolUse stays an unknown-tool review, so under enforce the call has
+/// run only after a person approved it. Without this, that approved call's
+/// result is withheld with nothing left to approve.
+fn learn_input(input: &Map<String, Value>) -> bool {
+    input.len() == 1
+        && input
+            .get("memory")
+            .and_then(Value::as_str)
+            .is_some_and(|memory| !memory.trim().is_empty())
 }
 
 /// `Some` only when a bounded proof applies; `None` keeps the normal path.
@@ -68,7 +86,9 @@ pub(super) fn evaluate(
     }
     match tool {
         "yield" => {
-            yield_report::signal_payload(payload)?;
+            if !context.yield_report_verified {
+                return None;
+            }
             Some({
                 let readable = yield_report::references_are_readable(&signals.path_values, context);
                 generic_result(

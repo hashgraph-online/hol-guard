@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
@@ -207,9 +209,6 @@ class TestBrowserScopeDecisionNarrowing:
 
     def test_exact_command_rule_does_not_create_family_decision(self) -> None:
         """An exact command rule must not broaden into all tool actions."""
-        from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
-            build_exact_shell_command_memory_artifact_id,
-        )
         from codex_plugin_scanner.guard.runtime.runner import (
             _build_policy_bundle_decisions,
         )
@@ -224,7 +223,10 @@ class TestBrowserScopeDecisionNarrowing:
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert len(decisions) == 1
         assert decisions[0].scope == "artifact"
-        assert decisions[0].artifact_id == build_exact_shell_command_memory_artifact_id(command)
+        assert (
+            decisions[0].artifact_id
+            == "memory:exact-shell-command:" + hashlib.sha256(command.encode("utf-8")).hexdigest()
+        )
 
     def test_exact_artifact_rule_does_not_create_family_decision(self) -> None:
         """An exact artifact grant stays exact even when a family is advertised."""

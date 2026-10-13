@@ -16,7 +16,7 @@ from typing import Any
 from .catalog import Scenario
 from .interruptions import case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
-from .proofs import BLOCK_REASONS, required_checks
+from .proofs import BLOCK_REASONS, block_reasons, required_checks
 
 _PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
@@ -283,7 +283,7 @@ def _targets_scenario(case: dict[str, Any], scenario: Scenario, decision: dict[s
 def _block_outcome(
     scenario: Scenario, case: dict[str, Any], decisions: list[dict[str, Any]], calls: list[Any]
 ) -> tuple[str, str]:
-    expected = {_EXTENSION_REASON} if scenario.oracle == "blocked-extension" else BLOCK_REASONS
+    expected = {_EXTENSION_REASON} if scenario.oracle == "blocked-extension" else block_reasons(scenario)
     matching = [d for d in decisions if _targets_scenario(case, scenario, d)]
     if not matching:
         if not calls:

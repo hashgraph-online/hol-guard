@@ -3,6 +3,7 @@
 //! `prepare_*_hook_payload` functions that map host stdin JSON onto the shared
 //! Guard hook shape.
 
+pub use crate::hook_adapter_prepare_cursor::cursor_client_event;
 use crate::hook_adapter_prepare_cursor::prepare_cursor;
 use crate::hook_adapter_pytext::{py_lower, py_strip};
 use crate::hook_adapter_value::{OMap, OValue, PyJsonError};

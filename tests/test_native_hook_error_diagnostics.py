@@ -10,9 +10,13 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_hook_edge
-from codex_plugin_scanner.guard.native_approval_errors import NATIVE_COMMAND_CONTROL_ERROR_CODES
+from codex_plugin_scanner.guard.native_approval_errors import (
+    NATIVE_COMMAND_CONTROL_ERROR_CODES,
+    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+)
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, _native_error_code
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+from codex_plugin_scanner.guard.native_runtime_resilience import native_runtime_health_snapshot
 
 
 @pytest.mark.parametrize("retryable", [False, True])
@@ -99,3 +103,57 @@ def test_raw_hook_bridge_records_control_fence_rejection_without_retry(
 def test_unknown_or_malformed_native_errors_are_not_exposed(payload: object) -> None:
     assert _native_error_code(payload) is None
     assert _decode_edge(payload) is None
+
+
+def test_a_lifecycle_event_the_edge_refuses_leaves_the_circuit_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    status = SimpleNamespace(
+        mode="auto",
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=tmp_path / "runtime", sha256="b" * 64),
+        capabilities=SimpleNamespace(
+            features=(
+                "hook-envelope-v2",
+                "hook-harness-response-v1",
+                "native-resident-client-v1",
+                "pre-tool-generic-authority-v1",
+                "git-execution-context-v1",
+            )
+        ),
+    )
+
+    def request(**_kwargs: object) -> bytes:
+        return json.dumps({"error": "native_hook_event_unsupported", "retryable": False}).encode()
+
+    monkeypatch.setattr(native_hook_edge, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(native_hook_edge, "native_resident_client_request", request)
+    for _ in range(5):
+        result = native_hook_edge.review_raw_hook_native(
+            payload={"hook_event_name": "Stop"},
+            harness="claude-code",
+            event="Stop",
+            guard_home=tmp_path,
+            home_dir=tmp_path,
+            cwd=tmp_path,
+            source_ref_external_allowed=False,
+            observe_mode=False,
+            deadline=12345.0,
+            policy_snapshot={"generation": 7},
+        )
+        assert result is None
+    health = native_runtime_health_snapshot(status.identity.sha256, tmp_path)
+    assert health.circuit_open is False
+    assert health.consecutive_failures == 0
+    assert health.resident_failures == 0
+
+
+def test_python_lifecycle_error_codes_are_rust_codes() -> None:
+    source = (
+        Path(__file__).resolve().parents[1] / "rust/crates/guard-contracts/src/approval_contracts_lifecycle_errors.rs"
+    ).read_text(encoding="utf-8")
+    declaration = source.split("pub const NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES:", 1)[1].split("];", 1)[0]
+    rust_codes = frozenset(re.findall(r'"([^\"]+)"', declaration))
+    assert frozenset(NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES) <= rust_codes
+    assert "native_hook_event_unsupported" in NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES

@@ -811,7 +811,9 @@ def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: 
     }
 
 
-def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Path) -> None:
+def test_explicit_permission_allow_cannot_override_explicit_policy(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     command = "gh pr merge 5115 --repo example/project --squash --auto"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
     layer = _github_permission_layer("command.github.permission.merge-remote", ControlState.ENABLED)
@@ -838,13 +840,19 @@ def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Pat
 
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}), artifact, "codex"
+            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "block"
     )
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}), artifact, "codex"
+            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "allow"
     )

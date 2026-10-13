@@ -24,7 +24,12 @@ def test_zcode_dispatch_cleans_validated_requests_even_when_execution_fails(tmp_
 
     def authorize(**kwargs):
         assert kwargs["harness"] == "zcode"
-        assert kwargs["payload"] == {**original, "guard_containment_receipt_only": True}
+        stamped = kwargs["payload"]
+        assert stamped["guard_execution_environment"]["environment_digest"]
+        assert {key: value for key, value in stamped.items() if key != "guard_execution_environment"} == {
+            **original,
+            "guard_containment_receipt_only": True,
+        }
         return receipt
 
     monkeypatch.setattr(authority, "try_native_hook_authority", authorize)

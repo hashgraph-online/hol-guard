@@ -87,6 +87,16 @@ def _recipes() -> dict[str, dict[str, object]]:
             "catalog": None,
             "provider_hash": _PROVIDER_HASH,
         },
+        "catalog_named_definition": {
+            **base,
+            "keep_name": True,
+            "catalog": {"name": "read_file", "inputSchema": _SCHEMA, "annotations": {"readOnlyHint": True}},
+        },
+        "catalog_other_named_definition": {
+            **base,
+            "keep_name": True,
+            "catalog": {"name": "other", "inputSchema": _SCHEMA},
+        },
         "catalog_without_input_schema": {**base, "catalog": {"name": "read_file", "description": "x"}},
         "catalog_snake_schema": {
             **base,
@@ -129,6 +139,7 @@ def _recipes() -> dict[str, dict[str, object]]:
             },
         },
         "no_workspace_with_config": {**base, "workspace": None},
+        "build_only_without_hash": {**base, "build_only": True},
         "invalid_provider_hash": {**base, "provider_hash": "XYZ", "expect_error": "provider_hash_invalid"},
     }
 
@@ -153,7 +164,8 @@ def _build_python(recipe: dict[str, object]):
     description = definition.get("description")
     kwargs["tool_schema"] = definition.get("inputSchema", definition.get("input_schema"))
     kwargs["tool_description"] = description if isinstance(description, str) else None
-    kwargs["tool_definition"] = {key: value for key, value in definition.items() if key != "name"}
+    keep_name = bool(recipe.get("keep_name"))
+    kwargs["tool_definition"] = {key: value for key, value in definition.items() if keep_name or key != "name"}
     artifact = build_tool_call_artifact(**kwargs)  # type: ignore[arg-type]
     if entry is not None:
         from dataclasses import replace
@@ -222,7 +234,10 @@ def _request(recipe: dict[str, object], wire_config: dict[str, object] | None, e
         explicit = recipe["explicit"]
         tool = {"kind": "explicit", "schema": explicit["schema"], "description": explicit["description"]}  # type: ignore[index]
     else:
-        tool = {"kind": "catalog", "entry": recipe["catalog"]}
+        catalog = recipe["catalog"]
+        if isinstance(catalog, dict) and not recipe.get("keep_name"):
+            catalog = {key: value for key, value in catalog.items() if key != "name"}
+        tool = {"kind": "catalog", "entry": catalog}
     build = {
         **_COMMON,
         "tool_name": recipe["tool_name"],
@@ -236,7 +251,9 @@ def _request(recipe: dict[str, object], wire_config: dict[str, object] | None, e
     return {
         "build": build,
         "artifact": None,
-        "hash": {
+        "hash": None
+        if recipe.get("build_only")
+        else {
             "arguments": recipe["arguments"],
             "config": wire_config,
             "workspace": workspace,
@@ -255,7 +272,11 @@ def _record(recipe: dict[str, object], home: Path) -> dict[str, object]:
         return {"request": request, "error": "native_mcp_tool_call_identity_provider_hash_invalid"}
     artifact = _build_python(recipe)
     workspace = recipe.get("workspace", _WORKSPACE)
-    artifact_hash = build_tool_call_hash(artifact, recipe["arguments"], workspace=workspace, config=config)  # type: ignore[arg-type]
+    artifact_hash = (
+        None
+        if recipe.get("build_only")
+        else build_tool_call_hash(artifact, recipe["arguments"], workspace=workspace, config=config)  # type: ignore[arg-type]
+    )
     return {
         "request": request,
         "expected": {
@@ -300,3 +321,21 @@ def test_python_builders_match_recorded_vectors(native_context_digest: Path) -> 
     if os.environ.get("HOL_GUARD_RECORD_VECTORS") == "1":
         _FIXTURE.write_text(json.dumps({"vectors": recorded}, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     assert json.loads(_FIXTURE.read_text(encoding="utf-8"))["vectors"] == json.loads(json.dumps(recorded))
+
+
+def test_oversized_request_error_is_reported_with_its_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_mcp_tool_call_identity as identity
+
+    def refuse(**kwargs: object) -> dict[str, object]:
+        return {
+            "schema": identity._RESULT_SCHEMA,
+            "request_id": kwargs["request"]["request_id"],  # type: ignore[index]
+            "request_sha256": "",
+            "status": "error",
+            "code": "native_mcp_tool_call_identity_request_too_large",
+        }
+
+    monkeypatch.setattr(identity, "_resident_request", refuse)
+    monkeypatch.setattr(identity, "_resolve_digest_home", lambda _home: Path("/nonexistent"))
+    with pytest.raises(ValueError, match="request_too_large"):
+        identity.native_tool_call_identity(build={"harness": "codex"})

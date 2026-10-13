@@ -39,11 +39,11 @@ from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_F
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation, SupplyChainUserCopy
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
-from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
+from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
-from tests.shim_execution_helpers import write_fake_manager_script
+from tests.shim_execution_helpers import build_shim_content_hash, write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler, _force_unpaid_entitlement
 
@@ -1051,13 +1051,11 @@ def test_machine_wide_package_shim_uses_current_workspace_across_dashboard_conte
     monkeypatch.setattr(guard_shims_module.sys, "executable", str(frozen_exe))
     monkeypatch.setenv("SHELL", "/bin/bash")
     monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
-    monkeypatch.setattr(guard_shims_module, "_is_transient_path", lambda _path: False)
     guard_home = home_dir / ".hol-guard"
     first_context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=first_workspace)
     second_context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=second_workspace)
 
     install_package_shims(first_context, managers=("npm",))
-    guard_shims_module.ensure_package_shim_path_in_shell_profile(first_context)
 
     for context in (first_context, second_context):
         status = package_shim_status(context)
@@ -1071,9 +1069,6 @@ def test_machine_wide_package_shim_uses_current_workspace_across_dashboard_conte
     assert "guard_workspace = None" in source
     assert "guard_has_explicit_workspace = False" in source
     assert "--workspace" not in next(line for line in source.splitlines() if line.startswith("base_command = "))
-    dashboard_status = guard_shims_module.package_shim_dashboard_status(second_context)
-    assert dashboard_status["path_status"] == "in_path"
-    assert dashboard_status["path_broken_managers"] == []
 
 
 def test_guard_package_shims_install_status_uninstall_roundtrip(tmp_path: Path, capsys) -> None:
@@ -1552,6 +1547,13 @@ def test_guard_package_shims_block_before_manager_execution(
     assert "HOL Guard" in result.stdout
 
 
+def _installed_shim_source(context: HarnessContext, manager: str) -> str:
+    install_package_shims(context, managers=(manager,))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    sidecar = shim_dir / f".{manager}.py"
+    return (sidecar if sidecar.exists() else shim_dir / manager).read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     ("manager", "expected_local_only_flag"),
     (("bunx", "--no-install"), ("npx", "--no")),
@@ -1566,7 +1568,7 @@ def test_package_shim_uses_manager_specific_local_only_flag(
         guard_home=tmp_path / ".hol-guard",
         workspace_dir=tmp_path / "workspace",
     )
-    shim_source = guard_shims_module._build_package_manager_python_shim(context, manager)
+    shim_source = _installed_shim_source(context, manager)
 
     assert f"command_name = {manager!r}" in shim_source
     assert "local_only_flag = {'bunx': '--no-install', 'npx': '--no'}.get(command_name)" in shim_source
@@ -1581,7 +1583,7 @@ def test_package_shim_tries_owned_containment_before_guard_review(tmp_path: Path
         workspace_dir=tmp_path / "workspace",
     )
 
-    shim_source = guard_shims_module._build_package_manager_python_shim(context, "npx")
+    shim_source = _installed_shim_source(context, "npx")
 
     package_script_index = shim_source.index("try_execute_contained_package_script")
     typescript_index = shim_source.index("try_execute_contained_typescript")

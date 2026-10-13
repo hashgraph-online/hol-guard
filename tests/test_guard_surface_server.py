@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_h
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
+from codex_plugin_scanner.guard.directory_path_authority import validated_owned_temporary_workspace
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_VERSION,
@@ -103,6 +104,10 @@ def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
     _prefix, encoded_payload, _signature = token.split(".")
     padding = "=" * (-len(encoded_payload) % 4)
     return json.loads(base64.urlsafe_b64decode(f"{encoded_payload}{padding}").decode("utf-8"))
+
+
+def _owned_temporary_workspace_accepted(candidate: str) -> bool:
+    return validated_owned_temporary_workspace(candidate) is not None
 
 
 class TestGuardSurfaceServer:
@@ -1669,7 +1674,6 @@ class TestGuardSurfaceServer:
 
     @pytest.mark.skipif(os.name != "posix", reason="POSIX /tmp ownership contract")
     def test_guard_daemon_accepts_owned_posix_tmp_workspace(self) -> None:
-        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
 
         with daemon_server_module.tempfile.TemporaryDirectory(
             prefix="hol-guard-owned-workspace-",
@@ -1677,14 +1681,13 @@ class TestGuardSurfaceServer:
         ) as workspace:
             resolved_workspace = os.path.realpath(workspace)
             assert resolved_workspace.startswith(f"{os.path.realpath('/tmp')}{os.sep}")
-            assert handler._is_owned_temporary_hook_workspace(resolved_workspace)
+            assert _owned_temporary_workspace_accepted(resolved_workspace)
 
     def test_guard_daemon_accepts_acl_scoped_primary_temp_without_getuid(
         self,
         tmp_path,
         monkeypatch,
     ) -> None:
-        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
         monkeypatch.delattr(daemon_server_module.os, "getuid", raising=False)
         current_home = tmp_path / "home"
         user_temp = current_home / "temp"
@@ -1693,20 +1696,19 @@ class TestGuardSurfaceServer:
         monkeypatch.setattr(daemon_server_module.Path, "home", lambda: current_home)
         monkeypatch.setattr(daemon_server_module.tempfile, "gettempdir", lambda: str(user_temp))
 
-        assert handler._is_owned_temporary_hook_workspace(str(workspace))
+        assert _owned_temporary_workspace_accepted(str(workspace))
         monkeypatch.setattr(daemon_server_module.tempfile, "gettempdir", lambda: str(tmp_path))
-        assert not handler._is_owned_temporary_hook_workspace(str(tmp_path))
+        assert not _owned_temporary_workspace_accepted(str(tmp_path))
 
     @pytest.mark.skipif(sys.platform != "darwin", reason="Darwin user temp root contract")
     def test_guard_daemon_accepts_darwin_workspace_after_sanitized_restart(
         self,
         monkeypatch,
     ) -> None:
-        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
         with daemon_server_module.tempfile.TemporaryDirectory(prefix="hol-guard-owned-workspace-") as workspace:
             monkeypatch.setattr(tempfile, "gettempdir", lambda: "/tmp")
 
-            assert handler._is_owned_temporary_hook_workspace(os.path.realpath(workspace))
+            assert _owned_temporary_workspace_accepted(os.path.realpath(workspace))
 
     def test_guard_daemon_hook_queue_bytes_fail_closed_and_reports_health(
         self,
@@ -1802,6 +1804,9 @@ class TestGuardSurfaceServer:
         monkeypatch,
     ) -> None:
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
+        # This measures the worker scheduler, so keep both Pi hooks off the
+        # resident's direct lane, which answers before admission.
+        monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()

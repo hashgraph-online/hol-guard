@@ -59,6 +59,11 @@ def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
         return PolicyIntegrityVerificationResult(status="valid")
 
     monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
+    monkeypatch.setattr(
+        GuardStore,
+        "_policy_integrity_results_for_rows",
+        lambda self, rows, **_: [PolicyIntegrityVerificationResult(status="valid") for _ in rows],
+    )
 
 
 def _request(

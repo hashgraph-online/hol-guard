@@ -66,7 +66,7 @@ pub(crate) fn evaluate(request: &ApprovalQueueIdentityRequestV1) -> Result<Value
     Ok(json!({ "items": items }))
 }
 
-fn identify(item: &ApprovalQueueIdentityItemV1) -> Option<Value> {
+pub(crate) fn identify(item: &ApprovalQueueIdentityItemV1) -> Option<Value> {
     let identity_key = normalize_command_identity(item.launch_target.as_deref().unwrap_or(""));
     let action_identity = match item.action_identity.as_deref().filter(|id| !id.is_empty()) {
         Some(identity) => identity.to_owned(),

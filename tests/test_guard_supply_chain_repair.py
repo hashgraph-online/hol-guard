@@ -251,10 +251,14 @@ def test_repair_detected_package_shims_installs_detected_unprotected_manager(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.shims._detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    # Detection is the resident's which() over PATH. An npm executable there is
+    # the unprotected manager this repair installs.
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    npm = fake_bin / "npm"
+    npm.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    npm.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin))
 
     result = _repair_detected_package_shims(context)
 

@@ -1,7 +1,45 @@
 import { test, expect } from 'bun:test';
-import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
+import { authorized, convertMessages, convertTools, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
+  StreamedArguments, nativeBackend,
   requireTransportSelection, thinkingLevel, promptCacheKey, usageChunk,
   REQUEST_MODEL, THINKING_LEVELS, keepStreamAlive } from './luna_adapter';
+
+test('tool conversion preserves strictness and the original optional result schema', async () => {
+  const parameters = { type: 'object', properties: { data: { type: 'object' },
+    error: { type: 'string' } }, required: [], additionalProperties: false };
+  for (const strict of [undefined, false, true]) {
+    const [tool] = convertTools([{ type: 'function', function: { name: 'yield', parameters,
+      ...(strict === undefined ? {} : { strict }) } }]);
+    expect(tool.strict).toBe(strict ?? false);
+    expect(tool.parameters).toBe(parameters);
+    expect(tool.parameters.required).toEqual([]);
+    await expect(tool.execute()).rejects.toThrow('cannot execute tools');
+  }
+  expect(() => convertTools([{ type: 'function', function: { strict: 'false' } }])).toThrow();
+  expect(() => convertTools([{ type: 'custom' }])).toThrow();
+});
+
+test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned Responses encoder keeps non-strict fields optional', async () => {
+  const root = process.env.GUARD_GAUNTLET_SDK_ROOT!;
+  const entry = Bun.resolveSync('@oh-my-pi/pi-ai', root);
+  const { convertOpenAICodexResponsesTools } = await import(
+    new URL('./providers/openai-codex-responses.ts', `file://${entry}`).href);
+  const parameters = { type: 'object', properties: { data: { type: 'string' },
+    error: { type: 'string' } }, required: [], additionalProperties: false };
+  for (const strict of [undefined, false, true]) {
+    const tools = convertTools([{ type: 'function', function: { name: 'yield', parameters,
+      ...(strict === undefined ? {} : { strict }) } }]);
+    const [wire] = convertOpenAICodexResponsesTools(tools, {});
+    expect(wire.strict).toBe(strict ?? false);
+    if (strict) {
+      expect(wire.parameters.required).toEqual(['data', 'error']);
+      expect(wire.parameters.properties.error.anyOf).toContainEqual({ type: 'null' });
+    } else {
+      expect(wire.parameters.required).toEqual([]);
+      expect(wire.parameters.properties.error.type).toBe('string');
+    }
+  }
+});
 
 test('silent inference emits only SSE comments and releases its heartbeat timer', () => {
   const chunks: string[] = [];
@@ -200,4 +238,25 @@ test('a conversation must end with a user or tool message', () => {
   expect(() => requirePromptable(convertMessages([{ role: 'user', content: 'u' },
     { role: 'assistant', content: 'a' }]))).toThrow();
   expect(requirePromptable(convertMessages([{ role: 'user', content: 'u' }])).length).toBe(1);
+});
+
+test('only listed native backends load, each with its own efforts', () => {
+  expect(nativeBackend(undefined)).toMatchObject({ provider: 'openai-codex', id: 'gpt-6-luna', sse: true });
+  const devin = nativeBackend('devin/swe-2');
+  expect(devin).toMatchObject({ provider: 'devin', id: 'swe-2', sse: false });
+  expect(thinkingLevel('high', devin.levels)).toBe('high');
+  expect(() => thinkingLevel('max', devin.levels)).toThrow();
+  expect(() => thinkingLevel('max')).toThrow();
+  expect(() => nativeBackend('openrouter/anything')).toThrow('Unsupported native backend');
+});
+
+test('a backend without SSE bytes sends its native arguments once, or keeps a complete stream', () => {
+  const wire = new StreamedArguments();
+  const call = { type: 'toolcall_end', contentIndex: 0, toolCall: { arguments: { command: 'ls' } } };
+  expect(wire.remaining(call)).toBe('{"command":"ls"}');
+  expect(wire.remaining(call)).toBe('');
+  const streamed = new StreamedArguments();
+  streamed.streamed.set(1, '{"path":');
+  expect(() => streamed.remaining({ ...call, contentIndex: 1 })).toThrow('Incomplete native argument stream');
+  expect(() => new StreamedArguments().remaining({ contentIndex: 2, toolCall: { arguments: [] } })).toThrow();
 });

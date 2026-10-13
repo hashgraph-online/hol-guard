@@ -32,7 +32,7 @@ uv build --wheel --out-dir pure-dist
 RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
 jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
-"$source_compiler" compile < source-build.json > source-compiled.json
+"$runtime" compile < source-build.json > source-compiled.json
 python scripts/build_native_hol_guard_wheel.py \
   --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
   --runtime "$runtime" \
@@ -42,7 +42,12 @@ python scripts/build_native_hol_guard_wheel.py \
   --target "$TARGET" \
   --source-sha "$HOL_GUARD_BUILD_SHA" \
   --rule-digest "$RULE_DIGEST" \
-  --source-compiler "$source_compiler" \
   --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
   --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
-python scripts/ci/check_wheel_size.py --dist-dir native-dist
+# Gauntlet development wheels use per-crate codegen and are never published, so
+# the distribution size budgets apply only to release-profile builds.
+if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then
+  echo "HOL_GUARD_DEV_WHEEL=1: development wheel, size budgets not applied"
+else
+  python scripts/ci/check_wheel_size.py --dist-dir native-dist
+fi

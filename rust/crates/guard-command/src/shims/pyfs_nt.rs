@@ -208,6 +208,7 @@ mod tests {
             windows: true,
             sqlite_connect_timeout_seconds: 30.0,
             now: String::new(),
+            shim_dir_transient: None,
         }
     }
 

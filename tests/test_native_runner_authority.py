@@ -210,7 +210,7 @@ def test_bound_refusals_never_open_the_availability_circuit(monkeypatch: pytest.
 
     monkeypatch.setattr(module, "native_resident_client_request", refuse)
     for _ in range(5):
-        with pytest.raises(NativeRunnerAuthorityError, match="invalid"):
+        with pytest.raises(module.NativeRunnerAuthorityRefusalError, match="invalid"):
             _call(tmp_path)
     assert not native_runtime_health_snapshot("0" * 64, tmp_path).circuit_open
 
@@ -252,7 +252,7 @@ def test_oversized_request_is_refused_before_the_resident(monkeypatch: pytest.Mo
         raise AssertionError("resident must not be asked")
 
     monkeypatch.setattr(module, "native_resident_client_request", never)
-    with pytest.raises(NativeRunnerAuthorityError, match="too_large"):
+    with pytest.raises(module.NativeRunnerAuthorityRefusalError, match="too_large"):
         native_runner_authority("detector_composition", {"signals": ["x" * (5 * 1024 * 1024)]}, tmp_path)
 
 

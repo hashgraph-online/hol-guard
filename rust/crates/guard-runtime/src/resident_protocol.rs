@@ -8,13 +8,13 @@ use guard_contracts::{
     ApprovalValidateRequestV3, ApprovalValidateRequestV4, CiscoPreflightRequestV1,
     ClaimApprovalReuseDecisionsRequestV1, CodexRequestResumeRequestV1, CodexToolOutputRequestV1,
     CommandEffectBatchRequestV1, CommandEffectRequestV1, CompoundGitInspectionRequestV1,
-    ConsumerArtifactComposeRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
-    ContainedPackageScriptExecuteRequestV1, ContainedTypescriptExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1,
-    ContributedMcpDecisionRequestV1, CursorObserverProofRequestV1, DaemonHandlerRequestV1,
-    DaemonLifecycleDecisionRequestV1, DaemonRouteRequestV1, DataFlowAnalyzeRequestV1,
-    GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1, GuardHookEnvelopeV2,
-    GuardStoreRequestV1, HookAdapterRequestV1, HookArtifactComposeRequestV1,
+    ConsumerArtifactComposeRequestV1, ConsumerArtifactProjectRequestV1, ContainedExecuteRequestV1,
+    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
+    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
+    ContextDigestRequestV1, ContributedMcpDecisionRequestV1, CursorObserverProofRequestV1,
+    DaemonHandlerRequestV1, DaemonLifecycleDecisionRequestV1, DaemonRouteRequestV1,
+    DataFlowAnalyzeRequestV1, GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1,
+    GuardHookEnvelopeV2, GuardStoreRequestV1, HookAdapterRequestV1, HookArtifactComposeRequestV1,
     HookAuthorityStateRequestV1, HookDecisionRequestV1, LocalCliGrantRequestV1,
     LocalMcpGrantRequestV1, McpProxyDecisionRequestV1, McpRuntimeEvidenceRequestV1,
     McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
@@ -24,11 +24,11 @@ use guard_contracts::{
     PackageAuditProjectionRequestV1, PackageAuthorityDecideRequestV1, PackageContextBuildRequestV1,
     PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PackagePolicyResolveRequestV1,
     PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, ProtectRequestRequestV1, RequestContextRequestV1,
-    RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1,
-    ShimAdminRequestV2, SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1,
-    WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    PolicyIntegrityRowsRequestV1, PromptAnalyzeRequestV1, ProtectRequestRequestV1,
+    RequestContextRequestV1, RunnerAuthorityRequestV1, RuntimeCapabilitiesV1,
+    RuntimeDetectorRunRequestV1, ShimAdminRequestV2, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -58,6 +58,14 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "policy-snapshot-v3".into(),
         "policy-snapshot-push-v1".into(),
         "policy-snapshot-resident-generation-v1".into(),
+        "policy-snapshot-direct-lane-v1".into(),
+        crate::hook_direct::HOOK_DIRECT_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_CONTAINED_ROUTE_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_PERMISSION_NOTICE_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_SAVED_DECISION_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE.into(),
+        crate::policy_store::policy_store_direct_lane::HOOK_DIRECT_REVIEW_FACTS_FEATURE.into(),
+        crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),
         "native-approval-artifact-v3".into(),
         "native-approval-challenge-v3".into(),
         "native-approval-validation-v3".into(),
@@ -105,7 +113,15 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // not be advertised elsewhere, or callers route work the binary cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
         features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
+        // The module is #[cfg(unix)]. A runtime cfg! check still type-checks
+        // this path on Windows, where the module is not compiled.
+        #[cfg(unix)]
+        features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
     }
+    features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
         guard_command::native_command_program::packaged_program_digests();
@@ -130,6 +146,8 @@ pub(crate) enum ResidentOperationV1 {
     RichCommandModel(crate::rich_command_model_op::RichCommandModelRequest),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),
+    HookDirect(crate::hook_direct::HookDirectRequestV1),
+    HookDirectEvidenceDrain(crate::hook_direct_evidence::HookDirectEvidenceDrainRequestV1),
     ApprovalChallenge(ApprovalChallengeRequestV3),
     ApprovalValidate(ApprovalValidateRequestV3),
     ApprovalConsume(ApprovalConsumeRequestV3),
@@ -200,12 +218,14 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalProofDecide(ApprovalProofRequestV1),
     CursorObserverProof(CursorObserverProofRequestV1),
     HookAuthorityState(HookAuthorityStateRequestV1),
+    PolicyIntegrityRows(PolicyIntegrityRowsRequestV1),
     HookDecide(HookDecisionRequestV1),
     DaemonRoute(DaemonRouteRequestV1),
     DaemonHandler(DaemonHandlerRequestV1),
     HookAdapter(HookAdapterRequestV1),
     HookArtifactCompose(HookArtifactComposeRequestV1),
     ConsumerArtifactCompose(ConsumerArtifactComposeRequestV1),
+    ConsumerArtifactProject(ConsumerArtifactProjectRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
     LocalMcpGrantDecide(LocalMcpGrantRequestV1),
     McpProxyDecide(McpProxyDecisionRequestV1),
@@ -217,6 +237,8 @@ pub(crate) enum ResidentOperationV1 {
     McpToolCallIdentity(McpToolCallIdentityRequestV1),
     NativeExactAction(NativeExactActionRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
+    #[cfg(unix)]
+    CodexBindingCapture(crate::binding_capture_op::CodexBindingCaptureRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     CatalogRead(guard_command::catalog_read_model::CatalogReadRequestV1),

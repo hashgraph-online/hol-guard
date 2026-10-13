@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import config, local_supply_chain, native_execution, native_prompt
 from codex_plugin_scanner.guard.contained_workspace_write_execution import ContainedWriteOperation
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.native_shim_admin import NativeShimAdminError
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import local_mcp_stdio, runner
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
@@ -194,13 +195,22 @@ def test_approval_filter_cannot_turn_non_string_into_permission(monkeypatch):
     assert captured["approved_classes"] == ["read"]
 
 
-@pytest.mark.parametrize("native,expected", [(["npm"], ["npm"]), (["npm", None], ["fallback"]), ({}, ["fallback"])])
-def test_supported_manager_list_is_validated(monkeypatch, tmp_path, native, expected):
+def test_supported_manager_list_stays_on_the_static_contract(monkeypatch, tmp_path):
     monkeypatch.setattr(local_supply_chain, "package_shim_dashboard_status", lambda _: {})
-    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda: ("fallback",))
-    monkeypatch.setattr(native_execution, "shim_admin_native", lambda *_args, **_kwargs: native)
+    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda _guard_home=None: ("fallback",))
     result = local_supply_chain._build_package_manager_protection(SimpleNamespace(guard_home=tmp_path))
-    assert result["supported_managers"] == expected
+    assert result["supported_managers"] == ["fallback"]
+
+
+def test_package_manager_protection_degrades_when_the_resident_cannot_answer(monkeypatch, tmp_path):
+    def unavailable(_context):
+        raise NativeShimAdminError("native_shim_admin_unavailable")
+
+    monkeypatch.setattr(local_supply_chain, "package_shim_dashboard_status", unavailable)
+    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda _guard_home=None: ("npm",))
+    result = local_supply_chain._build_package_manager_protection(SimpleNamespace(guard_home=tmp_path))
+    assert result["path_status"] == "unavailable"
+    assert result["protected_managers"] == []
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_execution, native_store_policy, store_approvals
+from codex_plugin_scanner.guard import native_execution, native_runner_authority, native_store_policy, store_approvals
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_queue_identity import (
     APPROVAL_QUEUE_IDENTITY_FEATURE,
@@ -34,6 +34,16 @@ def _isolated_backfill_cache() -> Iterator[None]:
     store_approvals._QUEUE_BACKFILLED_HOMES.clear()
     yield
     store_approvals._QUEUE_BACKFILLED_HOMES.clear()
+
+
+@pytest.fixture(autouse=True)
+def _projection_on_default_carrier(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These homes hold a placeholder verifier key, so field projection uses the real carrier."""
+    monkeypatch.setattr(
+        native_runner_authority,
+        "_projection_carrier_home",
+        lambda _requested: native_runner_authority._resolve_digest_home(None),
+    )
 
 
 def _home(tmp_path: Path) -> Path:
@@ -421,3 +431,29 @@ def test_backfill_without_a_home_fills_counters_without_calling_the_resident(
     assert row["action_identity"] is None
     assert row["last_seen_at"] == row["created_at"]
     assert calls == []
+
+
+def test_consistent_pending_requests_chunks_large_groups(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import store_approval_writes
+
+    connection = sqlite3.connect(":memory:")
+    connection.execute(
+        "create table approval_requests (request_id text, policy_action text,"
+        " decision_v2_json text, action_envelope_json text)"
+    )
+    request_ids = [f"request-{index}" for index in range(7)]
+    connection.executemany(
+        "insert into approval_requests values (?, 'review', null, null)", [(rid,) for rid in request_ids]
+    )
+    seen_batches: list[int] = []
+
+    def project(inputs, *, guard_home):
+        seen_batches.append(len(inputs))
+        return [SimpleNamespace(contract_error=None) for _ in inputs]
+
+    monkeypatch.setattr(store_approval_writes, "_REQUEST_ID_CHUNK", 3)
+    monkeypatch.setattr(store_approval_writes, "canonical_approval_surfaces_batch", project)
+    consistent = store_approval_writes._consistent_pending_requests(connection, request_ids, guard_home=tmp_path)
+    assert consistent == set(request_ids)
+    # Lookups are chunked; the native projection stays one batched call.
+    assert seen_batches == [7]

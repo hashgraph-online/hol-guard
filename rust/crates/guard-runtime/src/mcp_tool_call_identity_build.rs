@@ -85,10 +85,18 @@ pub(crate) fn build_artifact(
     if let Some(schema) = &schema {
         metadata.insert("tool_schema".to_owned(), schema.clone());
     }
-    if entry.is_some() {
-        // The public definition carries no name, so the name-matched authority
-        // hash is always absent here; the full-definition hash is private.
-        metadata.insert("mcp_tool_authority_hash".to_owned(), Value::Null);
+    if let Some(entry) = entry {
+        // Only a definition that names this tool binds its authority hash into
+        // the public metadata. The runtime strips the name, so it stays null
+        // there and the full-definition hash is private.
+        let named = entry
+            .as_ref()
+            .filter(|map| map.get("name").and_then(Value::as_str) == Some(build.tool_name.as_str()))
+            .and_then(tool_definition_authority_hash);
+        metadata.insert(
+            "mcp_tool_authority_hash".to_owned(),
+            named.map_or(Value::Null, Value::String),
+        );
     }
     let stripped = description
         .as_deref()

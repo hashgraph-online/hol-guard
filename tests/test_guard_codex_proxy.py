@@ -17,8 +17,8 @@ from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy import stdio as stdio_module
 from codex_plugin_scanner.guard.proxy.stdio import ProxyIoTimeoutError, _readline_with_timeout
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 

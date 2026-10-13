@@ -448,7 +448,7 @@ def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
     configured: bool,
 ) -> None:
-    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard import native_mcp_tool_call_identity
 
     artifact = GuardArtifact(
         artifact_id="codex:runtime:project:filesystem:read_file",
@@ -461,7 +461,7 @@ def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
         transport="stdio",
     )
     config = GuardConfig(workspace=tmp_path, guard_home=tmp_path / "guard-home") if configured else None
-    monkeypatch.setattr(native_context, "native_context_digest", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_mcp_tool_call_identity, "_resident_request", lambda **_kwargs: None)
 
     with pytest.raises(ValueError, match=r"^native_mcp_tool_approval_hash_unavailable$"):
         build_tool_call_hash(artifact, {"path": "data.txt"}, config=config)

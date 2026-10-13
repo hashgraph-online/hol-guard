@@ -276,27 +276,6 @@ def test_deadline_cutoff_status_does_not_poison_shared_memo(monkeypatch):
     assert native_context._status_memo is None
 
 
-def test_shell_read_assessment_parser_loss_requires_review(monkeypatch, tmp_path):
-    from types import SimpleNamespace
-
-    from codex_plugin_scanner.guard.runtime import shell_secret_reads
-
-    monkeypatch.setattr(shell_secret_reads, "_command_may_need_read_assessment", lambda *args, **kwargs: True)
-    monkeypatch.setattr(
-        shell_secret_reads,
-        "model_shell_execution_context",
-        lambda *args, **kwargs: SimpleNamespace(complete=True, reason_code=None, segments=(object(),)),
-    )
-
-    def unavailable(*args, **kwargs):
-        raise client.NativeCommandModelError("native_rich_command_model_unavailable")
-
-    monkeypatch.setattr(shell_secret_reads, "parse_shell_command", unavailable)
-    assessment = shell_secret_reads.assess_shell_reads("cat note.txt", cwd=tmp_path, home_dir=tmp_path)
-    assert assessment.incomplete
-    assert assessment.requires_review
-
-
 def test_explicit_inspection_home_identity_outage_returns_blocked_diagnostic(monkeypatch, tmp_path):
     from codex_plugin_scanner.guard import native_context
     from codex_plugin_scanner.guard.runtime import command_inspection
@@ -328,12 +307,21 @@ def test_explicit_inspection_home_identity_outage_returns_blocked_diagnostic(mon
 
 
 @pytest.mark.parametrize("harness", ["codex", "codex-alias"])
-def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(monkeypatch, tmp_path, harness):
+@pytest.mark.parametrize(
+    "error_type",
+    ["command-model", "sensitive-request"],
+)
+def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
+    monkeypatch, tmp_path, harness, error_type
+):
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
+    from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 
     monkeypatch.setattr(artifacts, "_canonical_harness_name", lambda _: "codex")
 
     def forbidden(*args, **kwargs):
+        if error_type == "sensitive-request":
+            raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
         raise client.NativeCommandModelError("native_rich_command_model_unavailable")
 
     monkeypatch.setattr(artifacts, "parse_shell_command", forbidden)

@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.retry_lineage import capture_retry_lineage, preserve_retry_lineage
 from codex_plugin_scanner.guard.runtime.local_request_snapshots import local_request_snapshot_payload
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_continuation import continuation_store_call
 
 _NOW = "2026-09-29T12:00:00+00:00"
 
@@ -223,7 +224,9 @@ def test_continuation_store_update_cannot_replace_first_retry_lineage(tmp_path: 
         lease_seconds=30,
     )
     assert claim is not None
-    finalized = store.finalize_continuation_attempt(
+    finalized = continuation_store_call(
+        store,
+        "store_finalize",
         request_id="request-continuation",
         offer_hash="continuation-offer",
         action="allow_once",
@@ -262,7 +265,7 @@ def test_continuation_store_update_cannot_replace_first_retry_lineage(tmp_path: 
         now=_NOW,
     )
 
-    assert finalized is True
+    assert finalized["finalized"] is True
     saved = store.get_guard_operation("continuation-operation")
     assert saved is not None
     metadata = saved["metadata"]

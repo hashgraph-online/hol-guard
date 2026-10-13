@@ -16,7 +16,7 @@ pub const SHIM_ADMIN_REQUEST_SCHEMA: &str = "guard-shim-admin-request.v2";
 /// Schema discriminator for the result.
 pub const SHIM_ADMIN_RESULT_SCHEMA: &str = "guard-shim-admin-result.v2";
 /// Capability advertised by the runtime when this operation is available.
-pub const SHIM_ADMIN_FEATURE: &str = "shim-admin-v2";
+pub const SHIM_ADMIN_FEATURE: &str = "shim-admin-v3";
 /// Largest canonical request serialization the op will accept.
 pub const SHIM_ADMIN_MAX_BYTES: usize = 512 * 1024;
 
@@ -54,6 +54,10 @@ pub struct ShimAdminFactsV2 {
     pub sqlite_connect_timeout_seconds: f64,
     /// ISO-8601 UTC timestamp standing in for `datetime.now(timezone.utc)`.
     pub now: String,
+    /// `shims._is_transient_path` of the package-shim directory.
+    /// Absent: the resident applies its own transient-path check.
+    #[serde(default)]
+    pub shim_dir_transient: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -66,7 +70,7 @@ pub struct ShimAdminRequestV2 {
     /// `status` | `dashboard_status` | `cloud_coverage` | `path_order` |
     /// `install` | `activate` | `repair` | `uninstall` | `probe_intercepts` |
     /// `supported_managers` | `ensure_package_shim_profile` |
-    /// `remove_guard_profile_blocks`.
+    /// `remove_guard_profile_blocks` | `record_audit`.
     pub subop: String,
     pub guard_home: String,
     /// `HarnessContext.home_dir`.

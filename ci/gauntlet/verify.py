@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import load_catalog, load_catalog_data, retain_trusted_cases
+from .contained_core import contained_wrapper_argv as _contained_wrapper_argv
 from .evidence import assess_case, reconcile
 from .fixtures import digest_file
 from .input_evidence import input_digest
@@ -56,13 +57,6 @@ def _read_json(path: Path, limit: int) -> dict[str, Any]:
     return data
 
 
-def _contained_public_path(value: object) -> bool:
-    return isinstance(value, str) and (
-        value.startswith("/")
-        or value.startswith(("{{fixture}}/", "{{workspace}}/", "{{home}}/", "{{contained_project}}/"))
-    )
-
-
 _CONTAINMENT_REASON = "native_vitest_readonly_containment_required"
 
 
@@ -85,38 +79,6 @@ def _contained_interruptions(observations: list[Any]) -> list[dict[str, Any]]:
             if not (by_design and interruption.get("kind") == "decision")
         )
     return found
-
-
-def _contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[list[str] | None, str | None]:
-    if not isinstance(command, str):
-        return None, "contained wrapper command is missing"
-    try:
-        argv = shlex.split(command)
-    except ValueError:
-        return None, "contained wrapper command is not valid shell argv"
-    canonical = " ".join("'" + value.replace("'", "'\\''") + "'" for value in argv)
-    if command != canonical:
-        return None, "contained wrapper command is not canonical"
-    if len(argv) != 12 or not _contained_public_path(argv[0]):
-        return None, "contained wrapper is not an approved path"
-    if argv[1] != "execute-contained-test" or argv[2] != "--guard-home" or not _contained_public_path(argv[3]):
-        return None, "contained wrapper guard-home binding is malformed"
-    if argv[4:6] != ["--workspace", expected_workspace]:
-        return None, "contained wrapper workspace binding differs from the reviewed caller"
-    if argv[6] != "--request-file":
-        return None, "contained wrapper request-file flag is missing"
-    request = Path(argv[7])
-    if (
-        not request.is_absolute()
-        or request.name != "request.json"
-        or not request.parent.name.startswith("hol-guard-contained-test-")
-    ):
-        return None, "contained wrapper request path is not adapter-owned"
-    if argv[8] != "--request-sha256" or re.fullmatch(r"[0-9a-f]{64}", argv[9]) is None:
-        return None, "contained wrapper request digest is malformed"
-    if argv[10] != "--home" or not _contained_public_path(argv[11]):
-        return None, "contained wrapper home binding is malformed"
-    return argv, None
 
 
 def _verify_contained_case(case: dict[str, Any], row: dict[str, Any], expected_id: str) -> None:

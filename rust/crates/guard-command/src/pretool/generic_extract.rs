@@ -25,6 +25,7 @@ pub(super) struct GenericSignals {
     pub(super) package_values: Vec<String>,
     pub(super) path_values: Vec<String>,
     pub(super) url_values: Vec<String>,
+    pub(super) request_body_or_method: bool,
     pub(super) prompt_present: bool,
     pub(super) env_reference: bool,
     pub(super) benign_prompt: bool,

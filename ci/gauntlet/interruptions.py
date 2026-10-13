@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import EXEMPT_ORACLES, Scenario, load_catalog
+from .contained_core import is_contained_deny
 
 # Response keys whose non-empty string is shown to the harness or its user on any decision.
 TEXT_KEYS = ("systemMessage", "message", "stopReason", "additionalContext", "permissionDecisionReason")
@@ -160,13 +161,20 @@ def case_interruptions(
     approvals: list[dict[str, Any]],
     approval_delta: int,
     harness: str | None = None,
+    contained: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """The compact interruption record stored on a case's assessment."""
+    """The compact interruption record stored on a case's assessment.
+
+    ``contained`` names fully bound contained-test calls; only their by-design containment deny
+    decision is exempt, never a rendered message or any other row.
+    """
     events: list[dict[str, Any]] = []
     decisions = quiet = 0
     for row in observations:
         decisions += 1
         found = observation_interruptions(row, harness) if isinstance(row, dict) else [_unproven({}, "malformed row")]
+        if contained and is_contained_deny(row, contained):
+            found = [event for event in found if event["kind"] != "decision"]
         quiet += not found
         events.extend(found)
     rows = [row for row in approvals if isinstance(row, dict)]

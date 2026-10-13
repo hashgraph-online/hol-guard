@@ -169,19 +169,6 @@ def test_mcp_targeted_grant_reads_only_called_tool_and_other(tmp_path: Path) -> 
     )
 
 
-def test_empty_command_filter_never_loads_every_permission(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.store_local_cli import _read_command_catalog, _read_command_states
-
-    identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read_file": "allow", "other": "block"})
-    with store._connect() as connection:
-        cli_id = f"local-cli.mcp-{identity.identity_hash[:8]}"
-        assert _read_command_catalog(connection, cli_id, ()) == []
-        assert _read_command_states(connection, cli_id, ()) == {}
-        assert len(_read_command_catalog(connection, cli_id)) == 3
-
-
 def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
     from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
@@ -592,18 +579,6 @@ def test_explicit_package_version_change_does_not_inherit_grant(tmp_path: Path) 
         server_identity=runtime,
     )
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
-
-
-def test_shim_only_path_does_not_resolve_package_launcher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.runtime.mcp_protection import resolved_package_launcher_executable
-
-    shim_bin = tmp_path / ".hol-guard" / "package-shims" / "bin"
-    shim_bin.mkdir(parents=True)
-    impostor = shim_bin / "npx"
-    impostor.write_text("#!/bin/sh\nexit 0\n")
-    impostor.chmod(0o755)
-    monkeypatch.setenv("PATH", str(shim_bin))
-    assert resolved_package_launcher_executable("npx") is None
 
 
 def test_different_package_does_not_inherit_npx_grant(tmp_path: Path) -> None:

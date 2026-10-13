@@ -1,18 +1,26 @@
 use super::sensitive_read_path_argument as sensitive_path_argument;
 use glob_class::glob_class_matches;
 use std::collections::{HashSet, VecDeque};
+mod agent_root;
 mod fd;
+mod git_metadata;
 mod glob_class;
 mod grep;
 mod hint;
 mod options;
+mod roots;
 mod sibling;
 mod tree;
+mod walk_memo;
+pub(super) use agent_root::{
+    agent_root_listing, skill_link_resolves_over_home, skill_listing_root,
+};
 use options::unsafe_search_value;
 pub(super) use tree::{
     safe_glob_operand, safe_literal_bracket_tree, safe_recursive_search_target,
-    safe_recursive_target, safe_unmatched_bracket_operand, SECRET_EXTENSIONS,
+    safe_recursive_target, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
 };
+pub(super) use walk_memo::with_walk_memo;
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];
     previous[0] = true;
@@ -250,7 +258,18 @@ pub(super) fn glob_can_select_sensitive_path(value: &str) -> bool {
             {
                 return true;
             }
-            let env_hint = hint::glob_constrained_lcs(bytes, b".env.") >= 2;
+            // A literal source extension already lets `*.ts` through, so for
+            // such a glob only the text before its first `*` can aim it at
+            // `.env.` files: `.env*.ts` still refuses, `*.test.ts` does not.
+            let env_scope = if code_extension {
+                &bytes[..bytes
+                    .iter()
+                    .position(|character| *character == b'*')
+                    .unwrap_or(bytes.len())]
+            } else {
+                bytes
+            };
+            let env_hint = hint::glob_constrained_lcs(env_scope, b".env.") >= 2;
             let family_hint = [
                 b"private-key".as_slice(),
                 b"private_key",
@@ -279,6 +298,9 @@ pub(super) fn glob_can_select_sensitive_path(value: &str) -> bool {
 enum SearchValueRole {
     Pattern,
     Glob,
+    /// ripgrep `-g`/`--glob`: a leading `!` turns the glob into an exclusion,
+    /// which only removes files from the walk and never selects new ones.
+    RgGlob,
     Path,
     TypeGlob,
     DirectoryAction,
@@ -422,7 +444,7 @@ fn safe_rg_arguments_inner(
                 &[
                     ('e', SearchValueRole::Pattern),
                     ('f', SearchValueRole::Path),
-                    ('g', SearchValueRole::Glob),
+                    ('g', SearchValueRole::RgGlob),
                     ('A', SearchValueRole::Other),
                     ('B', SearchValueRole::Other),
                     ('C', SearchValueRole::Other),
@@ -445,6 +467,16 @@ fn safe_rg_arguments_inner(
         }
         if paths_only || pattern_supplied {
             if stdin_only {
+                return false;
+            }
+            // A broad search of only parent directories traverses unrelated
+            // sibling projects. Named sibling paths still use canonical
+            // provenance checks, but `rg pattern ../` remains at review.
+            let directories: Vec<_> = argument
+                .split('/')
+                .filter(|part| !part.is_empty() && *part != ".")
+                .collect();
+            if !directories.is_empty() && directories.iter().all(|part| *part == "..") {
                 return false;
             }
             // A shell glob that lexically could reach a hidden or credential

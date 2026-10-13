@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 pub(super) fn signal_payload(payload: &Value) -> Option<Value> {
     if payload.get("tool_name")?.as_str()? != "yield"
-        || serde_json::to_vec(payload).ok()?.len() > 16 * 1024
+        || serde_json::to_string(payload).ok()?.len() > 16 * 1024
     {
         return None;
     }
@@ -30,7 +30,7 @@ pub(super) fn signal_payload(payload: &Value) -> Option<Value> {
     if let Some(data) = input.get("data") {
         if let Some(report) = data.as_object() {
             if !report.iter().all(|(key, value)| match key.as_str() {
-                "summary" | "report" | "architecture" => value.is_string(),
+                "summary" | "report" | "architecture" | "contents" => value.is_string(),
                 "files" => value.as_array().is_some_and(|files| {
                     files.len() <= 24
                         && files.iter().all(|file| {

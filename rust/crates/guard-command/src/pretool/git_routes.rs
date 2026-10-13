@@ -1,3 +1,9 @@
+#[path = "git_routes_temporary.rs"]
+mod temporary;
+
+pub(in crate::pretool) use temporary::owned_temporary_directory;
+use temporary::{owned_below, owned_temporary_roots};
+
 pub(crate) fn git_route_within_workspace(target: &str, context: super::PathContext<'_>) -> bool {
     let Some(cwd) = context.cwd else {
         return false;
@@ -36,7 +42,8 @@ pub(crate) fn git_route_within_workspace(target: &str, context: super::PathConte
     }
     if !target.starts_with(&workspace) {
         return registered_worktree_of_workspace(&target, &workspace)
-            || repository_below_home(&target, context);
+            || repository_below_home(&target, context)
+            || repository_owned_outside_home(&target, context);
     }
     target
         .ancestors()
@@ -51,13 +58,16 @@ pub(crate) fn git_route_within_workspace(target: &str, context: super::PathConte
 
 /// Agents working from a multi-repository parent read sibling repositories
 /// with `git -C ../other log`. A route outside the working directory is
-/// treated like a read of that directory: it must sit strictly below home,
-/// every component below home must be a non-hidden directory that clears the
-/// sensitive-path screens, and the repository root must hold a real `.git`
-/// directory below home or be a registered linked worktree of such a
-/// repository, so neither the home directory itself nor a symlinked or
-/// forged repository qualifies. The Git configuration probe still runs
-/// against the `-C` target and rejects executable helpers.
+/// treated like a read of that directory: it must sit strictly below home or
+/// below the shared temporary directory, every component below that root must
+/// be a non-hidden directory that clears the sensitive-path screens, and the
+/// repository root must hold a real `.git` directory below such a root or be a
+/// registered linked worktree of such a repository, so neither the root
+/// itself nor a symlinked or forged repository qualifies. Below `/tmp` every
+/// directory must also belong to the home owner and be writable by no one
+/// else, so another user cannot have planted or swapped the checkout. The Git
+/// configuration probe still runs against the `-C` target and rejects
+/// executable helpers.
 pub(in crate::pretool) fn repository_below_home(
     target: &std::path::Path,
     context: super::PathContext<'_>,
@@ -68,32 +78,135 @@ pub(in crate::pretool) fn repository_below_home(
     else {
         return false;
     };
-    let below_home = |path: &std::path::Path| {
-        path.strip_prefix(&home).is_ok_and(|relative| {
+    let temporary = owned_temporary_roots();
+    let root_of = |path: &std::path::Path| {
+        if path.starts_with(&home) {
+            Some((home.as_path(), false))
+        } else {
+            temporary
+                .iter()
+                .find(|root| path.starts_with(root))
+                .map(|root| (root.as_path(), true))
+        }
+    };
+    let below_root = |path: &std::path::Path| {
+        let Some((root, owned)) = root_of(path) else {
+            return false;
+        };
+        path.strip_prefix(root).is_ok_and(|relative| {
             !relative.as_os_str().is_empty()
                 && relative.components().all(|part| {
                     matches!(part, std::path::Component::Normal(name) if !name.to_string_lossy().starts_with('.'))
                 })
-        }) && super::read_paths::resolved_path_allowed(path, context.home_dir, context.cwd)
+        }) && (!owned || owned_below(root, path, &home))
+            && super::read_paths::resolved_path_allowed(path, context.home_dir, context.cwd)
             && !super::read_paths::inside_agent_state_tree(path, context.home_dir)
     };
-    if !below_home(target) {
+    let Some((root, _)) = root_of(target).filter(|_| below_root(target)) else {
         return false;
-    }
+    };
     target
         .ancestors()
-        .take_while(|path| *path != home)
+        .take_while(|path| *path != root)
         .find_map(|path| Some((path, std::fs::symlink_metadata(path.join(".git")).ok()?)))
-        .is_some_and(|(root, metadata)| {
+        .is_some_and(|(repository, metadata)| {
             metadata.is_dir()
-                || (metadata.is_file() && linked_worktree_of_repository(root, &below_home))
+                || (metadata.is_file() && linked_worktree_of_repository(repository, &below_root))
         })
+}
+
+/// Agents clone or create linked worktrees under a scratch location such as
+/// `/tmp` and read them with `git -C`. A repository outside both the working
+/// directory and home is routable under the same proofs as one below home,
+/// plus ownership: the work tree root, its `.git` entry and every path
+/// component are non-hidden, the path clears the sensitive-path screens, the
+/// root holds a real `.git` directory (or a registered linked worktree of
+/// one) and both are owned by the current user and writable by no one else.
+/// Git itself refuses a repository owned by someone else. The configuration
+/// probe still rejects executable helpers for the `-C` target.
+#[cfg(unix)]
+fn repository_owned_outside_home(
+    target: &std::path::Path,
+    context: super::PathContext<'_>,
+) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Some(home) = context
+        .home_dir
+        .and_then(|home| std::fs::canonicalize(home).ok())
+    else {
+        return false;
+    };
+    if target.starts_with(&home) || home.starts_with(target) {
+        return false;
+    }
+    let screened = |path: &std::path::Path| {
+        path.is_absolute()
+            && path.components().count() > 2
+            && path.components().all(|part| match part {
+                std::path::Component::RootDir => true,
+                std::path::Component::Normal(name) => !name.to_string_lossy().starts_with('.'),
+                _ => false,
+            })
+            && super::read_paths::resolved_path_allowed(path, context.home_dir, context.cwd)
+            && !super::read_paths::inside_agent_state_tree(path, context.home_dir)
+    };
+    if !screened(target) {
+        return false;
+    }
+    let me = nix::unistd::geteuid().as_raw();
+    // Nobody else may write there either, or another user could swap the
+    // `.git` entry after this check.
+    let owned = |path: &std::path::Path| {
+        std::fs::symlink_metadata(path)
+            .is_ok_and(|metadata| metadata.uid() == me && metadata.mode() & 0o022 == 0)
+    };
+    let Some((root, metadata)) = target
+        .ancestors()
+        .find_map(|path| Some((path, std::fs::symlink_metadata(path.join(".git")).ok()?)))
+    else {
+        return false;
+    };
+    screened(root)
+        && owned(root)
+        && owned(&root.join(".git"))
+        && (metadata.is_dir()
+            || (metadata.is_file()
+                && linked_worktree_of_repository(root, &|primary| {
+                    screened(primary) && owned(primary) && owned(&primary.join(".git"))
+                })))
+}
+
+#[cfg(not(unix))]
+fn repository_owned_outside_home(
+    _target: &std::path::Path,
+    _context: super::PathContext<'_>,
+) -> bool {
+    false
 }
 
 /// A linked worktree's `.git` file must name an entry of the
 /// `<repository>/.git/worktrees` registry whose `commondir` resolves back to
 /// that repository's `.git` directory and whose `gitdir` backlink names this
 /// worktree, and the owning repository must itself pass `repository_root`.
+/// The administrative directory of `worktree` when it is a linked worktree
+/// registered with the primary checkout at `repository` (both canonical).
+pub(in crate::pretool) fn linked_worktree_admin(
+    worktree: &std::path::Path,
+    repository: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let common = repository.join(".git");
+    if worktree == repository
+        || !std::fs::symlink_metadata(&common).is_ok_and(|metadata| metadata.is_dir())
+        || !linked_worktree_of_repository(worktree, &|root| root == repository)
+    {
+        return None;
+    }
+    let pointer = bounded_git_metadata(&worktree.join(".git"))?;
+    let admin =
+        std::fs::canonicalize(worktree.join(pointer.trim().strip_prefix("gitdir: ")?)).ok()?;
+    admin.starts_with(common.join("worktrees")).then_some(admin)
+}
+
 fn linked_worktree_of_repository(
     root: &std::path::Path,
     repository_root: &dyn Fn(&std::path::Path) -> bool,
@@ -294,4 +407,77 @@ fn registered_worktree_of_workspace(target: &std::path::Path, workspace: &std::p
     bounded_git_metadata(&pointer.join("gitdir"))
         .and_then(|path| std::fs::canonicalize(pointer.join(path.trim())).ok())
         .is_some_and(|backlink| backlink == entry)
+}
+
+/// `git --git-dir=<bare repository>` reads a repository without a work tree,
+/// and `--git-dir=<work tree>/.git` reads the repository of a work tree at
+/// or below the current directory.
+/// The directory must be a real (non-symlink) bare-shaped git directory
+/// (`HEAD`, `objects/`, `refs/`) owned by the current user that clears the
+/// same non-hidden and sensitive-path screens as a `-C` route outside home.
+/// The configuration probe still runs against it and rejects helpers.
+#[cfg(unix)]
+pub(crate) fn git_dir_route_within_scope(value: &str, context: super::PathContext<'_>) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let (Some(cwd), Some(home_dir)) = (context.cwd, context.home_dir) else {
+        return false;
+    };
+    let (Ok(workspace), Ok(home)) = (std::fs::canonicalize(cwd), std::fs::canonicalize(home_dir))
+    else {
+        return false;
+    };
+    let supplied = match value.strip_prefix('~') {
+        Some("") => home.clone(),
+        Some(rest) if rest.starts_with('/') => home.join(rest.trim_start_matches('/')),
+        Some(_) => return false,
+        None => std::path::PathBuf::from(value),
+    };
+    let supplied = if supplied.is_absolute() {
+        supplied
+    } else {
+        workspace.join(supplied)
+    };
+    let Ok(git_dir) = std::fs::canonicalize(supplied) else {
+        return false;
+    };
+    let real = |name: &str, directory: bool| {
+        std::fs::symlink_metadata(git_dir.join(name)).is_ok_and(|m| {
+            if directory {
+                m.is_dir()
+            } else {
+                m.is_file()
+            }
+        })
+    };
+    // A work tree's own `.git` directory passes the screens through its work
+    // tree. Git then takes the current directory as the work tree, so the
+    // repository must sit inside it; a `.git` reached from another checkout
+    // would pair one repository with an unrelated tree.
+    let work_tree_git = git_dir.file_name().is_some_and(|name| name == ".git");
+    let screened = match git_dir.parent() {
+        Some(parent) if work_tree_git => parent,
+        _ => git_dir.as_path(),
+    };
+    if git_dir == home
+        || (work_tree_git && !screened.starts_with(&workspace))
+        || screened == home
+        || !real("HEAD", false)
+        || !real("objects", true)
+        || !real("refs", true)
+        || !screened.components().all(|part| match part {
+            std::path::Component::RootDir => true,
+            std::path::Component::Normal(name) => !name.to_string_lossy().starts_with('.'),
+            _ => false,
+        })
+        || !super::read_paths::resolved_path_allowed(screened, context.home_dir, context.cwd)
+        || super::read_paths::inside_agent_state_tree(screened, context.home_dir)
+    {
+        return false;
+    }
+    std::fs::symlink_metadata(&git_dir).is_ok_and(|m| m.uid() == nix::unistd::geteuid().as_raw())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn git_dir_route_within_scope(_value: &str, _context: super::PathContext<'_>) -> bool {
+    false
 }

@@ -14,7 +14,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from ..native_restricted_pytest import restricted_native
+from ..native_restricted_pytest import decode_native_plan, restricted_native
 from .restricted_pytest_model import (
     _DEFAULT_TIMEOUT_SECONDS,
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
@@ -31,11 +31,12 @@ from .restricted_pytest_sandbox import (
     _backend_argv as _build_backend_argv,
 )
 from .restricted_pytest_sandbox import (
-    _macos_profile as _build_macos_profile,
-)
-from .restricted_pytest_sandbox import (
+    _link_user_site,
     _restricted_environment,
     _run_backend_process,
+)
+from .restricted_pytest_sandbox import (
+    _macos_profile as _build_macos_profile,
 )
 
 
@@ -61,33 +62,8 @@ def prepare_restricted_pytest(
         },
         dict,
     )
-    scalar = {"profile_version", "backend", "backend_executable", "workspace", "cwd", "executable"}
-    arrays = {"command", "allowed_executables", "denied_capabilities"}
-    if (
-        set(result) != scalar | arrays
-        or any(not isinstance(result[key], str) for key in scalar)
-        or any(
-            not isinstance(result[key], list) or not all(isinstance(item, str) for item in result[key])
-            for key in arrays
-        )
-        or result["backend"] not in {"macos-seatbelt", "linux-bubblewrap"}
-        or result["profile_version"]
-        != (PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION)
-        or not result["command"]
-        or not result["allowed_executables"]
-    ):
-        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Invalid native restricted launch plan.")
-    return RestrictedPytestPlan(
-        profile_version=result["profile_version"],
-        backend=result["backend"],
-        backend_executable=Path(result["backend_executable"]),
-        workspace=Path(result["workspace"]),
-        cwd=Path(result["cwd"]),
-        command=tuple(result["command"]),
-        executable=Path(result["executable"]),
-        allowed_executables=tuple(Path(path) for path in result["allowed_executables"]),
-        denied_capabilities=tuple(result["denied_capabilities"]),
-    )
+    profile = PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION
+    return decode_native_plan(result, (profile,))
 
 
 def run_restricted_pytest(
@@ -100,6 +76,7 @@ def run_restricted_pytest(
     platform: str | None = None,
     backend_executable: Path | None = None,
     read_only_workspace: bool = False,
+    merge_stderr: bool = False,
 ) -> int:
     """Run pytest inside the default restricted profile, with no fallback."""
 
@@ -122,31 +99,35 @@ def run_restricted_pytest(
         private_tmp = private_root / "tmp"
         private_home.mkdir(mode=0o700)
         private_tmp.mkdir(mode=0o700)
+        source = env if env is not None else os.environ
+        user_site_root = _link_user_site(source, private_home)
         launch_env = _restricted_environment(
-            env if env is not None else os.environ,
+            source,
             workspace=plan.workspace,
             cwd=plan.cwd,
             private_home=private_home,
             private_tmp=private_tmp,
             allowed_executables=plan.allowed_executables,
+            user_site_root=user_site_root,
         )
         if read_only_workspace:
             # Normal pytest caches belong to this run, not the protected source tree.
             launch_env["PYTHONDONTWRITEBYTECODE"] = "1"
             launch_env["PYTEST_ADDOPTS"] = f"-o cache_dir={shlex.quote(str(private_tmp / 'pytest-cache'))}"
-        backend_argv = _backend_argv(plan, private_root=private_root)
+        backend_argv = _backend_argv(plan, private_root=private_root, user_site_root=user_site_root)
         return _run_backend_process(
             backend_argv,
             env=launch_env,
             timeout_seconds=timeout_seconds,
             cwd=plan.cwd,
+            merge_stderr=merge_stderr,
         )
 
 
-def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> list[str]:
     """Compatibility wrapper for focused profile tests."""
 
-    return _build_backend_argv(plan, private_root=private_root)
+    return _build_backend_argv(plan, private_root=private_root, user_site_root=user_site_root)
 
 
 def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:

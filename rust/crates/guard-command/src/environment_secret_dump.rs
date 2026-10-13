@@ -75,6 +75,25 @@ fn sensitive_name(name: &str) -> Result<bool, &'static str> {
         matches(&SENSITIVE_NAME, name)
     }
 }
+/// Whether `text` runs `printenv` in a way that could print a secret: with no
+/// variable named, with an option, or naming a credential-like variable.
+/// `printenv PATH HOME` prints only the values asked for.
+pub fn printenv_may_print_secret(text: &str) -> bool {
+    text.match_indices("printenv").any(|(start, _)| {
+        let mut names = text[start + "printenv".len()..]
+            .split([';', '&', '|', '>', '<', '\n', ')', '`'])
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .peekable();
+        names.peek().is_none()
+            || names.any(|name| {
+                !name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                    || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    || sensitive_name(name).unwrap_or(true)
+            })
+    })
+}
 fn script_reads_secrets(script: &str) -> Result<bool, &'static str> {
     for pattern in ENV_DUMPS.iter() {
         if matches(pattern, script)? {
@@ -155,6 +174,12 @@ fn file_operand(args: &[String]) -> Option<&str> {
         }
     }
     None
+}
+/// Whether an `echo` or `printf` segment's text expands a credential-named
+/// variable such as `$GITHUB_TOKEN`. Printing one shows the secret to the
+/// agent, or writes it where any later command can read it. Fails closed.
+pub fn printer_expands_secret(text: &str) -> bool {
+    script_reads_secrets(text).unwrap_or(true)
 }
 fn segment_reads_secrets(
     segment: &[String],

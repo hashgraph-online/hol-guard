@@ -50,6 +50,7 @@ use serde_json::{json, Map, Value};
 
 use crate::action_lattice::{normalize_guard_action_result, UNKNOWN_GUARD_ACTION_REASON};
 use crate::effect_decision::GuardAction;
+use crate::guard_sync_transport::cloud_edge_block_reason;
 use crate::local_supply_chain::{
     resolve_risk_action, stable_digest_hex, stable_digest_hex_len, GuardConfig, SupplyChainStore,
 };
@@ -266,6 +267,15 @@ use go_sources::{go_replace_result, target_requires_npm_source_review};
 #[path = "supply_chain_package_eval/archive_scanning.rs"]
 mod archive_scanning;
 
+#[path = "supply_chain_package_eval/registry_install_identity.rs"]
+mod registry_install_identity;
+use registry_install_identity::{
+    lifecycle_scripts_enabled_reason, plain_registry_spec, registry_install_needs_flags,
+    registry_selector, script_free_git_free_tree_install, script_free_registry_install,
+};
+#[path = "supply_chain_package_eval/registry_install_tree.rs"]
+mod registry_install_tree;
+use registry_install_tree::git_free_install_tree;
 #[path = "supply_chain_package_eval/fallback_packages.rs"]
 mod fallback_packages;
 use fallback_packages::{

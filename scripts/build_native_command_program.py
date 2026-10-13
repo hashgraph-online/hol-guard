@@ -218,6 +218,7 @@ def main() -> int:
         raise ValueError("published descriptor has no canonical source")
     if args.check_public_descriptors:
         stale_public = []
+        expected_public = {}
         for identity, descriptor in descriptors.items():
             if "/" in identity or "\\" in identity or not identity.startswith("command."):
                 raise ValueError("invalid generated descriptor identity")
@@ -231,7 +232,19 @@ def main() -> int:
             )
             if blob.returncode or blob.stdout != canonical_bytes(descriptor):
                 stale_public.append(relative)
-        print(json.dumps({"ok": not stale_public, "stale_public_descriptors": sorted(stale_public)}, sort_keys=True))
+                expected_public[relative] = descriptor
+        # Descriptors are public projections; printing the expected one lets
+        # a contributor without the native toolchain update it from CI.
+        print(
+            json.dumps(
+                {
+                    "expected_public_descriptors": expected_public,
+                    "ok": not stale_public,
+                    "stale_public_descriptors": sorted(stale_public),
+                },
+                sort_keys=True,
+            )
+        )
         return int(bool(stale_public))
     program = compiled["program"]
     catalog = {

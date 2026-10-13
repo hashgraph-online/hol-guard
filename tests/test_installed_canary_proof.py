@@ -69,7 +69,6 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
     native_root.mkdir(parents=True)
     suffix = ".exe" if sys.platform == "win32" else ""
     (native_root / f"hol-guard-runtime{suffix}").touch()
-    (native_root / f"guard-command-source{suffix}").touch()
     distribution_stub = SimpleNamespace(locate_file=lambda _path: native_root)
     monkeypatch.setattr(canary, "distribution", lambda _name: distribution_stub)
     monkeypatch.setattr(canary, "_validate_corpus_bindings", lambda _root: {})

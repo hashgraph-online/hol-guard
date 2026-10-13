@@ -9,10 +9,12 @@ from unittest.mock import Mock
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import hook_worker_native as native_module
 from codex_plugin_scanner.guard.daemon import hook_worker_native_review as review
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -362,3 +364,83 @@ def test_control_binding_failure_without_fresh_ack_stays_blocked(
     native = Mock(side_effect=review.NativePolicyBindingRefreshError(code, 3, recording_only=True))
     monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", native)
     assert _pre_tool_call(worker, tmp_path, {"generation": 3, "mode": "enforce"})["policy_action"] == "block"
+
+
+def _post_tool_rejections(
+    worker: HookWorker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, codes: list[str], deadline: float | None
+) -> tuple[list[object], list[dict[str, object]]]:
+    calls: list[dict[str, object]] = []
+    unavailable = Mock(wraps=native_module._record_unavailable_native)
+
+    def reject(**kwargs: object) -> None:
+        calls.append(kwargs)
+        record_native_resident_client_failure_code(codes[len(calls) - 1])
+
+    monkeypatch.setattr(worker, "_review_raw_hook_native", reject)
+    monkeypatch.setattr(native_module, "_record_unavailable_native", unavailable)
+    try:
+        _response, native_used = worker._review_native_edge_with_snapshot(
+            payload={"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "true"}},
+            harness="grok",
+            event_name="PostToolUse",
+            default_harness="grok",
+            home_dir=tmp_path,
+            guard_home=tmp_path / "guard",
+            workspace=tmp_path,
+            deadline=deadline,
+            policy_snapshot={"mode": "enforce", "generation": 3},
+            recording_only=False,
+        )
+    finally:
+        record_native_resident_client_failure_code(None)
+    assert native_used is False
+    return [call.kwargs["reason_code"] for call in unavailable.call_args_list], calls
+
+
+def test_superseded_post_tool_snapshot_retries_under_refreshed_binding(
+    worker: HookWorker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A contained test run publishes its own snapshot while the tool runs, so
+    # the result review must rebind instead of answering fail-safe.
+    monkeypatch.setattr(worker, "_native_policy_snapshot", Mock(return_value={"generation": 4, "mode": "observe"}))
+    codes = [review.SNAPSHOT_NOT_CURRENT_ERROR, "native_hook_edge_unavailable"]
+    reasons, calls = _post_tool_rejections(worker, tmp_path, monkeypatch, codes, time.monotonic() + 2)
+    assert [call["policy_snapshot"]["generation"] for call in calls] == [3, 4]
+    assert [call["observe_mode"] for call in calls] == [False, True]
+    worker.policy_snapshot_publisher.request_control_binding_refresh.assert_called_once_with(3)
+    assert reasons == ["native_post_tool_unavailable"]
+
+
+@pytest.mark.parametrize("code", sorted(review.CONTROL_BINDING_REFRESH_ERRORS))
+def test_post_tool_control_binding_rejection_does_not_refresh(
+    worker: HookWorker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    reasons, calls = _post_tool_rejections(worker, tmp_path, monkeypatch, [code], time.monotonic() + 2)
+    assert len(calls) == 1
+    worker.policy_snapshot_publisher.request_control_binding_refresh.assert_not_called()
+    assert reasons == ["native_post_tool_unavailable"]
+
+
+@pytest.mark.parametrize("publish", [True, False])
+def test_post_tool_refresh_needs_deadline_and_publisher(
+    worker: HookWorker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, publish: bool
+) -> None:
+    monkeypatch.setattr(worker, "_publish_native_policy", publish)
+    deadline = None if publish else time.monotonic() + 2
+    codes = [review.SNAPSHOT_NOT_CURRENT_ERROR]
+    reasons, calls = _post_tool_rejections(worker, tmp_path, monkeypatch, codes, deadline)
+    assert len(calls) == 1
+    worker.policy_snapshot_publisher.request_control_binding_refresh.assert_not_called()
+    assert reasons == ["native_post_tool_unavailable"]
+
+
+@pytest.mark.parametrize("error", [OSError("resident gone"), TimeoutError(), NativePolicySnapshotError("not ready")])
+def test_post_tool_refresh_failure_keeps_unavailable_answer(
+    worker: HookWorker, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    monkeypatch.setattr(worker, "_native_policy_snapshot", Mock(side_effect=error))
+    codes = [review.SNAPSHOT_NOT_CURRENT_ERROR]
+    reasons, calls = _post_tool_rejections(worker, tmp_path, monkeypatch, codes, time.monotonic() + 2)
+    assert len(calls) == 1
+    worker.policy_snapshot_publisher.request_control_binding_refresh.assert_called_once_with(3)
+    assert reasons == ["native_post_tool_unavailable"]

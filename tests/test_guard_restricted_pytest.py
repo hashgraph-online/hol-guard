@@ -116,7 +116,9 @@ def test_pytest_artifact_carries_terminal_profile_and_reason(tmp_path: Path) -> 
     }
 
 
-def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(tmp_path: Path) -> None:
+def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "python3 -m pytest -q"},
@@ -137,7 +139,10 @@ def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(tmp_path: P
         artifact_actions={artifact.artifact_id: "allow"},
     )
 
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "sandbox-required"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "sandbox-required"
+    )
 
 
 @pytest.mark.parametrize("read_only_workspace", (False, True))

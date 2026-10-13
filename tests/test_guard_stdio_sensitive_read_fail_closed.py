@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.native_mcp_proxy_decision import NativeMcpProxyDecisionError
+from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 from codex_plugin_scanner.guard.proxy import stdio_sensitive_read as sensitive_read_module
 from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 
@@ -54,6 +55,30 @@ def test_sensitive_read_is_blocked_when_the_resident_is_unavailable(
     assert session["events"][0]["transport_outcome"] == "not-forwarded"
     assert "result" not in session["responses"][0]
     assert session["events"][0]["approval_reuse_reason_code"] == "native_unavailable"
+
+
+def test_classifier_outage_blocks_the_call_instead_of_escaping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
+
+    monkeypatch.setattr(sensitive_read_module, "extract_sensitive_file_read_request", unavailable)
+    event: dict[str, object] = {}
+    proxy = StdioGuardProxy.__new__(StdioGuardProxy)
+    proxy.cwd = tmp_path
+
+    result = sensitive_read_module.evaluate_sensitive_read(
+        proxy,
+        tool_name="list_dir",
+        params={"arguments": {"path": "."}},
+        event=event,
+    )
+
+    assert result is not None
+    _message, payload = result
+    assert payload["guardPolicyAction"] == "block"
+    assert payload["transportOutcome"] == "not-forwarded"
+    assert event["decision"] == "block"
+    assert event["approval_reuse_reason_code"] == "native_unavailable"
 
 
 def test_constructing_a_proxy_does_not_leave_a_digest_home_bound(tmp_path: Path) -> None:

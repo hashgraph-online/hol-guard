@@ -130,6 +130,7 @@ fn facts_from(value: &Value) -> ShimFacts {
             .as_f64()
             .expect("timeout"),
         now: string_of(&value["now"]),
+        shim_dir_transient: value.get("shim_dir_transient").and_then(Value::as_bool),
     }
 }
 

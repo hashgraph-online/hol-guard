@@ -104,3 +104,29 @@ def test_pathspec_index_flag_names_are_not_owned(tmp_path: Path, command: str) -
     assert payload["classification"]["action_class"] == "git read command"
     assert payload["controlling_rule_id"] == "command.git.diff"
     assert all(rule["rule_id"] != "command.git.index-inspection" for rule in payload["rules"])
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git diff --cached --check",
+        "git diff --cached --numstat",
+        "git diff --cached --quiet",
+        "git diff --cached -U3",
+        "git diff --staged --stat",
+        "git diff --cached --name-only HEAD",
+    ),
+)
+def test_bounded_cached_diffs_leave_the_decision_to_the_read_proof(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+    payload = inspect_command(command, cwd=repository, home_dir=home)
+
+    # Printing the staged diff to the terminal reads no more than `git diff HEAD`.
+    # A review here is the ordinary diff owner, never an index-inspection ask.
+    assert payload["status"] in {"review", "no_match"}
+    assert payload["classification"]["action_class"] != "git index inspection"
+    assert all(rule["rule_id"] != "command.git.index-inspection" for rule in payload["rules"])
+    if payload["status"] == "no_match":
+        return
+    assert payload["classification"]["action_class"] == "git read command"
+    assert payload["controlling_rule_id"] == "command.git.diff"

@@ -331,7 +331,7 @@ fn load_authenticated_daemon_identity(guard_home: &Path) -> Option<(Map<String, 
 
 /// `load_authenticated_daemon_state` (discovery.py:110-:123): the
 /// discovery key authenticates the state payload via an HMAC.
-fn load_authenticated_daemon_state(guard_home: &Path) -> Option<Map<String, Value>> {
+pub(crate) fn load_authenticated_daemon_state(guard_home: &Path) -> Option<Map<String, Value>> {
     let discovery_key = load_daemon_discovery_key(guard_home)?;
     let raw = read_private_regular_text(
         &guard_home.join("daemon-state.json"),
@@ -358,7 +358,7 @@ fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
 
 /// `load_guard_daemon_auth_token` (manager.py:1284-:1290) —
 /// `daemon-auth-token`, private parent required.
-fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
+pub(crate) fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
     let token = read_private_regular_text(
         &guard_home.join("daemon-auth-token"),
         DAEMON_AUTH_TOKEN_MAX_BYTES,
@@ -405,7 +405,7 @@ fn verify_daemon_state(payload: &Map<String, Value>, discovery_key: &str) -> boo
 
 /// `canonical_discovery_payload` (discovery.py:72-:73): compact sorted
 /// JSON.
-fn canonical_discovery_payload(payload: &Map<String, Value>) -> Vec<u8> {
+pub(crate) fn canonical_discovery_payload(payload: &Map<String, Value>) -> Vec<u8> {
     // serde_json's Value::Object is a BTreeMap, so iteration is
     // already key-sorted; compact separators match Python's
     // (",", ":"). ensure_ascii is the default for json.dumps, so
@@ -495,7 +495,7 @@ fn write_json_string(s: &str, out: &mut Vec<u8>) {
 
 /// Raw HMAC-SHA256 over an arbitrary message (single-shot; the crate's
 /// `hmac_sha256` is label+nonce shaped for the resident protocol).
-fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> Vec<u8> {
+pub(crate) fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> Vec<u8> {
     const BLOCK: usize = 64;
     let mut key_block = [0u8; BLOCK];
     if key.len() > BLOCK {

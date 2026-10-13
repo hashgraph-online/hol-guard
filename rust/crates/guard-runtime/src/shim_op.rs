@@ -42,6 +42,7 @@ fn facts_from(request: &ShimAdminFactsV2) -> ShimFacts {
         windows: request.windows,
         sqlite_connect_timeout_seconds: request.sqlite_connect_timeout_seconds,
         now: request.now.clone(),
+        shim_dir_transient: request.shim_dir_transient,
     }
 }
 
@@ -110,6 +111,9 @@ fn dispatch(request: &ShimAdminRequestV2) -> Result<Value, Failure> {
                 },
             )
             .map(object)
+        }
+        "record_audit" => {
+            shims::record_package_shim_audit_result(&context, request.generated_at.as_deref())
         }
         "supported_managers" => Ok(json!(shims::package_shim_supported_managers())),
         "ensure_package_shim_profile" => shims::ensure_package_shim_path_in_shell_profile(&context),
@@ -240,6 +244,7 @@ mod tests {
                 windows: cfg!(windows),
                 sqlite_connect_timeout_seconds: 30.0,
                 now: "2026-01-01T00:00:00+00:00".to_owned(),
+                shim_dir_transient: None,
             },
         }
     }

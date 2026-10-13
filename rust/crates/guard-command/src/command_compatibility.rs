@@ -13,12 +13,23 @@ use std::time::Instant;
 mod catalog;
 #[path = "command_compatibility/domains.rs"]
 mod domains;
+#[path = "command_compatibility/environment.rs"]
+mod environment;
 #[path = "command_compatibility/git.rs"]
 mod git;
 #[path = "command_compatibility/github.rs"]
 mod github;
 
 pub use catalog::compatibility_rule_ids;
+pub(crate) use environment::{
+    code_or_redirect_environment_name, inert_environment_name, plain_printed_name,
+};
+
+/// Whether `name` changes nothing about how the Git command it prefixes runs:
+/// an inert output or locale setting, or the commit identity.
+pub(crate) fn inert_git_environment_name(name: &str) -> bool {
+    environment::inert_environment_name(name) || environment::git_identity_environment_name(name)
+}
 
 pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     github::arguments_are_read_only(arguments, text)
@@ -29,6 +40,20 @@ pub(crate) fn git_inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     git::inspection_arguments(arguments, context)
+}
+
+/// `origin` followed by quiet/prune flags and simple named refs.
+pub(crate) fn git_fetch_origin_shaped(arguments: &[String]) -> bool {
+    git::fetch_origin_shaped(arguments)
+}
+
+/// The arguments after leading `-C` routes that stay within the workspace,
+/// whatever the subcommand. Remote and worktree proofs start from here.
+pub(crate) fn git_routed_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    git::routed_arguments(arguments, context)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +91,16 @@ impl CompatibilityObservations {
             segment_indexes: vec![index],
             uncertainty,
         });
+    }
+
+    fn mark_uncertain(&mut self, segments: &[usize]) {
+        let steered = |indexes: &[usize]| indexes.iter().any(|index| segments.contains(index));
+        for item in &mut self.rule_matches {
+            item.uncertainty |= steered(&item.segment_indexes);
+        }
+        for item in &mut self.permission_matches {
+            item.uncertainty |= steered(&item.segment_indexes);
+        }
     }
 
     fn normalize(&mut self) {
@@ -140,6 +175,16 @@ fn basename(segment: &CommandSegmentV1) -> String {
         .to_owned()
 }
 
+/// A code-loading setting makes any program run other code, and a credential
+/// name swaps whose authority it runs with, as `env NAME=` already does.
+/// Neither is a reviewable steer of that program.
+fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
+    segment.environment_names.iter().any(|name| {
+        environment::code_loading_environment_name(name)
+            || environment::credential_routing_environment_name(name)
+    })
+}
+
 pub fn compatibility_observations(
     command: &CanonicalCommandV1,
     deadline: Option<Instant>,
@@ -201,6 +246,10 @@ pub fn compatibility_observations_with_context(
         return Err("native_command_compatibility_model_unsupported");
     }
     let mut result = CompatibilityObservations::default();
+    let mut steered = Vec::new();
+    // Native proofs run a segment after a verified leading `cd` in the
+    // directory it enters, so their results are looked up there too.
+    let leading_cd = crate::pretool::verified_leading_cd(command, context);
     for (index, segment) in command.segments.iter().enumerate() {
         deadline_check(deadline)?;
         if segment.executable.is_none()
@@ -209,20 +258,55 @@ pub fn compatibility_observations_with_context(
                 .wrapper_chain
                 .iter()
                 .any(|wrapper| !matches!(wrapper.as_str(), "sudo" | "timeout"))
-            || !segment.environment_names.is_empty()
             || segment.text.contains('\0')
             || segment.arguments.iter().any(|value| value.contains('\0'))
         {
             return Err("native_command_compatibility_context_unsupported");
         }
+        // Inert names (`CI`, `LANG`, `LC_*`) do not steer, so the segment
+        // keeps the same permission decision as the unprefixed command.
+        // A loader, compiler or credential name is not a reviewable prefix: it
+        // runs other code or another identity, so the context is unsupported.
+        // Every other non-inert name (`GIT_DIR=`, `GH_HOST=`, `PORT=`) stays
+        // uncertainty. It takes the owners' floor and
+        // no permission can allow it, without turning the evaluation into a
+        // failure that would hide a disabled permission.
+        if assignment_prefix_is_unsupported(segment) {
+            return Err("native_command_compatibility_context_unsupported");
+        }
+        // The commit identity only names who Git records; it steers no other
+        // program.
+        let git = basename(segment) == "git";
+        if segment.environment_names.iter().any(|name| {
+            !(environment::inert_environment_name(name)
+                || git && environment::git_identity_environment_name(name))
+        }) {
+            steered.push(index);
+        }
+        // A trailing `2>&1` only joins stderr to the segment's own stdout. It
+        // writes no file and is not an operand, so the Git and GitHub CLI
+        // grammars attribute the command without it. A quoted `"2>&1"`
+        // operand is not a redirect and stays in place.
+        let merged = crate::pretool::without_stderr_merge(segment);
+        let cli_segment = merged.as_ref().unwrap_or(segment);
         match basename(segment).as_str() {
-            "git" => git::observe_with_context(segment, index, &mut result, context),
-            "gh" => github::observe(segment, index, &mut result),
+            "git" => {
+                let proof_context = match &leading_cd {
+                    Some((cd_index, cwd)) if index > *cd_index => crate::pretool::PathContext {
+                        cwd: Some(cwd.as_str()),
+                        ..context
+                    },
+                    _ => context,
+                };
+                git::observe_with_contexts(cli_segment, index, &mut result, context, proof_context)
+            }
+            "gh" => github::observe(cli_segment, index, &mut result),
             _ => {}
         }
-        domains::observe(command, segment, index, &mut result);
+        domains::observe(command, segment, index, &mut result, context);
     }
     deadline_check(deadline)?;
+    result.mark_uncertain(&steered);
     result.normalize();
     Ok(result)
 }

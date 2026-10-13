@@ -15,6 +15,7 @@ use guard_policy_snapshot::digest_bytes;
 use serde_json::Value;
 
 use super::context_digest_json::write_canonical_json_with_limit;
+use crate::mcp_proxy_projection as projection;
 use crate::{mcp_proxy_archive as archive, mcp_proxy_signals as signals};
 use crate::{mcp_proxy_catalog as catalog, mcp_proxy_package as package};
 use crate::{
@@ -49,6 +50,19 @@ pub(crate) fn decide(query: &McpProxyQueryV1) -> Value {
         McpProxyQueryV1::SensitiveReadHint(query) => sensitive::hint(query),
         McpProxyQueryV1::ExternalArchiveBind(query) => archive::bind(query),
         McpProxyQueryV1::PackageReasonSignals(query) => signals::reason_signals(query),
+        McpProxyQueryV1::CallProjection(query) => match projection::call_projection(query) {
+            Ok(payload) => payload,
+            Err(code) => serde_json::json!({"error": code}),
+        },
+    }
+}
+
+/// One query's payload, or the code of a check that fails as a bound error
+/// result instead of a payload.
+pub(crate) fn evaluate_query(query: &McpProxyQueryV1) -> Result<Value, &'static str> {
+    match query {
+        McpProxyQueryV1::CallProjection(query) => projection::call_projection(query),
+        query => Ok(decide(query)),
     }
 }
 
@@ -61,7 +75,10 @@ pub(crate) fn evaluate_mcp_proxy_decision(
     } else if request.request_id.len() > 128 {
         ("error", INVALID, Value::Null)
     } else {
-        ("ok", "ok", decide(&request.query))
+        match evaluate_query(&request.query) {
+            Ok(payload) => ("ok", "ok", payload),
+            Err(code) => ("error", code, Value::Null),
+        }
     };
     crate::encode_response(&McpProxyDecisionResultV1 {
         schema: MCP_PROXY_DECISION_RESULT_SCHEMA.to_owned(),

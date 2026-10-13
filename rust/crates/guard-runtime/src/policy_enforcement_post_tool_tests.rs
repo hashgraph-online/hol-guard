@@ -168,6 +168,71 @@ fn omp_delegation_acknowledgements_preserve_output_and_harness_floors() {
 }
 
 #[test]
+fn omp_learn_acknowledgement_is_released_without_lowering_output_floors() {
+    // The OMP extension's tool_result payload shape.
+    let input = json!({
+        "hook_event_name": "PostToolUse",
+        "tool_call_id": "call-learn-1",
+        "tool_name": "learn",
+        "tool_input": {"memory": "Run the project tests with cargo test before pushing."},
+        "tool_response": {"content": [{"type": "text", "text": "Memory saved."}]},
+        "is_error": false
+    });
+    let mut request = post_request(input.clone());
+    request.harness = "omp".into();
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "review".into());
+    let output = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(output.decision, "allow");
+    let denied = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("source_secret_match", "sensitive output"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    effective
+        .harness_actions
+        .insert("omp".into(), "block".into());
+    let denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    for harness in ["pi", "codex"] {
+        assert!(!guard_command::pretool::bounded_task_metadata_output(
+            &input, harness
+        ));
+    }
+    for tool_input in [
+        json!({"memory": "note", "scope": "global"}),
+        json!({"memory": ["note"]}),
+        json!({"memory": "  "}),
+        json!({}),
+        json!({"memory": "note", "command": "rm -rf build"}),
+    ] {
+        let mut changed = input.clone();
+        changed["tool_input"] = tool_input.clone();
+        assert!(
+            !guard_command::pretool::bounded_task_metadata_output(&changed, "omp"),
+            "{tool_input}"
+        );
+    }
+}
+
+#[test]
 fn policy_allow_cannot_lower_intrinsic_review_or_block() {
     let snapshot = snapshot(policy("allow"));
     for action in ["review", "block"] {
@@ -259,7 +324,7 @@ fn post_intrinsic_block_cannot_be_lowered_by_allow_policy() {
 }
 
 #[test]
-fn post_warning_policy_preserves_allow_with_warning() {
+fn post_warning_policy_keeps_a_silent_warn_on_a_proven_allow() {
     let request = post_request(json!({
         "tool_name": "read_file",
         "tool_response": "safe-looking output"
@@ -273,7 +338,9 @@ fn post_warning_policy_preserves_allow_with_warning() {
     .unwrap();
     assert_eq!(result.decision, "allow");
     assert_eq!(result.policy_action.as_deref(), Some("warn"));
-    assert_eq!(result.notice, "warning");
+    assert_eq!(result.reason_code, "native_policy_warning");
+    assert_eq!(result.notice, "none");
+    assert_eq!(result.reason, None);
 }
 
 #[test]

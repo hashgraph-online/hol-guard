@@ -90,6 +90,76 @@ fn test_named_python_scripts_share_the_inline_eval_boundary() {
 }
 
 #[test]
+fn unittest_and_final_status_echo_share_the_readonly_boundary() {
+    for (command, reason) in [
+        (
+            "python3 -m unittest",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            "python3 -m unittest -q",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            "python -I -m unittest discover -s tests -p 'test_*.py'",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            "python3 -m unittest -q 2>&1",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            r#"python3 -m unittest -q 2>&1; echo "exit=$?""#,
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            r#"python3 test_calc.py; echo "EXIT CODE: $?""#,
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            r#"python3 -m pytest -q 2>&1 | tail -20; echo "exit=$?""#,
+            "native_pytest_readonly_containment_required",
+        ),
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+            assert_eq!(result.reason_code, reason, "{command}");
+        }
+    }
+    for command in [
+        "python3 -m unittestx",
+        "python3 -m unittest 'a;b'",
+        "python3 -m unittest && rm -rf /",
+        "python3 -m unittest; rm -rf /",
+        r#"python3 -m unittest; echo "exit=$?"; rm -rf /"#,
+        r#"python3 -m unittest && echo "exit=$?""#,
+        r#"python3 -m unittest; echo "exit=$?" > out.txt"#,
+        r#"python3 -m unittest; echo "$(id)$?""#,
+        r#"python3 -m unittest; echo "exit=$?" "$?""#,
+        "python3 -m unittest 2>&1 > out.txt",
+        r#"python3 -m unittest; echo 'exit=$?'"#,
+        r#"python3 -m unittest; echo exit=\$?"#,
+        r#"rm -rf build; echo "exit=$?""#,
+        "sudo python3 -m unittest",
+        "PYTHONPATH=/tmp python3 -m unittest",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert!(
+            !matches!(
+                result.reason_code.as_str(),
+                "native_python_eval_readonly_containment_required"
+                    | "native_pytest_readonly_containment_required"
+            ),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn local_transform_service_is_containment_only_and_argv_bounded() {
     let command = "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping";
     let result = classify("omp", command);

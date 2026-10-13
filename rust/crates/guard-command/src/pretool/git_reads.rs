@@ -1,9 +1,12 @@
 //! Read-only `git` invocations proven without a review.
 //!
-//! Status, diff, log, show, rev-parse, ls-files, `remote -v`, `worktree list`,
-//! branch listings and `hash-object` reads. Diff-style reads that can run a
+//! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
+//! branch listings, `hash-object`, `config`, `ls-tree` and `cat-file` reads. Diff-style reads that can run a
 //! configured helper need the helper-context probe or both `--no-ext-diff`
 //! and `--no-textconv`.
+
+#[path = "git_log_names.rs"]
+mod log_names;
 
 fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool {
     arguments.iter().any(|argument| {
@@ -30,6 +33,18 @@ pub(super) fn safe_git_arguments(
             Some((subcommand, rest)) if subcommand == "branch" => {
                 return leading_safe && super::git_branch_listing::is_listing(rest);
             }
+            // The pattern is search text, not a path: only the revisions and
+            // pathspecs pass the path screen. Grep pages by default, so the
+            // configuration probe has to clear the pager first.
+            Some((subcommand, rest)) if subcommand == "grep" => {
+                return leading_safe
+                    && allow_helper_context
+                    && super::git_grep::targets(rest).is_some_and(|targets| {
+                        !targets.iter().any(|value| {
+                            value.starts_with(':') || super::sensitive_read_path_argument(value)
+                        })
+                    });
+            }
             Some((subcommand, rest)) if subcommand == "hash-object" => {
                 return leading_safe
                     && super::git_hash_object::safe_read(rest, allow_helper_context, context);
@@ -38,10 +53,16 @@ pub(super) fn safe_git_arguments(
         }
     }
     // Git magic pathspec semantics are not proven by this classifier; retain review.
-    if arguments
-        .iter()
-        .any(|value| value.starts_with(':') || super::sensitive_read_path_argument(value))
-    {
+    // A names-only log's glob pathspecs were checked by `log_names` instead.
+    // `-S`, `-G` and `--grep` values are search text too.
+    let listed = log_names::pathspec_start(arguments, context);
+    let search_text = super::git_search_text::pattern_positions(arguments);
+    if arguments.iter().enumerate().any(|(index, value)| {
+        !search_text.contains(&index)
+            && (value.starts_with(':')
+                || (super::sensitive_read_path_argument(value)
+                    && listed.is_none_or(|start| index < start)))
+    }) {
         return false;
     }
     let Some(arguments) =
@@ -55,6 +76,34 @@ pub(super) fn safe_git_arguments(
     if subcommand == "worktree" {
         return matches!(&arguments[1..], [list] if list == "list")
             || matches!(&arguments[1..], [list, flag] if list == "list" && flag == "--porcelain");
+    }
+    if subcommand == "merge-base" {
+        // Prints commit names only. It still honors pager.merge-base, so the
+        // configuration probe has to clear the helper context first.
+        return allow_helper_context
+            && arguments[1..].iter().all(|argument| {
+                !argument.starts_with('-')
+                    || matches!(
+                        argument.as_str(),
+                        "--is-ancestor"
+                            | "--all"
+                            | "-a"
+                            | "--octopus"
+                            | "--independent"
+                            | "--fork-point"
+                    )
+            });
+    }
+    if matches!(subcommand, "ls-tree" | "cat-file") {
+        // Object reads honor pager.<name> and can fetch a partial clone's
+        // missing objects, so the configuration probe has to clear them first.
+        return allow_helper_context
+            && super::git_object_reads::read_form(subcommand, &arguments[1..]);
+    }
+    if subcommand == "config" {
+        // Only the configuration probe can prove what the read prints.
+        return allow_helper_context
+            && super::git_config_reads::read_form(&arguments[1..]).is_some();
     }
     if !matches!(
         subcommand,
@@ -91,4 +140,39 @@ pub(super) fn safe_git_arguments(
         &["--ext-diff", "--textconv", "--output", "-o"],
         &["--output=", "--exec-path="],
     )
+}
+
+/// Whether a Git inspection, once the configuration probe cleared its helpers,
+/// writes nothing a later Git read could depend on. A pathspec that needs its
+/// own read review (a glob that might select a credential file) is judged on
+/// that segment; it does not change what the next read runs.
+pub(super) fn inspection_writes_nothing(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some(inspected) =
+        crate::command_compatibility::git_inspection_arguments(arguments, context)
+    else {
+        return false;
+    };
+    let leading = &arguments[..arguments.len() - inspected.len()];
+    let Some(subcommand) = inspected.first() else {
+        return false;
+    };
+    if !matches!(
+        subcommand.as_str(),
+        "status" | "diff" | "log" | "show" | "grep" | "merge-base"
+    ) {
+        return false;
+    }
+    let option_end = inspected
+        .iter()
+        .position(|argument| argument == "--")
+        .unwrap_or(inspected.len());
+    !has_argument(leading, &[], &["--exec-path"])
+        && !has_argument(
+            &inspected[1..option_end],
+            &["--ext-diff", "--textconv", "--output", "-o"],
+            &["--output=", "--exec-path="],
+        )
 }

@@ -11,8 +11,59 @@ fn matches_recorded_vectors() {
         let name = vector["name"].as_str().unwrap();
         let query: ConsumerArtifactComposeQueryV1 = serde_json::from_value(vector["query"].clone())
             .unwrap_or_else(|error| panic!("{name}: {error}"));
-        assert_eq!(compose(&query), vector["expected"], "{name}");
+        assert_eq!(compose(&query).unwrap(), vector["expected"], "{name}");
     }
+}
+
+#[test]
+fn fused_authoritative_decision_preserves_recorded_runtime_composition() {
+    let reference: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/decision_authority_vectors.json"
+    ))
+    .unwrap();
+    let mut checked = 0;
+    let mut refused = 0;
+    for vector in reference["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| !v["consumer_runtime_query"].is_null())
+    {
+        let mut runtime = vector["consumer_runtime_query"].clone();
+        runtime.as_object_mut().unwrap().remove("kind");
+        let query = serde_json::from_value(json!({
+            "kind": "runtime_authoritative", "runtime": runtime, "signals": [],
+        }))
+        .unwrap();
+        let outcome = compose(&query);
+        if vector["expected"]["status"] == "error" {
+            assert_eq!(vector["expected"]["error_type"], "ValueError");
+            assert_eq!(
+                outcome.unwrap_err(),
+                vector["expected"]["message"].as_str().unwrap()
+            );
+            refused += 1;
+            continue;
+        }
+        let mut actual = outcome.unwrap();
+        let decision = actual
+            .as_object_mut()
+            .unwrap()
+            .remove("authoritative_decision")
+            .unwrap();
+        assert_eq!(actual, vector["consumer_runtime_expected"]);
+        assert_eq!(decision, vector["expected"]["value"]);
+        assert_eq!(decision["action"], actual["policy_action"]);
+        assert_eq!(decision["reason"], actual["decision_reason"]);
+        assert_eq!(decision["composition_trace"], actual["policy_composition"]);
+        assert_eq!(
+            decision["enforcement"]["authority_finalized"],
+            actual["authority_finalized"]
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 514);
+    assert_eq!(refused, 2);
 }
 
 fn resident(request: Value) -> Result<Value, String> {
@@ -49,6 +100,45 @@ fn resident_transport_binds_request_and_composes() {
         .unwrap()
         .starts_with("sha256:"));
     assert_eq!(reply["payload"]["current_action"], "warn");
+}
+
+#[test]
+fn semantic_refusals_remain_bound_resident_answers() {
+    let reference: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/decision_authority_vectors.json"
+    ))
+    .unwrap();
+    let mut checked = 0;
+    for vector in
+        reference["vectors"].as_array().unwrap().iter().filter(|v| {
+            !v["consumer_runtime_query"].is_null() && v["expected"]["status"] == "error"
+        })
+    {
+        let mut runtime = vector["consumer_runtime_query"].clone();
+        runtime.as_object_mut().unwrap().remove("kind");
+        let reply = resident(envelope(
+            CONSUMER_ARTIFACT_COMPOSE_REQUEST_SCHEMA,
+            json!({
+                "kind": "runtime_authoritative", "runtime": runtime, "signals": []
+            }),
+        ))
+        .unwrap();
+        assert_eq!(reply["schema"], CONSUMER_ARTIFACT_COMPOSE_RESULT_SCHEMA);
+        assert_eq!(reply["request_id"], "req-consumer");
+        assert!(reply["request_sha256"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:"));
+        assert_eq!(reply["status"], "error");
+        assert_eq!(
+            reply["code"],
+            "native_consumer_artifact_compose_validation_refused"
+        );
+        assert_eq!(reply["payload"]["error_type"], "ValueError");
+        assert_eq!(reply["payload"]["message"], vector["expected"]["message"]);
+        checked += 1;
+    }
+    assert_eq!(checked, 2);
 }
 
 #[test]

@@ -351,6 +351,8 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(tmp_path, mon
         (context.guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE).write_text('{"invalid":"fixture"}')
     if fault in {"unrelated_nonce", "wrong_runtime", "changed_receipt", "stale_receipt"}:
         writer = RuntimeHookEvidenceWriter(store=store)
+        # The deadline measures the observer, not one-time native store provisioning.
+        _ = store.count_command_shadow_observations()
     launched = []
 
     def launch(argv, *, input_text, **kwargs):

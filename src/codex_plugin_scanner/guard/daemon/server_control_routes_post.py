@@ -15,6 +15,7 @@ from ..approval_scope_support import (
     resolve_request_scope_selection,
 )
 from ..approvals import ApprovalRequestAlreadyResolvedError, ApprovalRequestNotFoundError, apply_approval_resolution
+from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
 from .command_activity_api import handle_command_activity_feedback
@@ -396,6 +397,13 @@ class _ControlPostRoutes:
             return
         except IneligibleApprovalScopeError as error:
             self._write_ineligible_approval_scope_error(error)
+            return
+        except ApprovalScopeUnavailableError:
+            self._write_json(
+                {"resolved": False, "error": "native_approval_scope_unavailable"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
             return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)

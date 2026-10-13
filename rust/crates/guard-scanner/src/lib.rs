@@ -6,6 +6,8 @@ pub mod repository_scanner;
 pub mod secret_detection;
 pub mod staged_scanner;
 
+mod masked_value;
+
 use guard_rules::{CONTEXT_CHARS, MAX_MATCHES, MAX_SCAN_BYTES};
 use regex::{Regex, RegexBuilder};
 use std::collections::BTreeMap;
@@ -224,8 +226,9 @@ fn is_sample(
         return false;
     }
     if classifier == "credential-assignment"
-        && assignment_value(matched)
-            .is_some_and(|value| inert_code_expression_regex().is_match(value))
+        && assignment_value(matched).is_some_and(|value| {
+            inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
+        })
     {
         return true;
     }

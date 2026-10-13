@@ -1,18 +1,20 @@
 //! Keep ordinary shell structure the canonical parser cannot model reviewable.
 //!
-//! Loops, conditionals and heredocs defeat the exact model that extension
-//! matchers need. Treating that as an evaluation failure blocked them
-//! outright, so a fully permitted `gh` call inside a `for` loop, or a
-//! `gh pr comment` fed by a heredoc, could not even be approved. Those two
-//! shapes are now treated like an uncertain observation: they take the
-//! strongest floor of every active extension whose programs the text names,
-//! or that cannot be recognized by name, and never less than review.
+//! Loops, conditionals, heredocs and redirects defeat the exact model that
+//! extension matchers need. Treating that as an evaluation failure blocked
+//! them outright, so a fully permitted `gh` call inside a `for` loop, a
+//! `gh pr comment` fed by a heredoc, or `gh pr view 12 > pr.json` could not
+//! even be approved. Those shapes are now treated like an uncertain
+//! observation: they take the strongest floor of every active extension whose
+//! programs the text names, or that cannot be recognized by name, and never
+//! less than review.
 //!
 //! Everything that could hide a program or move data keeps the evaluation
-//! failure: wrappers, nested executors, command substitution, redirects
-//! other than one input heredoc, `PATH` overrides, interpreters and program
-//! names built from expansions or globs, as do signed or managed policy and
-//! global lockdown.
+//! failure: wrappers, nested executors, command substitution, redirects other
+//! than one input heredoc or to a literal path, redirects after a program
+//! that makes links, `PATH` overrides, interpreters and program names built
+//! from expansions or globs, as do signed or managed policy and global
+//! lockdown.
 
 use std::collections::BTreeSet;
 use std::time::Instant;
@@ -20,7 +22,12 @@ use std::time::Instant;
 use guard_contracts::NativeCommandObservationBatchV1;
 
 use super::{rank, rule_floor, CompiledNativeCommandControls};
+use crate::pretool::generic::workspace_redirects;
 use crate::CanonicalCommandV1;
+
+#[path = "native_command_link_makers.rs"]
+mod link_makers;
+use link_makers::creates_links;
 
 /// Compatibility owners recognize these programs without a catalog matcher.
 const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
@@ -207,8 +214,8 @@ impl CompiledNativeCommandControls {
 }
 
 /// Loops and conditionals, or one heredoc that only feeds standard input,
-/// with nothing in the shell text that redirects, substitutes or overrides
-/// `PATH`.
+/// with nothing in the shell text that substitutes or overrides `PATH` and no
+/// redirect except to a literal path.
 fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
     if command.path_overridden || command.confidence != "uncertain" {
         return false;
@@ -216,10 +223,24 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
     match command.uncertainty_reason.as_deref() {
         Some("compound_shell_not_yet_supported") => {
             !moves_data(&unquoted_literal(&command.normalized_text))
+                || literal_redirects_only(&command.normalized_text)
         }
-        Some("command_redirect_not_yet_supported") => input_heredoc(&command.normalized_text),
+        Some("command_redirect_not_yet_supported") => {
+            input_heredoc(&command.normalized_text)
+                || literal_redirects_only(&command.normalized_text)
+        }
         _ => false,
     }
+}
+
+/// Every redirect names a literal path or feeds `cat` a quoted heredoc, and
+/// the rest substitutes nothing and, when a redirect names a file other than
+/// `/dev/null`, makes no link that redirect could follow.
+fn literal_redirects_only(text: &str) -> bool {
+    workspace_redirects::project_naming_files(text).is_some_and(|(projected, names_files)| {
+        let literal = unquoted_literal(&projected);
+        !(moves_data(&literal) || (names_files && creates_links(&literal)))
+    })
 }
 
 /// Whether shell text redirects, substitutes or sets the environment of a
@@ -390,14 +411,78 @@ fn joined_quotes(text: &str) -> String {
 /// Whether a command position holds an expansion, glob or `.` source, which
 /// can run a program whose name appears nowhere in the text.
 fn synthesizes_program(literal: &str) -> bool {
-    command_words(literal)
-        .filter(|word| !is_assignment(word))
-        .any(|word| {
-            !matches!(
-                word,
-                "for" | "case" | "select" | "in" | "done" | "fi" | "esac" | "[" | "[["
-            ) && (word == "." || word.contains(['$', '*', '?', '[']))
+    let masked = mask_double_quoted_separators(literal);
+    let mut words = command_words(&masked).filter(|word| !is_assignment(word));
+    words.any(|word| {
+        !matches!(
+            word,
+            "for" | "case" | "select" | "in" | "done" | "fi" | "esac" | "[" | "[["
+        ) && (word == "." || word.contains(['$', '*', '?', '[']))
+    })
+}
+
+/// The text with command separators inside double quotes made ordinary, so a
+/// quoted regex such as `"^@@|^[+-]"` stays one argument instead of starting
+/// a fake command word. Expansion characters stay in place, so `"$cmd"` in a
+/// command position is still seen, and a quoted span holding a command
+/// substitution is left untouched because its commands still run. That
+/// includes `$(...)`, backticks, and Bash's `${ cmd; }` / `${| cmd; }` form.
+fn mask_double_quoted_separators(literal: &str) -> String {
+    let mut out = String::with_capacity(literal.len());
+    let mut span: Option<String> = None;
+    let mut escaped = false;
+    for character in literal.chars() {
+        let Some(quoted) = span.as_mut() else {
+            out.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                span = Some(String::new());
+            }
+            continue;
+        };
+        if escaped {
+            escaped = false;
+        } else if character == '\\' {
+            escaped = true;
+        } else if character == '"' {
+            out.push_str(&mask_span(quoted));
+            out.push(character);
+            span = None;
+            continue;
+        }
+        quoted.push(character);
+    }
+    if let Some(quoted) = span {
+        out.push_str(&quoted);
+    }
+    out
+}
+
+fn span_runs_a_command(quoted: &str) -> bool {
+    quoted.contains("$(")
+        || quoted.contains('`')
+        || quoted.match_indices("${").any(|(at, _)| {
+            quoted[at + 2..]
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_whitespace() || character == '|')
         })
+}
+
+fn mask_span(quoted: &str) -> String {
+    if span_runs_a_command(quoted) {
+        return quoted.to_owned();
+    }
+    quoted
+        .chars()
+        .map(|character| match character {
+            ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' => 'x',
+            other => other,
+        })
+        .collect()
 }
 
 /// The leading assignments and first word of each simple command, after

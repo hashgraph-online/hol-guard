@@ -1,6 +1,7 @@
 """Route Codex contained-test receipts through the PreToolUse ``updatedInput`` rewrite.
 
 Codex applies ``permissionDecision: "allow"`` with ``updatedInput`` from 0.131.0.
+macOS routes every contained profile and Linux the workspace sandbox, as for Z Code.
 Older releases treat that output as an unsupported hook result and run the
 original command, so the bridge rewrites only after it has confirmed the Codex
 process that launched it is new enough. Otherwise the denial stands.
@@ -18,7 +19,7 @@ import time
 from pathlib import Path
 from typing import TypeGuard
 
-from .zcode_contained_tests import contained_zcode_response
+from .zcode_contained_tests import contained_zcode_response, platform_contains
 
 _MIN_VERSION = (0, 131, 0)
 _MAX_ANCESTORS = 6
@@ -26,7 +27,7 @@ _PROC_PIDTBSDINFO = 3
 _PROC_BSDINFO_SIZE = 136
 _PPID_OFFSET = 16
 _VERSION = re.compile(r"^codex-cli (\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?\s*$")
-UPDATE_HINT = "Update Codex to 0.131 or later so HOL Guard can run this test inside its contained runner."
+UPDATE_HINT = "Update Codex to 0.131 or later so HOL Guard can run this command inside its contained runner."
 
 
 def route_codex_containment(
@@ -40,7 +41,7 @@ def route_codex_containment(
     """Rewrite a containment receipt into the contained sink, or keep the denial."""
 
     if (
-        sys.platform != "darwin"
+        not platform_contains(response)
         or guard_home is None
         or not _absolute_hook_home(home_dir)
         or response.get("policy_action") != "sandbox-required"
@@ -81,6 +82,8 @@ def _absolute_hook_home(home_dir: Path | None) -> TypeGuard[Path]:
 def launching_codex_executable() -> Path | None:
     """Path of the nearest ``codex`` ancestor process, read from the kernel."""
 
+    if sys.platform == "linux":
+        return _linux_codex_ancestor()
     try:
         libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
     except OSError:
@@ -100,6 +103,29 @@ def launching_codex_executable() -> Path | None:
         if size != _PROC_BSDINFO_SIZE:
             return None
         pid = int.from_bytes(info.raw[_PPID_OFFSET : _PPID_OFFSET + 4], sys.byteorder)
+    return None
+
+
+def _linux_codex_ancestor() -> Path | None:
+    """The same walk through ``/proc``: each process's executable and parent."""
+
+    pid = os.getppid()
+    for _ in range(_MAX_ANCESTORS):
+        if pid <= 1:
+            return None
+        try:
+            path = Path(os.readlink(f"/proc/{pid}/exe"))
+            if path.name == "codex":
+                return path
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        # The command name can hold spaces and parentheses; the fields after its closing one are fixed.
+        fields = stat.rsplit(")", 1)[-1].split()
+        try:
+            pid = int(fields[1])
+        except (IndexError, ValueError):
+            return None
     return None
 
 

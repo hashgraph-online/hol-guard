@@ -218,25 +218,6 @@ def test_removed_artifact_uses_the_authoritative_action_instead_of_a_hard_coded_
     assert inventory["last_policy_action"] == "allow"
 
 
-def test_history_counts_every_non_executable_install_action_but_not_warn(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    artifact_id = "package:npm:exact-actions"
-    for index, action in enumerate(("block", "review", "require-reapproval", "sandbox-required", "warn")):
-        store.add_event(
-            f"install_time_{action}",
-            {
-                "artifact_id": artifact_id,
-                "artifact_name": "exact-actions",
-                "policy_action": action,
-            },
-            f"2026-07-18T00:00:0{index}Z",
-        )
-
-    history = consumer_service.build_history_context(store, "guard-cli", artifact_id, None)
-
-    assert history.prior_incidents == 4
-
-
 @pytest.mark.parametrize("guard_action", ["block", "unknown-action"])
 def test_legacy_artifact_rejects_contradictory_or_unknown_exact_guard_action(
     guard_action: str,

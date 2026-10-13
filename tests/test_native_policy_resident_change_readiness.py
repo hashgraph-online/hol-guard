@@ -67,7 +67,13 @@ def test_resident_change_waits_for_new_ack_instead_of_returning_an_unready_polic
 
 
 @pytest.mark.parametrize(
-    "error", ["native_command_control_mutation_in_progress", "native_business_source_mutation_in_progress"]
+    "error",
+    [
+        "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
+        "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
+    ],
 )
 def test_control_mutation_contention_waits_for_committed_policy_ack(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: str
@@ -104,7 +110,9 @@ def test_control_mutation_contention_waits_for_committed_policy_ack(
     [
         "native_policy_snapshot_resident_changed",
         "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
         "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
     ],
 )
 @pytest.mark.parametrize("deadline", [None, 100.25, 99.0])

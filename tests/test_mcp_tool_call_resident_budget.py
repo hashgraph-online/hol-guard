@@ -13,7 +13,7 @@ import sqlite3
 
 import pytest
 
-from codex_plugin_scanner.guard import native_execution
+from codex_plugin_scanner.guard import native_context, native_execution
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
@@ -23,8 +23,12 @@ from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, 
 pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixtures("package_intent_native")]
 
 # Resident ops one benign warm allow may spend, excluding the `tools/list` setup.
-_TOTAL_BUDGET = 6
+# Includes the single `mcp_tool_call_identity` round trip; the stdio exchange fusion lowers it further.
+_TOTAL_BUDGET = 7
 _CONNECTION_BUDGET = 2
+# `native_context_digest` calls (cached ones included) cost Python time even when no resident round
+# trip happens, so they are bounded too.
+_DIGEST_BUDGET = 14
 _PER_OPERATION_BUDGET = {
     "mcp_tool_policy_decide": 1,
     "policy_decision_lookup": 0,
@@ -62,6 +66,14 @@ def test_benign_tool_call_stays_within_the_resident_round_trip_budget(
         return real(**kwargs)
 
     monkeypatch.setattr(native_execution, "native_resident_client_request", spy)
+    digests: list[str] = []
+    real_digest = native_context.native_context_digest
+
+    def digest_spy(kind, *args, **kwargs):
+        digests.append(str(kind))
+        return real_digest(kind, *args, **kwargs)
+
+    monkeypatch.setattr(native_context, "native_context_digest", digest_spy)
     connections: list[str] = []
     real_connect = sqlite3.connect
 
@@ -75,12 +87,14 @@ def test_benign_tool_call_stays_within_the_resident_round_trip_budget(
     setup = collections.Counter(operations)
     operations.clear()
     connections.clear()
+    digests.clear()
     result = proxy.run_session(messages)
     assert "result" in result["responses"][2], result["responses"][2]
     spent = operations - setup
     for operation, budget in _PER_OPERATION_BUDGET.items():
         assert spent[operation] <= budget, (operation, dict(spent))
     assert sum(spent.values()) <= _TOTAL_BUDGET, dict(spent)
+    assert len(digests) <= _DIGEST_BUDGET, collections.Counter(digests)
     # Each short-lived store connection costs about a millisecond of first-touch work. The extension
     # authority read, the policy lookup and every effect share one connection scope, and the receipt,
     # inventory and event writes share another, so this must not grow back to a connection per method.

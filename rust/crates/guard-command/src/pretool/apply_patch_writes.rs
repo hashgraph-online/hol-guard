@@ -28,10 +28,7 @@ const AGENT_INSTRUCTION_FILE_NAMES: &[&str] = &[
     ".cursorrules",
     ".windsurfrules",
 ];
-const PROTECTED_DIRECTORIES: &[&str] = &[
-    ".agents", ".claude", ".codex", ".cursor", ".bzr", ".git", ".hg", ".jj", ".pijul", ".svn",
-    "_darcs",
-];
+const PROTECTED_DIRECTORIES: &[&str] = &[".bzr", ".git", ".hg", ".jj", ".pijul", ".svn", "_darcs"];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -169,13 +166,22 @@ fn protected_name(path: &Path) -> bool {
         }),
         None => true,
     };
+    let mut parts = Vec::new();
+    for component in path.components() {
+        if let Component::Normal(part) = component {
+            let Some(part) = part.to_str() else {
+                return true;
+            };
+            parts.push(part);
+        }
+    }
+    // Harness configuration steers the next agent session, so a patch may
+    // not plant it any more than version-control metadata.
     instruction_file
-        || path.components().any(|component| match component {
-            Component::Normal(part) => part.to_str().is_none_or(|part| {
-                PROTECTED_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str())
-            }),
-            _ => false,
-        })
+        || crate::harness_config_names::path_parts_protected(parts.iter().copied())
+        || parts
+            .iter()
+            .any(|part| PROTECTED_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str()))
 }
 
 #[cfg(test)]

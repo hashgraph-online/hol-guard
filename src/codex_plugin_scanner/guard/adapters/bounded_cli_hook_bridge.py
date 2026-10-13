@@ -34,6 +34,13 @@ from .bounded_cli_hook_envelope import (
     _json_object as _json_object,
 )
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
+from .bounded_cli_hook_native import (
+    NATIVE_BOUNDED_HOOK_COMMAND,
+    NATIVE_BOUNDED_HOOK_FEATURE,
+    bounded_python_argv,
+    native_bridge_executable,
+    take_native_handoff_environment,
+)
 from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
 from .cursor_hook_config import isolated_cursor_hook_python
 from .desktop_hook_proxy import (
@@ -176,28 +183,34 @@ def bounded_cli_hook_command(
             raise RuntimeError("trusted Desktop hook proxy is unavailable")
     elif require_desktop_proxy:
         raise RuntimeError("trusted Desktop hook proxy requires a frozen launcher")
-    if frozen_launcher or harness.strip().lower() == "grok":
+    grok = harness.strip().lower() == "grok"
+    if frozen_launcher or grok:
         isolated_command = _isolated_bounded_hook_command(
             guard_home=guard_home,
             harness=harness,
             timeout_seconds=timeout_seconds,
             prepared_files=prepared_files,
         )
+        if isolated_command is not None and not grok:
+            return isolated_command
         if isolated_command is not None:
-            return (*isolated_command, config_json) if harness.strip().lower() == "grok" else isolated_command
+            # The native runtime answers the generated Grok client itself and
+            # runs that same client for anything it does not answer.
+            native_executable = None if frozen_launcher else native_bridge_executable("grok")
+            if native_executable is not None:
+                return (str(native_executable), NATIVE_BOUNDED_HOOK_COMMAND, *isolated_command, config_json)
+            return (*isolated_command, config_json)
         if frozen_launcher:
             return (
                 python_executable,
                 _FROZEN_BRIDGE_COMMAND,
                 config_json,
             )
-    return (
-        python_executable,
-        "-I",
-        "-c",
-        bootstrap,
-        json.dumps(config, ensure_ascii=True, separators=(",", ":")),
-    )
+    python_argv = (python_executable, "-I", "-c", bootstrap, config_json)
+    native_executable = None if grok else native_bridge_executable(harness)
+    if native_executable is not None:
+        return (str(native_executable), NATIVE_BOUNDED_HOOK_COMMAND, *python_argv)
+    return python_argv
 
 
 def _read_bounded_stdin(deadline_monotonic: float) -> tuple[str | None, str]:
@@ -289,8 +302,13 @@ def run_bounded_cli_hook(
     *,
     input_text: str,
     deadline_monotonic: float | None = None,
+    skip_daemon: bool = False,
 ) -> int:
-    """Run one isolated CLI hook and preserve its native stdout contract."""
+    """Run one isolated CLI hook and preserve its native stdout contract.
+
+    ``skip_daemon`` is set when the native bridge already asked the daemon
+    about this hook, so one hook never reaches the daemon twice.
+    """
 
     started_monotonic = time.monotonic()
     from .bounded_cli_hook_daemon import _apply_grok_bridge_approval_wait, try_daemon_hook
@@ -358,12 +376,16 @@ def run_bounded_cli_hook(
     remaining = max(0.0, deadline - time.monotonic())
     if remaining <= 0:
         return fail()
-    daemon_result = try_daemon_hook(
-        guard_home=guard_home,
-        harness=harness,
-        input_text=input_text,
-        timeout_seconds=remaining,
-        deadline_monotonic=deadline,
+    daemon_result = (
+        None
+        if skip_daemon
+        else try_daemon_hook(
+            guard_home=guard_home,
+            harness=harness,
+            input_text=input_text,
+            timeout_seconds=remaining,
+            deadline_monotonic=deadline,
+        )
     )
     if time.monotonic() >= deadline:
         return fail()
@@ -428,12 +450,14 @@ def main_from_argv(argv: Sequence[str]) -> int:
     """Parse the authenticated install-time hook config and run it."""
 
     started_monotonic = time.monotonic()
+    native_elapsed, daemon_tried = take_native_handoff_environment()
     config = _json_object(argv[0]) if _is_config_argv(argv) else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
     timeout = config.get("timeout_seconds") if config is not None else None
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         return _emit_failure(harness=harness, input_text="{}")
+    started_monotonic -= native_elapsed(float(timeout))
     deadline = started_monotonic + float(timeout)
     try:
         input_text, stdin_prefix = _read_bounded_stdin(deadline)
@@ -452,13 +476,16 @@ def main_from_argv(argv: Sequence[str]) -> int:
     input_text = stamp_hook_input_text(input_text)
     if config is None:
         return _emit_failure(harness=harness, input_text=input_text)
-    return run_bounded_cli_hook(config, input_text=input_text, deadline_monotonic=deadline)
+    return run_bounded_cli_hook(config, input_text=input_text, deadline_monotonic=deadline, skip_daemon=daemon_tried)
 
 
 __all__ = [
+    "NATIVE_BOUNDED_HOOK_COMMAND",
+    "NATIVE_BOUNDED_HOOK_FEATURE",
     "_FROZEN_BRIDGE_COMMAND",
     "bounded_cli_hook_command",
     "bounded_hook_script_path",
+    "bounded_python_argv",
     "main_from_argv",
     "run_bounded_cli_hook",
 ]

@@ -161,10 +161,30 @@ fn budget_and_parser_failures_cannot_become_empty_success() {
     uncertain.confidence = "uncertain".to_owned();
     assert!(compatibility_observations(&uncertain, None).is_err());
     let mut overridden = exact;
-    overridden.segments[0]
-        .environment_names
-        .push("GIT_CONFIG_GLOBAL".to_owned());
+    overridden.segments[0].path_overridden = true;
     assert!(compatibility_observations(&overridden, None).is_err());
+}
+
+#[test]
+fn assignment_prefixes_are_attributed_as_uncertainty_not_evaluation_failure() {
+    for command in ["X=1 ls", "TODO_FILE=/tmp/todo.json ./todo.py list"] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert!(observed.permission_matches.is_empty(), "{command}");
+    }
+    let push =
+        compatibility_observations(&model("GIT_DIR=/tmp/x git push origin main"), None).unwrap();
+    assert!(!push.rule_matches.is_empty());
+    assert!(push.rule_matches.iter().all(|item| item.uncertainty));
+    let view =
+        compatibility_observations(&model("GH_HOST=example.com gh pr view 12"), None).unwrap();
+    assert!(!view.permission_matches.is_empty());
+    assert!(view.permission_matches.iter().all(|item| item.uncertainty));
+    // Only the steered segment loses certainty.
+    let mixed = compatibility_observations(&model("X=1 ls && git push"), None).unwrap();
+    assert_eq!(mixed.rule_matches.len(), 1);
+    assert!(!mixed.rule_matches[0].uncertainty);
+    assert!(compatibility_observations(&model("PATH=/tmp git status"), None).is_err());
 }
 
 #[test]
@@ -222,4 +242,20 @@ fn graphql_queries_are_remote_reads_and_mutations_are_owned_rules() {
         "command.github.unknown"
     );
     assert!(unread_input.rule_matches[0].uncertainty);
+}
+
+#[test]
+fn printing_a_credential_variable_reads_the_secret() {
+    let reads_secret = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|item| item.rule_id == "command.shell-mutations.process-environment-secret-read")
+    };
+    // The redirect projection hands this layer the command without `> file`.
+    assert!(reads_secret("echo \"$GITHUB_TOKEN\""));
+    assert!(reads_secret("printf '%s' \"${NPM_TOKEN}\""));
+    assert!(!reads_secret("echo \"$PATH\""));
+    assert!(!reads_secret("echo hello"));
 }

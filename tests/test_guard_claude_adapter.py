@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code, claude_daemon_hook_bridge, get_adapter
+from codex_plugin_scanner.guard.adapters import claude_code, claude_daemon_hook_bridge, claude_hook_argv, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
@@ -341,7 +341,8 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
     assert _shell_command(command, windows=True) == subprocess.list2cmdline(list(command))
 
 
-def test_claude_daemon_hook_command_uses_python_not_node(tmp_path):
+def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
+    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     command_parts = adapter._daemon_hook_command_parts(context)

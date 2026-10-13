@@ -8,9 +8,9 @@
 
 use guard_contracts::{
     BrowserMcpArtifactV1, McpToolApprovalHashRequestV1, McpToolCallArtifactV1,
-    McpToolCallIdentityPayloadV1, McpToolCallIdentityRequestV1, McpToolCallIdentityResultV1,
-    MCP_TOOL_CALL_IDENTITY_MAX_BYTES, MCP_TOOL_CALL_IDENTITY_REQUEST_SCHEMA,
-    MCP_TOOL_CALL_IDENTITY_RESULT_SCHEMA,
+    McpToolCallHashInputV1, McpToolCallIdentityPayloadV1, McpToolCallIdentityRequestV1,
+    McpToolCallIdentityResultV1, MCP_TOOL_CALL_IDENTITY_MAX_BYTES,
+    MCP_TOOL_CALL_IDENTITY_REQUEST_SCHEMA, MCP_TOOL_CALL_IDENTITY_RESULT_SCHEMA,
 };
 use serde_json::{Map, Value};
 
@@ -38,7 +38,7 @@ fn request_digest(request: &McpToolCallIdentityRequestV1) -> Result<String, &'st
 
 fn hash_request(
     artifact: &McpToolCallArtifactV1,
-    request: &McpToolCallIdentityRequestV1,
+    input: &McpToolCallHashInputV1,
 ) -> McpToolApprovalHashRequestV1 {
     McpToolApprovalHashRequestV1 {
         artifact: BrowserMcpArtifactV1 {
@@ -52,10 +52,10 @@ fn hash_request(
         publisher: artifact.publisher.clone(),
         source_scope: Value::String(artifact.source_scope.clone()),
         transport: artifact.transport.clone(),
-        arguments: request.hash.arguments.clone(),
-        config: request.hash.config.clone(),
-        workspace: request.hash.workspace.clone(),
-        extension_control_digest: request.hash.extension_control_digest.clone(),
+        arguments: input.arguments.clone(),
+        config: input.config.clone(),
+        workspace: input.workspace.clone(),
+        extension_control_digest: input.extension_control_digest.clone(),
     }
 }
 
@@ -68,13 +68,20 @@ fn compose(request: &McpToolCallIdentityRequestV1) -> Result<Value, &'static str
         (None, Some(artifact)) => (artifact.clone(), Map::new()),
         _ => return Err(ERR_INVALID),
     };
-    let hashed = crate::context_digest::build_mcp_tool_approval(&hash_request(&artifact, request))
-        .map_err(|_| ERR_HASH)?;
+    let (artifact_hash, risk_categories) = match &request.hash {
+        Some(input) => {
+            let hashed =
+                crate::context_digest::build_mcp_tool_approval(&hash_request(&artifact, input))
+                    .map_err(|_| ERR_HASH)?;
+            (Some(hashed.token_or_digest), hashed.risk_categories)
+        }
+        None => (None, Vec::new()),
+    };
     serde_json::to_value(McpToolCallIdentityPayloadV1 {
         artifact,
         runtime_private_metadata: private,
-        artifact_hash: hashed.token_or_digest,
-        risk_categories: hashed.risk_categories,
+        artifact_hash,
+        risk_categories,
     })
     .map_err(|_| ERR_INVALID)
 }

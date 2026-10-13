@@ -150,7 +150,17 @@ def test_pretool_plugin_source_follows_updated_guard_python(tmp_path: Path) -> N
     assert "function resolveGuardPythonTarget(): string" in source
     assert "function isGuardSelfRepairCommand(command: string): boolean" in source
     assert "host terminal outside OpenCode" in source
-    assert "nodeSpawn(pythonTarget, options.args" in source
+    command_at = source.index("let command = pythonTarget;")
+    args_at = source.index("let args = options.args;")
+    native_at = source.index(
+        "const nativeRuntime = options.nativeArgs === undefined ? null : resolveGuardNativeRuntime();"
+    )
+    override_at = source.index("if (nativeRuntime !== null && options.nativeArgs !== undefined)")
+    spawn_at = source.index("proc = nodeSpawn(command, args,")
+    override = source[override_at:spawn_at]
+    assert command_at < args_at < native_at < override_at < spawn_at
+    assert "command = nativeRuntime;" in override
+    assert "args = options.nativeArgs(pythonTarget);" in override
     assert "nodeSpawn(GUARD_PYTHON.targetPath, options.args" not in source
     assert "Re-run `hol-guard install opencode` before retrying." not in source
     assert "detail.includes(GUARD_RUNTIME_MISSING) && isGuardSelfRepairCommand(command)" in source
@@ -281,7 +291,17 @@ def test_pretool_hook_env_blocks_workspace_import_shadowing(tmp_path: Path) -> N
     source = pretool_plugin_source(ctx)
     assert 'args: GUARD_FROZEN ? guardArgv : ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER]' in source
     assert "resolveGuardPythonTarget();" in source
-    assert "nodeSpawn(pythonTarget, options.args" in source
+    command_at = source.index("let command = pythonTarget;")
+    args_at = source.index("let args = options.args;")
+    native_at = source.index(
+        "const nativeRuntime = options.nativeArgs === undefined ? null : resolveGuardNativeRuntime();"
+    )
+    override_at = source.index("if (nativeRuntime !== null && options.nativeArgs !== undefined)")
+    spawn_at = source.index("proc = nodeSpawn(command, args,")
+    override = source[override_at:spawn_at]
+    assert command_at < args_at < native_at < override_at < spawn_at
+    assert "command = nativeRuntime;" in override
+    assert "args = options.nativeArgs(pythonTarget);" in override
 
 
 def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) -> None:

@@ -100,7 +100,8 @@ fn request_bound_fits_one_resident_frame() {
     const { assert!(MCP_TOOL_CALL_IDENTITY_MAX_BYTES < guard_contracts::MAX_NATIVE_REQUEST_BYTES) };
     let doc = vectors();
     let mut request = parse(&doc["vectors"]["catalog_token"]["request"]);
-    request.hash.arguments = json!({ "blob": "x".repeat(MCP_TOOL_CALL_IDENTITY_MAX_BYTES) });
+    request.hash.as_mut().expect("hash input").arguments =
+        json!({ "blob": "x".repeat(MCP_TOOL_CALL_IDENTITY_MAX_BYTES) });
     let reply = run(&request);
     assert_eq!(
         reply["code"],

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..codex_binding_capture_writer import CodexBindingCaptureWriter
+from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import (
@@ -40,6 +40,7 @@ from .hook_worker_native_review import (
     SNAPSHOT_NOT_CURRENT_ERROR,
     NativePolicyBindingRefreshError,
     review_native_edge,
+    superseded_post_tool_snapshot,
 )
 
 
@@ -434,19 +435,34 @@ class HookWorkerNativeMixin:
         # Worker threads are reused, so clear any failure code left by an
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
-        edge = self._review_raw_hook_native(
-            payload=payload,
-            harness=harness,
-            event=event_name,
-            guard_home=guard_home,
-            home_dir=home_dir,
-            cwd=workspace,
-            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-            observe_mode=recording_only,
-            deadline=deadline,
-            policy_snapshot=policy_snapshot,
-            **({"request_id": probe[1]} if probe is not None else {}),
-        )
+        for retried in (False, True):
+            edge = self._review_raw_hook_native(
+                payload=payload,
+                harness=harness,
+                event=event_name,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                cwd=workspace,
+                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
+                observe_mode=recording_only,
+                deadline=deadline,
+                policy_snapshot=policy_snapshot,
+                **({"request_id": probe[1]} if probe is not None else {}),
+            )
+            refreshed = (
+                None
+                if edge is not None or retried
+                else superseded_post_tool_snapshot(
+                    self, policy_snapshot, event_name, workspace=workspace, deadline=deadline
+                )
+            )
+            if refreshed is None:
+                break
+            # The tool already ran; review its result once under the binding
+            # that replaced ours instead of answering PostToolUse fail-safe.
+            policy_snapshot = refreshed
+            recording_only = recording_only_for_binding(refreshed, harness)
+            record_native_resident_client_failure_code(None)
         if edge is None:
             failure = native_resident_client_failure_code()
             if (
