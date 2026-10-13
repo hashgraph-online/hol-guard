@@ -250,9 +250,12 @@ fn policy_block_empties_paid_content_and_zeroes_the_lease() {
 
 #[test]
 fn expired_items_are_removed_without_extending_the_lease() {
-    // Project at a time after the item end but before the snapshot lease:
-    // the placement disappears and the remaining lease shrinks accordingly.
-    let frame = run(request(base_snapshot(), NOW_MS + 20_000));
+    // The placement ends at 12:00:15. The snapshot lease runs to 12:00:25.
+    // Projecting at 12:00:20.5 drops the ended placement. The item end caps
+    // the authority, so the remaining lease is 0 instead of the unused tail.
+    let mut snapshot = base_snapshot();
+    snapshot["placements"][0]["endsAt"] = json!("2026-10-13T12:00:15.000Z");
+    let frame = run(request(snapshot, NOW_MS + 20_000));
     assert_eq!(outcome(&frame), ("ok", None));
     let projection = projection_body(&frame);
     assert_eq!(
@@ -263,8 +266,7 @@ fn expired_items_are_removed_without_extending_the_lease() {
             .map(Vec::len),
         Some(0)
     );
-    // Snapshot lease end 12:00:25 minus now 12:00:20.5.
-    assert_eq!(projection.get("remainingLeaseMs"), Some(&json!(4_500)));
+    assert_eq!(projection.get("remainingLeaseMs"), Some(&json!(0)));
 }
 
 #[test]

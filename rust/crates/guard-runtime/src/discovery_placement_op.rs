@@ -421,7 +421,7 @@ fn validate_snapshot(
         return Err(DiscoveryError::Snapshot);
     }
     match reason {
-        Some("disabled" | "source_unavailable" | "invalid_snapshot" | "rate_limited") => {}
+        None | Some("disabled" | "source_unavailable" | "invalid_snapshot" | "rate_limited") => {}
         _ => return Err(DiscoveryError::Snapshot),
     }
     if state == "unavailable" {

@@ -4682,7 +4682,17 @@
     }
   }
 
-  .text-brand-dark, .text-brand-dark\/35 {
+  .text-brand-dark, .text-brand-dark\/30 {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-dark\/30 {
+      color: color-mix(in oklab, var(--brand-dark) 30%, transparent);
+    }
+  }
+
+  .text-brand-dark\/35 {
     color: var(--brand-dark);
   }
 
