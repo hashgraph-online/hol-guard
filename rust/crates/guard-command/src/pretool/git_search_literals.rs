@@ -111,11 +111,25 @@ fn log_search_indices(arguments: &[String]) -> Vec<usize> {
     // token as ordinary option data. Conservatively preserve full sensitive
     // path screening whenever such an option occurs.
     const SEPARATE_VALUE: &[&str] = &[
-        "--author", "--committer", "--since", "--after", "--until",
-        "--before", "--skip", "--max-count", "-n", "--grep-reflog",
-        "--min-parents", "--max-parents", "--pretty", "--format",
-        "--date", "--encoding", "--decorate-refs",
-        "--decorate-refs-exclude", "--line-prefix",
+        "--author",
+        "--committer",
+        "--since",
+        "--after",
+        "--until",
+        "--before",
+        "--skip",
+        "--max-count",
+        "-n",
+        "--grep-reflog",
+        "--min-parents",
+        "--max-parents",
+        "--pretty",
+        "--format",
+        "--date",
+        "--encoding",
+        "--decorate-refs",
+        "--decorate-refs-exclude",
+        "--line-prefix",
     ];
     let mut indices = Vec::new();
     let mut index = 0;
@@ -156,7 +170,7 @@ mod tests {
     fn pickaxe_and_grep_values_are_search_text() {
         assert_eq!(indices("--oneline -S process.env.X -- src"), vec![2]);
         assert_eq!(indices("-Gprocess.env --oneline"), vec![0]);
-        assert_eq!(indices("--grep=process.env -n 3"), vec![0]);
+        assert_eq!(indices("--grep=process.env --oneline"), vec![0]);
         assert_eq!(indices("--grep process.env HEAD"), vec![1]);
     }
 
@@ -168,6 +182,7 @@ mod tests {
         assert!(indices("--committer -G .env").is_empty());
         assert!(indices("--since --grep .env").is_empty());
         assert!(indices("-n -S .env").is_empty());
+        assert!(indices("--grep=process.env -n 3").is_empty());
         assert!(indices("--pretty -G .env").is_empty());
         assert!(indices("--format --grep .env").is_empty());
         assert!(indices("--stat HEAD").is_empty());
