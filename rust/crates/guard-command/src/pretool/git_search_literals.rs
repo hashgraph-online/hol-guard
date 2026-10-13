@@ -107,11 +107,24 @@ pub(super) fn search_positions(
 
 /// The positions of `-S`, `-G` and `--grep` values among `git log` options.
 fn log_search_indices(arguments: &[String]) -> Vec<usize> {
+    // Separate-value log options can consume a later -S, -G or --grep
+    // token as ordinary option data. Conservatively preserve full sensitive
+    // path screening whenever such an option occurs.
+    const SEPARATE_VALUE: &[&str] = &[
+        "--author", "--committer", "--since", "--after", "--until",
+        "--before", "--skip", "--max-count", "-n", "--grep-reflog",
+        "--min-parents", "--max-parents", "--pretty", "--format",
+        "--date", "--encoding", "--decorate-refs",
+        "--decorate-refs-exclude", "--line-prefix",
+    ];
     let mut indices = Vec::new();
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         if argument == "--" {
             break;
+        }
+        if SEPARATE_VALUE.contains(&argument.as_str()) {
+            return Vec::new();
         }
         if matches!(argument.as_str(), "-S" | "-G" | "--grep") {
             if arguments.get(index + 1).is_some() {
@@ -151,6 +164,12 @@ mod tests {
     fn other_log_arguments_are_not_search_text() {
         assert!(indices("--oneline -- .env").is_empty());
         assert!(indices("-- -S .env").is_empty());
+        assert!(indices("--author -S .env").is_empty());
+        assert!(indices("--committer -G .env").is_empty());
+        assert!(indices("--since --grep .env").is_empty());
+        assert!(indices("-n -S .env").is_empty());
+        assert!(indices("--pretty -G .env").is_empty());
+        assert!(indices("--format --grep .env").is_empty());
         assert!(indices("--stat HEAD").is_empty());
         assert!(indices("-S").is_empty());
     }
