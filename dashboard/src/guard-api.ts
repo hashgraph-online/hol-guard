@@ -1081,10 +1081,10 @@ export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): 
  * browser never calls Guard Cloud directly (connect-src stays 'self'), and
  * these fixed paths are the whole allowlist.
  */
-export async function fetchExtensionDiscoveryApi(input: string, init?: RequestInit): Promise<Response> {
+export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
-    typeof input === "string"
-    && /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+    typeof input === "string" &&
+    /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid extension discovery API path");
   }
