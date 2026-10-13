@@ -4576,6 +4576,118 @@
       "expect": "allow"
     },
     {
+      "id": "git-grep-env-idiom-pattern",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -ln \"process.env.SAMPLE_FLAG\" -- src"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-routed-grep-env-idiom-pattern",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${ORG_WT} grep -ln \"process.env\" -- src"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-pickaxe-env-idiom",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -S \"process.env.SAMPLE_FLAG\" -- src | head"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-grep-pattern-file-dotenv",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -f .env -- src"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-grep-env-idiom-dotenv-target",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -n \"process.env\" -- .env"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-grep-env-idiom-open-pager",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -O \"process.env\" -- src"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-grep-printenv-substitution",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -ln \"$(printenv)\" -- src"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-worktree-log-then-status",
       "fix_area": "git",
       "harnesses": [

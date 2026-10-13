@@ -190,17 +190,35 @@ pub(super) fn exact_safe_segment_with_context(
         .flatten();
     let inert_search = matches!(basename, "rg" | "grep" | "fd")
         && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
-    if (!inert_search
-        && !super::source_file_read_segment(segment)
-        && sensitive_command(&segment.text))
+    // Git search patterns are matched against content, never run: screen the
+    // other arguments only. The Git arm still screens the targets as paths.
+    let git_search = (basename == "git")
+        .then(|| {
+            super::git_search_literals::arguments_outside_search_text(&segment.arguments, context)
+        })
+        .flatten();
+    let sensitive_text = match &git_search {
+        Some(screened) => sensitive_command(&format!("{executable} {}", screened.join(" "))),
+        None => sensitive_command(&segment.text),
+    };
+    if (!inert_search && !super::source_file_read_segment(segment) && sensitive_text)
         || (!matches!(basename, "rg" | "grep" | "fd")
-            && segment
-                .arguments
-                .iter()
-                .enumerate()
-                .any(|(index, argument)| {
-                    Some(index) != jq_filter && sensitive_path_argument(argument)
-                }))
+            && git_search.as_ref().map_or_else(
+                || {
+                    segment
+                        .arguments
+                        .iter()
+                        .enumerate()
+                        .any(|(index, argument)| {
+                            Some(index) != jq_filter && sensitive_path_argument(argument)
+                        })
+                },
+                |screened| {
+                    screened
+                        .iter()
+                        .any(|argument| sensitive_path_argument(argument))
+                },
+            ))
         || !segment.environment_names.is_empty()
         || executable.contains(['/', '\\'])
     {

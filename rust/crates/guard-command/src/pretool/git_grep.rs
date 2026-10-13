@@ -70,7 +70,19 @@ fn count(value: &str) -> bool {
 /// subcommand, stay inside the read-only grammar. Patterns are search text,
 /// not paths, and are left out.
 pub(crate) fn targets(arguments: &[String]) -> Option<&[String]> {
-    let mut patterns = 0usize;
+    parse(arguments).map(|(_, start)| &arguments[start..])
+}
+
+/// The positions of the search patterns when `arguments`, the tokens after
+/// the `grep` subcommand, stay inside the read-only grammar. Git matches a
+/// pattern against file content and never expands or runs it.
+pub(crate) fn pattern_indices(arguments: &[String]) -> Option<Vec<usize>> {
+    parse(arguments).map(|(patterns, _)| patterns)
+}
+
+/// The pattern positions and the index of the first revision or pathspec.
+fn parse(arguments: &[String]) -> Option<(Vec<usize>, usize)> {
+    let mut patterns = Vec::new();
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         index += 1;
@@ -85,8 +97,8 @@ pub(crate) fn targets(arguments: &[String]) -> Option<&[String]> {
         }
         if argument == "-e" {
             arguments.get(index)?;
+            patterns.push(index);
             index += 1;
-            patterns += 1;
             continue;
         }
         if let Some((name, value)) = argument.split_once('=') {
@@ -121,18 +133,21 @@ pub(crate) fn targets(arguments: &[String]) -> Option<&[String]> {
             }
             Some(Short::NeedsPattern) => {
                 arguments.get(index)?;
+                patterns.push(index);
                 index += 1;
-                patterns += 1;
             }
-            Some(Short::AttachedPattern) => patterns += 1,
+            Some(Short::AttachedPattern) => patterns.push(index - 1),
             None => return None,
         }
     }
     let mut start = index;
-    if patterns == 0 {
+    if patterns.is_empty() {
         // The first operand is the pattern.
         match arguments.get(start) {
-            Some(pattern) if pattern != "--" => start += 1,
+            Some(pattern) if pattern != "--" => {
+                patterns.push(start);
+                start += 1;
+            }
             _ => return None,
         }
     }
@@ -149,7 +164,7 @@ pub(crate) fn targets(arguments: &[String]) -> Option<&[String]> {
             }
             !operand.is_empty() && !operand.starts_with('-')
         })
-        .then_some(targets)
+        .then_some((patterns, start))
 }
 
 enum Short {

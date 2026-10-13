@@ -55,10 +55,14 @@ pub(super) fn safe_git_arguments(
     // Git magic pathspec semantics are not proven by this classifier; retain review.
     // A names-only log's glob pathspecs were checked by `log_names` instead.
     let listed = log_names::pathspec_start(arguments, context);
+    // A log pickaxe or `--grep` value is search text, not a path.
+    let search =
+        super::git_search_literals::search_positions(arguments, context).unwrap_or_default();
     if arguments.iter().enumerate().any(|(index, value)| {
         value.starts_with(':')
             || (super::sensitive_read_path_argument(value)
-                && listed.is_none_or(|start| index < start))
+                && listed.is_none_or(|start| index < start)
+                && !search.contains(&index))
     }) {
         return false;
     }

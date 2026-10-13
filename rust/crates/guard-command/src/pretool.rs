@@ -48,6 +48,7 @@ pub(crate) mod git_hash_object;
 pub(crate) mod git_init_target;
 mod git_read_floor;
 mod git_reads;
+mod git_search_literals;
 mod repo_create_reason;
 use git_reads::safe_git_arguments;
 mod git_helper_context;

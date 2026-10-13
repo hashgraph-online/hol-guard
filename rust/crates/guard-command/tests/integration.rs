@@ -64,6 +64,7 @@ pub mod pretool_git_outside_cwd;
 pub mod pretool_git_pager_config;
 pub mod pretool_git_read_sequences;
 pub mod pretool_git_ref_reads;
+pub mod pretool_git_search_literals;
 pub mod pretool_git_session_ops;
 pub mod pretool_git_sibling_local_writes;
 pub mod pretool_git_sibling_worktree_ops;
