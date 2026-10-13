@@ -173,7 +173,7 @@ jobs:
           echo "CARGO_PROFILE_TEST_DEBUG=line-tables-only" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-rust
         with:
-          cache-key: ci-workspace-${{ matrix.check == 'clippy' && 'clippy' || 'test' }}
+          cache-key: ci-workspace-${{ matrix.check }}
           components: clippy
       - name: Install content-addressed compiler cache
         if: matrix.check != 'clippy'

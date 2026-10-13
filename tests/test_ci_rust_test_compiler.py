@@ -33,8 +33,32 @@ def test_compiler_wrapper_preserves_arguments(tmp_path: Path, arguments: list[st
     )
     executable.chmod(0o755)
     completed = subprocess.run(
-        ["sh", str(ROOT / "scripts/ci/rust_test_compiler.sh"), *arguments],
+        ["bash", str(ROOT / "scripts/ci/rust_test_compiler.sh"), *arguments],
         env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True, text=True, check=True, timeout=5,
     )
     assert json.loads(completed.stdout) == [*arguments, *extra]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="The compiler wrapper runs in Linux CI")
+def test_compiler_wrapper_preserves_cargo_binary_environment(tmp_path: Path) -> None:
+    """Preserve Cargo's hyphenated binary path through the executable's shebang."""
+    executable = tmp_path / "sccache"
+    executable.write_text(
+        f"#!{sys.executable}\nimport os\nprint(os.environ['CARGO_BIN_EXE_guard-command-source'])\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    wrapper = tmp_path / "wrapper"
+    wrapper.write_bytes((ROOT / "scripts/ci/rust_test_compiler.sh").read_bytes())
+    wrapper.chmod(0o755)
+    binary = "/tmp/native source/guard-command-source"
+    completed = subprocess.run(
+        [str(wrapper), "rustc", "--test", "a test.rs"],
+        env={
+            **os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "CARGO_BIN_EXE_guard-command-source": binary,
+        },
+        capture_output=True, text=True, check=True, timeout=5,
+    )
+    assert completed.stdout.strip() == binary

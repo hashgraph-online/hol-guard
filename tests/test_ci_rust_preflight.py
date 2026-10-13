@@ -153,10 +153,10 @@ def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, 
     ]
 
 
-def test_rust_shards_remain_required_and_cache_compatible() -> None:
-    """Keep every matrix child mandatory and reuse the existing dependency cache."""
+def test_rust_shards_remain_required_and_cache_isolated() -> None:
+    """Keep every matrix child mandatory and prevent competing partial cache writers."""
     jobs = workflow("ci.yml")["jobs"]
     assert "native-workspace" in jobs["required"]["needs"]
     cache = next(step for step in jobs["native-workspace"]["steps"]
                  if step.get("uses") == "./.github/actions/setup-rust")
-    assert cache["with"]["cache-key"] == "ci-workspace-${{ matrix.check == 'clippy' && 'clippy' || 'test' }}"
+    assert cache["with"]["cache-key"] == "ci-workspace-${{ matrix.check }}"
