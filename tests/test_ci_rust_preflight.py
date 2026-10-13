@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-import shlex
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -83,7 +84,7 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
     )
     cache = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
     assert steps.index(configure) < steps.index(cache)
-    assert configure["if"] == "matrix.check == 'test'"
+    assert configure["if"] == "matrix.check != 'clippy'"
     environment_file = tmp_path / "github-env"
     subprocess.run(
         ["bash", "-e", "-o", "pipefail", "-c", configure["run"]],
@@ -100,26 +101,62 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
     assert "RUSTFLAGS" not in configured
 
 
-def test_fast_rust_workspace_keeps_full_validation() -> None:
-    """Bind the test profile and dependency override to the actual nextest command."""
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux workspace validation uses Bash")
+@pytest.mark.parametrize(
+    ("check", "packages"),
+    [
+        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"]),
+        ("test-command", ["--package", "guard-command"]),
+        ("test-runtime", ["--package", "hol-guard-runtime"]),
+    ],
+)
+def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, packages: list[str]) -> None:
+    """Execute each shard's shell branch and inspect the exact Cargo arguments."""
     job = workflow("ci.yml")["jobs"]["native-workspace"]
-    assert job["strategy"]["matrix"]["check"] == ["clippy", "test"]
-    validate = next(
-        step["run"] for step in job["steps"] if step.get("name") == "Validate the locked Rust workspace"
-    )
+    assert job["strategy"]["matrix"]["check"] == ["clippy", "test-core", "test-command", "test-runtime"]
+    assert job["strategy"]["fail-fast"] is False
+    validate = next(step["run"] for step in job["steps"] if step.get("name") == "Validate the locked Rust workspace")
     assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in validate
     assert "-- -D warnings" in validate
-    command = next(
-        shlex.split(line)
-        for line in validate.replace("\\\n", " ").splitlines()
-        if line.lstrip().startswith('CARGO_PROFILE_TEST_OPT_LEVEL=0 PATH="$nextest_bin:$PATH" cargo nextest run ')
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    installer = bindir / "python3"
+    installer.write_text('#!/bin/sh\nprintf "%s\\n" "$FAKE_BIN"\n', encoding="utf-8")
+    installer.chmod(0o755)
+    cargo = bindir / "cargo"
+    cargo.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['CAPTURE']).write_text(json.dumps({'args': sys.argv[1:], "
+        "'opt': os.environ.get('CARGO_PROFILE_TEST_OPT_LEVEL')}))\n",
+        encoding="utf-8",
     )
-    assert command[:5] == [
-        "CARGO_PROFILE_TEST_OPT_LEVEL=0", "PATH=$nextest_bin:$PATH", "cargo", "nextest", "run"
+    cargo.chmod(0o755)
+    capture = tmp_path / "cargo.json"
+    subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", validate],
+        env={
+            **os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
+            "CARGO_CHECK": check, "FAKE_BIN": str(bindir), "CAPTURE": str(capture),
+            "CARGO_PROFILE_TEST_OPT_LEVEL": "1",
+        },
+        check=True, capture_output=True, timeout=5,
+    )
+    invocation = json.loads(capture.read_text())
+    assert invocation["opt"] == "0"
+    assert invocation["args"] == [
+        "nextest", "run", "--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets",
+        *packages, "--config", 'profile.test.package."*".opt-level=1', "--profile", "ci",
+        "--test-threads", "4", "--retries", "0", "--no-fail-fast",
     ]
-    assert command[command.index("--config") + 1] == 'profile.test.package."*".opt-level=1'
-    assert all(flag in command for flag in ("--locked", "--workspace", "--all-targets", "--no-fail-fast"))
-    assert command[command.index("--test-threads") + 1] == "4"
-    assert command[command.index("--retries") + 1] == "0"
-    assert "--partition" not in command
-    assert "--exclude" not in command
+
+
+def test_rust_shards_remain_required_and_cache_compatible() -> None:
+    """Keep every matrix child mandatory and reuse the existing dependency cache."""
+    jobs = workflow("ci.yml")["jobs"]
+    assert "native-workspace" in jobs["required"]["needs"]
+    cache = next(step for step in jobs["native-workspace"]["steps"]
+                 if step.get("uses") == "./.github/actions/setup-rust")
+    assert cache["with"]["cache-key"] == "ci-workspace-${{ matrix.check == 'clippy' && 'clippy' || 'test' }}"
