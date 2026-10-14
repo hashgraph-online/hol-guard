@@ -1,7 +1,8 @@
 //! Local Git writes that keep every change reachable: `git add`, a non-forced
 //! `git rm`, `git commit -m`, a new branch at `HEAD` or at a start point that
-//! replaces no untracked file, a non-forced branch rename and a plain stash
-//! push, with Git reads the configuration probe proves helper-free around them.
+//! replaces no untracked file, a non-forced branch rename, a plain stash push,
+//! `git stash apply` or `pop` of one entry and `git stash list`, with Git
+//! reads the configuration probe proves helper-free around them.
 //! The workspace sandbox runs them in a main checkout, but a linked worktree
 //! keeps its index, refs and objects in the shared Git directory the sandbox
 //! cannot write, and some hosts have no sandbox, so they would stop at review.
@@ -33,10 +34,12 @@ use std::time::Instant;
 
 #[path = "git_local_writes_forms.rs"]
 mod forms;
+#[path = "git_local_writes_route.rs"]
+mod route;
 #[path = "git_local_writes_start.rs"]
 mod start;
 
-use forms::{add, branch_rename, commit, rm};
+use forms::{add, branch_rename, commit, rm, stash_list, stash_restore};
 
 pub(crate) const REASON: &str = "native_exact_safe_git_local_write";
 pub(crate) const PUBLISH_REASON: &str = "native_exact_safe_git_publish_chain";
@@ -79,6 +82,8 @@ const COMMIT_HOOKS: &[&str] = &[
     "pre-auto-gc",
 ];
 const BRANCH_HOOKS: &[&str] = &["reference-transaction"];
+/// `git stash list` writes nothing and runs no hook.
+const LIST_HOOKS: &[&str] = &[];
 const CHECKOUT_HOOKS: &[&str] = &[
     "post-checkout",
     "post-index-change",
@@ -188,21 +193,23 @@ fn proven(
     if !extensions.permission_observations.iter().all(allowed_alone) {
         return None;
     }
-    let cwd_proof = model
-        .segments
-        .iter()
-        .position(|segment| segment.executable.as_deref() == Some("cd"))
-        .and_then(|cd_index| {
-            super::worktree_add::verified_worktree_cwd_context(model, cd_index, context)
-        });
+    let route = route::route(model, context)?;
+    let model = route.model(model);
+    let shell = context;
     let context = super::PathContext {
-        cwd: cwd_proof
-            .as_ref()
-            .map(|proof| proof.cwd.as_str())
-            .or(context.cwd),
+        cwd: route.cwd().or(context.cwd),
         ..context
     };
+    let read = |index: usize, context: super::PathContext<'_>| {
+        super::segment_proof::exact_safe_segment_with_context(
+            model,
+            &model.segments[index],
+            false,
+            context,
+        ) || configured_read(model, index, context, deadline, execution_environment)
+    };
     let mut writes: Vec<(usize, &'static [&'static str])> = Vec::new();
+    let mut stashed = Vec::new();
     let mut starts = Vec::new();
     let mut safe = Vec::new();
     let mut created: Vec<(usize, &str)> = Vec::new();
@@ -211,15 +218,24 @@ fn proven(
     let mut proposal = false;
     for (index, segment) in model.segments.iter().enumerate() {
         if segment.executable.as_deref() == Some("cd") {
-            if cwd_proof
-                .as_ref()
-                .is_none_or(|proof| proof.cd_index != index)
-            {
+            if route.cd_index() != Some(index) {
                 return None;
             }
             continue;
         }
+        // After a `;` that follows the `cd`, a step may run in either
+        // directory: only a read proven in both may.
+        if route.either(index) {
+            if !(read(index, context) && read(index, shell)) {
+                return None;
+            }
+            safe.push(index);
+            continue;
+        }
         if let Some((hooks, point)) = write_hooks(segment) {
+            if segment.arguments.first().map(String::as_str) == Some("stash") {
+                stashed.push(index);
+            }
             writes.push((index, hooks));
             starts.extend(point);
             match created_branch(segment) {
@@ -227,6 +243,11 @@ fn proven(
                 None => moved |= moves_head(segment),
             }
             continue;
+        }
+        // Behind `git -C` only the Git steps run in that repository; a push
+        // or a GitHub step would act from the shell's directory.
+        if route.chdir() && (super::git_push::chained(segment) || granted.contains(&index)) {
+            return None;
         }
         if super::git_push::chained(segment) {
             // A proposal opens the pull request for work the chain pushed.
@@ -239,9 +260,13 @@ fn proven(
             proposal = true;
             continue;
         }
-        if !super::segment_proof::exact_safe_segment_with_context(model, segment, false, context)
-            && !configured_read(model, index, context, deadline, execution_environment)
-        {
+        // Behind `git -C`, every other step runs in the shell's directory.
+        let step = if route.chdir() && segment.executable.as_deref() != Some("git") {
+            shell
+        } else {
+            context
+        };
+        if !read(index, step) {
             return None;
         }
         safe.push(index);
@@ -302,7 +327,18 @@ fn proven(
             .any(|key| key.to_ascii_lowercase().starts_with("includeif.onbranch"));
     if branch_scoped
         || !inert(&effective, &repository)
-        || !writes.iter().all(|(_, hooks)| probe.hooks_inert(hooks))
+        || forms::aliased(&effective, model)
+        || !probe.hooks_inert(writes.iter().flat_map(|(_, hooks)| hooks.iter().copied()))
+        || !stashed.iter().all(|index| {
+            forms::stash_free(
+                &effective,
+                model,
+                *index,
+                context,
+                deadline,
+                execution_environment,
+            )
+        })
         || !starts
             .iter()
             .all(|point| start::replaces_nothing(&probe, point))
@@ -373,7 +409,7 @@ fn configured_read(
     let stripped = super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
     segment.executable.as_deref() == Some("git")
-        && segment.environment_names.is_empty()
+        && identity_only(segment)
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden
         && super::directory_targets::drive_targets_quoted(segment)
@@ -388,9 +424,19 @@ fn configured_read(
         && super::git_reads::safe_git_arguments(&segment.arguments, true, context)
 }
 
+/// Whether every setting in front of the Git step only names the commit
+/// identity or adjusts output; none can choose a program Git runs.
+fn identity_only(segment: &CommandSegmentV1) -> bool {
+    segment
+        .environment_names
+        .iter()
+        .all(|name| crate::command_compatibility::inert_git_environment_name(name))
+}
+
 /// The hooks a proven write form runs, or `None` when `original` is not one.
-/// Leading Git options such as `-c` or `-C` are refused: they can point the
-/// command at another repository or configuration.
+/// Leading Git options such as `-c` are refused: they can point the command
+/// at another configuration. A leading `-C <dir>` reaches here only after
+/// the route proof dropped it.
 fn write_hooks(original: &CommandSegmentV1) -> Option<(&'static [&'static str], Option<String>)> {
     let stripped = super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
@@ -398,7 +444,7 @@ fn write_hooks(original: &CommandSegmentV1) -> Option<(&'static [&'static str], 
         || segment.pipeline_index != 0
         || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
-        || !segment.environment_names.is_empty()
+        || !identity_only(segment)
         || segment.text.contains(['>', '<', '$', '`', '\n', '\r'])
     {
         return None;
@@ -409,6 +455,12 @@ fn write_hooks(original: &CommandSegmentV1) -> Option<(&'static [&'static str], 
         (&"rm", rest) => rm(rest).then_some(INDEX_HOOKS),
         (&"commit", rest) => commit(rest).then_some(COMMIT_HOOKS),
         (&"branch", rest) => branch_rename(rest).then_some(BRANCH_HOOKS),
+        (&"stash", [action, rest @ ..]) if *action == "list" => {
+            stash_list(rest).then_some(LIST_HOOKS)
+        }
+        (&"stash", [action, rest @ ..]) if matches!(*action, "apply" | "pop") => {
+            stash_restore(rest).then_some(CHECKOUT_HOOKS)
+        }
         _ => super::workspace_contained::keeping_arguments(&segment.arguments)
             .then_some(CHECKOUT_HOOKS),
     };

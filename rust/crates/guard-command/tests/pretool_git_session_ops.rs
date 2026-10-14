@@ -43,7 +43,7 @@ fn default_controls() -> guard_command::native_command_controls::CompiledNativeC
     guard_command::native_command_controls::CompiledNativeCommandControls::new(&binding).unwrap()
 }
 
-fn git(home: &Path, directory: &Path, arguments: &[&str]) {
+pub(crate) fn git(home: &Path, directory: &Path, arguments: &[&str]) {
     let status = std::process::Command::new("git")
         .arg("-C")
         .arg(directory)
@@ -447,6 +447,9 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git switch -c feat/retry",
         "git checkout -b feat/retry",
         "git stash",
+        "git stash list",
+        "git stash apply",
+        "git stash pop",
     ] {
         allowed(command).unwrap();
     }
@@ -460,7 +463,7 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git -c core.hooksPath=/tmp/hooks commit -m x",
         "git add notes.md && rm -rf build",
         "git switch main",
-        "git stash pop",
+        "git stash drop",
     ] {
         assert!(allowed(command).is_err(), "{command}");
     }

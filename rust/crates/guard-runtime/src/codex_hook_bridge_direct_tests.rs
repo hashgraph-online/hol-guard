@@ -1,6 +1,6 @@
 use super::{
     answered_response, bounded_direct_request, direct_event, direct_request, grok_direct_answer,
-    grok_direct_request, harness_event, parse_hook_query, HookQuery, CLAUDE_CODE, CODEX,
+    grok_direct_request, harness_event, parse_hook_query, HookQuery, CLAUDE_CODE, CODEX, CURSOR,
 };
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -372,17 +372,19 @@ fn lifecycle_hooks_reach_the_resident_and_permission_hooks_do_not() {
 }
 
 #[test]
-fn only_claude_code_asks_the_resident_about_its_permission_dialog() {
+fn claude_code_and_codex_ask_the_resident_about_their_permission_dialogs() {
     assert!(harness_event(&CLAUDE_CODE, "PermissionRequest"));
     assert!(harness_event(&CLAUDE_CODE, "Notification"));
     assert!(harness_event(&CLAUDE_CODE, "Stop"));
-    assert!(!harness_event(&CODEX, "PermissionRequest"));
+    assert!(harness_event(&CODEX, "PermissionRequest"));
     assert!(!harness_event(&CODEX, "Notification"));
+    assert!(!harness_event(&CURSOR, "PermissionRequest"));
     for event in [
         "permission_request_v2",
         "notification",
         "copilotPermissionRequest",
     ] {
         assert!(!harness_event(&CLAUDE_CODE, event), "{event}");
+        assert!(!harness_event(&CODEX, event), "{event}");
     }
 }

@@ -320,6 +320,6 @@ pub(crate) fn authenticated_claude_hook_response(
     Ok(text)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_transport_tests.rs"]
 mod tests;

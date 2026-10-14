@@ -182,16 +182,59 @@ pub(crate) fn protected_patterns(workspace: &Path) -> Result<Vec<String>, Restri
         .chain(HARNESS_INSTRUCTION_FILES)
         .copied()
         .collect();
-    Ok(vec![
-        format!("^{root}/(.*/)?({})(/.*)?$", alternatives(&directories)?),
-        format!("^{root}/(.*/)?({})$", alternatives(&files)?),
-        format!(
-            "^{root}/(.*/)?{}/({})(/.*)?$",
-            ci(".github")?,
-            alternatives(GITHUB_AGENT_DIRECTORIES)?
-        ),
-        format!("^{root}/(.*/)?{}(/.*)?$", ci(".github/workflows")?),
-    ])
+    let prefix = format!("^{root}/(.*/)?");
+    let mut patterns = bounded(&prefix, &directories, "(/.*)?$")?;
+    patterns.extend(bounded(&prefix, &files, "$")?);
+    patterns.extend(bounded(
+        &format!("{prefix}{}/", ci(".github")?),
+        GITHUB_AGENT_DIRECTORIES,
+        "(/.*)?$",
+    )?);
+    patterns.push(format!("{prefix}{}(/.*)?$", ci(".github/workflows")?));
+    Ok(patterns)
+}
+
+/// Seatbelt rejects the whole profile when one string literal reaches about
+/// 1,023 bytes, so long name lists are spread over as many rules as needed.
+const SEATBELT_PATTERN_BUDGET: usize = 900;
+
+/// Bytes `value` takes inside a Seatbelt string literal, after escaping.
+fn quoted_len(value: &str) -> usize {
+    value.len()
+        + value
+            .bytes()
+            .filter(|byte| matches!(byte, b'\\' | b'"' | b'\n' | b'\r'))
+            .count()
+}
+
+fn bounded(
+    prefix: &str,
+    names: &[&str],
+    suffix: &str,
+) -> Result<Vec<String>, RestrictedPytestError> {
+    let mut patterns = Vec::new();
+    let mut group: Vec<String> = Vec::new();
+    let empty = quoted_len(prefix) + quoted_len(suffix) + 2;
+    let mut length = empty;
+    for name in names {
+        let name = ci(name)?;
+        let size = quoted_len(&name);
+        if !group.is_empty() && length + 1 + size > SEATBELT_PATTERN_BUDGET {
+            patterns.push(format!("{prefix}({}){suffix}", group.join("|")));
+            group.clear();
+            length = empty;
+        }
+        // A name that does not fit in an empty group cannot be split further.
+        if length + size > SEATBELT_PATTERN_BUDGET {
+            return Err(invalid());
+        }
+        length += size + usize::from(!group.is_empty());
+        group.push(name);
+    }
+    if !group.is_empty() {
+        patterns.push(format!("{prefix}({}){suffix}", group.join("|")));
+    }
+    Ok(patterns)
 }
 
 /// Helper paths stay unwritable at any letter case, and so does every
@@ -363,4 +406,16 @@ pub(super) fn compose(
         lines.push(regex_rule("file-read* file-write*", &pattern));
     }
     Ok(lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_name_that_cannot_fit_in_a_fresh_group_is_rejected() {
+        let long = "n".repeat(SEATBELT_PATTERN_BUDGET);
+        assert!(bounded("^", &["ok", &long], "$").is_err());
+        assert!(bounded("^", &["hooks", "plugins"], "$").is_ok());
+    }
 }

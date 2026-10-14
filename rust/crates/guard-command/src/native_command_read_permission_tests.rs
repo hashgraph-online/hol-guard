@@ -172,6 +172,41 @@ fn kubectl_reads_are_allowed_by_default_and_never_cover_exec_or_secrets() {
 }
 
 #[test]
+fn docker_listings_and_loopback_port_probes_need_no_prompt() {
+    let defaults = controls_with(&[]);
+    for command in [
+        "docker ps",
+        "docker ps -a",
+        "docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | head -8",
+        "docker images",
+        "docker container ls -q",
+        "nc -z 127.0.0.1 55433; echo \"probe-status:$?\"",
+        "nc -z 127.0.0.1 55433 && echo open || echo closed",
+        "nc -zv localhost 5432",
+    ] {
+        assert_eq!(action(&defaults, command), "allow", "{command}");
+    }
+    // Container state that prints environments or project secrets, other
+    // daemons, and network modes that move data keep the review.
+    for command in [
+        "docker inspect web",
+        "docker compose ps",
+        "docker logs web --tail 50",
+        "docker exec web env",
+        "docker -H tcp://build.example.com:2376 ps",
+        "docker --context production ps",
+        "DOCKER_HOST=tcp://build.example.com:2376 docker ps",
+        "nc -z example.com 443",
+        "nc -l 55433",
+        "nc -z -e /bin/sh 127.0.0.1 55433",
+        "echo payload | nc -z 127.0.0.1 55433",
+        "nc 127.0.0.1 55433 < notes.txt",
+    ] {
+        assert_ne!(action(&defaults, command), "allow", "{command}");
+    }
+}
+
+#[test]
 fn review_thread_queries_with_variables_and_newlines_are_reads() {
     let controls = controls_with(&[]);
     let threads = "reviewThreads(first:100){nodes{id,isResolved,isOutdated,path}}";

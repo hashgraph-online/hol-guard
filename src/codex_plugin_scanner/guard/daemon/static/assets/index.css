@@ -1652,6 +1652,10 @@
     resize: both;
   }
 
+  .scroll-mt-24 {
+    scroll-margin-top: calc(var(--spacing) * 24);
+  }
+
   .\[scrollbar-gutter\:stable\] {
     scrollbar-gutter: stable;
   }
@@ -6486,6 +6490,10 @@
 
     .sm\:flex-none {
       flex: none;
+    }
+
+    .sm\:scroll-mt-4 {
+      scroll-margin-top: calc(var(--spacing) * 4);
     }
 
     .sm\:grid-cols-2 {

@@ -73,3 +73,27 @@ fn original_portable_contained_argv_vectors() {
     }
     assert!(count >= 80);
 }
+
+#[test]
+fn bun_inline_eval_is_exact_argv_only() {
+    for flag in ["-e", "--eval", "-p", "--print"] {
+        let result = evaluate(
+            "contained_kind",
+            &json!({"command": ["bun", flag, "console.log(1)"]}),
+        )
+        .unwrap();
+        assert_eq!(result["value"]["inline_eval"], true, "{flag} {result}");
+    }
+    for command in [
+        json!(["bun", "-e"]),
+        json!(["bun", "-e", "1", "extra"]),
+        json!(["bun", "--smol", "-e", "1"]),
+        json!(["bun", "run", "-e", "1"]),
+        json!(["bun", "script.ts"]),
+        json!(["bunx", "-e", "1"]),
+        json!(["bun-evil", "-e", "1"]),
+    ] {
+        let result = evaluate("inline_eval", &json!({ "command": command })).unwrap();
+        assert_eq!(result["value"], false, "{command} {result}");
+    }
+}

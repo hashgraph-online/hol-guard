@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
-from typing import ParamSpec, TypeGuard, TypeVar, cast
+from typing import ParamSpec, TypeVar, cast
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from ..version import __version__
@@ -59,8 +59,6 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
-    DECISION_SCOPE_VALUES,
-    DecisionScope,
     GuardApprovalRequest,
     GuardArtifact,
     HarnessDetection,
@@ -155,10 +153,6 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
-
-
-def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
-    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
 
 
 def _queued_request_dicts(queued: Sequence[object]) -> list[dict[str, object]]:
@@ -1349,9 +1343,6 @@ def attach_primary_approval_link(
     )
     if review_url is not None:
         payload["primary_approval_url"] = review_url
-
-
-_UNPROVEN_HOOK_REASONS = frozenset({"guard_cursor_cli_attestation_unavailable"})
 
 
 def _live_hook_verification(

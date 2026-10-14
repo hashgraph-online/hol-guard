@@ -313,7 +313,8 @@
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler_contracts.py",
-    "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler_types.py"
+    "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler_types.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_direct_pi_transport.py"
    ],
    "current": "HTTP authentication, JSON envelope interpretation, fast-path selection, and fallback routing",
    "target": "authentication and byte transport only"
@@ -348,8 +349,8 @@
     "src/codex_plugin_scanner/guard/native_approval_gate.py",
     "src/codex_plugin_scanner/guard/native_approval_reuse.py",
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
-    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/environment_secret_dump.py",
     "src/codex_plugin_scanner/guard/native_runner_authority.py",
+    "src/codex_plugin_scanner/guard/native_developer_inspection_authority.py",
     "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
     "src/codex_plugin_scanner/guard/native_continuation_authority.py",
     "src/codex_plugin_scanner/guard/native_decisions.py",
@@ -359,6 +360,7 @@
     "src/codex_plugin_scanner/guard/native_cursor_observer_proof.py",
     "src/codex_plugin_scanner/guard/native_hook_authority_state.py",
     "src/codex_plugin_scanner/guard/native_store_policy.py",
+    "src/codex_plugin_scanner/guard/native_policy_integrity_rows.py",
     "src/codex_plugin_scanner/guard/native_approval_resolution.py",
     "src/codex_plugin_scanner/guard/native_approval_queue_identity.py",
     "src/codex_plugin_scanner/guard/native_approval_bulk_eligibility.py",
@@ -403,7 +405,6 @@
     "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
     "src/codex_plugin_scanner/guard/native_direct_tool_context.py",
     "src/codex_plugin_scanner/guard/native_cli_runtime_support.py",
-    "src/codex_plugin_scanner/guard/native_critical_floor.py",
     "src/codex_plugin_scanner/guard/native_approval_protocol.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py",

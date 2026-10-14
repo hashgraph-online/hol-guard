@@ -5,7 +5,9 @@ use std::io::{ErrorKind, Read};
 use std::path::PathBuf;
 use std::process::Command;
 
-use guard_runtime_windows_process::{handle_file_id, open_bound_regular_file, regular_file_id};
+use guard_runtime_windows_process::{
+    handle_file_id, open_bound_regular_file, open_bound_replaceable_file, regular_file_id,
+};
 
 struct Fixture(PathBuf);
 
@@ -102,4 +104,20 @@ fn file_ids_distinguish_a_replacement_with_the_same_contents() {
     fs::rename(&replacement, &path).unwrap();
     let file = open_bound_regular_file(&path).unwrap();
     assert_ne!(handle_file_id(&file).unwrap(), original);
+}
+
+#[test]
+fn replaceable_open_lets_a_rename_replace_the_file_and_keeps_its_bytes() {
+    let fixture = Fixture::new("replaceable");
+    let path = fixture.0.join("state.json");
+    fs::write(&path, b"old").unwrap();
+    let mut held = open_bound_replaceable_file(&path).unwrap();
+    assert!(fs::OpenOptions::new().write(true).open(&path).is_err());
+    let replacement = fixture.0.join("state.json.tmp");
+    fs::write(&replacement, b"new").unwrap();
+    fs::rename(&replacement, &path).unwrap();
+    let mut bytes = Vec::new();
+    held.read_to_end(&mut bytes).unwrap();
+    assert_eq!(bytes, b"old");
+    assert_eq!(fs::read(&path).unwrap(), b"new");
 }

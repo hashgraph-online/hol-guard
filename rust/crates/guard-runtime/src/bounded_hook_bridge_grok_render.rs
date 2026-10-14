@@ -484,6 +484,6 @@ pub(crate) fn quote_component(text: &str) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_grok_render_tests.rs"]
 mod tests;

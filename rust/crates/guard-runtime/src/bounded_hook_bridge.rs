@@ -19,13 +19,9 @@
 //! native bridge never decides a verdict.
 
 use std::io::{self, Write};
-use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-
-use nix::errno::Errno;
-use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 
 use crate::bounded_hook_bridge_render::{
     daemon_response_to_native, event_name, failure_output, Rendered, NATIVE_HARNESSES,
@@ -33,8 +29,17 @@ use crate::bounded_hook_bridge_render::{
 use crate::claude_hook_bridge_auth::{private_file_text, LOOPBACK_HOSTS};
 use crate::claude_hook_bridge_http::{remaining, LoopbackConnection, MAX_DAEMON_RESPONSE_BYTES};
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
+use crate::hook_bridge_exit::exit_code;
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::pyjson::{self, PyVal};
+
+#[cfg(unix)]
+#[path = "bounded_hook_bridge_input.rs"]
+mod input;
+#[cfg(windows)]
+#[path = "bounded_hook_bridge_input_windows.rs"]
+mod input;
+pub(crate) use input::read_hook_input;
 
 pub(crate) const BRIDGE_COMMAND: &str = "bounded-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "bounded-hook-bridge-v1";
@@ -43,7 +48,6 @@ pub(crate) const DAEMON_TRIED_ENV: &str = "HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED
 
 pub(crate) const MAX_HOOK_INPUT_BYTES: usize = 1_000_000;
 const READ_CHUNK: usize = 65_536;
-const MAX_POLL_WAIT: Duration = Duration::from_secs(60);
 const MAX_STATE_BYTES: u64 = 64 * 1024;
 const MAX_TOKEN_BYTES: u64 = 4096;
 const DAEMON_BUDGET: Duration = Duration::from_secs(5);
@@ -126,43 +130,6 @@ pub(crate) enum Input {
     Read(Vec<u8>),
     /// The deadline passed or stdin failed: Python's `_emit_failure`.
     Failed,
-}
-
-/// `_read_hook_input`: at most one byte past the limit, every read inside
-/// the hook deadline.
-pub(crate) fn read_hook_input(deadline: Instant) -> Input {
-    let stdin = io::stdin();
-    let mut raw = Vec::new();
-    let mut chunk = vec![0_u8; READ_CHUNK];
-    while raw.len() <= MAX_HOOK_INPUT_BYTES {
-        let left = remaining(deadline);
-        if left.is_zero() {
-            return Input::Failed;
-        }
-        let Ok(timeout) = PollTimeout::try_from(left.min(MAX_POLL_WAIT)) else {
-            return Input::Failed;
-        };
-        let mut descriptors = [PollFd::new(stdin.as_fd(), PollFlags::POLLIN)];
-        match poll(&mut descriptors, timeout) {
-            Ok(0) | Err(Errno::EINTR) => continue,
-            Ok(_) => {}
-            Err(_) => return Input::Failed,
-        }
-        if Instant::now() >= deadline {
-            return Input::Failed;
-        }
-        let want = READ_CHUNK.min(MAX_HOOK_INPUT_BYTES + 1 - raw.len());
-        match nix::unistd::read(stdin.as_fd(), &mut chunk[..want]) {
-            Ok(0) => break,
-            Ok(count) => raw.extend_from_slice(&chunk[..count]),
-            Err(Errno::EINTR) => {}
-            Err(_) => return Input::Failed,
-        }
-    }
-    if Instant::now() >= deadline {
-        return Input::Failed;
-    }
-    Input::Read(raw)
 }
 
 /// A hook the daemon can be asked about: the stamped text and its event.
@@ -387,14 +354,6 @@ fn direct_route(
     ))
 }
 
-fn exit_code(status: ExitStatus) -> i32 {
-    use std::os::unix::process::ExitStatusExt;
-    status
-        .code()
-        .or_else(|| status.signal().map(|signal| 128 + signal))
-        .unwrap_or(1)
-}
-
 /// Run the Python bridge. `stdin` is the hook already read, or `None` to
 /// let Python read the hook itself.
 pub(crate) fn run_python(
@@ -487,6 +446,6 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_tests.rs"]
 mod tests;

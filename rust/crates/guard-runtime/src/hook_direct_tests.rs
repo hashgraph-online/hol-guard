@@ -350,10 +350,12 @@ fn request_shapes_the_daemon_must_handle_defer() {
         deferred(&run(&lane, reference)),
         "direct_hook_payload_unsupported"
     );
+    // Codex PermissionRequest is the no-decision passthrough. A harness
+    // without that passthrough still defers, and the command is not judged.
     let mut permission = allowed_payload(&lane);
     permission["hook_event_name"] = json!("PermissionRequest");
     assert_eq!(
-        deferred(&run(&lane, permission)),
+        deferred(&run_as(&lane, "copilot", Some(HOME), permission)),
         "direct_hook_event_unsupported"
     );
     let mut environment = allowed_payload(&lane);
@@ -601,18 +603,12 @@ fn a_command_the_policy_warns_on_is_answered() {
 }
 
 #[test]
-fn a_cursor_pre_tool_use_is_answered_only_when_its_client_allows_it() {
+fn a_cursor_pre_tool_use_is_answered_only_as_its_client_renders_it() {
     let cursor = lane("cursor", json!({}));
     let result = run_as(&cursor, "cursor", Some(HOME), allowed_payload(&cursor));
     assert_eq!(result["outcome"], "answer", "{result}");
     assert_eq!(result["edge"]["harness_response"]["policy_action"], "warn");
     assert_eq!(drain(&cursor, None)["records"][0]["harness"], "cursor");
-    let mut prompt = allowed_payload(&cursor);
-    prompt["hook_event_name"] = json!("UserPromptSubmit");
-    assert_eq!(
-        deferred(&run_as(&cursor, "cursor", Some(HOME), prompt)),
-        "direct_hook_event_unsupported"
-    );
     let sensitive_read = |lane: &Lane| {
         json!({
             "hook_event_name": "PreToolUse",
@@ -630,8 +626,9 @@ fn a_cursor_pre_tool_use_is_answered_only_when_its_client_allows_it() {
         )),
         "direct_hook_not_allow"
     );
-    // Watch lets the call run, so the Cursor client allows whatever the
-    // edge would have stopped.
+    // A review the binding cannot queue still takes the daemon path, as any
+    // harness's does. Watch lets the call run, so the Cursor client allows
+    // whatever the edge would have stopped.
     let watch = lane(
         "cursor-watch",
         json!({ "harness_postures": { "cursor": "watch" } }),
@@ -767,7 +764,8 @@ fn a_deferred_hook_queues_no_evidence() {
     let lane = lane("deferred-evidence", json!({}));
     let mut permission = allowed_payload(&lane);
     permission["hook_event_name"] = json!("PermissionRequest");
-    deferred(&run(&lane, permission));
+    // Copilot has no passthrough, so this stays a defer and records nothing.
+    deferred(&run_as(&lane, "copilot", Some(HOME), permission));
     assert_eq!(drain(&lane, None)["records"], json!([]));
 }
 
@@ -1018,6 +1016,9 @@ fn a_claude_code_prompt_without_a_notice_is_answered_in_either_posture() {
 
 #[path = "hook_direct_lifecycle_tests.rs"]
 mod lifecycle;
+
+#[path = "hook_direct_pi_tests.rs"]
+mod pi_lane;
 
 #[path = "hook_direct_cursor_tests.rs"]
 mod cursor_observer;

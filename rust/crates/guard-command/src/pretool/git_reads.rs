@@ -1,9 +1,12 @@
 //! Read-only `git` invocations proven without a review.
 //!
 //! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
-//! branch listings, `hash-object` and `config` reads. Diff-style reads that can run a
+//! branch listings, `hash-object`, `config`, `ls-tree` and `cat-file` reads. Diff-style reads that can run a
 //! configured helper need the helper-context probe or both `--no-ext-diff`
 //! and `--no-textconv`.
+
+#[path = "git_log_names.rs"]
+mod log_names;
 
 fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool {
     arguments.iter().any(|argument| {
@@ -50,10 +53,16 @@ pub(super) fn safe_git_arguments(
         }
     }
     // Git magic pathspec semantics are not proven by this classifier; retain review.
-    if arguments
-        .iter()
-        .any(|value| value.starts_with(':') || super::sensitive_read_path_argument(value))
-    {
+    // A names-only log's glob pathspecs were checked by `log_names` instead.
+    // `-S`, `-G` and `--grep` values are search text too.
+    let listed = log_names::pathspec_start(arguments, context);
+    let search_text = super::git_search_text::pattern_positions(arguments);
+    if arguments.iter().enumerate().any(|(index, value)| {
+        !search_text.contains(&index)
+            && (value.starts_with(':')
+                || (super::sensitive_read_path_argument(value)
+                    && listed.is_none_or(|start| index < start)))
+    }) {
         return false;
     }
     let Some(arguments) =
@@ -84,6 +93,12 @@ pub(super) fn safe_git_arguments(
                             | "--fork-point"
                     )
             });
+    }
+    if matches!(subcommand, "ls-tree" | "cat-file") {
+        // Object reads honor pager.<name> and can fetch a partial clone's
+        // missing objects, so the configuration probe has to clear them first.
+        return allow_helper_context
+            && super::git_object_reads::read_form(subcommand, &arguments[1..]);
     }
     if subcommand == "config" {
         // Only the configuration probe can prove what the read prints.

@@ -4,8 +4,11 @@
 //! `codex_daemon_hook_auth.py`. Every error string is the `ValueError`
 //! message CPython raises, because the bridge writes it into the hook reason.
 
+#[cfg(unix)]
+use std::fs::Metadata;
 use std::fs::{self, File};
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -85,8 +88,10 @@ pub(crate) fn private_file_text(path: &Path, label: &str) -> Result<String, Stri
     private_file_raw(path, label).map(|text| py_strip(&text).to_owned())
 }
 
-/// [`private_file_text`] without the strip: the file's UTF-8 text as is.
-pub(crate) fn private_file_raw(path: &Path, label: &str) -> Result<String, String> {
+/// The directory and file metadata of a private file, refused unless the
+/// directory is a directory and the file is a regular file (not a link).
+#[cfg(unix)]
+fn private_file_metadata(path: &Path, label: &str) -> Result<(Metadata, Metadata), String> {
     let unavailable = || format!("{label} is unavailable");
     let parent = fs::symlink_metadata(parent_of(path)).map_err(|_| unavailable())?;
     let metadata = fs::symlink_metadata(path).map_err(|_| unavailable())?;
@@ -96,6 +101,20 @@ pub(crate) fn private_file_raw(path: &Path, label: &str) -> Result<String, Strin
     if !metadata.file_type().is_file() {
         return Err(format!("{label} must be a regular file"));
     }
+    Ok((parent, metadata))
+}
+
+/// [`private_file_text`] without the strip: the file's UTF-8 text as is.
+#[cfg(windows)]
+pub(crate) fn private_file_raw(path: &Path, label: &str) -> Result<String, String> {
+    let file = crate::claude_hook_bridge_auth_windows::open_private_file(path, label)?;
+    read_private_text(file, label)
+}
+
+/// [`private_file_text`] without the strip: the file's UTF-8 text as is.
+#[cfg(unix)]
+pub(crate) fn private_file_raw(path: &Path, label: &str) -> Result<String, String> {
+    let (parent, metadata) = private_file_metadata(path, label)?;
     let uid = nix::unistd::getuid().as_raw();
     if parent.uid() != uid || metadata.uid() != uid {
         return Err(format!("{label} ownership does not match the current user"));
@@ -115,6 +134,12 @@ pub(crate) fn private_file_raw(path: &Path, label: &str) -> Result<String, Strin
     if opened.dev() != metadata.dev() || opened.ino() != metadata.ino() {
         return Err(unreadable());
     }
+    read_private_text(file, label)
+}
+
+/// Read a checked private file, capped, as UTF-8.
+fn read_private_text(file: File, label: &str) -> Result<String, String> {
+    let unreadable = || format!("{label} is unreadable");
     let mut bytes = Vec::new();
     file.take(PRIVATE_FILE_MAX_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -397,6 +422,6 @@ pub(crate) fn verify_challenge_response(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_auth_tests.rs"]
 mod tests;

@@ -51,6 +51,10 @@ pub const DIRECT_LANE_MAX_INTEGRITY_DEGRADED_REASONS: usize = 16;
 /// to, and the working directory it rebuilds the action envelope with. The
 /// resident checks each one itself; one it cannot accept reads as absent, so
 /// such a hook stays with the daemon rather than costing the lane.
+/// `structured_output_config` is the managed-policy view the daemon resolves
+/// structured output mediation from for an Oh My Pi or Pi `PostToolUse`. The
+/// resident resolves it itself; a value it cannot read as that view reads as
+/// absent, so such a hook stays with the daemon rather than costing the lane.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DirectLaneBindingV1 {
@@ -84,6 +88,8 @@ pub struct DirectLaneBindingV1 {
     pub review_oauth_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review_host_cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_output_config: Option<serde_json::Value>,
 }
 
 /// A process environment whose `Debug` output never shows the values.

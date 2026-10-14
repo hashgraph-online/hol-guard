@@ -22,7 +22,9 @@ pub struct PathContext<'a> {
 
 mod contained_wrapper;
 pub(crate) mod curl_reads;
+pub(crate) mod docker_reads;
 pub(crate) mod kubectl_reads;
+pub(crate) mod port_probes;
 mod workspace_contained;
 #[cfg(unix)]
 pub(crate) use workspace_contained::PROFILE as WORKSPACE_PROFILE;
@@ -32,7 +34,9 @@ pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
 mod base64_reads;
+mod brew_reads;
 mod bun_eval;
+mod chain_temporary;
 mod compound_reason;
 mod fanout_reads;
 mod find_reads;
@@ -43,8 +47,10 @@ pub(crate) mod git_config_reads;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 pub(crate) mod git_init_target;
+pub(crate) mod git_object_reads;
 mod git_read_floor;
 mod git_reads;
+mod git_search_text;
 mod repo_create_reason;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
@@ -62,6 +68,7 @@ mod lookup_reads;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
+mod postgres_reads;
 mod pytest_contained;
 mod tool_bin_listing;
 mod trusted_location;
@@ -84,6 +91,7 @@ mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+pub(crate) mod sed_edits;
 mod segment_proof;
 mod shell_script;
 mod stdin_filters;
@@ -165,8 +173,13 @@ pub(super) fn normalized_haystack(value: &str) -> String {
 }
 
 pub(super) fn sensitive_command(value: &str) -> bool {
+    credential_keyword_text(value) || sensitive_location_text(value)
+}
+
+/// Credential words such as `password` or `api_key`, anywhere in `value`
+/// except a plain source-file path.
+pub(super) fn credential_keyword_text(value: &str) -> bool {
     let lowered = normalized_haystack(value);
-    let keywords_apply = !plain_source_code_path(value);
     let keyword_needles = [
         "aws_secret_access_key",
         "private_key",
@@ -176,13 +189,16 @@ pub(super) fn sensitive_command(value: &str) -> bool {
         "password",
         "secret",
     ];
-    if keywords_apply
+    !plain_source_code_path(value)
         && keyword_needles
             .iter()
             .any(|needle| lowered.contains(needle))
-    {
-        return true;
-    }
+}
+
+/// Credential locations and environment reads: `.env`, `~/.ssh`,
+/// `process.env` and the like.
+fn sensitive_location_text(value: &str) -> bool {
+    let lowered = normalized_haystack(value);
     let needles = [
         "/.ssh/",
         "~/.ssh",
@@ -305,7 +321,9 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
-    if !safe_scalar::bounded_total_sleep(model) {
+    if !safe_scalar::bounded_total_sleep(model)
+        || !chain_temporary::absent_reads_bounded(model, context)
+    {
         return false;
     }
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
@@ -314,6 +332,11 @@ fn exact_safe_command_with_context(
         return true;
     }
     if let Some(rest) = segment_proof::after_read_prefix(model, context) {
+        return segment_proof::exact_safe_cwd_compound(&rest, allow_git_helper_context, context);
+    }
+    if let Some(rest) =
+        git_read_floor::after_safe_git_read_prefix(model, allow_git_helper_context, context)
+    {
         return segment_proof::exact_safe_cwd_compound(&rest, allow_git_helper_context, context);
     }
     model.segments.iter().all(|segment| {
@@ -544,7 +567,10 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if sensitive_command(normalized) {
+    if git_search_text::sensitive_beyond_patterns(
+        normalized,
+        git_search_text::command_without_patterns(&model),
+    ) {
         return Ok(pretool_decision(
             model,
             "review",
@@ -582,6 +608,7 @@ fn evaluate_single_command(
         ));
     }
     let reason = repo_create_reason::private_alternative_reason(&model)
+        .or_else(|| repo_create_reason::created_remote_push_reason(&model))
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));

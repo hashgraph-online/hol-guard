@@ -451,6 +451,6 @@ pub(crate) fn run(python_argv: &[String], started: Instant) -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_grok_tests.rs"]
 mod tests;

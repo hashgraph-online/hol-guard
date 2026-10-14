@@ -5,11 +5,18 @@
 //! walks its operands and prints the name of every directory below them (every
 //! file too with `-a`), so unless `-s` or a zero depth limits the output to the
 //! operands, each operand gets the same tree screen as `ls -R`. Following
-//! symbolic links (`-L`) is not admitted.
+//! symbolic links (`-L`) is not admitted, and neither is any option that reads
+//! operand or pattern lists from a file (`--files0-from`, `-X`).
+//!
+//! An operand that does not exist makes `du` print only an error, exactly as
+//! `ls` does, so it gets the same absent-path proof as an `ls` operand: a
+//! sibling checkout's missing `node_modules` is no more revealing than listing
+//! that checkout.
 //!
 //! `diff` reads the content of both operands. Two files each need the
-//! ordinary read proof. A directory operand makes `diff` read the files inside
-//! it, so both operands then need the recursive content-search screen.
+//! ordinary read proof, or the absent chain-local temporary file proof. A
+//! directory operand makes `diff` read the files inside it, so both operands
+//! then need the recursive content-search screen.
 use super::{safe_reads, search};
 
 const MAX_OPERANDS: usize = 16;
@@ -20,7 +27,7 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     let mut values = arguments.iter();
     while let Some(argument) = values.next() {
         let option = argument.as_str();
-        if option == "-d" {
+        if option == "-d" || option == "--max-depth" {
             match values.next() {
                 Some(depth) if digits(depth) => names_descendants &= !zero(depth),
                 _ => return false,
@@ -64,11 +71,12 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     }
     operands.len() <= MAX_OPERANDS
         && operands.iter().all(|operand| {
-            if names_descendants {
+            let present = if names_descendants {
                 search::safe_recursive_target(operand, context)
             } else {
                 safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
-            }
+            };
+            present || super::listing_reads::absent_listing_operand(operand, context)
         })
 }
 
@@ -120,8 +128,15 @@ pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathCont
     if *left == "-" || *right == "-" {
         return false;
     }
+    // A chain may diff a temporary copy it makes first, which is absent when
+    // the hook runs; reading it can only report a missing file.
     [left, right].iter().all(|operand| {
         safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
+            || super::chain_temporary::absent_temporary_read_target(
+                operand,
+                context.home_dir,
+                context.cwd,
+            )
     }) || [left, right]
         .iter()
         .all(|operand| search::safe_recursive_search_target(operand, context))

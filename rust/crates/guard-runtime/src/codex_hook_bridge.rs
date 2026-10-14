@@ -16,9 +16,10 @@
 //! The native bridge never decides a verdict. The daemon decides; the
 //! Python bridge decides whenever the daemon cannot.
 
+use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::claude_hook_bridge_http::remaining;
@@ -29,6 +30,7 @@ use crate::codex_hook_identity::current_process_identity;
 use crate::codex_hook_response::{
     codex_hook_response, fail_closed, runtime_hook_event_name, PRE_TOOL_USE,
 };
+use crate::hook_bridge_exit::exit_code;
 use crate::hook_env_stamp::{
     current_environment, dumps, json_string, set_member, stamp_hook_input_text, Stamp,
 };
@@ -67,13 +69,52 @@ fn non_empty_strings(value: Option<&PyVal>) -> bool {
         .is_some_and(|items| !items.is_empty() && items.iter().all(|item| item.as_str().is_some()))
 }
 
-/// `bridge_config_from_argv` for POSIX JSON arguments. Base64url arguments
-/// (Windows installs) and anything Python would refuse return `None`.
-pub(crate) fn parse_config(argument: &str) -> Option<BridgeConfig> {
-    if !argument.starts_with('{') {
+/// `decode_bridge_config_argument`: POSIX installs pass the JSON itself,
+/// Windows installs unpadded base64url of its UTF-8. Anything Python
+/// refuses is `None`.
+fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
+    if argument.starts_with('{') {
+        return Some(Cow::Borrowed(argument));
+    }
+    let text = String::from_utf8(base64url_decode_unpadded(argument)?).ok()?;
+    text.starts_with('{').then_some(Cow::Owned(text))
+}
+
+/// `base64.urlsafe_b64decode(argument + "=" * (-len(argument) % 4))` behind
+/// Python's `[A-Za-z0-9_-]+` full match. A length one past a multiple of
+/// four is refused, and the unused low bits of the last character are
+/// ignored, as `binascii` ignores them.
+fn base64url_decode_unpadded(argument: &str) -> Option<Vec<u8>> {
+    if argument.is_empty() || argument.len() % 4 == 1 {
         return None;
     }
-    let parsed = pyjson::parse_mapping_lone_surrogates(argument).ok()?;
+    let mut out = Vec::with_capacity(argument.len() / 4 * 3 + 2);
+    let (mut buffer, mut bits) = (0_u32, 0_u32);
+    for byte in argument.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            _ => return None,
+        };
+        buffer = (buffer << 6) | u32::from(value);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// `bridge_config_from_argv` for JSON and base64url arguments. Anything
+/// Python would refuse returns `None`, so the Python bridge answers it.
+pub(crate) fn parse_config(argument: &str) -> Option<BridgeConfig> {
+    let argument = decode_config_argument(argument)?;
+    let parsed = pyjson::parse_mapping_lone_surrogates(&argument).ok()?;
     if parsed.mapped {
         return None;
     }
@@ -348,14 +389,6 @@ pub(crate) fn route_hook(
     (route, Some(prepared))
 }
 
-fn exit_code(status: ExitStatus) -> i32 {
-    use std::os::unix::process::ExitStatusExt;
-    status
-        .code()
-        .or_else(|| status.signal().map(|signal| 128 + signal))
-        .unwrap_or(1)
-}
-
 /// Run the Python bridge with `stdin`, inheriting stdout, stderr, cwd and
 /// the environment; `None` when it could not start.
 fn run_python(argv: &[String], stdin: &[u8], elapsed: Duration) -> Option<i32> {
@@ -432,6 +465,6 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_tests.rs"]
 mod tests;

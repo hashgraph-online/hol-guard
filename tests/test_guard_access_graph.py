@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 
 
-def _risk(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
     tool_name = str(artifact.metadata.get("tool_name"))
     return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
 
@@ -261,7 +261,7 @@ def test_call_projection_risk_categories_are_emitted_from_runtime_arguments(nati
         transport="stdio",
     )
 
-    categories = _risk(
+    categories = _projected_call(
         native_context_digest,
         artifact,
         {
@@ -290,7 +290,7 @@ def test_call_projection_risk_categories_avoid_broad_substring_matches(native_co
         transport="stdio",
     )
 
-    categories = _risk(
+    categories = _projected_call(
         native_context_digest,
         artifact,
         {"filename": "myapp.env", "mode": "prefetch"},
@@ -309,7 +309,7 @@ def test_call_projection_risk_categories_match_snake_case_secret_tokens(native_c
         transport="stdio",
     )
 
-    categories = _risk(
+    categories = _projected_call(
         native_context_digest,
         artifact,
         {"keys": ["OPENAI_API_TOKEN", "aws_secret_key"]},
@@ -328,7 +328,7 @@ def test_call_projection_risk_categories_match_snake_case_network_tokens(native_
         transport="stdio",
     )
 
-    categories = _risk(native_context_digest, artifact, {"mode": "fetch_remote"}).risk_categories
+    categories = _projected_call(native_context_digest, artifact, {"mode": "fetch_remote"}).risk_categories
 
     assert categories == ("outbound_network",)
 
@@ -364,7 +364,7 @@ def test_call_projection_risk_categories_detect_network_and_process_bypass_shape
         transport="stdio",
     )
 
-    assert expected_categories.issubset(set(_risk(native_context_digest, artifact, arguments).risk_categories))
+    assert expected_categories.issubset(set(_projected_call(native_context_digest, artifact, arguments).risk_categories))
 
 
 def test_call_projection_risk_categories_ignore_benign_network_vocabulary(native_context_digest: Path) -> None:
@@ -377,7 +377,7 @@ def test_call_projection_risk_categories_ignore_benign_network_vocabulary(native
         transport="stdio",
     )
 
-    categories = _risk(
+    categories = _projected_call(
         native_context_digest,
         artifact,
         {"prompt": "Calculate the area of a socket gasket from the attached diagram."},
@@ -396,7 +396,7 @@ def test_call_projection_risk_categories_match_snake_case_privileged_tokens(nati
         transport="stdio",
     )
 
-    categories = _risk(native_context_digest, artifact, {"operation": "chmod_file"}).risk_categories
+    categories = _projected_call(native_context_digest, artifact, {"operation": "chmod_file"}).risk_categories
 
     assert categories == ("command_execution", "privileged_system_mutation")
 
@@ -411,7 +411,7 @@ def test_call_projection_risk_categories_match_camel_case_tokens(native_context_
         transport="stdio",
     )
 
-    categories = _risk(
+    categories = _projected_call(
         native_context_digest, artifact, {"operation": "readSecret", "mode": "chmodFile"}
     ).risk_categories
 

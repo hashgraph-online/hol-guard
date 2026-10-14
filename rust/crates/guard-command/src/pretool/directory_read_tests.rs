@@ -465,6 +465,9 @@ fn relative_parent_listings_follow_their_resolved_target() {
             "ls -la ../worktree-report",
             "ls ..",
             "cat ../worktree-report/README.md",
+            // A missing child of a listable parent reveals no more than
+            // listing the parent does.
+            "ls ../missing",
         ] {
             let action = shell_action(harness, command, &home, &workspace);
             assert_eq!(action, "allow", "{harness}: {command}");
@@ -476,7 +479,8 @@ fn relative_parent_listings_follow_their_resolved_target() {
         "cat ../.env",
         "cat ../../.ssh/config",
         "cat ../worktree-report/../.env",
-        "ls ../missing",
+        "ls ../../.ssh/missing",
+        "ls ../worktree-report/../missing",
         "ls ~/projects/../.ssh",
     ] {
         let action = shell_action("omp", command, &home, &workspace);

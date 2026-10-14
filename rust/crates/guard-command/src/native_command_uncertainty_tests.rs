@@ -47,7 +47,7 @@ fn evaluate(binding: &NativeCommandControlBindingV1, command: &str) -> PreToolRe
 fn uncertain_git_attribution_requires_review_instead_of_a_hard_block() {
     let binding = binding_with_layers(serde_json::json!([]));
     for command in [
-        "git cat-file -p HEAD",
+        "git cat-file --batch-check",
         "git notes list",
         "git -c core.sshCommand=payload fetch origin main",
         "git fetch origin --upload-pack=payload",
@@ -134,7 +134,7 @@ fn assignment_prefixes_cannot_evade_a_disabled_permission() {
 fn a_disabled_permission_still_blocks_uncertain_and_redirected_commands() {
     let binding = binding_with_layers(disabled_permission_layer("command.git.push"));
     for command in [
-        "git cat-file -p HEAD",
+        "git cat-file --batch-check",
         "git notes list",
         "git push origin main > /tmp/push.log",
     ] {

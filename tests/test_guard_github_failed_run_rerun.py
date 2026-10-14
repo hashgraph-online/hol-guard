@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.native_critical_floor import native_critical_floor_action
 from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from tests.native_command_test_support import real_native_review_fixture
@@ -43,11 +42,6 @@ def test_failed_job_rerun_rejects_broader_variants(args: tuple[str, ...]) -> Non
 
 def test_indirect_failed_job_rerun_still_requires_reapproval(tmp_path: Path) -> None:
     command = "xargs gh run rerun 31707639186 --repo hashgraph-online/hol-guard --failed"
-    # Preserve the independent workflow policy floor. Native transport is
-    # stricter for this unsupported wrapper, as asserted separately below.
-    action = native_critical_floor_action(command, cwd=tmp_path, home_dir=tmp_path)
-
-    assert action == "require-reapproval"
     native = real_native_review_fixture(command).payload
     assert native["minimum_action"] == "block"
     assert native["command_model"]["uncertainty_reason"] == "nested_command_executor_not_yet_supported"

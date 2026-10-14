@@ -33,7 +33,15 @@ pub(super) fn execution_free(
             | "hash-object"
             | "config"
             | "merge-base"
+            | "ls-tree"
+            | "cat-file"
     ) {
+        return None;
+    }
+    // Other object-read forms can run drivers; their own review floors decide.
+    if matches!(operation, "ls-tree" | "cat-file")
+        && !super::git_object_reads::read_form(operation, &remaining[1..])
+    {
         return None;
     }
     // A plain configuration write is no read; its own proof decides it.
@@ -209,7 +217,7 @@ fn probe(
     // Like status, hash-object pages only when its own pager.* key says so;
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
-        "status" | "hash-object" | "merge-base" => false,
+        "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -481,7 +489,11 @@ pub(super) fn trusted_command(
         }
         found?
     };
-    super::trusted_location::trusted_location(&path, home, cwd).then_some(path)
+    let shim = super::git_session_probe::apple_developer_tools::selection_overridden(
+        &path,
+        execution_environment,
+    );
+    (!shim && super::trusted_location::trusted_location(&path, home, cwd)).then_some(path)
 }
 #[cfg(all(test, unix))]
 #[path = "git_config_home_tests.rs"]

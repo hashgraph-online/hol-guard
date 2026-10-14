@@ -69,6 +69,23 @@ def test_typed_adapters_return_the_owner_answer() -> None:
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_value_metrics_accepts_a_store_wider_than_the_resident_array_limit() -> None:
+    # A store with more events than one resident JSON array may hold failed every sync.
+    # Events arrive newest first; the older tail is distinguishable, so keeping the
+    # oldest window instead would count 3,399 stops.
+    newest_event = {
+        "event_name": "install_time_block",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "payload": {"artifact_id": "a", "artifact_name": "A"},
+    }
+    older_event = {**newest_event, "event_name": "install_time_allow"}
+    events = [newest_event] * sync.VALUE_METRIC_EVENT_LIMIT + [older_event] * (4_793 - sync.VALUE_METRIC_EVENT_LIMIT)
+    metrics, digest = sync.value_metrics(events, "2026-01-02T00:00:00Z")
+    assert metrics["installs_stopped_before_execution"]["value"] == sync.VALUE_METRIC_EVENT_LIMIT
+    assert digest["generated_at"] == "2026-01-02T00:00:00Z"
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(sync.POLICY_CANONICAL_ENFORCEMENT_ENV, "canonical")
     assert sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None) is True

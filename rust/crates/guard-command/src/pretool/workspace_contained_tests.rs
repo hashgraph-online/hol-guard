@@ -3,7 +3,7 @@ use crate::native_command_program::packaged_command_program;
 use guard_contracts::NativeCommandControlBindingV1;
 use std::path::{Path, PathBuf};
 
-fn controls() -> CompiledNativeCommandControls {
+pub(super) fn controls() -> CompiledNativeCommandControls {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -483,9 +483,6 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         "rm -rf coverage",
         "rm src/a.ts",
         "rm -f src/a.ts dist/out.js",
-        "sed -i 's/1/2/' src/a.ts",
-        "sed -i '' -e 's/1/2/g' src/a.ts",
-        "sed -E -i.bak 's/(1)/2/' src/a.ts",
         "sed --in-place=.orig -n 'p' src/a.ts && rm -f src/a.ts.orig",
     ] {
         let got = reason(command);
@@ -495,6 +492,23 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
             assert_ne!(got, CONTAINED, "{command}");
         }
     }
+    // A plain substitution on a workspace file is proven on the host. The
+    // GNU operand form is proven only where GNU sed parses it that way.
+    for (command, proven) in [
+        ("sed -i 's/1/2/' src/a.ts", cfg!(target_os = "linux")),
+        ("sed -i '' -e 's/1/2/g' src/a.ts", true),
+        ("sed -E -i.bak 's/(1)/2/' src/a.ts", true),
+    ] {
+        let got = reason(command);
+        if proven {
+            assert_eq!(got, "native_exact_safe_command", "{command}");
+        } else if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        }
+    }
+    // The `e` flag runs the pattern space as a command; it is never proven.
+    let exec = "sed -i '' 's/1/2/e' src/a.ts";
+    assert_ne!(reason(exec), "native_exact_safe_command", "{exec}");
     // A tracked or unknown tree may hold uncommitted work the sandbox would
     // write back as deleted.
     for command in [

@@ -54,8 +54,6 @@ fn hooks_the_daemon_handles_itself_defer() {
     let lane = lane("lifecycle-daemon", json!({}));
     let unsupported = "direct_hook_event_unsupported";
     for name in [
-        "PermissionRequest",
-        "permission_request_v2",
         "copilotPermissionRequest",
         "beforeSubmitPrompt",
         "Session Start",
@@ -63,6 +61,13 @@ fn hooks_the_daemon_handles_itself_defer() {
     ] {
         assert_eq!(
             deferred(&run(&lane, lifecycle(name))),
+            unsupported,
+            "{name}"
+        );
+    }
+    for name in ["PermissionRequest", "permission_request_v2"] {
+        assert_eq!(
+            deferred(&run_as(&lane, "copilot", Some(HOME), lifecycle(name))),
             unsupported,
             "{name}"
         );
@@ -141,11 +146,36 @@ fn a_claude_permission_dialog_without_a_notice_is_left_to_claude() {
         )),
         "direct_hook_event_unsupported"
     );
-    // Other harnesses keep the daemon path for every permission event.
+    // Harnesses without a passthrough keep the daemon path.
     assert_eq!(
-        deferred(&run(&lane, permission_request(json!("synthetic")))),
+        deferred(&run_as(
+            &lane,
+            "kimi",
+            Some(HOME),
+            permission_request(json!("synthetic"))
+        )),
         "direct_hook_event_unsupported"
     );
+}
+
+#[test]
+fn a_codex_permission_request_is_left_to_codex() {
+    let lane = lane("codex-permission-passthrough", json!({}));
+    let passthrough = json!({
+        "harness_response": {
+            "hookSpecificOutput": { "hookEventName": "PermissionRequest" },
+        }
+    });
+    for payload in [
+        permission_request(json!("synthetic")),
+        json!({ "hookEventName": "permission_request_v2" }),
+    ] {
+        let result = run(&lane, payload.clone());
+        assert_eq!(result["outcome"], "answer", "{payload}: {result}");
+        assert_eq!(result["edge"], passthrough, "{payload}");
+    }
+    // The answer carries no decision and records nothing.
+    assert_eq!(drain(&lane, None)["records"], json!([]));
 }
 
 #[test]

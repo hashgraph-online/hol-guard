@@ -8,6 +8,8 @@
 //! unrecognised keep review. Skill directories and `~/.agents` may be roots
 //! because the expression prints names, never contents. The Oh My Pi
 //! `~/.agent` root may be one when its tree clears the walk `ls -R` needs.
+//! Another home dot-directory may be one when `-maxdepth 1` keeps the walk to
+//! its own entries.
 
 use super::safe_reads::{bounded_read_target, verified_path_context};
 
@@ -35,9 +37,40 @@ pub(super) fn safe_find_listing_arguments(
             !super::search::skill_link_resolves_over_home(root, context)
                 && (bounded_read_target(root, context.home_dir, context.cwd, true)
                     || super::search::skill_listing_root(root, context)
-                    || super::search::agent_root_listing(root, context, true))
+                    || super::search::agent_root_listing(root, context, true)
+                    || (entries_only(expression)
+                        && super::read_paths::home_hidden_directory(
+                            root,
+                            context.home_dir,
+                            context.cwd,
+                        )))
         })
         && safe_expression(expression)
+}
+
+/// `-maxdepth 0` or `1` bounds `find` to the root and its own entries, the
+/// names a plain `ls` prints. Every `-maxdepth` must say so; deeper values
+/// would reach stores nested below a home dot-directory.
+fn entries_only(expression: &[String]) -> bool {
+    let mut bounded = false;
+    let mut index = 0;
+    while index < expression.len() {
+        let token = expression[index].as_str();
+        index += 1;
+        match token {
+            "-maxdepth" => match expression.get(index).map(String::as_str) {
+                Some("0" | "1") => {
+                    bounded = true;
+                    index += 1;
+                }
+                _ => return false,
+            },
+            "-name" | "-iname" | "-path" | "-ipath" | "-wholename" | "-iwholename" | "-type"
+            | "-mindepth" => index += 1,
+            _ => {}
+        }
+    }
+    bounded
 }
 
 fn safe_expression(expression: &[String]) -> bool {

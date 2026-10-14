@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard import native_request_context as client
 from codex_plugin_scanner.guard.native_context import _UNBOUND_PREFIX, _canonical_request_sha256
 from codex_plugin_scanner.guard.runtime import shell_execution_context as shell
 from codex_plugin_scanner.guard.runtime._shell_execution_context_support import ShellPathIdentity
-from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "request-context-parity" / "cases.v1.json"
 
@@ -264,22 +263,6 @@ def test_malformed_shell_reply_yields_the_incomplete_context_not_an_exception(
     assert context.reason_code == shell.SHELL_CWD_NATIVE_UNAVAILABLE
     assert context.segments == ()
     assert context.native is None
-
-
-@pytest.mark.parametrize("command", ["cat ~/.ssh/id_rsa", "./tool.sh"])
-def test_unavailable_resident_keeps_the_mandatory_read_floors(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, command: str
-) -> None:
-    _reply(monkeypatch, prerequisite=False)
-    assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
-    assert assessment.requires_review is True
-
-
-def test_unavailable_resident_does_not_invent_a_floor_for_unrelated_text(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _reply(monkeypatch, prerequisite=False)
-    assert assess_shell_reads("echo hello", cwd=tmp_path, home_dir=tmp_path).requires_review is False
 
 
 def _materialize(root: Path, entries: list[dict[str, str]]) -> None:

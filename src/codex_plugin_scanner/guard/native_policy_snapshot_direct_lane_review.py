@@ -63,25 +63,41 @@ class _ReadState:
         return self._state
 
 
+def _records_listen_origin(state: object) -> bool:
+    if not isinstance(state, dict):
+        return False
+    center = state.get("approval_center_url")
+    if isinstance(center, str) and center.strip():
+        return True
+    port = state.get("daemon_port")
+    return isinstance(state.get("daemon_host"), str) and isinstance(port, int) and port > 0
+
+
 def _read_origin(store: object) -> tuple[bool, str | None]:
-    # The daemon falls back to the default origin when its runtime state is
-    # unreadable. That fallback is not the origin the daemon links once the
-    # read succeeds again, so an unreadable state reports itself as unknown.
+    # The daemon falls back to the default origin until its runtime state
+    # records where it listens, and when that state is unreadable. That
+    # fallback is not the origin the daemon links once the state lands, so
+    # neither case binds an origin; an unreadable state reports itself as
+    # unknown so a transient lock reads as no change.
     from .daemon.hook_native_review_approval import _native_review_approval_center_url
 
     getter = getattr(store, "get_runtime_state", None)
-    if callable(getter):
-        try:
-            store = _ReadState(getter())
-        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-            return False, None
-    return True, _text_fact(_native_review_approval_center_url(store), _MAX_REVIEW_FACT_BYTES)
+    if not callable(getter):
+        return True, None
+    try:
+        state = getter()
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False, None
+    if not _records_listen_origin(state):
+        return True, None
+    return True, _text_fact(_native_review_approval_center_url(_ReadState(state)), _MAX_REVIEW_FACT_BYTES)
 
 
 def approval_center_origin(store: object) -> str | None:
     """The approval center origin the daemon links a queued review to.
 
-    An unreadable runtime state binds no origin, so a reviewed hook defers.
+    A runtime state that is unreadable or does not yet record where the daemon
+    listens binds no origin, so a reviewed hook defers.
     """
 
     return _read_origin(store)[1]

@@ -85,7 +85,6 @@ def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[
 
 
 @pytest.mark.native_codex_hook_bridge
-@pytest.mark.skipif(sys.platform == "win32", reason="the native Codex bridge is POSIX-only")
 def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -100,7 +99,6 @@ def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
 
 
 @pytest.mark.native_codex_hook_bridge
-@pytest.mark.skipif(sys.platform == "win32", reason="the native Codex bridge is POSIX-only")
 def test_python_bridge_pin_keeps_the_python_argv_when_native_is_offered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -111,7 +109,6 @@ def test_python_bridge_pin_keeps_the_python_argv_when_native_is_offered(
     assert python_bridge_argv(list(argv)) == list(argv)
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="the native Codex bridge is POSIX-only")
 def test_python_bridge_pin_skips_native_selection_in_a_fresh_process() -> None:
     """A subprocess installer must see the same Python bridge pin as the parent."""
 

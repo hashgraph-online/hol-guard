@@ -127,6 +127,7 @@ fn consume_with(
     let context = Context {
         harness: "claude-code",
         payload: &payload,
+        recorded_payload: &payload,
         workspace: &workspace,
         home_dir: vectors["home_dir"].as_str().unwrap(),
         guard_home: &guard_home,
@@ -148,7 +149,9 @@ fn an_approve_once_answers_one_retry() {
         response["hookSpecificOutput"]["permissionDecision"],
         json!("allow")
     );
-    assert!(matches!(second, Err(HookDirectDefer::SavedDecision)));
+    // Spent, so the retry reaches the inbox, which a home that published no
+    // review facts leaves to the daemon.
+    assert!(matches!(second, Err(HookDirectDefer::ReviewQueue)));
 }
 
 #[test]

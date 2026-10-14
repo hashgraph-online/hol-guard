@@ -16,8 +16,9 @@ pub(super) fn worktree_add_execution_free(
     executable: &str,
     leading: &[String],
     destination: &Path,
-    branch: &str,
+    branch: Option<&str>,
     reference: Option<&str>,
+    attach: bool,
     reference_may_move: bool,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
@@ -64,17 +65,10 @@ pub(super) fn worktree_add_execution_free(
     let Some(facts) = safe_worktree_config(&output, &git_home)? else {
         return Some(false);
     };
-    let git_dir = git_path(
+    let [git_dir, common_dir] = git_paths(
         &base,
         leading,
-        &["rev-parse", "--absolute-git-dir"],
-        &cwd,
-        deadline,
-    )?;
-    let common_dir = git_path(
-        &base,
-        leading,
-        &["rev-parse", "--git-common-dir"],
+        ["--absolute-git-dir", "--git-common-dir"],
         &cwd,
         deadline,
     )?;
@@ -88,21 +82,49 @@ pub(super) fn worktree_add_execution_free(
     {
         return Some(false);
     }
-    let branch_ref = format!("refs/heads/{branch}");
-    let (status, output) = git_query_with_args(
-        &base,
-        leading,
-        &["show-ref", "--verify", "--quiet", &branch_ref],
-        deadline,
-        WORKTREE_PROBE_LIMIT,
-    )?;
-    if status.success() {
-        return Some(false);
+    // Without `-b` no branch is created, so there is no name that could
+    // already exist.
+    if let Some(branch) = branch {
+        let branch_ref = format!("refs/heads/{branch}");
+        let (status, output) = git_query_with_args(
+            &base,
+            leading,
+            &["show-ref", "--verify", "--quiet", &branch_ref],
+            deadline,
+            WORKTREE_PROBE_LIMIT,
+        )?;
+        if status.success() {
+            return Some(false);
+        }
+        if status.code() != Some(1) || !output.is_empty() {
+            return None;
+        }
     }
-    if status.code() != Some(1) || !output.is_empty() {
-        return None;
+    let branch_ref: String;
+    let mut reference = reference.unwrap_or("HEAD");
+    // Without `-b` or `--detach`, `git worktree add <path> <name>` checks
+    // out `refs/heads/<name>` when that branch exists (Git never treats
+    // `HEAD` as a branch name here), whatever the name would otherwise
+    // resolve to. Read that branch's tip so the tree proven is the tree
+    // checked out. Otherwise Git detaches at the commit the name resolves
+    // to, which the `rev-parse` below resolves the same way; a name that
+    // resolves to nothing would make Git create a tracking branch and fails
+    // the proof there.
+    if attach && reference != "HEAD" {
+        branch_ref = format!("refs/heads/{reference}");
+        let (status, output) = git_query_with_args(
+            &base,
+            leading,
+            &["show-ref", "--verify", "--quiet", &branch_ref],
+            deadline,
+            WORKTREE_PROBE_LIMIT,
+        )?;
+        if status.success() {
+            reference = branch_ref.as_str();
+        } else if status.code() != Some(1) || !output.is_empty() {
+            return None;
+        }
     }
-    let reference = reference.unwrap_or("HEAD");
     let commit_ref = format!("{reference}^{{commit}}");
     let (status, output) = git_query_with_args(
         &base,
@@ -357,28 +379,41 @@ fn git_query_with_args(
     super::git_probe::output(&mut command, deadline, limit)
 }
 
-fn git_path(
+/// One `rev-parse` answers every request, one line each, in order. A path
+/// that itself held a line break shifts the count, so the answer is refused.
+fn git_paths<const N: usize>(
     base: &Command,
     leading: &[String],
-    arguments: &[&str],
+    requests: [&str; N],
     cwd: &Path,
     deadline: Instant,
-) -> Option<PathBuf> {
-    let (status, output) = git_query_with_args(base, leading, arguments, deadline, 4096)?;
+) -> Option<[PathBuf; N]> {
+    let mut arguments = vec!["rev-parse"];
+    arguments.extend(requests);
+    let (status, output) =
+        git_query_with_args(base, leading, &arguments, deadline, 4096 * N as u64)?;
     if !status.success() {
         return None;
     }
-    let rendered = std::str::from_utf8(&output).ok()?.trim();
-    if rendered.is_empty() || rendered.contains(['\0', '\n', '\r']) {
-        return None;
-    }
-    let path = Path::new(rendered);
-    fs::canonicalize(if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        cwd.join(path)
-    })
-    .ok()
+    let rendered = std::str::from_utf8(&output).ok()?;
+    let rendered = rendered.strip_suffix('\n').unwrap_or(rendered);
+    let paths = rendered
+        .split('\n')
+        .map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.contains(['\0', '\r']) {
+                return None;
+            }
+            let path = Path::new(line);
+            fs::canonicalize(if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                cwd.join(path)
+            })
+            .ok()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    paths.try_into().ok()
 }
 
 fn hooks_are_inert(path: &Path) -> bool {

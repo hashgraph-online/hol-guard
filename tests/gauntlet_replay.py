@@ -21,6 +21,7 @@ from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
 from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
+from tests.native_gate_retry import UNAVAILABLE_REASON
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
@@ -167,6 +168,9 @@ def failure_reasons(case: ReplayCase, result: dict[str, object], approvals: list
 
 def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str, Any]]) -> str | None:
     """None when the case behaves as expected, otherwise a one-line failure."""
+    if result.get("reason_code") == UNAVAILABLE_REASON:
+        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case.
+        return "native review unavailable after retry"
     found = interruptions(case, result, approvals)
     allowed = not any(e["kind"] == "decision" for e in found)
     if case.expect == "quiet":

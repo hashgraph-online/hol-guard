@@ -85,7 +85,9 @@ def test_a_drained_answer_is_recorded_like_a_daemon_allow(tmp_path: Path, observ
     assert activity["receipt_id"] == RECEIPT["decision_id"]
 
 
-@pytest.mark.parametrize("harness", ["claude-code", "cursor", "kimi", "copilot", "zcode", "hermes", "opencode", "grok"])
+@pytest.mark.parametrize(
+    "harness", ["claude-code", "cursor", "kimi", "copilot", "zcode", "hermes", "opencode", "grok", "pi", "omp"]
+)
 def test_a_drained_answer_is_recorded_for_its_harness(
     tmp_path: Path, observed: list[dict[str, object]], harness: str
 ) -> None:

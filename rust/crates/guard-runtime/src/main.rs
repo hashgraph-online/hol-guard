@@ -54,17 +54,12 @@ mod binding_capture_receipt;
 mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
-#[cfg(unix)]
+mod blocked_request_mode;
 mod bounded_hook_bridge;
-#[cfg(unix)]
 mod bounded_hook_bridge_grok;
-#[cfg(unix)]
 mod bounded_hook_bridge_grok_render;
-#[cfg(unix)]
 mod bounded_hook_bridge_grok_script;
-#[cfg(unix)]
 mod bounded_hook_bridge_hermes;
-#[cfg(unix)]
 mod bounded_hook_bridge_render;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
@@ -86,21 +81,16 @@ mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
 mod claude_guard_question;
-#[cfg(unix)]
 mod claude_hook_bridge;
-#[cfg(unix)]
 mod claude_hook_bridge_auth;
+#[cfg(windows)]
+mod claude_hook_bridge_auth_windows;
 #[cfg(all(test, unix))]
 mod claude_hook_bridge_fixture;
-#[cfg(unix)]
 mod claude_hook_bridge_http;
-#[cfg(unix)]
 mod claude_hook_bridge_http_text;
-#[cfg(unix)]
 mod claude_hook_bridge_render;
-#[cfg(unix)]
 mod claude_hook_bridge_transport;
-#[cfg(unix)]
 mod claude_hook_bridge_url;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
@@ -118,15 +108,10 @@ mod cloud_sync_privacy;
 mod codex_app_server_socket;
 mod codex_detect;
 mod codex_hook_artifacts;
-#[cfg(unix)]
 mod codex_hook_bridge;
-#[cfg(unix)]
 mod codex_hook_bridge_direct;
-#[cfg(unix)]
 mod codex_hook_bridge_transport;
-#[cfg(unix)]
 mod codex_hook_identity;
-#[cfg(unix)]
 mod codex_hook_response;
 mod codex_hooks;
 mod codex_identity;
@@ -180,11 +165,8 @@ mod continuation_metadata;
 mod continuation_store;
 mod contributed_mcp_decision_op;
 mod critical_floor_op;
-#[cfg(unix)]
 mod cursor_hook_bridge;
-#[cfg(unix)]
 mod cursor_hook_bridge_response;
-#[cfg(unix)]
 mod cursor_hook_bridge_script;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
@@ -217,6 +199,8 @@ mod data_flow_analyze_op;
 mod decision_authority_op;
 #[cfg(test)]
 mod decision_authority_vectors_tests;
+mod developer_inspection_authority_op;
+mod developer_inspection_host;
 mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;
@@ -245,7 +229,11 @@ mod guard_config_managed;
 mod guard_store_advisory_cache;
 #[cfg(test)]
 mod guard_store_advisory_cache_vectors_tests;
+mod guard_store_approval_request;
+mod guard_store_approval_row;
+mod guard_store_approval_write;
 mod guard_store_args;
+mod guard_store_claude_review;
 mod guard_store_clients;
 mod guard_store_cmd_activity;
 mod guard_store_cmd_api;
@@ -264,6 +252,9 @@ mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
 mod guard_store_db;
+mod guard_store_guard_event;
+#[cfg(test)]
+mod guard_store_guard_event_tests;
 mod guard_store_inventory;
 #[cfg(test)]
 mod guard_store_inventory_page_tests;
@@ -311,6 +302,7 @@ mod guard_store_receipts_vectors_tests;
 mod guard_store_sessions;
 #[cfg(test)]
 mod guard_store_sessions_vectors_tests;
+mod guard_store_silent_review;
 mod guard_store_state_ops;
 #[cfg(test)]
 mod guard_store_state_ops_vectors_tests;
@@ -353,6 +345,7 @@ mod hook_approval_context;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
+mod hook_bridge_exit;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
@@ -365,7 +358,6 @@ mod hook_decision_op;
 mod hook_decision_settle;
 mod hook_direct;
 mod hook_direct_evidence;
-#[cfg(unix)]
 mod hook_env_stamp;
 mod hook_policy_config;
 mod hook_process_spawn;
@@ -398,6 +390,19 @@ mod mcp_proxy_projection_vectors_tests;
 mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
+mod mcp_relay;
+#[cfg(unix)]
+mod mcp_relay_args;
+#[cfg(unix)]
+mod mcp_relay_authority;
+#[cfg(unix)]
+mod mcp_relay_catalog;
+#[cfg(unix)]
+mod mcp_relay_core;
+#[cfg(unix)]
+mod mcp_relay_host;
+#[cfg(unix)]
+mod mcp_relay_launch;
 mod mcp_runtime_evidence_op;
 mod mcp_sensitive_read;
 #[cfg(test)]
@@ -418,7 +423,6 @@ mod mcp_tool_policy_revalidate;
 mod memory_pattern;
 mod native_exact_action_op;
 mod native_hook_receipt;
-#[allow(dead_code)] // Read once the direct lane queues a reviewed `PreToolUse` itself.
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
@@ -471,6 +475,7 @@ mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
 mod policy_integrity_resolver;
+mod policy_integrity_rows_op;
 mod policy_lookup_groups;
 mod policy_lookup_reuse;
 mod policy_snapshot_build;

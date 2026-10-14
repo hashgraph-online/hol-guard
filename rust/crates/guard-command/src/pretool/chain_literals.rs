@@ -15,6 +15,8 @@ use std::collections::{HashMap, HashSet};
 #[path = "chain_literals_lex.rs"]
 mod lex;
 use lex::{identifier, items, names_variable, opaque, tokenize, Token};
+#[path = "chain_literals_pwd.rs"]
+mod pwd;
 
 const MAX_COMMAND_CHARS: usize = 8192;
 const MAX_VALUE_CHARS: usize = 256;
@@ -70,16 +72,22 @@ struct Binding {
     unconditional: bool,
 }
 
+/// The extension controls cannot see through an expansion they do not model.
+const EVALUATION_FAILED: &str = "native_command_extension_evaluation_failed";
+
 /// Replace a raw review with the verdict for the substituted command, which
 /// runs the same words. Another sandbox verdict is kept only when its
-/// launcher, which re-derives the shape from the raw text, would run it.
+/// launcher, which re-derives the shape from the raw text, would run it. A
+/// raw block that only says the expansions could not be evaluated also takes
+/// the substituted command's review, which every control did evaluate.
 pub(super) fn rejudge(
     raw: PreToolResultV1,
     payload: &Value,
     context: PathContext<'_>,
     evaluate: impl Fn(&Value) -> PreToolResultV1,
 ) -> PreToolResultV1 {
-    if raw.minimum_action != "review" {
+    let unevaluated = raw.reason_code == EVALUATION_FAILED;
+    if raw.minimum_action != "review" && !unevaluated {
         return raw;
     }
     let Some(command) = super::extract_generic_signals(payload)
@@ -88,7 +96,9 @@ pub(super) fn rejudge(
     else {
         return raw;
     };
-    let Some(substituted) = substitute(&command) else {
+    let directory = context.cwd.and_then(|cwd| pwd::project(&command, cwd));
+    let base = directory.as_deref().unwrap_or(&command);
+    let Some(substituted) = substitute(base).or(directory) else {
         return raw;
     };
     let projected_payload = super::payload_with_command(payload, &command, &substituted);
@@ -99,6 +109,7 @@ pub(super) fn rejudge(
     match projected.minimum_action.as_str() {
         "allow" | "warn" | "block" => projected,
         "sandbox-required" if launches_as_judged(&projected, &command, context) => projected,
+        "review" if unevaluated && projected.reason_code != EVALUATION_FAILED => projected,
         _ => raw,
     }
 }

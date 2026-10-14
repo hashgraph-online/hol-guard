@@ -1,4 +1,4 @@
-import { r as reactExports, aq as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, ar as ApprovalProofModal, as as Tag, at as PROTECTION_POSTURE_COPY, au as POSTURE_OUTCOME_COLUMNS, av as getDefaultExportFromCjs, aw as React, y as HiMiniShieldCheck, ax as HiMiniSquares2X2, ay as HiMiniLockClosed, az as HiMiniBellAlert, aA as HiMiniAdjustmentsHorizontal, aB as HiMiniCircleStack, aC as TabBar, c as HiMiniChevronRight, S as SectionLabel, P as useFocusTrap, aD as fetchCloudReviewSettings, M as HiMiniCloud, aE as HiMiniArrowPath, I as HiMiniXMark, aF as ApprovalProofFieldInputs, aG as isApprovalProofSubmitDisabled, aH as buildApprovalProofCredentials, aI as changeCloudReviewSettings, aJ as resolveProtectionLevelCopy, ad as fetchSettings, aK as fetchRuntimeSnapshot, aL as clearHarnessWatchOverrides, aM as withHarnessPosturePatch, e as updateSettings, aN as clearPolicy, aO as clearReviewQueue, aP as revokeApprovalGateCooldown, aQ as disableApprovalGateTotp, aR as importSettings, aS as resetSettings, aT as enrollApprovalGateTotp, aU as verifyApprovalGateTotp, aV as clearEvidence, aW as exportDiagnostics, aX as repairApprovalCenter, aY as exportSettings, aZ as setupDesktopNotifications, n as EmptyState, a_ as settingsWatchBannerModel, a$ as WorkspacePageHeader, W as WatchProtectionBanner, b0 as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, b1 as humanizeList, b2 as isProtectionPosture, b3 as deriveProtectionPosture, b4 as normalizeHarnessPostures, b5 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { r as reactExports, aq as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, ar as ApprovalProofModal, as as Tag, at as PROTECTION_POSTURE_COPY, au as POSTURE_OUTCOME_COLUMNS, av as getDefaultExportFromCjs, aw as React, y as HiMiniShieldCheck, ax as HiMiniSquares2X2, ay as HiMiniLockClosed, az as HiMiniBellAlert, aA as HiMiniAdjustmentsHorizontal, aB as HiMiniCircleStack, aC as TabBar, c as HiMiniChevronRight, S as SectionLabel, P as useFocusTrap, aD as fetchCloudReviewSettings, M as HiMiniCloud, aE as HiMiniArrowPath, I as HiMiniXMark, aF as ApprovalProofFieldInputs, aG as isApprovalProofSubmitDisabled, aH as buildApprovalProofCredentials, aI as changeCloudReviewSettings, aJ as resolveProtectionLevelCopy, ad as fetchSettings, aK as fetchRuntimeSnapshot, aL as clearHarnessWatchOverrides, aM as withHarnessPosturePatch, e as updateSettings, aN as clearPolicy, aO as clearReviewQueue, aP as revokeApprovalGateCooldown, aQ as disableApprovalGateTotp, aR as importSettings, aS as resetSettings, aT as enrollApprovalGateTotp, aU as verifyApprovalGateTotp, aV as clearEvidence, aW as exportDiagnostics, aX as repairApprovalCenter, aY as exportSettings, aZ as setupDesktopNotifications, n as EmptyState, a_ as settingsWatchBannerModel, a$ as WorkspacePageHeader, W as WatchProtectionBanner, b0 as HiMiniMagnifyingGlass, b1 as commitDashboardLocation, b2 as guardAwareHref, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, b3 as humanizeList, b4 as isProtectionPosture, b5 as deriveProtectionPosture, b6 as normalizeHarnessPostures, b7 as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, b as GuardRepairRequestError, c as resolveSettingsSaveProofKind, e as requiresSettingsSaveProof, f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, g as HarnessPostureSummaryCard, h as HarnessPostureManager, G as GuardRepairControl, a as SettingsSaveProofModal, i as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
@@ -2324,12 +2324,12 @@ function SettingsSelectRow({
 function resolveApprovalPasswordSectionCopy(wasConfigured, enabled = true) {
   if (wasConfigured) {
     if (!enabled) {
-      return "Your approval password is set. Turn on Ask for proof above to change it or connect an authenticator.";
+      return "Local approval is off. Choose a password to enable it again. Your authenticator stays connected.";
     }
     return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
   }
   if (!enabled) {
-    return "Set an approval password to require proof before allow or trust changes stick. Setting one turns on Ask for proof.";
+    return "Choose a password to protect approvals and permission changes on this device. Setup turns on password checks.";
   }
   return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }
@@ -2350,7 +2350,7 @@ function ApprovalPasswordSection(props) {
         children: "Change password"
       }
     ) }) : null,
-    !props.wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
+    !props.wasConfigured || !props.gateActive ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
   ] });
 }
 function cloudReviewProofIncomplete(gate, password, totp, requireFreshTotp) {
@@ -3093,19 +3093,30 @@ function hasUnsavedChanges(saved, draft) {
 }
 function applyApprovalGateDraft(settings, updates) {
   const gate = settings.approval_gate;
+  if (gate !== void 0) {
+    return {
+      ...settings,
+      approval_gate: {
+        ...gate,
+        enabled: updates.enabled,
+        cooldown_seconds: updates.cooldown_seconds,
+        strict_all_decisions: updates.strict_all_decisions ?? gate.strict_all_decisions
+      }
+    };
+  }
   return {
     ...settings,
     approval_gate: {
       enabled: updates.enabled,
-      configured: gate?.configured ?? false,
+      configured: false,
       cooldown_seconds: updates.cooldown_seconds,
-      cooldown_active: gate?.cooldown_active ?? false,
-      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
-      locked_until: gate?.locked_until ?? null,
-      fail_closed: gate?.fail_closed ?? false,
-      strict_all_decisions: updates.strict_all_decisions ?? gate?.strict_all_decisions ?? false,
-      totp_enabled: gate?.totp_enabled ?? false,
-      totp_pending: gate?.totp_pending ?? false
+      cooldown_active: false,
+      cooldown_expires_at: null,
+      locked_until: null,
+      fail_closed: false,
+      strict_all_decisions: updates.strict_all_decisions ?? false,
+      totp_enabled: false,
+      totp_pending: false
     }
   };
 }
@@ -3116,6 +3127,8 @@ function saveStatusText(saveSuccess, saveError) {
   return saveError ?? "";
 }
 function SettingsWorkspace({ onApprovalGateChange }) {
+  const [returnToExtensions] = reactExports.useState(() => new URLSearchParams(window.location.search).get("returnTo") === "extensions");
+  const approvalSetupRef = reactExports.useRef(null);
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [draft, setDraft] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
@@ -3135,6 +3148,11 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const [pendingPosture, setPendingPosture] = reactExports.useState(null);
   const [activeTab, setActiveTab] = reactExports.useState(() => resolveInitialSettingsTab(window.location.search));
   const [searchQuery, setSearchQuery] = reactExports.useState("");
+  reactExports.useEffect(() => {
+    if (!returnToExtensions || activeTab !== "approval" || state.kind !== "ready") return;
+    approvalSetupRef.current?.focus();
+    approvalSetupRef.current?.scrollIntoView({ block: "start" });
+  }, [returnToExtensions, activeTab, state.kind]);
   const [importingSettings, setImportingSettings] = reactExports.useState(false);
   const [resettingSettings, setResettingSettings] = reactExports.useState(false);
   const [exportingSettings, setExportingSettings] = reactExports.useState(false);
@@ -3444,10 +3462,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     if (proofModalPending) {
       return;
     }
-    const revertGateEnabled = setupGateRevertRef.current;
-    if (proofModalMode === "setup-gate" && revertGateEnabled !== null) {
-      setApprovalGateEnabled(revertGateEnabled);
-      setDraft((value) => value === null ? value : applyApprovalGateDraft(value, { enabled: revertGateEnabled, cooldown_seconds: approvalGateCooldown, strict_all_decisions: approvalGateStrictAllDecisions }));
+    const revertGate = setupGateRevertRef.current;
+    if (proofModalMode === "setup-gate" && revertGate !== null) {
+      setApprovalGateEnabled(revertGate.enabled);
+      setDraft((value) => value === null ? value : { ...value, approval_gate: revertGate.gate });
     }
     setupGateRevertRef.current = null;
     setProofModalOpen(false);
@@ -3703,7 +3721,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
   const handleOpenPasswordChangeModal = reactExports.useCallback((mode = "change-password") => {
     if (mode === "setup-gate") {
-      setupGateRevertRef.current = approvalGateEnabled;
+      setupGateRevertRef.current = { enabled: approvalGateEnabled, gate: draft?.approval_gate };
       setApprovalGateEnabled(true);
       setDraft(
         (value) => value === null ? value : applyApprovalGateDraft(value, {
@@ -3714,7 +3732,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       );
     }
     openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
-  }, [openProofModal, approvalGateEnabled, approvalGateCooldown, approvalGateStrictAllDecisions]);
+  }, [openProofModal, approvalGateEnabled, approvalGateCooldown, approvalGateStrictAllDecisions, draft]);
   const handleRequestRevokeCooldown = reactExports.useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
   }, [openProofModal]);
@@ -4227,6 +4245,46 @@ function SettingsWorkspace({ onApprovalGateChange }) {
             }
           ) }),
           activeTab === "approval" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: approvalSetupRef, role: "region", tabIndex: -1, "aria-label": "Local approval setup", className: "scroll-mt-24 rounded-xl focus-visible:outline-2 focus-visible:outline-brand-blue sm:scroll-mt-4", children: [
+              returnToExtensions ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 flex flex-wrap items-center justify-between gap-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Local approval" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: hasUnsavedChanges(savedSettingsRef.current, draft) ? "Save your changes before returning to Extensions." : savedSettingsRef.current?.approval_gate?.enabled && savedSettingsRef.current?.approval_gate?.configured ? "Local approval is ready. Return to Extensions to finish setup." : "Set a password here, then return to Extensions. Guard Cloud is not required." })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", disabled: saving || proofModalPending || hasUnsavedChanges(savedSettingsRef.current, draft), onClick: () => commitDashboardLocation(guardAwareHref("/extensions")), children: "Back to Extensions" })
+              ] }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ApprovalGateCard,
+                {
+                  enabled: approvalGateEnabled,
+                  gateConfig: draft.approval_gate ?? null,
+                  savedGateConfig: savedSettingsRef.current?.approval_gate ?? null,
+                  totpCode: approvalGateTotpCode,
+                  totpDeviceLabel: approvalGateTotpDeviceLabel,
+                  strictAllDecisions: approvalGateStrictAllDecisions,
+                  cooldownSeconds: approvalGateCooldown,
+                  totpEnrollment,
+                  totpSetupOpen,
+                  totpSetupStep,
+                  totpActionPassword,
+                  totpActionPending,
+                  totpActionError,
+                  onToggle: handleApprovalGateToggle,
+                  onOpenPasswordChangeModal: handleOpenPasswordChangeModal,
+                  onTotpCodeChange: handleApprovalGateTotpCode,
+                  onTotpDeviceLabelChange: handleApprovalGateTotpDeviceLabel,
+                  onTotpActionPasswordChange: handleTotpActionPasswordChange,
+                  onOpenTotpSetup: handleOpenTotpSetup,
+                  onCloseTotpSetup: handleCloseTotpSetup,
+                  onStrictAllDecisionsChange: handleApprovalGateStrictAllDecisions,
+                  onCooldownChange: handleApprovalGateCooldownChange,
+                  onStartTotpEnrollment: handleStartTotpEnrollment,
+                  onVerifyTotpEnrollment: handleVerifyTotpEnrollment,
+                  onDisableTotp: handleDisableTotp,
+                  onRevokeCooldown: handleRequestRevokeCooldown
+                }
+              )
+            ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               SettingsFormSection,
               {
@@ -4257,7 +4315,6 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 ] })
               }
             ),
-            !approvalGateEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: draft?.approval_gate?.configured === true ? "Ask for proof is off. Your saved password and authenticator stay on this device." : "Add a password or phone app code before allow or trust changes stick." }) }) : null,
             draft.blocked_request_mode === "ask" && /* @__PURE__ */ jsxRuntimeExports.jsx(
               SettingsFormSection,
               {
@@ -4289,37 +4346,6 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                     )
                   ] }) })
                 ] })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              ApprovalGateCard,
-              {
-                enabled: approvalGateEnabled,
-                gateConfig: draft.approval_gate ?? null,
-                savedGateConfig: savedSettingsRef.current?.approval_gate ?? null,
-                totpCode: approvalGateTotpCode,
-                totpDeviceLabel: approvalGateTotpDeviceLabel,
-                strictAllDecisions: approvalGateStrictAllDecisions,
-                cooldownSeconds: approvalGateCooldown,
-                totpEnrollment,
-                totpSetupOpen,
-                totpSetupStep,
-                totpActionPassword,
-                totpActionPending,
-                totpActionError,
-                onToggle: handleApprovalGateToggle,
-                onOpenPasswordChangeModal: handleOpenPasswordChangeModal,
-                onTotpCodeChange: handleApprovalGateTotpCode,
-                onTotpDeviceLabelChange: handleApprovalGateTotpDeviceLabel,
-                onTotpActionPasswordChange: handleTotpActionPasswordChange,
-                onOpenTotpSetup: handleOpenTotpSetup,
-                onCloseTotpSetup: handleCloseTotpSetup,
-                onStrictAllDecisionsChange: handleApprovalGateStrictAllDecisions,
-                onCooldownChange: handleApprovalGateCooldownChange,
-                onStartTotpEnrollment: handleStartTotpEnrollment,
-                onVerifyTotpEnrollment: handleVerifyTotpEnrollment,
-                onDisableTotp: handleDisableTotp,
-                onRevokeCooldown: handleRequestRevokeCooldown
               }
             )
           ] }),

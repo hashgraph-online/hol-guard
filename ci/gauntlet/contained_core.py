@@ -28,6 +28,7 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 CONTAINMENT_PROFILES = {
     "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
     "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
+    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
     "native_package_test_readonly_containment_required": "package-test-readonly-v1",
     "native_node_build_output_containment_required": "node-build-output-v1",
     "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",

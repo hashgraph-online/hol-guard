@@ -414,6 +414,6 @@ fn write_string(text: &str, ensure_ascii: bool, unmap: bool, out: &mut String) {
     out.push('"');
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "hook_env_stamp_tests.rs"]
 pub(crate) mod tests;

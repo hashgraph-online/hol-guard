@@ -516,10 +516,9 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/data_flow.py",
           "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
-          "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
-          "src/codex_plugin_scanner/guard/runtime/kubernetes_*.py"
+          "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads and Kubernetes secret reads when it builds runtime artifacts. github_actions_read_workflow imports github_command_capabilities, which returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads when it builds runtime artifacts. github_actions_read_workflow imports github_command_capabilities, which returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
       },
       {
         "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -641,6 +640,7 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/runtime/contained_output_filters.py",
           "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
           "src/codex_plugin_scanner/guard/runtime/contained_wrapper.py",
           "src/codex_plugin_scanner/guard/runtime/embedded_script_evidence.py",
@@ -1627,6 +1627,106 @@
         "evidence": "commands_router maps the \"install\", \"update\" and \"init\" subcommand names to these three handlers by string; no hook, run, protect or MCP proxy route dispatches to them. `_migrate_legacy_macos_secrets` is called only from the update and install handlers. The report validates that no retained symbol references them. Marked root_function because the module is a dispatcher root."
       },
       {
+        "id": "guard-mcp-serve-dispatch",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py",
+        "root_function": true,
+        "symbols": [
+          "_run_guard_mcp_command"
+        ],
+        "entry_points": [],
+        "reason": "Dispatch body of `guard mcp serve`, the opt-in stdio MCP server that exposes Guard status, search and policy authoring tools to an MCP client.",
+        "evidence": "commands_router maps the \"mcp\" subcommand name to this handler by string, and it lazily imports guard.mcp.server only inside its body. No adapter, installer or harness config registers `guard mcp serve`, and no hook, run, protect or MCP proxy route dispatches to it; it runs only when a user configures an MCP client to launch it. The report validates that no retained symbol references it. Marked root_function because the module is a dispatcher root."
+      },
+      {
+        "id": "mcp-policy-request-workflow",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/mcp/policy_store.py",
+        "symbols": [
+          "_VALID_REQUEST_STATUSES",
+          "_PolicyRequestStoreConnection",
+          "_PolicyImportResult",
+          "_PENDING_TTL_SECONDS",
+          "_now",
+          "_parse_iso",
+          "PendingPolicyRequest",
+          "_coerce_status",
+          "_coerce_mode",
+          "_row_to_request",
+          "StageRequestInput",
+          "StageRequestResult",
+          "ApplyRequestResult",
+          "MCPolicyRequestRepository"
+        ],
+        "entry_points": [],
+        "reason": "Pending MCP policy creation requests are staged, applied, declined and recovered only by operator workflows: the Guard MCP policy tools (mcp/policy_tools.py, mcp/tools.py, mcp/policy_apply.py), the daemon policy-decision and business-policy recovery routes, and dashboard support reads. None of those run on a hook or proxy request. The runtime keeps ensure_mcp_policy_request_schema, which store_connection_schema calls when it opens the store.",
+        "evidence": "rg -n 'MCPolicyRequestRepository|PendingPolicyRequest|StageRequestInput' src -g '*.py' lists only mcp/policy_apply.py, mcp/policy_tools.py, mcp/tools.py, daemon/mcp_policy_decisions.py, daemon/business_policy_recovery.py and daemon/server_dashboard_support.py outside mcp/policy_store.py; none of them is in the runtime import closure."
+      },
+      {
+        "id": "daemon-peer-update-and-cli-endpoint",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
+        "symbols": [
+          "live_desktop_owned_daemon",
+          "load_guard_daemon_endpoint",
+          "load_guard_daemon_endpoint_url",
+          "retained_newer_runtime_payload",
+          "daemon_refresh_outcome_succeeded",
+          "retained_desktop_owner_payload",
+          "retained_desktop_owner_note"
+        ],
+        "entry_points": [],
+        "reason": "Desktop-owned daemon detection, retained-runtime payloads and refresh outcomes serve Guard self-update and desktop apply; the endpoint loaders serve CLI commands that talk to a running daemon. None of them runs on a hook or proxy request. daemon_source_is_desktop_core stays counted because retained runtime code reads it.",
+        "evidence": "rg -n 'live_desktop_owned_daemon|load_guard_daemon_endpoint|retained_newer_runtime_payload|daemon_refresh_outcome_succeeded|retained_desktop_owner_(payload|note)' src -g '*.py' lists only cli/update_commands.py, cli/update_desktop_apply.py, daemon/dashboard_update_runner.py and daemon/update_refresh_program.py (self-update), and cli/commands_dispatch_trust.py, cli/commands_support_service.py, cli/extension_controls_commands.py and cli/product.py outside daemon/runtime_peer.py; none of them is in the runtime import closure."
+      },
+      {
+        "id": "policy-document-file-io",
+        "category": "cli_only",
+        "path": "src/codex_plugin_scanner/guard/policy_document_io.py",
+        "symbols": [
+          "_POLICY_FILE_MODE",
+          "_POLICY_DIRECTORY_MODE_MASK",
+          "PolicyFileTrustError",
+          "_assert_trusted_parent_metadata",
+          "_open_trusted_parent",
+          "_assert_trusted_file_metadata",
+          "read_trusted_policy_bytes",
+          "read_trusted_policy_text",
+          "write_private_policy_text",
+          "load_trusted_policy_document"
+        ],
+        "entry_points": [],
+        "reason": "Trusted reads and private writes of policy document files back the hol-guard policy import and export commands. Policy compilation (compile_policy_document, CompiledPolicyRow) stays counted because Cloud sync and the policy store use it.",
+        "evidence": "rg -n 'PolicyFileTrustError|read_trusted_policy_text|write_private_policy_text|load_trusted_policy_document' src -g '*.py' lists only cli/commands_dispatch_policy_document.py outside policy_document_io.py; mcp/policy_tools.py, runtime/runner.py and store_policy_document.py import only CompiledPolicyRow, PolicyCompilationError and compile_policy_document."
+      },
+      {
+        "id": "mdm-local-integrity-snapshot",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/mdm/contracts.py",
+        "symbols": [
+          "AssuranceLevel",
+          "IntegrityState",
+          "SupervisorState",
+          "RemediationClass",
+          "IntegrityReasonCode",
+          "SnapshotComponent",
+          "SnapshotKeyComponent",
+          "SnapshotSupervisorComponent",
+          "IntegrityComponent",
+          "KeyProtectionStatus",
+          "SupervisorStatus",
+          "SnapshotProduct",
+          "SnapshotIdentifiers",
+          "SnapshotContinuity",
+          "HarnessCoverage",
+          "SnapshotComponents",
+          "LocalIntegritySnapshot"
+        ],
+        "entry_points": [],
+        "reason": "The local integrity snapshot models and reason codes describe managed-device health reports. They are built by mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py and mdm/harness_coverage.py and consumed by the health lease and the mdm CLI, all of which run on the health-reporting cadence rather than a hook request. Managed-policy contracts in this module stay counted.",
+        "evidence": "rg -ln 'IntegrityReasonCode|LocalIntegritySnapshot|SnapshotComponents|KeyProtectionStatus|SupervisorStatus|IntegrityComponent' src -g '*.py' lists only mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py, mdm/harness_coverage.py, mdm/health_lease.py, mdm/health_snapshot_validation.py and cli/commands_dispatch_mdm.py besides mdm/contracts.py; the adapters' HarnessCoverageSummary comes from adapters/contracts.py. None of those mdm modules is in the runtime import closure."
+      },
+      {
         "id": "store2-oauth-connect-lifecycle",
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/store_oauth.py",
@@ -1643,6 +1743,34 @@
         "entry_points": [],
         "reason": "Cloud connect and pairing lifecycle methods of the OAuth credential store: clearing credentials and sync state on disconnect or reconnect, listing sources, legacy macOS secret migration and recording connect results.",
         "evidence": "Remaining callers are the guard connect and uninstall CLI flows, the daemon connect-flow and cloud-sync control handlers, and the cloud sync runner, all of which the install-uninstall-doctor, daemon-control-plane-routes and cloud-sync-transport exclusions already remove from scope, plus the excluded install and update dispatchers that reach the legacy migration by name. The credential read path (health, profile, local credentials, source loading, recovery and the credential lock) is not excluded because approvals and package entitlement callers use it. The report validates that no retained method or in-scope module references the excluded names."
+      },
+      {
+        "id": "extension-control-authority-commit",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/store_extension_control_authority_commit.py",
+        "symbols": [
+          "ExtensionControlAuthorityCommitMixin.enroll_extension_control_authority",
+          "ExtensionControlAuthorityCommitMixin.commit_extension_control_layers",
+          "ExtensionControlAuthorityCommitMixin._bootstrap_extension_control_authority"
+        ],
+        "entry_points": [],
+        "reason": "Write side of the extension-control authority store: enrolling the local authority and committing signed control layers.",
+        "evidence": "enroll_extension_control_authority is called only from cli/extension_controls_commands.py and commit_extension_control_layers only from daemon/extension_control_api.py; the extension-authoring exclusion already removes both from scope. _bootstrap_extension_control_authority is called only from enroll and from the recovery method excluded by extension-control-authority-recovery. The read and verification side of the authority store (views, layer loading, transitions) is not excluded because hook evaluation reads it. The report validates that no retained symbol references them."
+      },
+      {
+        "id": "extension-control-authority-recovery",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/store_extension_control_authority.py",
+        "symbols": [
+          "StoreExtensionControlAuthorityMixin.recover_extension_control_authority",
+          "StoreExtensionControlAuthorityMixin._restore_missing_snapshot_before_recovery",
+          "StoreExtensionControlAuthorityMixin._reset_extension_control_authority",
+          "StoreExtensionControlAuthorityMixin._note_controls_lost_by_reset",
+          "StoreExtensionControlAuthorityMixin.acknowledge_extension_control_degraded_mode"
+        ],
+        "entry_points": [],
+        "reason": "Operator recovery of the extension-control authority store: resetting to a recovered or new key and acknowledging degraded mode.",
+        "evidence": "The store methods are called only from cli/extension_controls_commands.py and daemon/extension_control_api.py, both removed by the extension-authoring exclusion; the same-named method on daemon/client.py is a separate HTTP client used only by that excluded CLI. _restore_missing_snapshot_before_recovery and _reset_extension_control_authority are called only from the recovery method, and _note_controls_lost_by_reset only from the reset. The reset is the only in-scope caller of _bootstrap_extension_control_authority. Hook evaluation reads the authority view and layers and never recovers or acknowledges. The report validates that no retained symbol references them."
       },
       {
         "id": "adapter-cline-setup",
@@ -1767,6 +1895,109 @@
         "entry_points": [],
         "reason": "Resolving queued approval requests (approve, deny, bulk allow-once) and building the dashboard runtime snapshot. These run when a person acts in the approval center, the dashboard or the guard approvals command; no hook or MCP proxy call reaches them.",
         "evidence": "Every caller of apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible is outside runtime scope: the daemon control-plane routes (server_control_routes_post.py, server_control_policy.py), the dashboard read routes (server_dashboard_runtime_read.py) and the guard approvals command (cli/approval_commands.py). The remaining symbols are reached only from apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible. The retained in-scope part of approvals.py (request queueing, build_approval_request_url, primary_approval_request, silent_review_center_url) does not reference them, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "extension-control-dashboard-resolution",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
+        "symbols": [
+          "_FAILURE_REASON",
+          "_TRUSTED_LOCKDOWN_SURFACES",
+          "resolve_extension_controls",
+          "_has_explicit_enabled_permission",
+          "_validate_layer_targets",
+          "_extension_closure",
+          "_permission_closure",
+          "_resolution"
+        ],
+        "entry_points": [],
+        "reason": "resolve_extension_controls builds the effective extension-control view for the dashboard projection and the semantic preview. Hook evaluation reads extension controls through the native resident and never calls it.",
+        "evidence": "rg -l 'resolve_extension_controls' src -g '*.py' lists only daemon/extension_control_projection.py and daemon/extension_control_semantic_preview.py outside runtime/extension_control_resolver.py; neither is in the runtime import closure."
+      },
+      {
+        "id": "unlisted-cli-check-for-mcp-probe",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
+        "symbols": [
+          "_INTERPRETER_NAMES",
+          "_RESERVED_TOOL_NAMES",
+          "catalog_owned_executables",
+          "unlisted_cli_invocation_is_safe",
+          "is_reserved_tool_name",
+          "_safe_primary_segment",
+          "_is_interpreter_name",
+          "_normalize_tool_name"
+        ],
+        "entry_points": [],
+        "reason": "unlisted_cli_invocation_is_safe decides whether local MCP probing may start an unlisted CLI to list its tools. It runs only during discovery probing, never on a hook or proxy request. The operator CLI recognition helpers in this module are already excluded by operator-cli-recognition-api.",
+        "evidence": "rg -l 'unlisted_cli_invocation_is_safe' src -g '*.py' lists only runtime/local_mcp_probe.py outside runtime/local_cli_identity.py; it is not in the runtime import closure."
+      },
+      {
+        "id": "native-resident-update-teardown",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/native_resident_client.py",
+        "symbols": [
+          "stop_native_resident",
+          "retire_native_resident_for_update",
+          "close_native_residents"
+        ],
+        "entry_points": [],
+        "reason": "Retiring the native resident before an update and closing residents after desktop qualification are lifecycle steps run by hol-guard update and the qualification command. Request-time resident calls in this module stay counted.",
+        "evidence": "rg -l 'retire_native_resident_for_update|close_native_residents' src -g '*.py' lists only cli/update_commands.py and cli/desktop_qualification.py outside native_resident_client.py; neither is in the runtime import closure.",
+        "root_function": true
+      },
+      {
+        "id": "local-mcp-catalog-probe",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/runtime/local_mcp_stdio.py",
+        "symbols": [
+          "MCP_PROBE_TIMEOUT_SECONDS",
+          "MAX_MCP_PROBE_TOOLS",
+          "NativeMcpAuthorityError",
+          "_native_catalog_result",
+          "_shlex_join_safe",
+          "run_mcp_catalog"
+        ],
+        "entry_points": [],
+        "reason": "run_mcp_catalog starts a local stdio MCP server to list its tools for discovery probing. The MCP proxy relays live traffic through other helpers in this module, which stay counted.",
+        "evidence": "rg -l 'run_mcp_catalog' src -g '*.py' lists only runtime/local_mcp_probe.py outside runtime/local_mcp_stdio.py; it is not in the runtime import closure."
+      },
+      {
+        "id": "policy-bundle-sync-messages",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/policy_bundle_parser.py",
+        "symbols": [
+          "_POLICY_BUNDLE_TRUST_REMEDIATION_REASONS",
+          "_POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS",
+          "_POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS",
+          "_POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS",
+          "_POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS",
+          "_POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS",
+          "_POLICY_BUNDLE_VERSION_REMEDIATION_REASONS",
+          "policy_bundle_daemon_version_supported",
+          "policy_bundle_rejection_message"
+        ],
+        "entry_points": [],
+        "reason": "The daemon version gate and rejection messages are used when Cloud sync accepts or rejects a policy bundle. Bundle parsing used at request time stays counted.",
+        "evidence": "rg -l 'policy_bundle_daemon_version_supported|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and daemon/server_control_sync.py (daemon-control-plane-routes) outside policy_bundle_parser.py."
+      },
+      {
+        "id": "package-audit-report-projection",
+        "category": "offline_reporting",
+        "path": "src/codex_plugin_scanner/guard/native_package_audit_projection.py",
+        "symbols": [
+          "_RECEIPT_KEYS",
+          "_CI_KEYS",
+          "_ACTIONS",
+          "native_audit_receipt_metadata",
+          "native_advisory_aliases",
+          "native_ci_gate_result",
+          "native_empty_audit_outcome",
+          "native_normalize_cloud_audit_response"
+        ],
+        "entry_points": [],
+        "reason": "Audit receipt metadata, advisory aliases, CI gate results, empty outcomes and Cloud audit normalization shape the workspace supply-chain audit report. Install-time package decisions do not call them.",
+        "evidence": "rg -l 'native_audit_receipt_metadata|native_advisory_aliases|native_ci_gate_result|native_empty_audit_outcome|native_normalize_cloud_audit_response' src -g '*.py' lists only supply_chain_workspace_audit.py outside native_package_audit_projection.py; it is not in the runtime import closure."
       }
     ],
     "dynamic_imports": [

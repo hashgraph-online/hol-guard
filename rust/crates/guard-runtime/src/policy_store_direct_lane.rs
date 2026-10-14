@@ -50,8 +50,10 @@ pub(crate) struct DirectLaneBinding {
     /// The policy-integrity state the daemon refreshed when it published.
     pub(crate) policy_integrity_state: Option<DirectLanePolicyIntegrityStateV1>,
     /// What the daemon queues a reviewed `PreToolUse` for approval with.
-    #[allow(dead_code)]
     pub(crate) review: DirectLaneReviewFacts,
+    /// The managed-policy view the daemon resolves Pi structured output
+    /// mediation from.
+    pub(crate) structured_output_config: Option<serde_json::Value>,
 }
 
 /// The daemon's policy-integrity key, held only in memory.
@@ -96,6 +98,7 @@ impl DirectLaneBinding {
             exact_action_control_digest: None,
             policy_integrity_state: None,
             review: DirectLaneReviewFacts::default(),
+            structured_output_config: None,
         }
     }
 }
@@ -169,6 +172,7 @@ impl PolicySnapshotStore {
                     binding.review_oauth_source,
                     binding.review_host_cwd,
                 ),
+                structured_output_config: binding.structured_output_config,
             })
         });
         match self.direct_lane.lock() {

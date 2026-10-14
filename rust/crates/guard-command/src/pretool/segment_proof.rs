@@ -1,227 +1,15 @@
 use super::{
     executable_basename, pure_expression, safe_directory_target, safe_gh_arguments,
-    safe_git_arguments, safe_reads, search, sensitive_command, sensitive_path_argument,
+    safe_git_arguments, safe_reads, search, sensitive_path_argument,
 };
 use crate::CanonicalCommandV1;
 
-pub(super) fn verified_cwd_compound_context(
-    model: &CanonicalCommandV1,
-    context: super::PathContext<'_>,
-) -> Option<String> {
-    let first = model.segments.first()?;
-    if model.segments.len() < 2
-        || first.executable.as_deref() != Some("cd")
-        || !first.environment_names.is_empty()
-        || first.pipeline_index != 0
-        || !super::directory_targets::drive_targets_quoted(first)
-        || !super::directory_targets::home_targets_unquoted(first)
-        || model.segments[1..]
-            .iter()
-            .any(|segment| segment.executable.as_deref() == Some("cd"))
-    {
-        return None;
-    }
-    let [target] = first.arguments.as_slice() else {
-        return None;
-    };
-    let cwd = safe_reads::verified_cwd_target(target, context)?;
-    for (index, pair) in model.segments.windows(2).enumerate() {
-        // Parser spans count Unicode characters, not UTF-8 byte offsets.
-        let length = pair[1].span.start.checked_sub(pair[0].span.end)?;
-        let separator: String = model
-            .normalized_text
-            .chars()
-            .skip(pair[0].span.end)
-            .take(length)
-            .collect();
-        if (index == 0 && separator.trim() != "&&") || !matches!(separator.trim(), "&&" | "|") {
-            return None;
-        }
-    }
-    Some(cwd)
-}
-
-pub(super) fn exact_safe_cwd_compound(
-    model: &CanonicalCommandV1,
-    allow_git_helper_context: bool,
-    context: super::PathContext<'_>,
-) -> bool {
-    let Some(cwd) = verified_cwd_compound_context(model, context) else {
-        return false;
-    };
-    if model.segments.len() == 2
-        && matches!(
-            model.segments[1].executable.as_deref(),
-            Some("cp" | "mkdir" | "touch" | "mv" | "ln" | "rm")
-        )
-    {
-        // `rm` and `ln` delete or publish a path. Re-anchoring them is safe
-        // only inside the original workspace or a linked worktree of it.
-        // `cd ~` and `cd /tmp` must not become the new write boundary.
-        if matches!(model.segments[1].executable.as_deref(), Some("ln" | "rm"))
-            && !mutation_directory_stays_in_workspace(&cwd, context)
-        {
-            return false;
-        }
-        // A verified successful cd has no filesystem side effects. Reuse the
-        // standalone mutation proof without admitting a later write chain.
-        let mut operation = model.clone();
-        operation.segments = vec![model.segments[1].clone()];
-        return exact_safe_segment_with_context(
-            &operation,
-            &operation.segments[0],
-            false,
-            crate::pretool::PathContext {
-                home_dir: context.home_dir,
-                cdpath_unset: context.cdpath_unset,
-                rustup_override_absent: context.rustup_override_absent,
-                npm_config_inert: context.npm_config_inert,
-                shell_home_matches: context.shell_home_matches,
-                cwd: Some(&cwd),
-            },
-        );
-    }
-    model.segments[1..].iter().all(|segment| {
-        (cwd_read_executable(segment.executable.as_deref())
-            || super::version_probes::lone_probe_segment(segment))
-            && exact_safe_segment_with_context(
-                model,
-                segment,
-                allow_git_helper_context,
-                crate::pretool::PathContext {
-                    home_dir: context.home_dir,
-                    cdpath_unset: context.cdpath_unset,
-                    rustup_override_absent: context.rustup_override_absent,
-                    npm_config_inert: context.npm_config_inert,
-                    shell_home_matches: context.shell_home_matches,
-                    cwd: Some(&cwd),
-                },
-            )
-    })
-}
-
-/// Executables a verified `cd` compound may run after the directory change.
-pub(super) fn cwd_read_executable(executable: Option<&str>) -> bool {
-    matches!(
-        executable,
-        Some(
-            "pwd"
-                | "true"
-                | "echo"
-                | "printf"
-                | "which"
-                | "whoami"
-                | "uname"
-                | "date"
-                | "sleep"
-                | "uptime"
-                | "pgrep"
-                | "ps"
-                | "ls"
-                | "cat"
-                | "base64"
-                | "stat"
-                | "test"
-                | "find"
-                | "head"
-                | "tail"
-                | "git"
-                | "gh"
-                | "jq"
-                | "wc"
-                | "od"
-                | "rg"
-                | "grep"
-                | "sed"
-                | "sort"
-                | "uniq"
-                | "cut"
-                | "du"
-                | "df"
-                | "diff"
-        )
-    )
-}
-
-/// The command from its only `cd` onward, when everything before that `cd`
-/// is a proven read that neither depends on nor changes the directory or Git
-/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` then gets
-/// the same decision as `cd /tmp/a/app && git status`. The prefix keeps its
-/// own proof against the original directory; Git segments stay out of it so
-/// the Git execution floor always sees every Git read with its directory.
-pub(super) fn after_read_prefix(
-    model: &CanonicalCommandV1,
-    context: super::PathContext<'_>,
-) -> Option<CanonicalCommandV1> {
-    if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
-        return None;
-    }
-    let mut changes = model
-        .segments
-        .iter()
-        .enumerate()
-        .filter(|(_, segment)| segment.executable.as_deref() == Some("cd"));
-    let (start, _) = changes.next()?;
-    if start == 0 || changes.next().is_some() {
-        return None;
-    }
-    for (index, pair) in model.segments[..=start].windows(2).enumerate() {
-        let length = pair[1].span.start.checked_sub(pair[0].span.end)?;
-        let separator: String = model
-            .normalized_text
-            .chars()
-            .skip(pair[0].span.end)
-            .take(length)
-            .collect();
-        let last = index + 2 == start + 1;
-        if (last && separator.trim() != "&&") || !matches!(separator.trim(), "&&" | "|") {
-            return None;
-        }
-    }
-    let proven = model.segments[..start].iter().all(|segment| {
-        segment.environment_names.is_empty()
-            && segment.wrapper_chain.is_empty()
-            && !segment.path_overridden
-            && segment
-                .executable
-                .as_deref()
-                .is_some_and(|executable| executable_basename(executable) != "git")
-            && cwd_read_executable(segment.executable.as_deref())
-            && exact_safe_segment_with_context(model, segment, false, context)
-    });
-    if !proven {
-        return None;
-    }
-    let mut rest = model.clone();
-    rest.segments = model.segments[start..].to_vec();
-    Some(rest)
-}
-
-/// `ln` and `rm` may follow `cd` only when the new directory is the original
-/// workspace, a directory inside it, or a linked worktree of the same
-/// repository. A session whose directory is the home, or a directory that
-/// contains the home, has no workspace boundary. `cd ~` and `cd /tmp` must
-/// not become the new write boundary.
-fn mutation_directory_stays_in_workspace(cwd: &str, context: super::PathContext<'_>) -> bool {
-    let Some(original) = context
-        .cwd
-        .and_then(|root| std::fs::canonicalize(root).ok())
-    else {
-        return false;
-    };
-    let target = std::path::Path::new(cwd);
-    let home = context
-        .home_dir
-        .and_then(|home| std::fs::canonicalize(home).ok());
-    let Some(home) = home else {
-        return false;
-    };
-    if home.starts_with(target) || home.starts_with(&original) {
-        return false;
-    }
-    target.starts_with(&original)
-        || super::worktree_writes::same_repository_worktree(&original, target)
-}
+#[path = "segment_proof_cwd.rs"]
+mod cwd;
+pub(super) use cwd::{
+    after_read_prefix, cwd_read_executable, exact_safe_cwd_compound, verified_cwd_compound_context,
+    verified_cwd_list_context,
+};
 
 pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
@@ -286,6 +74,8 @@ pub(crate) fn benign_command_segments(
                     | "uptime"
                     | "pgrep"
                     | "ps"
+                    | "lsof"
+                    | "pg_isready"
             ) || segment.arguments.is_empty()
                 || stdin_filter;
             // Context-free public wrappers cannot prove that a file operand or
@@ -397,18 +187,35 @@ pub(super) fn exact_safe_segment_with_context(
         return false;
     };
     let basename = executable_basename(executable);
+    let jq_filter = (basename == "jq")
+        .then(|| safe_reads::jq_filter_position(&segment.arguments, segment.pipeline_index > 0))
+        .flatten();
     let inert_search = matches!(basename, "rg" | "grep" | "fd")
         && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
+    let search_text = if basename == "git" {
+        super::git_search_text::pattern_positions(&segment.arguments)
+    } else {
+        Vec::new()
+    };
     if (!inert_search
         && !super::source_file_read_segment(segment)
-        && sensitive_command(&segment.text))
+        && super::git_search_text::sensitive_beyond_patterns(
+            &segment.text,
+            super::git_search_text::segment_without_patterns(segment),
+        ))
         || (!matches!(basename, "rg" | "grep" | "fd")
             && segment
                 .arguments
                 .iter()
-                .any(|argument| sensitive_path_argument(argument)))
+                .enumerate()
+                .any(|(index, argument)| {
+                    Some(index) != jq_filter
+                        && !search_text.contains(&index)
+                        && sensitive_path_argument(argument)
+                }))
         || !segment.environment_names.is_empty()
-        || executable.contains(['/', '\\'])
+        || (executable.contains(['/', '\\'])
+            && !super::postgres_reads::trusted_pg_ctl_path(executable, context))
     {
         return false;
     }
@@ -432,6 +239,8 @@ pub(super) fn exact_safe_segment_with_context(
         "printenv" => super::safe_scalar::safe_printenv_arguments(&segment.arguments),
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
+        "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
+        "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
         "ls" => {
             super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
         }
@@ -457,7 +266,7 @@ pub(super) fn exact_safe_segment_with_context(
             if !target.starts_with('-')
                 && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
         "cp" => {
-            model.segments.len() == 1
+            super::chain_temporary::copy_segments_allowed(model, segment, context)
                 && super::directory_targets::drive_targets_quoted(segment)
                 && (safe_reads::safe_copy_arguments(&segment.arguments, context)
                     || super::recursive_copy::safe_recursive_copy_arguments(
@@ -491,6 +300,10 @@ pub(super) fn exact_safe_segment_with_context(
         "kubectl" => super::kubectl_reads::safe_kubectl_segment(model, segment, context),
         "export" => super::kubectl_reads::safe_export_segment(model, segment, context),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
+        "docker" => super::docker_reads::safe_docker_segment(model, segment),
+        "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
+        "brew" => super::brew_reads::safe_brew_segment(model, segment),
+        "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "npm" => {
             super::npm_reads::read_only_neighbors(model)
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)
@@ -529,6 +342,7 @@ pub(super) fn exact_safe_segment_with_context(
         }
         "sed" => {
             safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context)
+                || super::sed_edits::safe_in_place_segment(model, segment, context)
         }
         "python" | "python3" | "node" | "nodejs" => {
             super::safe_scalar::version_probe_arguments(basename, &segment.arguments)

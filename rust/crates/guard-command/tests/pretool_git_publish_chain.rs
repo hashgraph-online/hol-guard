@@ -284,3 +284,38 @@ fn any_unproven_step_or_connector_keeps_the_review() {
     let (action, _) = repository.decision("git add . && git commit -m x && git push origin main");
     assert_ne!(action, "allow");
 }
+
+#[test]
+fn checks_before_a_proven_publish_run_contained_then_publish() {
+    install_git_push_verdict(verdict);
+    let repository = repository("checks");
+    let command = concat!(
+        "node --input-type=module -e \"console.log('guide')\" && ",
+        "git checkout -b add-guide && git add CONTRIBUTING.md && ",
+        "git commit -m \"Add guide\" && git push -u origin add-guide",
+    );
+    let result = repository.evaluate_with(command, &repository.primary, &controls("default"));
+    assert_eq!(
+        result.reason_code, "native_workspace_containment_required",
+        "{command}"
+    );
+    assert!(
+        result.reason.contains("then runs the Git steps"),
+        "{}",
+        result.reason
+    );
+    // The Git steps must pass on their own, joined by `&&` alone.
+    for command in [
+        "node -e \"console.log(1)\" && git checkout -b refused && git push origin refused",
+        "node -e \"console.log(1)\" && git add -f . && git commit -m x && git push origin main",
+        "node -e \"console.log(1)\" && git add . ; git push origin main",
+        "node -e \"console.log(1)\" && git push upstream main",
+    ] {
+        let result = repository.evaluate_with(command, &repository.primary, &controls("default"));
+        assert_ne!(result.minimum_action, "allow", "{command}");
+        assert!(
+            !result.reason.contains("then runs the Git steps"),
+            "{command}"
+        );
+    }
+}

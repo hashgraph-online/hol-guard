@@ -11,6 +11,11 @@ use super::*;
 use crate::claude_hook_bridge_fixture::{spawn_daemon, write_private, Exchange, GuardHome};
 
 const VECTORS: &str = include_str!("../testdata/codex_hook_bridge/vectors.json");
+/// Windows config arguments from `encode_hook_config_argument(windows=True)`
+/// and the text `decode_bridge_config_argument` returns for each (`null`
+/// where Python refuses the argument).
+const BASE64URL_CONFIGS: &str =
+    include_str!("../testdata/codex_hook_bridge/base64url_configs.json");
 const TOKEN: &str = "codex-token-fixture";
 
 fn vectors(section: &str) -> Vec<Value> {
@@ -49,7 +54,29 @@ fn config_arguments_are_accepted_as_python_accepts_them() {
 }
 
 #[test]
-fn base64_and_oversized_configs_are_left_to_python() {
+fn base64url_config_arguments_decode_as_python_decodes_them() {
+    let all: Value = serde_json::from_str(BASE64URL_CONFIGS).unwrap();
+    let mut accepted = 0;
+    for case in all["cases"].as_array().unwrap() {
+        let argument = case["argument"].as_str().unwrap();
+        let decoded = case["decoded"].as_str();
+        assert_eq!(
+            decode_config_argument(argument).as_deref(),
+            decoded,
+            "{argument:?}"
+        );
+        let expected = decoded.and_then(parse_config);
+        accepted += usize::from(expected.is_some());
+        assert_eq!(parse_config(argument), expected, "{argument:?}");
+    }
+    assert!(
+        accepted >= 2,
+        "the vectors must include accepted Windows configs"
+    );
+}
+
+#[test]
+fn incomplete_and_oversized_configs_are_left_to_python() {
     assert_eq!(parse_config("eyJzdGF0ZV9wYXRoIjoiIn0"), None);
     let huge = r#"{"state_path":"/h/daemon-state.json","manifest_path":"m","query":"","fallback_command":["x"],"start_command":["y"],"hook_timeouts":{"A":99999999999999999999}}"#;
     assert_eq!(parse_config(huge), None);

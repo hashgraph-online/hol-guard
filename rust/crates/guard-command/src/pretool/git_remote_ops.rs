@@ -108,7 +108,7 @@ pub(super) fn exact_safe_command(
 /// A Git read the configuration probe proves starts no pager, diff driver or
 /// textconv helper. A fetch writes refs, never configuration, so the proof
 /// holds on either side of it.
-fn proven_read(
+pub(super) fn proven_read(
     model: &CanonicalCommandV1,
     index: usize,
     context: super::PathContext<'_>,
@@ -284,7 +284,7 @@ fn prove(
     !config::config_weakens_transport(&effective)
         && !config::repository_config_routes_transport(&repository)
         && !effective.keys().any(|key| key.starts_with("submodule."))
-        && probe.hooks_inert(&["pre-auto-gc", "reference-transaction", "post-fetch"])
+        && probe.hooks_inert(["pre-auto-gc", "reference-transaction", "post-fetch"])
         && upstream.is_none_or(|upstream| {
             pull::fast_forward_inert(&effective, &repository, upstream, &probe)
         })

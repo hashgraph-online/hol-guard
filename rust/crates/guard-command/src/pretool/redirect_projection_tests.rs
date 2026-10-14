@@ -70,6 +70,7 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
                 writes_file,
                 // The test workspace does not exist, so no write is bounded.
                 bounded_writes: !writes_file,
+                git_chain: None,
             }),
             "{command}"
         );

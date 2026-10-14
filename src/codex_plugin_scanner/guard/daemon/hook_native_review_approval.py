@@ -193,6 +193,10 @@ def pause_native_pre_tool_for_approval(
                 str(native_result.get("reason") or "HOL Guard blocked this action."),
                 reason_code=str(native_result.get("reason_code") or "") or "unknown",
                 approval_queued=queued is not None,
+                # The queued row is stored with this same binding; without one a
+                # one-time approval cannot match the agent's retry.
+                retry_reuses_approval=identity is not None,
+                exact_action_allowable=exact_token is not None,
             ),
         )
         response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)

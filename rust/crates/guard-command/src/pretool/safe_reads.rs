@@ -2,6 +2,8 @@
 mod command_sequences;
 #[path = "jq_filter.rs"]
 mod jq_filter;
+#[path = "read_globs.rs"]
+mod read_globs;
 pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -10,7 +12,8 @@ pub(super) use super::read_paths::{
 };
 pub(super) use super::safe_scalar::{safe_date_arguments, safe_sleep_arguments};
 pub(super) use super::safe_writes::{
-    bounded_native_file_write_target, safe_copy_arguments, safe_file_mutation_arguments,
+    bounded_native_file_write_target, bounded_structured_file_write_target, safe_copy_arguments,
+    safe_file_mutation_arguments,
 };
 pub(super) use command_sequences::exact_safe_sequence;
 pub(crate) use command_sequences::proven_created_file_removal;
@@ -52,6 +55,7 @@ pub(super) fn safe_listing_arguments(
                 context.home_dir,
                 context.cwd,
             )
+            || super::read_paths::home_hidden_directory(argument, context.home_dir, context.cwd)
             || (super::search::skill_listing_root(argument, context)
                 && !super::search::skill_link_resolves_over_home(argument, context))
             || super::listing_reads::absent_listing_operand(argument, context)
@@ -68,6 +72,13 @@ pub(super) fn command_read_target(
 ) -> bool {
     if context.home_dir.is_some() || context.cwd.is_some() {
         bounded_read_target(value, context.home_dir, context.cwd, allow_directory)
+            || (!allow_directory && read_globs::bounded_glob_file_read_target(value, context))
+            || (!allow_directory
+                && super::chain_temporary::absent_temporary_read_target(
+                    value,
+                    context.home_dir,
+                    context.cwd,
+                ))
     } else {
         safe_read_target(value)
     }
@@ -96,6 +107,9 @@ pub(super) fn safe_sed_stdin_arguments(arguments: &[String]) -> bool {
         && safe_sed_arguments(arguments, true, super::PathContext::default())
 }
 
+/// Upper bound on `;`-separated range prints in one `sed -n` program.
+const MAX_PRINT_RANGES: usize = 16;
+
 pub(super) fn safe_sed_arguments(
     arguments: &[String],
     piped_input: bool,
@@ -104,23 +118,31 @@ pub(super) fn safe_sed_arguments(
     let Some((quiet, program, targets)) = sed_program_and_targets(arguments) else {
         return false;
     };
-    if program.len() > 256 || program.contains(['\n', '\r', '\\', ';']) {
+    if program.len() > 256 || program.contains(['\n', '\r', '\\']) {
         return false;
     }
+    // `1,12p;28,40p` prints several line ranges, as the Codex output proof
+    // already allows. Every statement must be a numeric or `$` range print,
+    // so no w/W/e/r command, label or regex address can join it.
     let bounded_print = quiet
-        && program.strip_suffix('p').is_some_and(|range| {
-            let counts: Vec<_> = range.split(',').collect();
-            (1..=2).contains(&counts.len())
-                && counts.iter().all(|count| {
-                    !count.is_empty()
-                        && count.len() <= 6
-                        && count.bytes().all(|byte| byte.is_ascii_digit())
-                        && count.parse::<u32>().is_ok_and(|count| count > 0)
-                })
+        && program.split(';').count() <= MAX_PRINT_RANGES
+        && program.split(';').all(|statement| {
+            statement.trim().strip_suffix('p').is_some_and(|range| {
+                let counts: Vec<_> = range.trim_end().split(',').collect();
+                (1..=2).contains(&counts.len())
+                    && counts.iter().all(|count| {
+                        *count == "$"
+                            || (!count.is_empty()
+                                && count.len() <= 6
+                                && count.bytes().all(|byte| byte.is_ascii_digit())
+                                && count.parse::<u32>().is_ok_and(|count| count > 0))
+                    })
+            })
         });
     // Exactly one substitution with inert flags. No e/w commands, program
     // files, in-place edits, or additional statements can enter this proof.
     let substitution = !quiet
+        && !program.contains(';')
         && program.strip_prefix("s/").is_some_and(|body| {
             let parts: Vec<_> = body.split('/').collect();
             parts.len() == 3 && matches!(parts[2], "" | "g")
@@ -316,8 +338,8 @@ fn safe_word_count_with_targets(
     saw_target || piped_input
 }
 
-/// `jq <projection> <file>` reads one bounded file through the same
-/// field/index projection the stdin form admits.
+/// `jq <filter> <file>` reads one bounded file through the same filter
+/// grammar the stdin form admits.
 pub(super) fn safe_jq_file_arguments(
     arguments: &[String],
     context: super::PathContext<'_>,
@@ -326,12 +348,37 @@ pub(super) fn safe_jq_file_arguments(
         return false;
     };
     !file.starts_with('-')
-        && rest.last().is_some_and(|filter| filter.starts_with('.'))
-        && safe_jq_stdin_arguments(rest)
+        && safe_jq_filter_arguments(rest)
         && command_read_target(file, context, false)
 }
 
+/// Where a proven jq filter sits: last when jq reads stdin, before the file
+/// operand otherwise. The filter is a program over the value read, so a
+/// field such as `.key` is not a path to screen.
+pub(super) fn jq_filter_position(arguments: &[String], piped_input: bool) -> Option<usize> {
+    let last = arguments.len().checked_sub(1)?;
+    let index = if piped_input {
+        last
+    } else {
+        last.checked_sub(1)?
+    };
+    if piped_input && !arguments[index].starts_with('.') {
+        return None;
+    }
+    jq_filter::safe_filter(&arguments[index]).then_some(index)
+}
+
 pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {
+    // Stdin may come from a network/API command, so retain the pre-existing
+    // projection-first requirement. Standalone builtins and object output are
+    // admitted only when jq reads a separately screened file operand.
+    arguments
+        .last()
+        .is_some_and(|filter| filter.starts_with('.'))
+        && safe_jq_filter_arguments(arguments)
+}
+
+fn safe_jq_filter_arguments(arguments: &[String]) -> bool {
     let mut filter = None;
     for argument in arguments {
         if filter.is_none()
@@ -426,4 +473,22 @@ fn safe_head_tail_with_targets(
         saw_target = true;
     }
     (saw_target || piped_input) && !expect_count
+}
+
+#[cfg(test)]
+mod jq_stdin_boundary_tests {
+    use super::{jq_filter_position, safe_jq_filter_arguments, safe_jq_stdin_arguments};
+
+    #[test]
+    fn object_filters_and_bare_builtins_do_not_expand_stdin_authority() {
+        for filter in ["keys", "length", "{tests: .tests, total: .total}"] {
+            let args = vec!["-r".to_owned(), filter.to_owned()];
+            assert!(safe_jq_filter_arguments(&args), "{filter}");
+            assert!(!safe_jq_stdin_arguments(&args), "{filter}");
+            assert_eq!(jq_filter_position(&args, true), None, "{filter}");
+        }
+        let projection = vec!["-r".to_owned(), ".tests | keys".to_owned()];
+        assert!(safe_jq_stdin_arguments(&projection));
+        assert_eq!(jq_filter_position(&projection, true), Some(1));
+    }
 }

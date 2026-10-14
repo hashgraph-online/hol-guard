@@ -3,9 +3,11 @@
 //! Guard installs Cursor's hooks as `guard-runtime cursor-hook-bridge
 //! <python> -I <script> --cursor-hook-event <event>`. For a `PreToolUse`
 //! hook (Cursor's `preToolUse`, `beforeShellExecution`,
-//! `beforeMCPExecution` and `beforeReadFile`) that a live resident allows
-//! or terminally denies, the bridge prints the client's own answer without
-//! starting Python. For Cursor's `afterShellExecution` and
+//! `beforeMCPExecution` and `beforeReadFile`) or a prompt the daemon reviews
+//! as a `UserPromptSubmit` that a live resident allows, denies or pauses for
+//! review, the bridge prints the client's own answer without starting
+//! Python; a review whose loopback link the client may sign with Guard's
+//! Python is the client's to answer. For Cursor's `afterShellExecution` and
 //! `afterMCPExecution` observers, which the daemon records as a `PostToolUse`
 //! and the client always answers with `{}`, the bridge prints `{}` once the
 //! resident has answered (and so queued the record). The client's other
@@ -48,6 +50,12 @@ const AFTER_EVENTS: [&str; 2] = ["aftershellexecution", "aftermcpexecution"];
 const PREPARED_AFTER_EVENTS: [&str; 2] = ["afterShellExecution", "afterMCPExecution"];
 /// The client's answer to an `after*` observer the daemon reviewed.
 const AFTER_STDOUT: &str = "{}\n";
+/// The event the bridge names a prompt for the resident.
+const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
+/// The keys the daemon reads a hook's event from before `hook_event_name`.
+const EARLIER_EVENT_KEYS: [&str; 2] = ["event", "eventName"];
+/// The prompt names the daemon reviews as a `UserPromptSubmit`, compacted.
+const PROMPT_EVENTS: [&str; 3] = ["prompt", "userpromptsubmit", "userpromptsubmitted"];
 const UNAVAILABLE_STDOUT: &str = "{\"permission\": \"deny\", \"user_message\": \"HOL Guard could not complete the native hook decision safely.\"}\n";
 
 /// `_cursor_unavailable_response` for a hook whose input could not be read
@@ -142,6 +150,9 @@ struct Client {
 enum Kind {
     /// Rendered by `_emit_cursor_response`.
     PreToolUse,
+    /// A prompt the daemon reviews as a `UserPromptSubmit`, rendered by
+    /// `_emit_cursor_response` as a tool hook is.
+    Prompt,
     /// An `after*` observer: `{}` once the daemon reviewed it.
     After,
 }
@@ -164,8 +175,18 @@ fn client_after_event(event: &str) -> bool {
     stripped.is_ascii() && AFTER_EVENTS.contains(&stripped.to_ascii_lowercase().as_str())
 }
 
-/// The request the client would send for a `PreToolUse` hook or an
-/// `after*` observer, or `None` to run the client.
+/// Whether a prepared hook name is one the daemon reviews as a
+/// `UserPromptSubmit`: stripped, without `_` and `-`, and lowercased.
+fn prompt_event(name: &str) -> bool {
+    let compact: String = py_strip(name)
+        .chars()
+        .filter(|character| !matches!(character, '_' | '-'))
+        .collect();
+    compact.is_ascii() && PROMPT_EVENTS.contains(&compact.to_ascii_lowercase().as_str())
+}
+
+/// The request the client would send for a `PreToolUse` hook, a prompt or
+/// an `after*` observer, or `None` to run the client.
 fn prepared_request(client: &Client, raw: &[u8]) -> Option<Request> {
     if raw.len() > MAX_HOOK_INPUT_BYTES {
         return None;
@@ -186,6 +207,15 @@ fn prepared_request(client: &Client, raw: &[u8]) -> Option<Request> {
     let prepared = prepare_payload("cursor", &payload, None).ok()?;
     let kind = match prepared.get_str("hook_event_name") {
         Some(PRE_TOOL_USE) => Kind::PreToolUse,
+        // The daemon reads `event` and `eventName` before this name.
+        Some(name)
+            if prompt_event(name)
+                && !EARLIER_EVENT_KEYS
+                    .iter()
+                    .any(|key| prepared.contains_key(key)) =>
+        {
+            Kind::Prompt
+        }
         Some(name) if PREPARED_AFTER_EVENTS.contains(&name) && client_after_event(&event) => {
             Kind::After
         }
@@ -210,19 +240,20 @@ fn prepared_request(client: &Client, raw: &[u8]) -> Option<Request> {
 }
 
 /// The client's answer for a resident's harness response: `json.loads` of
-/// the body the daemon would return, rendered by `_emit_cursor_response`;
-/// for an observer, `{}` once `_daemon_hook_result` accepts the body as a
-/// JSON object, whatever it holds.
-fn answer(kind: Kind, event: &str, response: &str) -> Option<(String, i32)> {
+/// the body the daemon would return, rendered by `_emit_cursor_response`
+/// with `guard_home` the client's `GUARD_HOME`; for an observer, `{}` once
+/// `_daemon_hook_result` accepts the body as a JSON object, whatever it
+/// holds.
+fn answer(kind: Kind, event: &str, response: &str, guard_home: &Path) -> Option<(String, i32)> {
     let body = match kind {
-        Kind::PreToolUse => response,
+        Kind::PreToolUse | Kind::Prompt => response,
         Kind::After => py_strip(response),
     };
     let OValue::Map(response) = parse_python_json(body).ok()? else {
         return None;
     };
     match kind {
-        Kind::PreToolUse => rendered(event, &response),
+        Kind::PreToolUse | Kind::Prompt => rendered(event, &response, guard_home),
         Kind::After => Some((AFTER_STDOUT.to_owned(), 0)),
     }
 }
@@ -233,17 +264,19 @@ fn route(client: &Client, raw: &[u8]) -> Option<i32> {
     let request = prepared_request(client, raw)?;
     let event_name = match request.kind {
         Kind::PreToolUse => PRE_TOOL_USE,
+        Kind::Prompt => USER_PROMPT_SUBMIT,
         Kind::After => POST_TOOL_USE,
     };
+    let guard_home = Path::new(&client.guard_home);
     let answered = direct_answer(
         CURSOR,
-        Path::new(&client.guard_home),
+        guard_home,
         &request.query,
         event_name,
         &request.data,
         client.deadline,
     )?;
-    let (stdout, code) = answer(request.kind, &request.event, &answered)?;
+    let (stdout, code) = answer(request.kind, &request.event, &answered, guard_home)?;
     write_stdout(&stdout);
     Some(code)
 }
@@ -291,6 +324,6 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
         .unwrap_or_else(|| unavailable(event))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "cursor_hook_bridge_tests.rs"]
 mod tests;

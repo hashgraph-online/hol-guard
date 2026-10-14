@@ -312,3 +312,35 @@ fn paged_results_reuse_prepared_values_and_serialized_fragments() {
         masked.digest
     );
 }
+
+#[test]
+fn kubernetes_secret_read_source_replays_recorded_python() {
+    use std::io::Read;
+    let bytes = include_bytes!("../../guard-command/tests/fixtures/sfrs/kubernetes.json.gz");
+    let mut body = String::new();
+    flate2::read::GzDecoder::new(&bytes[..])
+        .read_to_string(&mut body)
+        .unwrap();
+    let fixture: Value = serde_json::from_str(&body).unwrap();
+    let mut replayed = 0;
+    for case in fixture["cases"].as_array().unwrap() {
+        if case["fn"] != json!("k_secret_read_source") {
+            continue;
+        }
+        let Some(command) = case["args"][0].as_str() else {
+            continue;
+        };
+        let request = ShellHelpersRequest {
+            schema: "guard-shell-helpers-request.v1".into(),
+            request_id: "kubernetes-parity".into(),
+            action: "kubernetes_secret_read_source".into(),
+            input: json!({"command": command}),
+            timeout_ms: 10_000,
+        };
+        let reply = resident_reply(&request);
+        assert_eq!(reply["code"], json!("ok"), "{command}");
+        assert_eq!(reply["result"], case["result"], "{command}");
+        replayed += 1;
+    }
+    assert!(replayed >= 500, "replayed {replayed}");
+}

@@ -5,27 +5,17 @@
 
 use std::path::{Component, Path};
 
-/// Hidden names whose entry names alone reveal credential or agent state.
-const GUARDED_HIDDEN_NAMES: [&str; 18] = [
-    ".agent",
-    ".agents",
-    ".aws",
-    ".azure",
-    ".claude",
-    ".codex",
-    ".config",
-    ".docker",
-    ".gcloud",
-    ".gnupg",
-    ".hol-guard",
-    ".kube",
-    ".local",
-    ".mozilla",
-    ".npm",
-    ".password-store",
-    ".ssh",
-    ".terraform",
-];
+#[path = "home_hidden_listing.rs"]
+mod home;
+pub(in crate::pretool) use home::home_hidden_directory;
+
+/// Agent state and tool trees whose entry names reveal agent state inside a
+/// repository. Credential stores come from the shared home list.
+const AGENT_STATE_NAMES: [&str; 5] = [".agent", ".agents", ".config", ".local", ".npm"];
+
+fn guarded_hidden_name(name: &str) -> bool {
+    AGENT_STATE_NAMES.contains(&name) || home::CREDENTIAL_STORE_NAMES.contains(&name)
+}
 
 /// Whether `value` names an existing directory below a hidden component that
 /// sits inside a repository work tree the session may already read.
@@ -83,7 +73,7 @@ pub(in crate::pretool) fn repository_hidden_directory(
             return false;
         };
         let name = name.to_string_lossy().to_ascii_lowercase();
-        !GUARDED_HIDDEN_NAMES.contains(&name.as_str()) && !name.starts_with(".env")
+        !guarded_hidden_name(&name) && !name.starts_with(".env")
     }) && std::fs::symlink_metadata(repository.join(".git")).is_ok()
         && guard_secure_fs::sensitive_path_family(&canonical).is_none()
         && !guard_secure_fs::credential_named_path(&canonical)

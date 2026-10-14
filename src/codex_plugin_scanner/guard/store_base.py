@@ -57,8 +57,6 @@ from .policy_integrity import (
     REMOTE_POLICY_SOURCES,
     PolicyIntegrityVerificationResult,
     is_remote_policy_source,
-    sign_local_policy_row,
-    verify_local_policy_row,
 )
 from .runtime.actions import GuardActionEnvelope
 from .runtime.approval_context import parse_approval_context_token

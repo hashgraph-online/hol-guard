@@ -50,6 +50,7 @@ use serde_json::{json, Map, Value};
 
 use crate::action_lattice::{normalize_guard_action_result, UNKNOWN_GUARD_ACTION_REASON};
 use crate::effect_decision::GuardAction;
+use crate::guard_sync_transport::cloud_edge_block_reason;
 use crate::local_supply_chain::{
     resolve_risk_action, stable_digest_hex, stable_digest_hex_len, GuardConfig, SupplyChainStore,
 };

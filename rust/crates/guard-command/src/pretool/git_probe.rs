@@ -1,6 +1,8 @@
 //! Bounded, non-interactive Git metadata probes.
 use std::cell::RefCell;
+use std::ffi::OsString;
 use std::io::Read;
+use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
@@ -16,21 +18,50 @@ pub(super) const LISTING_LIMIT: u64 = 16 * 1024 * 1024;
 pub(super) type MemoKey = (String, Vec<String>, Option<String>, Option<String>, bool);
 type Memo = Option<Vec<(MemoKey, Option<bool>)>>;
 
+/// The program, arguments, explicit environment, directory and output bound
+/// of one query. Every query starts from [`copy_command`], so the environment
+/// is always cleared first and these parts describe the whole process.
+type QueryKey = (
+    OsString,
+    Vec<OsString>,
+    Vec<(OsString, Option<OsString>)>,
+    Option<PathBuf>,
+    u64,
+);
+type Queries = Option<Vec<(QueryKey, (ExitStatus, Vec<u8>))>>;
+
 thread_local! {
     static MEMO: RefCell<Memo> = const { RefCell::new(None) };
+    static QUERIES: RefCell<Queries> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+thread_local! {
+    static SPAWNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Git processes this thread started, for tests that count probe spawns.
+#[cfg(test)]
+pub(super) fn spawns() -> usize {
+    SPAWNS.with(std::cell::Cell::get)
 }
 
 /// Lets every proof within one evaluation share a single probe of each Git
-/// segment. The memo is dropped when `evaluate` returns, so the next
-/// evaluation inspects the repository again.
+/// segment, and a single run of each identical metadata query. Both memos are
+/// dropped when `evaluate` returns, so the next evaluation inspects the
+/// repository and its configuration again.
 pub(crate) fn with_memo<T>(evaluate: impl FnOnce() -> T) -> T {
-    struct Restore(Memo);
+    struct Restore(Memo, Queries);
     impl Drop for Restore {
         fn drop(&mut self) {
             MEMO.with(|memo| *memo.borrow_mut() = self.0.take());
+            QUERIES.with(|queries| *queries.borrow_mut() = self.1.take());
         }
     }
-    let _restore = Restore(MEMO.with(|memo| memo.replace(Some(Vec::new()))));
+    let _restore = Restore(
+        MEMO.with(|memo| memo.replace(Some(Vec::new()))),
+        QUERIES.with(|queries| queries.replace(Some(Vec::new()))),
+    );
     evaluate()
 }
 
@@ -70,6 +101,11 @@ pub(super) fn memoized(key: MemoKey, probe: impl FnOnce() -> Option<bool>) -> Op
     }
 }
 
+/// Runs a read-only metadata query built by [`copy_command`]. Within one
+/// evaluation an identical query that already completed is answered from
+/// memory: nothing the hook evaluates runs in between, so Git would print the
+/// same bytes again. A query that failed or timed out is never remembered, and
+/// an expired deadline still refuses before the memo is consulted.
 pub(super) fn output(
     command: &mut Command,
     deadline: Instant,
@@ -78,6 +114,43 @@ pub(super) fn output(
     if Instant::now() >= deadline {
         return None;
     }
+    let key: QueryKey = (
+        command.get_program().to_owned(),
+        command.get_args().map(ToOwned::to_owned).collect(),
+        command
+            .get_envs()
+            .map(|(name, value)| (name.to_owned(), value.map(ToOwned::to_owned)))
+            .collect(),
+        command.get_current_dir().map(ToOwned::to_owned),
+        limit,
+    );
+    let cached = QUERIES.with(|queries| {
+        queries.borrow().as_ref().and_then(|entries| {
+            entries
+                .iter()
+                .find(|(entry, _)| *entry == key)
+                .map(|(_, result)| result.clone())
+        })
+    });
+    if cached.is_some() {
+        return cached;
+    }
+    let result = spawn_output(command, deadline, limit)?;
+    QUERIES.with(|queries| {
+        if let Some(entries) = queries.borrow_mut().as_mut() {
+            entries.push((key, result.clone()));
+        }
+    });
+    Some(result)
+}
+
+fn spawn_output(
+    command: &mut Command,
+    deadline: Instant,
+    limit: u64,
+) -> Option<(ExitStatus, Vec<u8>)> {
+    #[cfg(test)]
+    SPAWNS.with(|spawns| spawns.set(spawns.get() + 1));
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -238,5 +311,66 @@ mod tests {
             memoized(key("--short"), probe);
         });
         assert_eq!(runs.get(), 2);
+    }
+
+    #[cfg(unix)]
+    fn query(text: &str, marker: Option<&str>) -> Option<(std::process::ExitStatus, Vec<u8>)> {
+        let mut base = std::process::Command::new("/bin/sh");
+        base.current_dir("/");
+        if let Some(marker) = marker {
+            base.env("MARKER", marker);
+        }
+        let mut command = super::copy_command(&base)?;
+        command.args(["-c", &format!("printf %s \"{text}$MARKER\"")]);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        super::output(&mut command, deadline, 4096)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn one_evaluation_runs_each_identical_query_once() {
+        let before = super::spawns();
+        let (first, repeated, other, marked) = with_memo(|| {
+            (
+                query("a", None),
+                query("a", None),
+                query("b", None),
+                query("a", Some("!")),
+            )
+        });
+        assert_eq!(super::spawns() - before, 3);
+        assert_eq!(
+            first.as_ref().map(|(_, bytes)| bytes.as_slice()),
+            Some(&b"a"[..])
+        );
+        assert_eq!(first, repeated);
+        assert_eq!(other.map(|(_, bytes)| bytes), Some(b"b".to_vec()));
+        assert_eq!(marked.map(|(_, bytes)| bytes), Some(b"a!".to_vec()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn queries_outside_or_across_evaluations_run_again() {
+        let before = super::spawns();
+        with_memo(|| query("a", None));
+        with_memo(|| query("a", None));
+        query("a", None);
+        query("a", None);
+        assert_eq!(super::spawns() - before, 4);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_expired_deadline_refuses_before_the_memo() {
+        with_memo(|| {
+            assert!(query("a", None).is_some());
+            let mut command =
+                super::copy_command(std::process::Command::new("/bin/sh").current_dir("/"))
+                    .unwrap();
+            command.args(["-c", "printf %s \"a$MARKER\""]);
+            let before = super::spawns();
+            assert!(super::output(&mut command, std::time::Instant::now(), 4096).is_none());
+            assert_eq!(super::spawns(), before);
+        });
     }
 }

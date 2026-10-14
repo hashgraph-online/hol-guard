@@ -328,6 +328,10 @@ impl CompiledNativeCommandControls {
                 reason = "native_command_permission_disabled";
             }
         }
+        if floor::proof_owner_disabled(&self.blocked_extensions, command, context) {
+            floor = "block";
+            reason = "native_command_extension_disabled";
+        }
         if let Some(candidate) = uncertain_floor {
             if rank(candidate) > rank(floor) {
                 floor = candidate;

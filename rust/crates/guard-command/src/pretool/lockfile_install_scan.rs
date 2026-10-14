@@ -45,6 +45,7 @@ const BUNFIG_INSTALL_KEYS: &[&str] = &[
     "minimumReleaseAge",
     "linkWorkspacePackages",
     "dryRun",
+    "smol",
 ];
 
 pub(super) fn directory_ready(

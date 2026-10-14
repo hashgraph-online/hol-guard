@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.runtime.browser_mcp_intent import normalize_brow
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 
 
-def _risk(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
     tool_name = str(artifact.metadata.get("tool_name"))
     return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
 
@@ -68,7 +68,7 @@ class TestBrowserMcpCurrentBehavior:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack", "timeout": 30000},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         # Browser navigation suppresses outbound_network
         assert "outbound_network" not in categories
         assert "browser_navigation" in categories
@@ -81,7 +81,7 @@ class TestBrowserMcpCurrentBehavior:
             tool_name="post_message",
             arguments={"webhook": "https://example.com/webhook"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" in categories
 
     def test_navigate_page_with_env_path_triggers_secret_access(self, native_context_digest: Path) -> None:
@@ -89,7 +89,7 @@ class TestBrowserMcpCurrentBehavior:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///home/user/.env"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
     def test_navigate_page_with_npmrc_triggers_secret_access(self, native_context_digest: Path) -> None:
@@ -97,7 +97,7 @@ class TestBrowserMcpCurrentBehavior:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///project/.npmrc"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
     def test_navigate_page_to_localhost_does_not_trigger_outbound_network(self, native_context_digest: Path) -> None:
@@ -106,7 +106,7 @@ class TestBrowserMcpCurrentBehavior:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "http://127.0.0.1:3000/guard"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" not in categories
         assert "browser_navigation" in categories
 
@@ -115,7 +115,7 @@ class TestBrowserMcpCurrentBehavior:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
         )
-        summary = _risk(native_context_digest, artifact, arguments).risk_summary
+        summary = _projected_call(native_context_digest, artifact, arguments).risk_summary
         assert isinstance(summary, str)
         assert len(summary) > 0
 
@@ -496,7 +496,7 @@ class TestBrowserRiskClassifierIntegration:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" not in categories, (
             f"Browser navigation should not trigger outbound_network, got {categories}"
         )
@@ -507,7 +507,7 @@ class TestBrowserRiskClassifierIntegration:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "http://127.0.0.1:3000/guard"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_navigation" in categories
         assert "outbound_network" not in categories
 
@@ -516,7 +516,7 @@ class TestBrowserRiskClassifierIntegration:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://example.com/page"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_navigation" in categories
         assert "browser_external_domain" in categories
 
@@ -526,7 +526,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="take_screenshot",
             arguments={"pageId": "tab1"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_inspection" in categories
 
     def test_browser_interaction_category(self, native_context_digest: Path) -> None:
@@ -535,7 +535,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="click",
             arguments={"selector": "#button"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_interaction" in categories
 
     def test_browser_transfer_category(self, native_context_digest: Path) -> None:
@@ -544,7 +544,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="upload_file",
             arguments={"filePath": "/tmp/test.txt"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_transfer" in categories
 
     def test_browser_privileged_category(self, native_context_digest: Path) -> None:
@@ -553,7 +553,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="read_cookies",
             arguments={},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_privileged" in categories
 
     def test_browser_sensitive_surface_category(self, native_context_digest: Path) -> None:
@@ -562,7 +562,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="evaluate_script",
             arguments={"expression": "document.title"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_sensitive_surface" in categories
 
     def test_evaluate_script_optional_filepath_schema_is_not_filesystem_access(
@@ -590,10 +590,10 @@ class TestBrowserRiskClassifierIntegration:
                 },
             },
         )
-        categories = _risk(native_context_digest, artifact, {"function": "() => document.title"}).risk_categories
+        categories = _projected_call(native_context_digest, artifact, {"function": "() => document.title"}).risk_categories
         assert "filesystem_access" not in categories
         assert "browser_privileged" in categories
-        with_file = _risk(
+        with_file = _projected_call(
             native_context_digest, artifact, {"function": "() => 1", "filePath": "out.json"}
         ).risk_categories
         assert "filesystem_access" in with_file
@@ -629,7 +629,7 @@ class TestBrowserRiskClassifierIntegration:
             publisher=artifact.publisher,
             metadata={**artifact.metadata, "server_args": ["--remote-debugging-port=9222"]},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_shared_profile" in categories
 
     def test_secret_access_overrides_browser_safe_handling(self, native_context_digest: Path) -> None:
@@ -637,7 +637,7 @@ class TestBrowserRiskClassifierIntegration:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///home/user/.env"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
     def test_npmrc_overrides_browser_safe_handling(self, native_context_digest: Path) -> None:
@@ -645,7 +645,7 @@ class TestBrowserRiskClassifierIntegration:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///project/.npmrc"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
     def test_non_browser_mcp_still_gets_outbound_network(self, native_context_digest: Path) -> None:
@@ -666,7 +666,7 @@ class TestBrowserRiskClassifierIntegration:
             arguments={"webhook": "https://example.com/webhook"},
             server_identity=server_identity,
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" in categories
 
     def test_browser_risk_summary_is_informative(self, native_context_digest: Path) -> None:
@@ -674,7 +674,7 @@ class TestBrowserRiskClassifierIntegration:
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://example.com/page"},
         )
-        summary = _risk(native_context_digest, artifact, arguments).risk_summary
+        summary = _projected_call(native_context_digest, artifact, arguments).risk_summary
         assert isinstance(summary, str)
         assert len(summary) > 0
 
@@ -684,7 +684,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="read_cookies",
             arguments={},
         )
-        summary = _risk(native_context_digest, artifact, arguments).risk_summary
+        summary = _projected_call(native_context_digest, artifact, arguments).risk_summary
         assert isinstance(summary, str)
         assert len(summary) > 0
 
@@ -694,7 +694,7 @@ class TestBrowserRiskClassifierIntegration:
             tool_name="evaluate_script",
             arguments={"expression": "document.cookie"},
         )
-        categories = _risk(native_context_digest, artifact, arguments).risk_categories
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         # browser_privileged should come before browser_sensitive_surface
         if "browser_privileged" in categories and "browser_sensitive_surface" in categories:
             assert categories.index("browser_privileged") < categories.index("browser_sensitive_surface")

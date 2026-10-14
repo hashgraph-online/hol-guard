@@ -1,6 +1,10 @@
 //! The argument forms of the local Git writes `git_local_writes` proves:
 //! `add`, a non-forced `rm`, `commit` with its message on the command line
-//! and a non-forced `branch` rename.
+//! and a non-forced `branch` rename, plus the `stash list` read beside them.
+
+use super::super::git_remote_config::GitConfig;
+use crate::CanonicalCommandV1;
+use std::time::Instant;
 
 /// Options `allowed` accepts, then pathspecs, with `--` ending the options.
 fn pathspecs(rest: &[&str], allowed: impl Fn(&str) -> bool) -> bool {
@@ -91,4 +95,104 @@ pub(super) fn branch_rename(rest: &[&str]) -> bool {
         }
     }
     moved && matches!(names.len(), 1 | 2)
+}
+
+/// `stash list` with at most a count limit. Git runs it as `git log -g
+/// refs/stash`; other log options can ask for patches whose diff drivers the
+/// proof below does not clear.
+pub(super) fn stash_list(rest: &[&str]) -> bool {
+    match rest {
+        [] => true,
+        ["-n" | "--max-count", value] => count(value),
+        [flag] => flag
+            .strip_prefix("--max-count=")
+            .or_else(|| flag.strip_prefix('-').filter(|_| !flag.starts_with("--")))
+            .is_some_and(count),
+        _ => false,
+    }
+}
+
+fn count(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// `stash apply` or `stash pop` with `-q`, `--index` and at most one entry
+/// (`stash@{N}` or `N`). Git refuses to apply an entry over a modified file,
+/// and `pop` keeps the entry when the apply conflicts.
+pub(super) fn stash_restore(rest: &[&str]) -> bool {
+    let mut entries = 0;
+    rest.iter().all(|option| match *option {
+        "-q" | "--quiet" | "--index" => true,
+        entry if stash_entry(entry) => {
+            entries += 1;
+            entries == 1
+        }
+        _ => false,
+    })
+}
+
+fn stash_entry(value: &str) -> bool {
+    let index = value
+        .strip_prefix("stash@{")
+        .and_then(|rest| rest.strip_suffix('}'))
+        .unwrap_or(value);
+    !index.is_empty() && index.len() <= 4 && index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// Whether the `git stash` at `index` starts no program its hooks do not
+/// cover. Stash pages only under its own `pager.stash` setting. `list` runs
+/// `git log -g refs/stash`, held to the configuration proof of that log
+/// read; `apply` and `pop` merge the entry, which may run a configured merge
+/// driver, and then run `git status`, held to the proof of that read.
+pub(super) fn stash_free(
+    effective: &GitConfig,
+    model: &CanonicalCommandV1,
+    index: usize,
+    context: super::super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let original = &model.segments[index];
+    let stripped = super::super::segment_proof::without_stderr_merge(original);
+    let segment = stripped.as_ref().unwrap_or(original);
+    let stdout_piped = super::super::git_helper_context::stdout_piped(model, index);
+    let free = |arguments: &[&str]| {
+        let arguments: Vec<String> = arguments.iter().map(|word| (*word).to_owned()).collect();
+        super::super::git_config::execution_free(
+            "git",
+            &arguments,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        ) == Some(true)
+    };
+    let pager_off = |value: &String| {
+        value.is_empty() || value == "cat" || super::super::git_remote_ops::pull::disabled(value)
+    };
+    let merge_driver = effective.keys().any(|key| {
+        let key = key.to_ascii_lowercase();
+        key.starts_with("merge.") && key.ends_with(".driver")
+    });
+    (stdout_piped
+        || effective
+            .get("pager.stash")
+            .is_none_or(|values| values.iter().all(pager_off)))
+        && match segment.arguments.get(1).map(String::as_str) {
+            Some("list") => free(&["log", "-g", "--first-parent", "refs/stash"]),
+            Some("apply" | "pop") => !merge_driver && free(&["status"]),
+            _ => true,
+        }
+}
+
+/// Whether the configuration defines an alias named like a Git step's
+/// subcommand. Git ignores an alias that shadows a builtin; the proof does
+/// not rely on that.
+pub(super) fn aliased(effective: &GitConfig, model: &CanonicalCommandV1) -> bool {
+    model
+        .segments
+        .iter()
+        .filter(|segment| segment.executable.as_deref() == Some("git"))
+        .filter_map(|segment| segment.arguments.first())
+        .any(|name| effective.contains_key(&format!("alias.{}", name.to_ascii_lowercase())))
 }

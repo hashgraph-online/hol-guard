@@ -92,8 +92,7 @@ const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.switch",
     "command.git.unsafe-read",
 ];
-// These change a remote. The sandbox has no network, so containing them would
-// only turn a consent prompt into a silent failure.
+// Remote changes: with no network, containing them only hides a consent prompt.
 const REMOTE_RULES: &[&str] = &["command.git.force-push", "command.git.remote-branch-delete"];
 const CONTAINABLE_RISKS: &[&str] = &["local_secret_read", "destructive_shell"];
 const EXTENSION_REVIEW: &str = "native_command_extension_review";
@@ -102,8 +101,7 @@ pub(crate) struct Shape {
     /// Arguments for a trusted `git init`, run before the sandbox starts
     /// because `git init` always rewrites the write-denied `.git/config`.
     pub bootstrap: Option<Vec<String>>,
-    /// Text the sandbox runs before `git init`, which runs only when it
-    /// succeeds, as `&&` requires.
+    /// Text run before `git init`, which runs only if it succeeds (`&&`).
     pub prefix: Option<String>,
     /// Text for `sh -c`; `None` runs the original bytes unchanged.
     pub remainder: Option<String>,
@@ -111,9 +109,8 @@ pub(crate) struct Shape {
     pub init_span: Option<(usize, usize)>,
 }
 
-/// Builtins that change the shell's own state. A segment before `git init`
-/// runs in a separate shell, so its effect would not reach the rest.
-const SHELL_STATE: &[&str] = &[
+/// Shell-state builtins: before `git init` they run in a separate shell.
+pub(super) const SHELL_STATE: &[&str] = &[
     "cd", "pushd", "popd", "export", "unset", "set", "shopt", "source", ".", "alias", "unalias",
     "declare", "typeset", "local", "readonly", "eval", "exec", "umask", "trap", "ulimit", "hash",
     "shift", "read", "getopts", "builtin", "enable", "exit", "return", "function",
@@ -141,9 +138,8 @@ fn branch_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
 }
 
-/// The canonical arguments of a `git init` that creates a repository in the
-/// current directory, or None for any other form (template, separate git
-/// directory, another target directory, unknown options).
+/// The canonical arguments of a `git init` creating a repository in the current
+/// directory, or None for any other form (template, git dir, target, unknown options).
 pub(crate) fn init_arguments(arguments: &[String]) -> Option<Vec<String>> {
     let mut result = Vec::new();
     let mut index = 0;
@@ -168,9 +164,8 @@ pub(crate) fn init_arguments(arguments: &[String]) -> Option<Vec<String>> {
     Some(result)
 }
 
-/// Shape checks shared by classification and the launch plan. `original` is
-/// the exact text the caller will run; it is needed only to slice off a
-/// bootstrapped `git init`.
+/// Shape checks shared by classification and the launch plan. `original`,
+/// the exact text to run, is needed only to slice off a bootstrapped `git init`.
 pub(crate) fn command_shape(
     model: &CanonicalCommandV1,
     workspace: &Path,
@@ -307,17 +302,16 @@ fn extensions_contain(
     model: &CanonicalCommandV1,
     package: bool,
 ) -> bool {
-    // Without the loaded extension program there is no network or risk
-    // evidence, so the command stays at review.
+    // Without the loaded extension program there is no risk evidence: keep review.
     let Some(extensions) = result.command_extensions.as_ref() else {
         return false;
     };
     extensions.binding.uncertainty_count == removal::accepted_uncertainty(extensions, model)
         && extensions.evaluation_error.is_none()
-        // The Node package-firewall permission marks package-manager use, not
-        // a proven risk. A disabled one already blocked before this point.
+        // The Node package-firewall permission marks package-manager use (or a
+        // Bun image evaluating code), not a proven risk; a disabled one blocked.
         && extensions.permission_observations.iter().all(|observation| {
-            package
+            (package || super::restricted_tests::bun_inline_eval(model))
                 && observation.mcp_tool.is_none()
                 && observation.extension_id == package::NODE_PACKAGE_EXTENSION
                 && observation.uncertainty_reasons.is_empty()
@@ -415,6 +409,11 @@ pub(super) fn convert(
     let (Some(model), Some(controls), Some(cwd)) = (model, controls, context.cwd) else {
         return;
     };
+    let projected = super::contained_wrapper::package_dir::as_cd_list(model, context);
+    let (issued, model) = (model, projected.as_ref().map_or(model, |list| &list.model));
+    let command_text = projected
+        .as_ref()
+        .map_or(command_text, |list| Some(list.text.as_str()));
     // After `cd <sibling root> &&` the sink runs the rest from that root, so
     // the rest is checked with the root as its workspace and working directory.
     let sibling = sibling::sibling_list(model, context);
@@ -439,7 +438,7 @@ pub(super) fn convert(
     // held to every package check below whichever way it arrived.
     let runners = runner::installed_tools(shaped, &workspace);
     let package = package || runners.is_some();
-    if !extensions_contain(result, controls, model, package)
+    if !extensions_contain(result, controls, issued, package)
         || (package && !package::local_package_work(model, runners.is_some()))
     {
         return;
@@ -479,8 +478,8 @@ pub(super) fn convert(
             command_text.filter(|_| sibling.is_none()),
         )
         .is_none()
-        || removal::destroys_workspace(result, model, &workspace)
-        || removal::loses_work(result, model, context, execution_environment)
+        || removal::destroys_workspace(result, issued, &workspace)
+        || removal::loses_work(result, issued, context, execution_environment)
     {
         return;
     }

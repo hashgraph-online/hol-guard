@@ -8,8 +8,9 @@
 //! `_native_review_launch_target` (`hook_native_review_approval.py`). The
 //! resident runs the same `consume_native_review_approval` store operation the
 //! daemon asks it for, under the same shared storage gate, and answers only
-//! when it spent an approval. Every other outcome defers, so the daemon still
-//! queues the review.
+//! when it spent an approval. With no approval to spend, the resident queues
+//! the review itself (`hook_direct_review_queue.rs`); every other outcome
+//! defers to the daemon.
 
 use super::query::{self, pre_tool_command, pre_tool_input, strip};
 use super::{render, Context, HookDirectDefer};
@@ -31,14 +32,15 @@ const STORE_FILE_SUFFIXES: [&str; 4] = ["", "-journal", "-shm", "-wal"];
 const BUSY_TIMEOUT_MS: u64 = 250;
 const LAUNCH_TARGET_FIELDS: [&str; 4] = ["url", "path", "file_path", "target"];
 
-/// The accepted allow for a review the resident spent an approve-once for.
+/// The accepted allow for a review the resident spent an approve-once for,
+/// or `None` when the store had no approve-once to spend.
 pub(super) fn answer(
     context: &Context<'_>,
     result: &Object,
     exact: &NativeExactActionQueryV1,
     receipt: Option<&Value>,
     artifact_id: &str,
-) -> Result<Value, HookDirectDefer> {
+) -> Result<Option<Value>, HookDirectDefer> {
     let NativeExactActionQueryV1::ExactAction { tool_name, .. } = exact else {
         return Err(HookDirectDefer::SavedDecision);
     };
@@ -83,7 +85,8 @@ pub(super) fn answer(
     let spent = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
     repair_store_permissions(guard_home);
     match spent {
-        Ok(Value::Bool(true)) => Ok(response),
+        Ok(Value::Bool(true)) => Ok(Some(response)),
+        Ok(Value::Bool(false)) => Ok(None),
         _ => Err(HookDirectDefer::SavedDecision),
     }
 }
@@ -108,7 +111,7 @@ fn launch_target(payload: &Map<String, Value>) -> Result<String, HookDirectDefer
 
 /// The daemon's storage gate, held shared until the spend commits. A gate
 /// the daemon has not created yet, or one held exclusively, defers.
-fn storage_gate(guard_home: &Path) -> Result<File, HookDirectDefer> {
+pub(super) fn storage_gate(guard_home: &Path) -> Result<File, HookDirectDefer> {
     let gate = open_no_follow(&guard_home.join(STORAGE_GATE_FILE_NAME))
         .ok_or(HookDirectDefer::SavedDecision)?;
     FileExt::try_lock_shared(&gate).map_err(|_| HookDirectDefer::SavedDecision)?;
@@ -133,7 +136,7 @@ fn open_no_follow(_path: &Path) -> Option<File> {
 /// `_repair_store_permissions`: the store files stay owner-only, including a
 /// journal this connection created.
 #[cfg(unix)]
-fn repair_store_permissions(guard_home: &Path) {
+pub(super) fn repair_store_permissions(guard_home: &Path) {
     use std::os::unix::fs::PermissionsExt;
     for suffix in STORE_FILE_SUFFIXES {
         let path = guard_home.join(format!("{STORE_FILE_NAME}{suffix}"));
@@ -144,7 +147,7 @@ fn repair_store_permissions(guard_home: &Path) {
 }
 
 #[cfg(not(unix))]
-fn repair_store_permissions(_guard_home: &Path) {}
+pub(super) fn repair_store_permissions(_guard_home: &Path) {}
 
 #[cfg(test)]
 #[path = "hook_direct_saved_consume_tests.rs"]

@@ -330,6 +330,38 @@ mod envelope {
     }
 
     #[test]
+    fn working_directory_uses_are_judged_as_the_session_directory() {
+        let ws = workspace("pwd", true);
+        let d = ws.display();
+        for (raw, literal) in [
+            (
+                "ln -s \"$(pwd)/node_modules\" ../x-wt/node_modules".to_owned(),
+                format!("ln -s \"{d}/node_modules\" ../x-wt/node_modules"),
+            ),
+            (
+                "ls \"$PWD\" && cat ${PWD}/package.json".to_owned(),
+                format!("ls \"{d}\" && cat {d}/package.json"),
+            ),
+            (
+                "cat $(pwd)/package.json; wc -l `pwd`/package.json".to_owned(),
+                format!("cat {d}/package.json; wc -l {d}/package.json"),
+            ),
+        ] {
+            assert_judged_as_literal(&raw, &literal, &ws);
+        }
+        assert_eq!(verdict("cat $(pwd)/package.json", &ws).0, "allow");
+        // A chain that also creates the sibling and runs a project script is
+        // reviewed on its real operands instead of failing to evaluate.
+        let chain = "git worktree add ../x-wt -b report && ln -s \"$(pwd)/node_modules\" ../x-wt/node_modules && cd ../x-wt && npm run report";
+        let (action, reason) = verdict(chain, &ws);
+        assert_ne!(action, "allow", "{reason}");
+        assert_ne!(reason, super::super::EVALUATION_FAILED);
+        // After a directory change the expansion stays opaque.
+        let (action, reason) = verdict("cd .git && cat $(pwd)/config", &ws);
+        assert_ne!(action, "allow", "{reason}");
+    }
+
+    #[test]
     fn the_launcher_runs_only_the_raw_text_it_judged() {
         let ws = workspace("launcher", true);
         let raw = "export F=a.txt && touch $F && cat $F";

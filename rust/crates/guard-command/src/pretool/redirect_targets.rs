@@ -1,0 +1,108 @@
+//! Which literal output targets the redirect projection may remove: a path
+//! the shell opens as written, inside the working directory or a temporary
+//! root, never hidden, credential-shaped or reached through a symlink.
+
+use crate::pretool::PathContext;
+
+fn posix_temp_file(target: &str) -> bool {
+    let Some(rest) = target
+        .strip_prefix("/tmp/")
+        .or_else(|| target.strip_prefix("/private/tmp/"))
+    else {
+        return false;
+    };
+    !rest.is_empty()
+        && !rest.contains('/')
+        && !rest.contains("..")
+        && rest
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || "._-+@%,=".contains(value))
+}
+
+pub(super) fn safe_output_target(target: &str, context: PathContext<'_>) -> bool {
+    if target.is_empty()
+        || target.len() > 4096
+        || target.starts_with(['-', '~'])
+        || !target
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:".contains(value))
+        || crate::pretool::sensitive_command(target)
+    {
+        return false;
+    }
+    let path = std::path::Path::new(target);
+    // Windows does not treat `/tmp/file` as absolute, so the host path walk
+    // never sees the POSIX temp directory. A single literal temp segment is
+    // still a bounded file write and keeps the review floor.
+    if !path.is_absolute() && posix_temp_file(target) {
+        return true;
+    }
+    // A POSIX-rooted path other than the bounded temp-file exception cannot
+    // be resolved safely with Windows host path semantics.
+    #[cfg(windows)]
+    if target.starts_with('/') {
+        return false;
+    }
+    // Hidden components cover dotfiles, `.git/hooks`, and `.env` targets.
+    if path.components().any(|component| match component {
+        std::path::Component::Normal(name) => {
+            name.to_str().is_none_or(|name| name.starts_with('.'))
+        }
+        std::path::Component::RootDir | std::path::Component::CurDir => false,
+        _ => true,
+    }) {
+        return false;
+    }
+    let cwd = context
+        .cwd
+        .map(std::path::Path::new)
+        .filter(|cwd| cwd.is_absolute());
+    if path.is_absolute() {
+        if let Some(base) = ["/tmp", "/private/tmp"]
+            .into_iter()
+            .map(std::path::Path::new)
+            .find(|base| path.starts_with(base) && path != *base)
+        {
+            return path
+                .strip_prefix(base)
+                .is_ok_and(|rest| no_symlink_components(base, rest));
+        }
+        return cwd.is_some_and(|cwd| {
+            path != cwd
+                && path
+                    .strip_prefix(cwd)
+                    .is_ok_and(|rest| no_symlink_components(cwd, rest))
+        });
+    }
+    cwd.is_some_and(|cwd| no_symlink_components(cwd, path))
+}
+
+pub(super) fn bounded_write(target: &str, context: PathContext<'_>) -> bool {
+    use crate::pretool::safe_writes::{
+        bounded_native_file_write_target, bounded_native_temporary_write_target,
+    };
+    // Home is outside the workspace even when it sits below a temporary
+    // directory, as it does for disposable and CI accounts.
+    let path = std::path::Path::new(target);
+    let under = |base: Option<&str>| base.is_some_and(|base| path.starts_with(base));
+    if path.is_absolute() && under(context.home_dir) && !under(context.cwd) {
+        return false;
+    }
+    bounded_native_file_write_target(target, context.home_dir, context.cwd)
+        || bounded_native_temporary_write_target(target, context.home_dir, context.cwd)
+}
+
+/// Writing through an existing symlink could reach any file the user owns.
+fn no_symlink_components(base: &std::path::Path, relative: &std::path::Path) -> bool {
+    let mut current = base.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => return false,
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+            Err(_) => return false,
+        }
+    }
+    true
+}

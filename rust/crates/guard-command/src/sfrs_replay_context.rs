@@ -142,7 +142,7 @@ fn encode_segment(segment: &ShellExecutionSegment) -> Value {
     })
 }
 
-fn encode_context(context: &ShellExecutionContext) -> Value {
+pub(crate) fn encode_context(context: &ShellExecutionContext) -> Value {
     json!({
         "$type": "ShellExecutionContext",
         "command_text": context.command_text,
@@ -258,7 +258,7 @@ fn decode_segment(value: &Value) -> Result<ShellExecutionSegment, String> {
     })
 }
 
-fn decode_context(value: &Value) -> Result<ShellExecutionContext, String> {
+pub(crate) fn decode_context(value: &Value) -> Result<ShellExecutionContext, String> {
     let segments = field(value, "segments")?
         .as_array()
         .ok_or("segments is not a list")?;

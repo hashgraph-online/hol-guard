@@ -102,6 +102,11 @@ fn bunfig_lockfile_table_is_inert_only_for_save_and_print() {
             true,
         ),
         (
+            "install-smol",
+            "[install]\nlinker = \"hoisted\"\nsmol = true\n\n[install.lockfile]\nsave = false\n",
+            true,
+        ),
+        (
             "install-registry",
             "[install]\nregistry = \"https://registry.example.invalid\"\n",
             false,

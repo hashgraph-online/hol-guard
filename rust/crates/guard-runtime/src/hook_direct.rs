@@ -9,11 +9,15 @@
 //! `PreToolUse` allow or terminal block, any `PreToolUse` verdict in Watch,
 //! any reviewed `PostToolUse` of those harnesses, and a reviewed
 //! `UserPromptSubmit` with its receipt, for Codex always and for Claude Code
-//! in Watch, and a Cursor `PreToolUse` its hook client runs as an allow.
+//! in Watch, and a Cursor `PreToolUse` or `UserPromptSubmit` its hook client
+//! renders as it would the daemon's answer.
 //! The bounded bridge harnesses, Grok among them, are answered as Codex is.
 //! The daemon never changes those responses. Every other request, and every
 //! `PreToolUse` verdict the daemon turns into an approval or a repair link,
-//! defers so the caller takes the daemon path, which is unchanged. A Claude
+//! defers so the caller takes the daemon path, which is unchanged; a
+//! reviewed `PreToolUse` outside Watch, Cursor's included, is answered from a
+//! saved decision, an approve-once or the approval inbox where
+//! `hook_direct_saved_decision.rs` reproduces the daemon. A Claude
 //! Code or ZCode sandbox requirement outside Watch is routed to
 //! contained execution as the daemon routes it, once the daemon has bound
 //! its sink command, and defers without one. While custom extension
@@ -27,17 +31,18 @@
 
 use crate::policy_store::policy_store_direct_lane::DirectLaneDefer;
 use crate::policy_store::PolicySnapshotStore;
+use edge::{direct_event, post_tool_answer, pre_tool_answer, prompt_answer, reviewed_edge};
 use guard_contracts::{
     GuardExecutionEnvironmentV1, GuardHookEnvelopeV2, GuardHookSourceMetadataV2,
     GUARD_HOOK_ENVELOPE_V2_SCHEMA,
 };
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(all(test, unix))]
 use workspace::{expanduser, normalized_workspace, normpath};
-use workspace::{python_strip, settled_directory, workspace_candidate};
+use workspace::{settled_directory, workspace_candidate};
 
 pub(crate) const HOOK_DIRECT_FEATURE: &str = "hook-direct-v1";
 /// The resident accepts the sink command that routes a sandbox requirement.
@@ -48,11 +53,15 @@ pub(crate) const HOOK_DIRECT_PERMISSION_NOTICE_FEATURE: &str = "hook-direct-perm
 /// The resident answers a reviewed `PreToolUse` from a saved exact-action
 /// decision when the binding carries what the daemon reads it with.
 pub(crate) const HOOK_DIRECT_SAVED_DECISION_FEATURE: &str = "hook-direct-saved-decision-v1";
+/// The resident takes the bound managed-policy view and answers an Oh My Pi
+/// `PostToolUse` for which it requires no structured output mediation.
+pub(crate) const HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE: &str = "hook-direct-structured-output-v1";
 const HOOK_DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 /// The harnesses whose allow the daemon returns as the edge rendered it.
 /// The bounded bridge harnesses after Cursor have no harness-specific step
-/// on the daemon path for the hooks answered here.
-const DIRECT_HARNESSES: [&str; 12] = [
+/// on the daemon path for the hooks answered here; the `pi` module defers
+/// the Oh My Pi steps the resident cannot repeat.
+const DIRECT_HARNESSES: [&str; 14] = [
     "codex",
     CLAUDE_CODE,
     CURSOR,
@@ -65,6 +74,8 @@ const DIRECT_HARNESSES: [&str; 12] = [
     "cline",
     "opencode",
     GROK,
+    "pi",
+    "omp",
 ];
 const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
 const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
@@ -147,7 +158,9 @@ enum HookDirectDefer {
     EdgeFailed,
     NotAllow,
     SavedDecision,
+    ReviewQueue,
     RuntimeSuperseded,
+    StructuredMediation,
 }
 
 impl HookDirectDefer {
@@ -173,7 +186,9 @@ impl HookDirectDefer {
             Self::EdgeFailed => "direct_hook_edge_failed",
             Self::NotAllow => "direct_hook_not_allow",
             Self::SavedDecision => "direct_hook_saved_decision",
+            Self::ReviewQueue => "direct_hook_review_queue",
             Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
+            Self::StructuredMediation => "direct_hook_structured_mediation",
         }
     }
 }
@@ -237,9 +252,6 @@ fn answer(
     };
     let pre_tool = event == PRE_TOOL_USE;
     let cursor_harness = request.harness == CURSOR;
-    if cursor_harness && event == USER_PROMPT_SUBMIT {
-        return Err(HookDirectDefer::EventUnsupported);
-    }
     if payload.contains_key(TRANSITION_PROBE_FIELD) {
         // A probe carries a request identity only the daemon assigns.
         return Err(HookDirectDefer::TransitionProbe);
@@ -250,6 +262,8 @@ fn answer(
     {
         return Err(HookDirectDefer::PayloadUnsupported);
     }
+    let structured_mediation = pi::structured_mediation(&request.harness, event);
+    let source_ref_external_allowed = pi::source_ref_external_allowed(&request.harness);
     payload.remove("hook_env");
     // The daemon records the payload without `hook_env`, and with the
     // execution environment present even when the caller sent none.
@@ -278,6 +292,14 @@ fn answer(
     let (snapshot, binding) = policy_store
         .admit_direct_hook(&workspace)
         .map_err(HookDirectDefer::Lane)?;
+    if structured_mediation
+        && !pi::structured_output_unrequired(
+            &request.harness,
+            binding.structured_output_config.as_ref(),
+        )
+    {
+        return Err(HookDirectDefer::StructuredMediation);
+    }
 
     let home_dir = binding
         .home_dir
@@ -331,8 +353,7 @@ fn answer(
     let guard_home = request.guard_home.clone();
     // Without custom rules, the daemon reads a reviewed `PreToolUse` against
     // the exact-action decisions the user saved.
-    let saved_payload =
-        (pre_tool && !custom_rules && !recording_only && !cursor_harness).then(|| payload.clone());
+    let saved_payload = (pre_tool && !custom_rules && !recording_only).then(|| payload.clone());
     let envelope = GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: None,
@@ -355,7 +376,7 @@ fn answer(
             cwd: Some(workspace.clone()),
             home_dir: request_home.clone(),
             guard_home: request.guard_home,
-            source_ref_external_allowed: false,
+            source_ref_external_allowed,
             execution_environment,
         },
         recording_only,
@@ -365,12 +386,15 @@ fn answer(
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
-        PRE_TOOL_USE if cursor_harness => cursor::answer(&edge, recording_only)?,
         // Watch never pauses or repairs a call: the daemon records the
         // edge's non-blocking response for every verdict, as the drain does.
-        PRE_TOOL_USE if recording_only => reviewed_edge(&edge, PRE_TOOL_USE)?,
+        PRE_TOOL_USE if recording_only && !cursor_harness => reviewed_edge(&edge, PRE_TOOL_USE)?,
         PRE_TOOL_USE => match (
-            pre_tool_answer(&edge, contained && sink_command.is_none()),
+            if cursor_harness {
+                cursor::answer(&edge, recording_only)
+            } else {
+                pre_tool_answer(&edge, contained && sink_command.is_none())
+            },
             saved_payload.as_ref(),
         ) {
             // The daemon returns a saved decision's response as is.
@@ -378,6 +402,7 @@ fn answer(
                 let context = saved_decision::Context {
                     harness: &request.harness,
                     payload,
+                    recorded_payload: &evidence_payload,
                     workspace: &workspace,
                     home_dir: &request_home,
                     guard_home: &guard_home,
@@ -443,116 +468,6 @@ fn answer(
     Ok(answered)
 }
 
-/// The edge result for `event`, when it carries the result and harness
-/// response the daemon reads.
-fn reviewed_edge(edge: &[u8], event: &str) -> Result<Value, HookDirectDefer> {
-    let parsed: Value = serde_json::from_slice(edge).map_err(|_| HookDirectDefer::EdgeFailed)?;
-    if parsed.get("event_name").and_then(Value::as_str) != Some(event)
-        || !parsed.get("result").is_some_and(Value::is_object)
-        || !parsed.get("harness_response").is_some_and(Value::is_object)
-    {
-        return Err(HookDirectDefer::EdgeFailed);
-    }
-    Ok(parsed)
-}
-
-/// The edge result to return as is, when the daemon would pass it through
-/// unchanged:
-///
-/// - an allow, with an allow or warn floor. The daemon asks for approval
-///   only on review and require-reapproval floors, so a warn is recorded and
-///   run like an allow.
-/// - a terminal block or sandbox requirement. The daemon only adds a repair
-///   link to a command-control authority block and routes a Claude Code
-///   sandbox requirement to contained execution, which defers here with
-///   `contained` and is otherwise routed by the caller; any other denial keeps
-///   the edge's harness response. A saved approval never lowers a terminal
-///   action, and the daemon checks custom block rules only against an allow.
-fn pre_tool_answer(edge: &[u8], contained: bool) -> Result<Value, HookDirectDefer> {
-    let parsed = reviewed_edge(edge, PRE_TOOL_USE)?;
-    let result = parsed.get("result");
-    let field = |name: &str| {
-        result
-            .and_then(|result| result.get(name))
-            .and_then(Value::as_str)
-    };
-    let passed_through = match (field("decision"), field("minimum_action")) {
-        (Some("allow"), Some("allow" | "warn")) => true,
-        (Some("deny" | "block"), Some("block")) => {
-            field("reason_code") != Some(REPAIRABLE_BLOCK_REASON)
-        }
-        (Some("deny" | "block"), Some("sandbox-required")) => !contained,
-        _ => false,
-    };
-    if !passed_through {
-        return Err(HookDirectDefer::NotAllow);
-    }
-    Ok(parsed)
-}
-
-/// The edge result to return as is: the daemon passes every reviewed
-/// `PostToolUse` of these harnesses through unchanged.
-fn post_tool_answer(edge: &[u8]) -> Result<Value, HookDirectDefer> {
-    reviewed_edge(edge, POST_TOOL_USE)
-}
-
-/// The edge result the daemon returns: it passes a reviewed
-/// `UserPromptSubmit` through once it accepts the receipt, and answers one
-/// without a receipt as unavailable. With `notice`, it adds Guard's Claude
-/// Code notice to the response; only these actions carry one.
-fn prompt_answer(edge: &[u8], notice: bool) -> Result<Value, HookDirectDefer> {
-    let mut parsed = reviewed_edge(edge, USER_PROMPT_SUBMIT)?;
-    if !parsed.get("receipt").is_some_and(Value::is_object) {
-        return Err(HookDirectDefer::EdgeFailed);
-    }
-    let result = parsed.get("result").cloned().unwrap_or(Value::Null);
-    let action = result.get("minimum_action").and_then(Value::as_str);
-    if notice
-        && matches!(
-            action,
-            Some("require-reapproval" | "block" | "sandbox-required")
-        )
-    {
-        let response = parsed
-            .get_mut("harness_response")
-            .ok_or(HookDirectDefer::PromptNotice)?;
-        claude_prompt_text::brand(response, &result)?;
-    }
-    Ok(parsed)
-}
-
-/// The daemon's event name rule: the first non-blank name field decides, and
-/// a payload without one is a `PreToolUse`. Only the two tool events and a
-/// prompt can be answered here.
-fn direct_event(payload: &Map<String, Value>) -> Result<Option<&'static str>, HookDirectDefer> {
-    for field in EVENT_NAME_FIELDS {
-        let Some(value) = payload.get(field).and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(stripped) = python_strip(value)? else {
-            continue;
-        };
-        let compact: String = stripped
-            .chars()
-            .filter(|character| !matches!(character, '_' | '-'))
-            .collect();
-        if !compact.is_ascii() {
-            return Ok(None);
-        }
-        let compact = compact.to_ascii_lowercase();
-        return Ok(if PRE_TOOL_EVENT_NAMES.contains(&compact.as_str()) {
-            Some(PRE_TOOL_USE)
-        } else if POST_TOOL_EVENT_NAMES.contains(&compact.as_str()) {
-            Some(POST_TOOL_USE)
-        } else if USER_PROMPT_EVENT_NAMES.contains(&compact.as_str()) {
-            Some(USER_PROMPT_SUBMIT)
-        } else {
-            None
-        });
-    }
-    Ok(Some(PRE_TOOL_USE))
-}
-
 #[path = "hook_direct_claude_permission_text.rs"]
 mod claude_permission_text;
 #[path = "hook_direct_claude_prompt_text.rs"]
@@ -561,10 +476,14 @@ mod claude_prompt_text;
 mod contained;
 #[path = "hook_direct_cursor.rs"]
 mod cursor;
+#[path = "hook_direct_edge.rs"]
+mod edge;
 #[path = "hook_direct_lifecycle.rs"]
 mod lifecycle;
 #[path = "hook_direct_local_cli.rs"]
 mod local_cli;
+#[path = "hook_direct_pi.rs"]
+mod pi;
 #[path = "hook_direct_saved_decision.rs"]
 mod saved_decision;
 #[path = "hook_direct_workspace.rs"]

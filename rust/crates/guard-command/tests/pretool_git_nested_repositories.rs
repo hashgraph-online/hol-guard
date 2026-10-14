@@ -150,21 +150,28 @@ fn linked_worktree_target_from_parent_directory_is_routed() {
             result.reason_code
         );
     }
-    for command in [
-        format!("git -C '{target}' commit --allow-empty -m fixture"),
-        format!("git -C '{target}' hash-object -w tracked.txt"),
-    ] {
-        let result = decide(&repository, &home, &command);
-        assert_ne!(result.decision, "allow", "{command}");
-    }
+    // A proven local write behind `-C` is judged as after `cd`: the commit
+    // keeps every change reachable and starts no hook. Writing an object
+    // from an arbitrary path is no such form.
+    let commit = format!("git -C '{target}' commit --allow-empty -m fixture");
+    let result = decide(&repository, &home, &commit);
+    assert_eq!(result.decision, "allow", "{commit}: {}", result.reason_code);
+    let command = format!("git -C '{target}' hash-object -w tracked.txt");
+    let result = decide(&repository, &home, &command);
+    assert_ne!(result.decision, "allow", "{command}");
     // An unregistered copy of the pointer stays reviewed. Unrelated sibling
     // repositories below home are covered by `pretool_home_layout_reads`.
     let forged = home.join("forged-worktree");
     std::fs::create_dir_all(&forged).unwrap();
     std::fs::copy(worktree.join(".git"), forged.join(".git")).unwrap();
-    let command = format!("git -C '{}' status --short", forged.display());
-    let result = decide(&repository, &home, &command);
-    assert_ne!(result.decision, "allow", "{command}");
+    let forged = forged.display();
+    for command in [
+        format!("git -C '{forged}' status --short"),
+        format!("git -C '{forged}' commit --allow-empty -m fixture"),
+    ] {
+        let result = decide(&repository, &home, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+    }
 }
 
 #[test]

@@ -17,8 +17,6 @@ const MAX_REVIEW_FACT_BYTES: usize = 256;
 const MAX_HOST_CWD_BYTES: usize = 4096;
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "[::1]", "localhost"];
 
-// Read once the resident queues a reviewed `PreToolUse` itself.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct DirectLaneReviewFacts {
     /// `ask` or `safe-alternative`, as every bound config resolves it.

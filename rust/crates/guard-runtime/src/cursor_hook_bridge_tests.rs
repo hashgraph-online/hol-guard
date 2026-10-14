@@ -97,6 +97,16 @@ fn scratch(label: &str) -> std::path::PathBuf {
     std::fs::canonicalize(root).unwrap()
 }
 
+/// A guard home with the daemon auth token file the client may sign a
+/// loopback review link with, or without it.
+fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
+    let root = scratch(label);
+    if tokened {
+        std::fs::write(root.join("daemon-auth-token"), "3f".repeat(32)).unwrap();
+    }
+    root
+}
+
 fn map(value: Value) -> OMap {
     let OValue::Map(map) = parse_python_json(&value.to_string()).unwrap() else {
         panic!("not a map");
@@ -230,6 +240,8 @@ fn answers_match_the_client_for_every_vector() {
     let fixture: Value = serde_json::from_str(ANSWER_VECTORS).unwrap();
     let vectors = fixture["vectors"].as_array().unwrap();
     assert!(vectors.len() >= 20);
+    // A loopback review link the client may sign stays with the client.
+    let home = guard_home("answers", true);
     for vector in vectors {
         let event = vector["event"].as_str().unwrap();
         let response = vector["response"].as_str().unwrap();
@@ -238,9 +250,88 @@ fn answers_match_the_client_for_every_vector() {
             (stdout.to_owned(), i32::try_from(code).unwrap())
         });
         assert_eq!(
-            answer(Kind::PreToolUse, event, response),
+            answer(Kind::PreToolUse, event, response, &home),
             expected,
             "{event:?} {response}"
+        );
+    }
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+const REVIEW_VECTORS: &str =
+    include_str!("../testdata/cursor_hook_bridge/cursor_review_vectors.json");
+
+#[test]
+fn reviews_and_prompts_match_the_client_in_either_guard_home() {
+    let fixture: Value = serde_json::from_str(REVIEW_VECTORS).unwrap();
+    assert_eq!(
+        fixture["schema"],
+        "hol-guard-cursor-native-review-answers.v1"
+    );
+    let vectors = fixture["vectors"].as_array().unwrap();
+    assert!(vectors.len() >= 200);
+    let untokened = guard_home("review-untokened", false);
+    let tokened = guard_home("review-tokened", true);
+    for vector in vectors {
+        let home = match vector["home"].as_str().unwrap() {
+            "untokened" => &untokened,
+            "tokened" => &tokened,
+            other => panic!("unknown home {other}"),
+        };
+        let event = vector["event"].as_str().unwrap();
+        let response = vector["response"].as_str().unwrap();
+        let kind = if prompt_event(event) {
+            Kind::Prompt
+        } else {
+            Kind::PreToolUse
+        };
+        let expected = vector["stdout"].as_str().map(|stdout| {
+            let code = vector["exit_code"].as_i64().unwrap();
+            (stdout.to_owned(), i32::try_from(code).unwrap())
+        });
+        assert_eq!(
+            answer(kind, event, response, home),
+            expected,
+            "{} {} {event:?} {response}",
+            vector["home"],
+            vector["case"]
+        );
+    }
+    // A link shape the bridge does not reproduce is left to a client that
+    // holds a token.
+    let odd = r#"{"policy_action":"review","reason":"r","approval_url":"https://guard.example/approvals/a?b=c"}"#;
+    assert_eq!(
+        answer(Kind::PreToolUse, "beforeShellExecution", odd, &tokened),
+        None
+    );
+    std::fs::remove_dir_all(untokened).unwrap();
+    std::fs::remove_dir_all(tokened).unwrap();
+}
+
+#[test]
+fn a_prompt_is_sent_only_when_nothing_else_names_the_hook() {
+    let client = test_client();
+    for name in [
+        "UserPromptSubmit",
+        " user_prompt_submit ",
+        "prompt",
+        "userPromptSubmitted",
+    ] {
+        let raw = json!({"hook_event_name": name, "prompt": "hi"}).to_string();
+        let request = prepared_request(&client, raw.as_bytes()).unwrap_or_else(|| panic!("{name}"));
+        assert_eq!(request.kind, Kind::Prompt, "{name}");
+        assert_eq!(request.event, name);
+    }
+    for raw in [
+        &br#"{"hook_event_name":"UserPromptSubmit","event":"x","prompt":"hi"}"#[..],
+        br#"{"hook_event_name":"UserPromptSubmit","eventName":"x","prompt":"hi"}"#,
+        br#"{"hook_event_name":"beforeSubmitPrompt","prompt":"hi"}"#,
+    ] {
+        assert_eq!(
+            prepared_request(&client, raw),
+            None,
+            "{}",
+            String::from_utf8_lossy(raw)
         );
     }
 }
@@ -286,7 +377,7 @@ fn observers_are_sent_and_answered_as_the_client_does() {
             let stdout = expected["stdout"].as_str().unwrap().to_owned();
             let code = i32::try_from(expected["exit_code"].as_i64().unwrap()).unwrap();
             assert_eq!(
-                answer(Kind::After, &request.event, body),
+                answer(Kind::After, &request.event, body, Path::new("/g")),
                 Some((stdout, code)),
                 "{input} {body}"
             );
@@ -295,7 +386,7 @@ fn observers_are_sent_and_answered_as_the_client_does() {
     // A body `_daemon_hook_result` rejects sends the hook to the client.
     for body in ["", " ", "[]", "null", "\"{}\"", "{", "{} {}"] {
         assert_eq!(
-            answer(Kind::After, "afterShellExecution", body),
+            answer(Kind::After, "afterShellExecution", body, Path::new("/g")),
             None,
             "{body:?}"
         );

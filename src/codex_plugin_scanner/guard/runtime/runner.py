@@ -463,6 +463,9 @@ def sync_receipts(
             )
         except urllib.error.HTTPError as error:
             if error.code == 401:
+                edge_block = _cloud_edge_block_from_http_error(error)
+                if edge_block is not None:
+                    raise RuntimeError(edge_block) from error
                 if auth_context is None and not auth_refresh_retried:
                     auth_refresh_retried = True
                     resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
@@ -484,6 +487,9 @@ def sync_receipts(
                         )
                     except urllib.error.HTTPError as retry_error:
                         if retry_error.code == 401:
+                            edge_block = _cloud_edge_block_from_http_error(retry_error)
+                            if edge_block is not None:
+                                raise RuntimeError(edge_block) from retry_error
                             raise GuardSyncAuthorizationExpiredError(
                                 _guard_oauth_reauthorization_message()
                             ) from retry_error
@@ -1027,7 +1033,7 @@ def sync_receipts(
             pain_signals_uploaded = 0
         else:
             raise
-    value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=5000), now)
+    value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=_sync.VALUE_METRIC_EVENT_LIMIT), now)
     summary: dict[str, object] = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
@@ -3085,11 +3091,55 @@ def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
     return None
 
 
+CLOUD_EDGE_BLOCK_REASON_PREFIX = "Guard Cloud is unreachable from this network"
+
+
+def _cloud_edge_block_message(error: urllib.error.HTTPError, raw_body: str) -> str | None:
+    """Cloudflare's own block or challenge page instead of a Guard Cloud answer.
+
+    Mirrors ``cloud_edge_block_message`` in guard_sync_transport.rs. The page is HTML
+    a client cannot pass, so its raw text is no use as an error message.
+    """
+    headers = error.headers
+    if headers is None:
+        return None
+    challenged = headers.get("cf-mitigated") is not None
+    from_cloudflare = headers.get("cf-ray") is not None or str(headers.get("server") or "").lower() == "cloudflare"
+    html = str(headers.get("content-type") or "").lower().startswith("text/html")
+    page = raw_body[: 64 * 1024]
+    challenge_page = "Just a moment..." in page or "challenge-platform" in page
+    block_page = "Attention Required! | Cloudflare" in page or "Sorry, you have been blocked" in page
+    if not challenged and not (from_cloudflare and html and (challenge_page or block_page)):
+        return None
+    action = "challenged" if challenged or challenge_page else "blocked"
+    ray = str(headers.get("cf-ray") or "").split("-", 1)[0]
+    if ray.isascii() and ray.isalnum():
+        ray_detail, ray_hint = f", Ray ID {ray}", "; the Guard Cloud operator can look up that Ray ID"
+    else:
+        ray_detail, ray_hint = "", ""
+    return (
+        f"{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request "
+        f"(HTTP {error.code}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    )
+
+
+def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
+    """Read the body once and return the edge-block message, if Cloudflare answered."""
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    return _cloud_edge_block_message(error, raw_body)
+
+
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     try:
         raw_body = error.read().decode("utf-8", errors="replace")
     except OSError:
         raw_body = ""
+    edge_block = _cloud_edge_block_message(error, raw_body)
+    if edge_block is not None:
+        return edge_block
     try:
         payload = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
@@ -3141,6 +3191,9 @@ def _check_plan_restriction_403(
         payload: object = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
         payload = None
+    edge_block = _cloud_edge_block_message(error, raw_body)
+    if edge_block is not None:
+        return False, edge_block
     fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
     if not isinstance(payload, dict):
         return False, fallback

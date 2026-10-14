@@ -78,6 +78,10 @@ def _run_ephemeral_reap_synchronously(monkeypatch) -> None:
     monkeypatch.setattr(daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", schedule)
 
 
+def _inspect_command(command: str) -> dict[str, object]:
+    return daemon_manager_module._lifecycle("inspect_command", {"command": command})
+
+
 def test_stale_ephemeral_reap_is_nonblocking_and_single_flight(tmp_path, monkeypatch) -> None:
     entered = threading.Event()
     release = threading.Event()
@@ -212,15 +216,15 @@ def test_frozen_private_daemon_command_is_inventory_compatible(tmp_path) -> None
     )
     rendered_command = subprocess.list2cmdline(list(command)) if os.name == "nt" else shlex.join(command)
 
-    assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
-    assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home.resolve()
+    assert _inspect_command(rendered_command)["matches"]
+    assert Path(_inspect_command(rendered_command)["guard_home"]) == guard_home.resolve()
     assert daemon_manager_module._guard_daemon_port_from_command(rendered_command) == 4781
 
     tampered_payload = json.loads(command[2])
     tampered_payload["port"] = 0
     tampered_parts = (command[0], command[1], json.dumps(tampered_payload))
     tampered_command = subprocess.list2cmdline(list(tampered_parts)) if os.name == "nt" else shlex.join(tampered_parts)
-    assert not daemon_manager_module._guard_daemon_command_matches(tampered_command)
+    assert not _inspect_command(tampered_command)["matches"]
 
 
 def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
@@ -929,7 +933,7 @@ def test_post_update_daemon_start_forwards_explicit_windows_breakaway_authorizat
     ensure.assert_called_once_with(
         guard_home,
         home_dir=home_dir,
-        start_timeout=daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        start_timeout=daemon_manager_module._post_update_guard_daemon_start_timeout(),
         preferred_port=4781,
         allow_windows_job_breakaway=True,
     )
@@ -970,12 +974,12 @@ def test_running_guard_daemon_processes_for_guard_home_accepts_console_script_la
 
 
 def test_guard_daemon_command_matches_accepts_console_script_shortcuts() -> None:
-    assert daemon_manager_module._guard_daemon_command_matches(
-        "/Users/test/.local/bin/hol-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
-    )
-    assert daemon_manager_module._guard_daemon_command_matches(
+    assert _inspect_command("/Users/test/.local/bin/hol-guard daemon --serve --guard-home /tmp/guard-home --port 5474")[
+        "matches"
+    ]
+    assert _inspect_command(
         "/Users/test/.local/bin/plugin-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
-    )
+    )["matches"]
 
 
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
@@ -1675,8 +1679,8 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     if os.name == "nt":
         assert captured_env["USERPROFILE"] == str(home_dir.resolve())
     rendered_command = shlex.join(captured_command)
-    assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
-    assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home
+    assert _inspect_command(rendered_command)["matches"]
+    assert Path(_inspect_command(rendered_command)["guard_home"]) == guard_home
     assert daemon_manager_module._guard_daemon_port_from_command(rendered_command) == 5412
     assert all(
         key not in captured_env

@@ -2,6 +2,10 @@
 /// bound the shell secret-read walk already treats as a pure delay.
 pub(super) const MAX_SAFE_SLEEP_SECONDS: f64 = 3600.0;
 
+#[path = "process_probes.rs"]
+mod process_probes;
+pub(super) use process_probes::{safe_lsof_arguments, safe_pg_isready_arguments};
+
 /// `printenv` naming only location, identity or display variables prints
 /// those values and nothing else. A bare `printenv`, an option, or any name
 /// that could hold a credential stays reviewed.
@@ -61,15 +65,16 @@ pub(super) fn bounded_total_sleep(model: &crate::CanonicalCommandV1) -> bool {
 }
 
 /// `pgrep` only lists matching process ids and names; admit read-only display
-/// and matching flags plus exactly one literal pattern.
+/// and matching flags plus exactly one literal pattern. `-l` and `-a` print
+/// the matched process names or command lines, the same view `ps aux` gives.
 pub(super) fn safe_pgrep_arguments(arguments: &[String]) -> bool {
     let mut patterns = 0_usize;
     for argument in arguments {
         if let Some(flags) = argument.strip_prefix('-') {
             if flags.is_empty()
-                || !flags
-                    .bytes()
-                    .all(|flag| matches!(flag, b'f' | b'i' | b'x' | b'n' | b'o' | b'c'))
+                || !flags.bytes().all(|flag| {
+                    matches!(flag, b'f' | b'i' | b'x' | b'n' | b'o' | b'c' | b'l' | b'a')
+                })
             {
                 return false;
             }

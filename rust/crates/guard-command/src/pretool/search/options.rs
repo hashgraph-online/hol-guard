@@ -18,6 +18,10 @@ pub(super) fn unsafe_search_value(
                 context.home_dir,
                 context.cwd,
                 false,
+            ) && !super::super::chain_temporary::absent_temporary_read_target(
+                value,
+                context.home_dir,
+                context.cwd,
             ) && (value.starts_with(['/', '~'])
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)

@@ -2,16 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extension_interaction import (
-    CommandExtensionInteraction,
-    CommandExtensionInteractionMatch,
-)
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_ephemeral_body import (
     gh_pr_create_uses_safe_ephemeral_body,
-)
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_initial_risk import (
-    initial_shell_risk_match,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
@@ -105,27 +97,3 @@ def test_ephemeral_pr_body_workflow_rejects_secret_bearing_body() -> None:
     assert not gh_pr_create_uses_safe_ephemeral_body(command)
     request = extract_sensitive_tool_action_request("Shell", {"command": command})
     assert request is not None
-
-
-def test_extension_priority_still_controls_verified_workflow() -> None:
-    command = _workflow()
-    canonical = parse_shell_command(command)
-    handled, match = initial_shell_risk_match(
-        tool_name="Shell",
-        normalized_tool_name="shell",
-        command_text=command,
-        detection_command_text=command,
-        raw_command_text=command,
-        cwd=None,
-        home_dir=None,
-        canonical_command=canonical,
-        extension_interaction=CommandExtensionInteraction(
-            priority=CommandExtensionInteractionMatch("controlled action", "Extension requires review."),
-            fallback=None,
-        ),
-        interpreter_executable_identities=(),
-    )
-
-    assert handled
-    assert match is not None
-    assert match.action_class == "controlled action"

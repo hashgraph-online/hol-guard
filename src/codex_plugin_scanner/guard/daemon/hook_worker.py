@@ -285,6 +285,12 @@ class HookWorker(HookWorkerNativeMixin):
             from .claude_permission_request import claude_permission_request_response
 
             return claude_permission_request_response(self.store, payload)
+        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "codex":
+            # Codex asks this only for an escalation of a call its PreToolUse
+            # hook, with the same matcher, already sent to Guard. A deny here
+            # would refuse every approval Codex asks for, so the decision
+            # stays with Codex's own approval prompt.
+            return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
         # Send even unknown or malformed event labels to Rust. The edge
         # returns no semantic result for unsupported events, which this
         # method turns into a deterministic deny/fail-safe response.

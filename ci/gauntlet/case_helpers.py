@@ -30,6 +30,20 @@ def _watch_binding(store: Any) -> dict[str, Any]:
     return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
 
 
+def ready_watch_binding(worker: Any, timeout: float = 5.0) -> dict[str, Any]:
+    """Finish the startup review-fact refresh before measuring Watch's command."""
+    publisher = worker.policy_snapshot_publisher
+    publisher._recheck_direct_lane_review_facts()
+    with publisher._condition:
+        ready = publisher._condition.wait_for(
+            lambda: publisher._acked and publisher._renewal_after_generation is None,
+            timeout=timeout,
+        )
+    if not ready:
+        raise RuntimeError("Watch fixture startup publication did not settle")
+    return _watch_binding(worker.store)
+
+
 def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
     """Label new inbox rows by the mixed-read path they name. Unrecognized rows stay unmatched."""
 

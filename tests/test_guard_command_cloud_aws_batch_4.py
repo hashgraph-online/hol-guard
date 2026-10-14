@@ -6,12 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix import (
+from tests.cloud_operation_fixtures import (
     AWS_DESTRUCTIVE_COMMAND_PATHS,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5,
-    aws_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
     assert_review_required_cases,
@@ -92,16 +91,6 @@ def test_aws_combined_matrix_is_exactly_three_hundred_unique_operations() -> Non
     assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)
     assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
     assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
-
-
-def test_aws_batch_4_compiles_into_the_combined_path_set_matcher() -> None:
-    matchers = aws_destructive_command_matchers(
-        global_options_with_values=frozenset({"--region"}),
-        global_flags=frozenset({"--debug"}),
-    )
-    assert len(matchers) == 1
-    assert matchers[0].paths == frozenset(AWS_DESTRUCTIVE_COMMAND_PATHS)
-    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4).issubset(matchers[0].paths)
 
 
 def test_aws_batch_4_operations_feed_inspection_and_runtime_hooks(tmp_path: Path) -> None:

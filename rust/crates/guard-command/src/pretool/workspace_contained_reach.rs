@@ -24,7 +24,7 @@ pub(super) fn reaches_outside(segment: &CommandSegmentV1, name: &str, workspace:
     }
     // A variable or home path the sandbox would resolve differently. Redirect
     // targets appear only in the segment text.
-    if segment.text.contains('$')
+    if expands_variable(&segment.text, name)
         || segment.text.split_whitespace().any(|word| {
             word.trim_start_matches(['>', '<', '&', '|', '"', '\'', '='])
                 .starts_with('~')
@@ -43,6 +43,37 @@ pub(super) fn reaches_outside(segment: &CommandSegmentV1, name: &str, workspace:
         };
         outside(value, name, workspace)
     })
+}
+
+/// Text tools whose programs use `$` as an anchor or a field reference.
+const PATTERN_TOOLS: &[&str] = &[
+    "awk", "gawk", "mawk", "nawk", "sed", "grep", "egrep", "fgrep", "rg", "jq",
+];
+
+/// A `$` the shell expands. Inside single quotes it is literal, and a pattern
+/// tool reads it as program text (`awk '/x$/{f=1}'`). Any other tool may hand
+/// its arguments to a shell or expand them itself, so every `$` counts there.
+fn expands_variable(text: &str, name: &str) -> bool {
+    if !PATTERN_TOOLS.contains(&name) {
+        return text.contains('$');
+    }
+    let mut single = false;
+    let mut double = false;
+    let mut escaped = false;
+    for current in text.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match current {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '$' if !single => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Redirect targets live only in the segment text: `> out`, `2>>log`, `&>x`.

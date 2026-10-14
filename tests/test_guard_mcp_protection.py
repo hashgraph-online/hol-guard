@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 
-def _risk(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
     tool_name = str(artifact.metadata.get("tool_name"))
     return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
 
@@ -1300,7 +1300,7 @@ def test_mcp_tool_schema_flags_file_command_and_url_arguments(native_context_dig
         },
     )
 
-    assert _risk(native_context_digest, artifact, {}).risk_categories == (
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == (
         "filesystem_access",
         "command_execution",
         "outbound_network",
@@ -1330,7 +1330,7 @@ def test_mcp_tool_schema_follows_local_refs_for_risk_categories(native_context_d
         },
     )
 
-    assert _risk(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
 
 
 def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories(native_context_digest: Path) -> None:
@@ -1356,7 +1356,7 @@ def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories(native_co
         },
     )
 
-    assert _risk(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
 
 
 def test_mcp_tool_schema_ignores_unreferenced_schema_definitions(native_context_digest: Path) -> None:
@@ -1381,7 +1381,7 @@ def test_mcp_tool_schema_ignores_unreferenced_schema_definitions(native_context_
         },
     )
 
-    assert _risk(native_context_digest, artifact, {}).risk_categories == ()
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ()
 
 
 def test_mcp_tool_schema_traverses_conditional_and_dependent_branches(native_context_digest: Path) -> None:
@@ -1407,11 +1407,11 @@ def test_mcp_tool_schema_traverses_conditional_and_dependent_branches(native_con
         },
     )
 
-    categories = set(_risk(native_context_digest, artifact, {}).risk_categories)
+    categories = set(_projected_call(native_context_digest, artifact, {}).risk_categories)
     assert {"command_execution", "outbound_network", "tool_schema_mismatch"}.issubset(categories)
 
 
-def test_mcp_tool_schema_ignores_not_branch_when_inferring_risk(native_context_digest: Path) -> None:
+def test_mcp_tool_schema_ignores_not_branch_when_inferring_projected_call(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1429,7 +1429,7 @@ def test_mcp_tool_schema_ignores_not_branch_when_inferring_risk(native_context_d
         },
     )
 
-    assert _risk(native_context_digest, artifact, {}).risk_categories == ()
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ()
 
 
 def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys(native_context_digest: Path) -> None:
@@ -1442,7 +1442,7 @@ def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys(native_contex
         transport="stdio",
     )
 
-    assert _risk(
+    assert _projected_call(
         native_context_digest,
         artifact,
         {
@@ -1482,9 +1482,9 @@ def test_mcp_tool_descriptions_emit_capability_risk_categories(native_context_di
         tool_description="Execute shell scripts or run command lines.",
     )
 
-    assert _risk(native_context_digest, read_files, {}).risk_categories == ("filesystem_access",)
-    assert _risk(native_context_digest, mutates_files, {}).risk_categories == ("destructive_mutation",)
-    assert _risk(native_context_digest, executes_commands, {}).risk_categories == ("command_execution",)
+    assert _projected_call(native_context_digest, read_files, {}).risk_categories == ("filesystem_access",)
+    assert _projected_call(native_context_digest, mutates_files, {}).risk_categories == ("destructive_mutation",)
+    assert _projected_call(native_context_digest, executes_commands, {}).risk_categories == ("command_execution",)
 
 
 def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema(native_context_digest: Path) -> None:
@@ -1498,7 +1498,7 @@ def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema(na
         tool_schema={"type": "object", "properties": {"script": {"type": "string"}}},
     )
 
-    assert _risk(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
 
 
 @pytest.mark.parametrize(
@@ -1522,4 +1522,4 @@ def test_tool_risk_resolves_only_existing_array_reference(index, expected, nativ
             "$ref": f"#/$defs/ops/{index}",
         },
     )
-    assert _risk(native_context_digest, artifact, {}).risk_categories == expected
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == expected

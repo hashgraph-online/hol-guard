@@ -135,7 +135,7 @@ fn npm_cache_dir(env: &BTreeMap<String, String>, home_dir: Option<&Path>) -> Opt
 // ---------------------------------------------------------------------------
 
 /// `_is_request` — `{"method", "id"}` both present.
-fn is_request(message: &Value) -> bool {
+pub fn is_request(message: &Value) -> bool {
     match message {
         Value::Object(m) => m.contains_key("method") && m.contains_key("id"),
         _ => false,
@@ -143,7 +143,7 @@ fn is_request(message: &Value) -> bool {
 }
 
 /// `_is_response` — an `id` and no `method`.
-fn is_response(message: &Value) -> bool {
+pub fn is_response(message: &Value) -> bool {
     match message {
         Value::Object(m) => m.contains_key("id") && !m.contains_key("method"),
         _ => false,
@@ -151,7 +151,7 @@ fn is_response(message: &Value) -> bool {
 }
 
 /// `_is_notification` — a `method` and no `id`.
-fn is_notification(message: &Value) -> bool {
+pub fn is_notification(message: &Value) -> bool {
     match message {
         Value::Object(m) => m.contains_key("method") && !m.contains_key("id"),
         _ => false,
@@ -161,7 +161,7 @@ fn is_notification(message: &Value) -> bool {
 /// `_response_key` — `json.dumps(value, sort_keys=True, separators=(",",":"))`
 /// canonical key used to correlate a response to its request id. `None` →
 /// `None` (a non-object/id-less message is not correlated).
-fn response_key(value: Option<&Value>) -> Option<String> {
+pub fn response_key(value: Option<&Value>) -> Option<String> {
     let value = value?;
     // serde_json serializes map keys in insertion order; canonicalize to match
     // Python's sort_keys compact dump for correlation keys.
@@ -201,7 +201,8 @@ pub enum SessionEvent {
 /// the native runtime. The caller (resident op) drives `write`/`next_event`
 /// while Python supplies policy verdicts out-of-band.
 pub struct LiveMcpSession {
-    writer: SessionWriter,
+    /// `None` once `close_input` dropped the writer (graceful child EOF).
+    writer: Option<SessionWriter>,
     child_pid: i32,
     inbox: mpsc::Receiver<Value>,
     /// True while the drain pump holds the start of a frame that has not completed.
@@ -222,12 +223,13 @@ pub struct LiveMcpSession {
 /// `_buffered_child_responses`/`_buffered_client_responses`): a FIFO queue of
 /// payloads per `response_key(id)`, capped per key.
 #[derive(Default)]
-struct ResponseBuffers {
+pub struct ResponseBuffers {
     map: BTreeMap<String, Vec<Value>>,
 }
 
 impl ResponseBuffers {
-    fn buffer(&mut self, payload: Value) {
+    /// Queue `payload` under its id correlation key; overflow is dropped.
+    pub fn buffer(&mut self, payload: Value) {
         if let Some(key) = response_key(payload.get("id")) {
             let bucket = self.map.entry(key).or_default();
             if bucket.len() < MAX_BUFFERED_PER_KEY {
@@ -236,7 +238,8 @@ impl ResponseBuffers {
         }
     }
 
-    fn pop(&mut self, request_id: &Value) -> Option<Value> {
+    /// Remove the oldest payload buffered for `request_id`.
+    pub fn pop(&mut self, request_id: &Value) -> Option<Value> {
         let key = response_key(Some(request_id))?;
         let pending = self.map.get_mut(&key)?;
         if pending.is_empty() {
@@ -324,7 +327,7 @@ impl LiveMcpSession {
         let drain = thread::spawn(move || session_pump(stdout, tx, cancel_tx, partial_tx));
         Ok((
             LiveMcpSession {
-                writer,
+                writer: Some(writer),
                 child_pid,
                 inbox: rx,
                 partial,
@@ -351,9 +354,10 @@ impl LiveMcpSession {
             return Err("child_frame_too_large".to_owned());
         }
         framed.push(b'\n');
-        let result = self
-            .writer
-            .write(framed, &self.cancellation, Duration::from_secs(5));
+        let Some(writer) = self.writer.as_ref() else {
+            return Err("session_input_closed".to_owned());
+        };
+        let result = writer.write(framed, &self.cancellation, Duration::from_secs(5));
         if result.is_err() {
             // A timed-out write may have delivered part of a frame. Retire the
             // transport rather than retrying and corrupting JSON-RPC framing.
@@ -467,6 +471,13 @@ impl LiveMcpSession {
     /// `_pop_buffered_client_response`.
     pub fn pop_buffered_client_response(&mut self, request_id: &Value) -> Option<Value> {
         self.buffered_client.pop(request_id)
+    }
+
+    /// Drop the stdin writer so the child observes EOF on its input, the
+    /// graceful shutdown `runtime_mcp.py` performs before waiting for exit.
+    /// Later writes fail with `session_input_closed`. Idempotent.
+    pub fn close_input(&mut self) {
+        self.writer = None;
     }
 
     /// Signal cooperative cancellation to the drain pump.

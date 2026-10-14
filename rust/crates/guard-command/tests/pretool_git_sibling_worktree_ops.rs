@@ -43,6 +43,7 @@ fn routed_sibling_worktree_add_from_origin_is_quiet() {
         format!(
             "git -C {primary} fetch origin main --quiet; git -C {primary} worktree add {destination} -b feat/ga4-goal origin/main 2>&1 | tail -1"
         ),
+        format!("git -C {primary} worktree add --detach {destination} origin/main"),
     ] {
         assert_allow_at(&session, &session.org, &command, WORKTREE_ADD);
     }
@@ -101,7 +102,6 @@ fn sibling_worktree_add_keeps_unproven_shapes_reviewed() {
         format!("git -C {primary} worktree add {fresh} -b feat/ga4-goal -- origin/main"),
         format!("git -C {primary} worktree add -b feat/ga4-goal -- {fresh} origin/main"),
         format!("git -C {primary} worktree add {fresh} -b -- origin/main"),
-        format!("git -C {primary} worktree add --detach {fresh} origin/main"),
         format!("git -C {primary} worktree add -f {fresh} -b feat/ga4-goal origin/main"),
         format!("git -C {primary} worktree add {fresh} -b feat/ga4-goal origin/main 2>&1 | sh"),
         format!(

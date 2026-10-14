@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_com
 from codex_plugin_scanner.guard.cli.update_grok_repair import _isolated_bounded_hook_is_current
 from tests.test_bounded_cli_hook_script_template import _load_script, _serve, _write_daemon_files
 
-_POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="the native bounded bridge is POSIX-only")
+_POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX paths and hook command syntax")
 _PYTHON = "/usr/bin/python3"
 _NATIVE_SCRIPT = (
     Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/bounded_hook_bridge_grok_script.rs"

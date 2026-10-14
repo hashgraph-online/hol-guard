@@ -99,7 +99,8 @@ fn cd_then_read_sequence(
             after_semicolon |= separator == ";";
             let executable = segment.executable.as_deref();
             plain_segment(segment)
-                && cwd_read_executable(executable)
+                && (cwd_read_executable(executable)
+                    || crate::pretool::version_probes::lone_probe_segment(segment))
                 && executable.is_some_and(|name| !matches!(executable_basename(name), "git" | "gh"))
                 && exact_safe_segment_with_context(model, segment, allow_git_helper_context, moved)
                 && (!after_semicolon

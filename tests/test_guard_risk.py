@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.advisory_model import _normalized_url_indicator
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -36,18 +35,11 @@ from codex_plugin_scanner.guard.risk import (
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.git_execution_safety import git_binary_path_is_trusted
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.credential_exfiltration import (
-    _read_small_runtime_text_file,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_expansion import (
     _gh_pr_create_body_has_shell_command_substitution,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters import (
     _split_attached_redirection_token,
-)
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.sensitive_read_pipeline import (
-    _resolved_runtime_path,
-    _runtime_entry_for_name,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_static_safety import (
     _path_text_is_within_root_text,
@@ -4393,35 +4385,6 @@ def test_tool_action_request_classifier_detects_fd_prefixed_curl_heredoc_upload(
     }
 
 
-def test_resolved_runtime_path_rejects_paths_outside_workspace_and_home(tmp_path):
-    workspace_dir = tmp_path / "workspace"
-    home_dir = tmp_path / "home"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    home_dir.mkdir(parents=True, exist_ok=True)
-    outside_dir = tmp_path / "outside"
-    outside_dir.mkdir(parents=True, exist_ok=True)
-    inside_path = workspace_dir / "allowed.cfg"
-    outside_path = outside_dir / "blocked.cfg"
-    inside_path.write_text("ok\n", encoding="utf-8")
-    outside_path.write_text("nope\n", encoding="utf-8")
-
-    assert _resolved_runtime_path("./allowed.cfg", cwd=workspace_dir, home_dir=home_dir) == inside_path
-    assert _resolved_runtime_path("../outside/blocked.cfg", cwd=workspace_dir, home_dir=home_dir) is None
-
-
-def test_read_small_runtime_text_file_rejects_symlink_escape(tmp_path):
-    workspace_dir = tmp_path / "workspace"
-    outside_dir = tmp_path / "outside"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    outside_dir.mkdir(parents=True, exist_ok=True)
-    outside_path = outside_dir / "secret.txt"
-    outside_path.write_text("secret\n", encoding="utf-8")
-    symlink_path = workspace_dir / "linked-secret.txt"
-    symlink_path.symlink_to(outside_path)
-
-    assert _read_small_runtime_text_file(symlink_path, allowed_roots=(workspace_dir,)) is None
-
-
 def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monkeypatch):
     def fake_normcase(value: str) -> str:
         return value.replace("\\", "/").lower()
@@ -4432,44 +4395,6 @@ def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monk
         "C:\\Users\\Michael\\Workspace\\config.toml",
         "c:\\users\\michael\\workspace",
     )
-
-
-def test_runtime_entry_for_name_uses_filesystem_case_matching(tmp_path, monkeypatch):
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    (workspace_dir / "Actual.cfg").write_text("ok\n", encoding="utf-8")
-
-    monkeypatch.setattr("os.path.normcase", lambda value: value)
-    monkeypatch.setattr(
-        "os.path.samefile",
-        lambda entry_path, requested_path: Path(entry_path).name.casefold() == Path(requested_path).name.casefold(),
-    )
-
-    entry = _runtime_entry_for_name(str(workspace_dir), "actual.cfg")
-
-    assert entry is not None
-    assert entry.name == "Actual.cfg"
-
-
-def test_read_small_runtime_text_file_rejects_growth_after_stat(tmp_path, monkeypatch):
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    target_path = workspace_dir / "payload.txt"
-    target_path.write_text("small", encoding="utf-8")
-
-    class GrowingRuntimeFile:
-        def __enter__(self) -> GrowingRuntimeFile:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def read(self, _size: int) -> str:
-            return "x" * 32769
-
-    monkeypatch.setattr("os.fdopen", lambda *_args, **_kwargs: GrowingRuntimeFile())
-
-    assert _read_small_runtime_text_file(target_path, allowed_roots=(workspace_dir,)) is None
 
 
 def test_split_attached_redirection_token_handles_long_user_text_without_regex():
@@ -4846,9 +4771,3 @@ def test_extract_network_hosts_keeps_host_like_non_media_header_values():
     text = "X-Callback: vnd.github.raw Accept: application/vnd.github.raw+json"
 
     assert extract_network_hosts(text) == {"vnd.github.raw"}
-
-
-def test_normalized_url_indicator_tolerates_bracketed_regex():
-    raw = r"https://[^:]*:\([^@]*\)@.*|\1|"
-    result = _normalized_url_indicator(raw)
-    assert result == raw

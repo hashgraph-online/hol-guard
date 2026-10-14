@@ -92,6 +92,9 @@ const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
 pub(super) enum ExactKeys<'a> {
     Token(&'a str),
     OnceOnly(&'a str),
+    /// No exact-action query. The daemon records such reviews; the resident
+    /// queues only reviews it queried.
+    #[cfg_attr(not(test), allow(dead_code))]
     Neither,
 }
 

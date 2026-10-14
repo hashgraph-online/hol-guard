@@ -244,7 +244,6 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
         format!("touch {root}/marker && cd {repository} && git status"),
         format!("ls {root} && cd {repository} && rm -rf app"),
         format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
-        format!("git -C {repository} status && cd {repository} && git log -1"),
         format!("ls {root}; cd {repository} && git status"),
         format!("ls {root} || cd {repository} && git status"),
     ] {
@@ -254,5 +253,43 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
             "{command}: {}",
             result.decision
         );
+    }
+}
+
+/// Local Git reads before the `cd` write nothing the reads after it could
+/// pick up, so the floor judges the command from the `cd` onward.
+#[test]
+fn proven_git_reads_before_a_cd_into_a_sibling_repository_are_allowed() {
+    let (space, _cleanup) = workspace("git-prefix");
+    let other = space.root.join("other");
+    git(&space.root, &["init", "--quiet", other.to_str().unwrap()]);
+    std::fs::write(other.join("notes.txt"), "other\n").unwrap();
+    git(&other, &["add", "-A"]);
+    git(&other, &["commit", "--quiet", "-m", "other"]);
+    let other = other.to_str().unwrap();
+    for command in [
+        format!(
+            "git log --oneline -5 && git status --short | head -20 && echo \"=== other ===\" \
+             && cd {other} && git log --oneline -5 && git status --short | head"
+        ),
+        format!("git status && cd {other} && git log -1"),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    for command in [
+        format!("git checkout -b scratch && cd {other} && git log -1"),
+        format!("git config core.hooksPath hooks && cd {other} && git log -1"),
+        format!("git commit --allow-empty -m wip && cd {other} && git log -1"),
+        format!("git -c core.pager=less log -1 && cd {other} && git log -1"),
+        format!("git status; cd {other} && git log -1"),
+        format!("git status && cd {other} && git config core.fsmonitor true && git status"),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_ne!(result.decision, "allow", "{command}");
     }
 }

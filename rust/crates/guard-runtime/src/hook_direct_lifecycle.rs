@@ -15,6 +15,11 @@
 //! daemon does, then renders the daemon's answer; without the key, or when
 //! a row is signed under another key, the session keeps the daemon path.
 //!
+//! Codex's `PermissionRequest` gets the daemon's constant passthrough: no
+//! decision, so Codex shows its own approval prompt. Codex asks it only for
+//! a call whose `PreToolUse` hook, with the same matcher, already reached
+//! Guard.
+//!
 //! Claude Code's `permission_prompt` notification is answered the same way:
 //! the notice, when there is one, is verified and marked seen, and the event
 //! the daemon records for every such prompt is written in that transaction.
@@ -42,7 +47,7 @@ use crate::policy_store::PolicySnapshotStore;
 /// The daemon's `reason_code` when the edge does not review an event.
 const UNAVAILABLE_REASON_CODE: &str = "native_hook_event_unavailable";
 /// `_DECISION_HARNESSES` among the harnesses the resident answers.
-const DECISION_HARNESSES: [&str; 2] = ["hermes", "openclaw"];
+const DECISION_HARNESSES: [&str; 4] = ["hermes", "openclaw", "pi", "omp"];
 /// Events `fail_closed_response` answers with a deny, or the daemon handles
 /// itself.
 const DAEMON_EVENTS: [&str; 3] = [
@@ -54,6 +59,7 @@ const DAEMON_EVENTS: [&str; 3] = [
 /// exact spelling reaches the daemon's permission prompt handler.
 const NOTIFICATION: &str = "Notification";
 const PERMISSION_PROMPT: &str = "permission_prompt";
+const CODEX: &str = "codex";
 /// The events `runtime_hook_event_name` names `PermissionRequest`.
 const CLAUDE_PERMISSION_EVENTS: [&str; 2] = ["permissionrequest", "permissionrequestv2"];
 /// A longer or unusual name is left to the daemon.
@@ -95,6 +101,12 @@ fn constant_response(harness: &str, event: &str) -> Value {
     })
 }
 
+/// The daemon's Codex `PermissionRequest` answer: no decision, so Codex
+/// uses its normal approval flow.
+fn codex_permission_response() -> Value {
+    json!({ "hookSpecificOutput": { "hookEventName": "PermissionRequest" } })
+}
+
 /// The answer for a hook whose event the edge does not review, when the
 /// daemon would return its constant for it.
 pub(super) fn answer(
@@ -118,7 +130,9 @@ pub(super) fn answer(
     let compact = event.replace(['_', '-'], "").to_ascii_lowercase();
     let claude_permission =
         harness == CLAUDE_CODE && CLAUDE_PERMISSION_EVENTS.contains(&compact.as_str());
+    let codex_permission = harness == CODEX && CLAUDE_PERMISSION_EVENTS.contains(&compact.as_str());
     if !claude_permission
+        && !codex_permission
         && (DAEMON_EVENTS.contains(&compact.as_str()) || compact.starts_with("before"))
     {
         return Err(HookDirectDefer::EventUnsupported);
@@ -144,6 +158,9 @@ pub(super) fn answer(
     }
     if claude_permission {
         return claude_permission_answer(guard_home, payload, policy_store);
+    }
+    if codex_permission {
+        return Ok(json!({ "harness_response": codex_permission_response() }));
     }
     // `str(payload.get("notification_type") or "") == "permission_prompt"`.
     if harness == CLAUDE_CODE

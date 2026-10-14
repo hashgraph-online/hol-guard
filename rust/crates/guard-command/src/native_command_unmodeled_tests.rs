@@ -183,7 +183,13 @@ fn a_disabled_extension_for_another_program_does_not_block_unmodeled_commands() 
     }
     // An interpreter can assemble any program, so it stays blocked while any
     // extension is disabled, and the disabled program itself is still named.
-    for command in ["sh -c 'gh pr view 12'", "for x in a; do docker ps; done"] {
+    // A docker listing the native proof admits is blocked as well.
+    for command in [
+        "sh -c 'gh pr view 12'",
+        "for x in a; do docker ps; done",
+        "docker ps",
+        "docker ps --format '{{.Names}}' | head -5",
+    ] {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
     }
 }

@@ -86,16 +86,41 @@ fn capped(deadline: Instant, cap: Duration) -> Duration {
 }
 
 /// `Path.home()`: `$HOME` without trailing slashes, else the passwd entry.
-fn home_directory() -> PathBuf {
+#[cfg(unix)]
+fn home_directory() -> Option<PathBuf> {
     if let Some(home) = std::env::var_os("HOME") {
         let text = home.to_string_lossy();
         let trimmed = text.trim_end_matches('/');
-        return PathBuf::from(if trimmed.is_empty() { "/" } else { trimmed });
+        return Some(PathBuf::from(if trimmed.is_empty() {
+            "/"
+        } else {
+            trimmed
+        }));
     }
-    nix::unistd::User::from_uid(nix::unistd::getuid())
-        .ok()
-        .flatten()
-        .map_or_else(|| PathBuf::from("/"), |user| user.dir)
+    Some(
+        nix::unistd::User::from_uid(nix::unistd::getuid())
+            .ok()
+            .flatten()
+            .map_or_else(|| PathBuf::from("/"), |user| user.dir),
+    )
+}
+
+/// `Path.home()` on Windows (`ntpath.expanduser`): `%USERPROFILE%`, else
+/// `%HOMEDRIVE%` joined with `%HOMEPATH%`. `HOME` is ignored, as CPython
+/// ignores it there. With neither set CPython raises; the bridge instead
+/// declines to start the child process.
+#[cfg(windows)]
+fn home_directory() -> Option<PathBuf> {
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        return Some(if profile.is_empty() {
+            PathBuf::from(".")
+        } else {
+            PathBuf::from(profile)
+        });
+    }
+    let home_path = std::env::var_os("HOMEPATH")?;
+    let drive = std::env::var_os("HOMEDRIVE").unwrap_or_default();
+    Some(PathBuf::from(drive).join(home_path))
 }
 
 /// `isolated_hook_environment()` including the signed Desktop proxy
@@ -220,12 +245,15 @@ impl Bridge<'_> {
         if timeout < MINIMUM_OPERATION {
             return false;
         }
+        let Some(home) = home_directory() else {
+            return false;
+        };
         let mut environment = hook_environment();
         environment.insert("HOL_GUARD_HOOK_FAILURE_KIND".to_owned(), kind.to_owned());
         let result = run_isolated_hook_process(
             &self.config.recovery_command,
             "",
-            &home_directory(),
+            &home,
             &environment,
             Some(timeout.as_secs_f64()),
             None,
@@ -245,10 +273,16 @@ impl Bridge<'_> {
                 &self.data,
             );
         }
+        let Some(home) = home_directory() else {
+            return degraded(
+                &format!("{reason}; fallback could not resolve the home directory"),
+                &self.data,
+            );
+        };
         let result = run_isolated_hook_process(
             &self.config.fallback_command,
             &self.data,
-            &home_directory(),
+            &home,
             &hook_environment(),
             Some(timeout.as_secs_f64()),
             None,
@@ -338,6 +372,6 @@ pub(crate) fn run(config_text: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_tests.rs"]
 mod tests;

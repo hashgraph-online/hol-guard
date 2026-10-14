@@ -124,14 +124,14 @@
     {
       "event": "preToolUse",
       "response": "{\"policy_action\":\"review\",\"reason\":\"r\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r\", \"agent_message\": \"r\"}\n",
+      "exit_code": 2
     },
     {
       "event": "preToolUse",
       "response": "{\"policy_action\":\"require-reapproval\",\"reason\":\"r\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r\", \"agent_message\": \"r\"}\n",
+      "exit_code": 2
     },
     {
       "event": "preToolUse",

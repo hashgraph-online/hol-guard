@@ -333,6 +333,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::HookAuthorityState(request) => {
                 crate::hook_authority_state_op::evaluate_hook_authority_state_request(&request)
             }
+            ResidentOperationV1::PolicyIntegrityRows(request) => {
+                crate::policy_integrity_rows_op::evaluate_policy_integrity_rows_request(&request)
+            }
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
             }

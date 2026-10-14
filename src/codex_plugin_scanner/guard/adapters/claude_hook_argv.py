@@ -32,7 +32,7 @@ def _native_bridge_executable() -> Path | None:
     """The validated native runtime when it can proxy Claude hooks itself.
 
     The native bridge ports ``claude_daemon_hook_bridge`` so each hook call
-    skips the Python interpreter start. Windows keeps the Python bridge.
+    skips the Python interpreter start.
     """
 
     return native_hook_bridge_executable(NATIVE_CLAUDE_HOOK_FEATURE)

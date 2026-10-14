@@ -11,7 +11,7 @@ pub(super) fn bounded_file_write_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_write_target(value, home_dir, cwd, false, false)
+    bounded_write_target(value, home_dir, cwd, false, false, false)
 }
 
 pub(super) fn bounded_native_file_write_target(
@@ -19,7 +19,20 @@ pub(super) fn bounded_native_file_write_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_write_target(value, home_dir, cwd, false, true)
+    bounded_write_target(value, home_dir, cwd, false, true, false)
+}
+
+/// A structured write tool opens its path literally, so `[id]` in a Next.js,
+/// SvelteKit or Nuxt route directory and `$postId` in a Remix or TanStack
+/// Router route file are names, not globs or expansions. Only brackets and `$`
+/// are accepted; every other metacharacter and every location, protected-file,
+/// hidden-part and hard-link screen still applies to the resolved target.
+pub(super) fn bounded_structured_file_write_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    bounded_write_target(value, home_dir, cwd, false, true, true)
 }
 
 /// A new directory path, screened like `mkdir`: the workspace, a linked
@@ -29,7 +42,7 @@ pub(super) fn bounded_new_directory_write_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_write_target(value, home_dir, cwd, true, true)
+    bounded_write_target(value, home_dir, cwd, true, true, false)
 }
 
 /// A single absolute file write into a temporary directory the user owns.
@@ -58,6 +71,7 @@ fn bounded_write_target(
     cwd: Option<&str>,
     directory: bool,
     allow_home: bool,
+    literal_names: bool,
 ) -> bool {
     let Some(workspace) = cwd.and_then(|root| {
         let expanded = expand_home_read_path(root, home_dir).unwrap_or_else(|| root.to_owned());
@@ -68,8 +82,12 @@ fn bounded_write_target(
     if value.is_empty()
         || value.len() > 4096
         || value.contains([
-            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+            '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}',
         ])
+        || (!literal_names && value.contains(['$', '[', ']']))
+        // `$` never reaches a colon past the drive, such as an NTFS `::$DATA`
+        // stream selector, so a literal name always names the file itself.
+        || (value.contains('$') && value.char_indices().any(|(at, c)| c == ':' && at > 1))
         || value.split(['/', '\\']).any(|part| part == "..")
     {
         return false;
@@ -164,7 +182,12 @@ pub(super) fn safe_copy_arguments(arguments: &[String], context: super::PathCont
     !paths.0.starts_with('-')
         && !paths.1.starts_with('-')
         && paths.0.trim() == paths.0
-        && bounded_file_read_target(paths.0, context.home_dir, context.cwd)
+        && (bounded_file_read_target(paths.0, context.home_dir, context.cwd)
+            || super::chain_temporary::absent_temporary_read_target(
+                paths.0,
+                context.home_dir,
+                context.cwd,
+            ))
         && (bounded_native_file_write_target(destination_text, context.home_dir, context.cwd)
             // The temporary carve-out is only for destinations the user
             // spelled absolutely. A relative destination joined onto a /tmp
@@ -219,7 +242,7 @@ pub(super) fn creatable_target(
     context: super::PathContext<'_>,
     directory: bool,
 ) -> bool {
-    bounded_write_target(value, context.home_dir, context.cwd, directory, true)
+    bounded_write_target(value, context.home_dir, context.cwd, directory, true, false)
         || (std::path::Path::new(value).is_absolute()
             && bounded_temporary_copy_target(value, context))
 }

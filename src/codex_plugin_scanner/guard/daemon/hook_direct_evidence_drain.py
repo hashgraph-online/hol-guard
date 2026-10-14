@@ -43,6 +43,8 @@ _DIRECT_HARNESSES = frozenset(
         "cline",
         "opencode",
         "grok",
+        "pi",
+        "omp",
     }
 )
 _PRE_TOOL_USE = "PreToolUse"

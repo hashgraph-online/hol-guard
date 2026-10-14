@@ -238,7 +238,7 @@ def run_authorized_contained_test(
     try:
         peeled = peel_contained_wrapper(tool_input["command"], workspace=workspace, home=home_dir, cwd=cwd)
     except (OSError, RuntimeError, ValueError) as error:
-        # Pipelines and lists the wrapper cannot peel (`| grep`, `&&`) still
+        # Pipelines and lists the wrapper cannot peel (`| sort`, `&&`) still
         # run as issued when Rust chose the workspace sandbox for them.
         exit_code = run_workspace(authorize(payload))
         if exit_code is None:
@@ -339,7 +339,9 @@ def run_authorized_contained_test(
         return exit_code
     if inline_plan is not None:
         profile = inline_plan.profile_version
-        if profile == "node-eval-readonly-v1":
+        if profile == "node-eval-readonly-v1" and Path(command[0]).name == "bun":
+            reason = "native_bun_eval_readonly_containment_required"
+        elif profile == "node-eval-readonly-v1":
             reason = "native_node_eval_readonly_containment_required"
         else:
             reason = "native_python_eval_readonly_containment_required"

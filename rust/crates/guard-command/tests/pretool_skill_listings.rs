@@ -151,6 +151,38 @@ fn listing_a_missing_path_proceeds_outside_hidden_locations() {
 }
 
 #[test]
+fn listing_a_missing_path_in_a_sibling_checkout_proceeds() {
+    let home = home("sibling-missing");
+    std::fs::create_dir_all(home.join("work/project-wt/scripts")).unwrap();
+    std::fs::write(home.join("work/project-wt/.git"), "gitdir: x\n").unwrap();
+    std::fs::write(home.join("work/project/.gitignore"), "node_modules\n").unwrap();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for command in [
+            "ls ../project-wt/node_modules 2>/dev/null",
+            "ls ../../work/project-wt/node_modules/pkg",
+            "ls -la ../project-wt; ls ../project-wt/node_modules 2>/dev/null; cat .gitignore",
+        ] {
+            assert_eq!(
+                action(&home, harness, command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+    for command in [
+        // Parent steps only lead the operand; hidden and sensitive names and
+        // a missing name before `..` keep their review.
+        "ls ../project-wt/missing/../scripts",
+        "ls ../project-wt/.env-missing",
+        "ls ../../.ssh/missing",
+        "ls ../../.codex/missing",
+        "ls ~/../missing",
+    ] {
+        assert_ne!(action(&home, "zcode", command), "allow", "{command}");
+    }
+}
+
+#[test]
 fn plugin_cache_listings_stay_under_the_skills_directory() {
     let home = home("plugin-cache");
     let version = home.join(".zcode/cli/plugins/cache/market/plugin/1.0.0");
@@ -174,11 +206,20 @@ fn plugin_cache_listings_stay_under_the_skills_directory() {
         ),
         "allow"
     );
-    assert_ne!(
+    // Other plugin directories list by name like any home dot-directory.
+    assert_eq!(
         action(
             &home,
             "zcode",
             "ls ~/.zcode/cli/plugins/cache/market/plugin/1.0.0/logs"
+        ),
+        "allow"
+    );
+    assert_ne!(
+        action(
+            &home,
+            "zcode",
+            "ls -R ~/.zcode/cli/plugins/cache/market/plugin/1.0.0/logs"
         ),
         "allow"
     );

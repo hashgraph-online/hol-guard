@@ -8,7 +8,7 @@ pub(super) use allowances::{
 mod hidden_listing;
 #[path = "omp_read_targets.rs"]
 mod omp_targets;
-pub(super) use hidden_listing::repository_hidden_directory;
+pub(super) use hidden_listing::{home_hidden_directory, repository_hidden_directory};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
 use allowances::{

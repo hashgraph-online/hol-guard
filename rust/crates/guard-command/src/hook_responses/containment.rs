@@ -6,8 +6,12 @@
 use serde_json::{json, Map, Value};
 
 const GIT_RULES: [&str; 3] = ["command.git.diff", "command.git.log", "command.git.show"];
-const NODE_PERMISSION_CODES: [&str; 5] = [
+/// Bun inline evaluation reports package protection because Bun is a package
+/// manager image; pretool admits that only for an exact, screened `bun -e/-p`
+/// argv, under its own reason. `node -e` never carries the permission.
+const NODE_PERMISSION_CODES: [&str; 6] = [
     "native_workspace_containment_required",
+    "native_bun_eval_readonly_containment_required",
     "native_vitest_readonly_containment_required",
     "native_package_test_readonly_containment_required",
     "native_node_tool_readonly_containment_required",
@@ -17,7 +21,8 @@ const NODE_PERMISSION_CODES: [&str; 5] = [
 pub(super) fn required_profile(reason_code: &str) -> Option<&'static str> {
     Some(match reason_code {
         "native_python_eval_readonly_containment_required" => "python-eval-readonly-v1",
-        "native_node_eval_readonly_containment_required" => "node-eval-readonly-v1",
+        "native_node_eval_readonly_containment_required"
+        | "native_bun_eval_readonly_containment_required" => "node-eval-readonly-v1",
         "native_package_test_readonly_containment_required" => "package-test-readonly-v1",
         "native_node_build_output_containment_required" => "node-build-output-v1",
         "native_node_tool_readonly_containment_required" => "node-tool-readonly-v1",

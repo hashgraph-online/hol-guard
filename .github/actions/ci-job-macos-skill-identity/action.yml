@@ -7,6 +7,12 @@ inputs:
   suite:
     description: skill-identity, or gates for the benign false-positive and replay gates.
     required: true
+  shard-index:
+    description: Zero-based gate shard this job runs (gates suite only).
+    required: true
+  shard-count:
+    description: Number of gate shards (gates suite only).
+    required: true
 runs:
   using: composite
   steps:
@@ -62,7 +68,21 @@ runs:
       # Linux CI decides stale pending markers; this run catches cases that
       # are reviewed only on macOS, where the sandbox and paths differ.
       if: inputs.suite == 'gates'
-      run: uv run --no-sync pytest -q --tb=short -n 2 --dist load --max-worker-restart 0
-        tests/test_guard_benign_false_positive_gate.py tests/test_guard_gauntlet_replay_gate.py
-        tests/test_guard_command_corpus_benign_allow.py
+      env:
+        SHARD_INDEX: ${{ inputs.shard-index }}
+        SHARD_COUNT: ${{ inputs.shard-count }}
+      run: |
+        # A collection failure must fail the step even when grep still prints nodes.
+        set -o pipefail
+        gates=(tests/test_guard_benign_false_positive_gate.py
+               tests/test_guard_gauntlet_replay_gate.py
+               tests/test_guard_command_corpus_benign_allow.py)
+        uv run --no-sync pytest --collect-only -q "${gates[@]}" | grep '::' > gate-nodes.txt
+        # Same split as the Linux gates: every shard sorts the same node list
+        # and keeps every SHARD_COUNT-th node, so shards are disjoint and cover
+        # the whole gate.
+        sort gate-nodes.txt | awk -v n="$SHARD_COUNT" -v i="$SHARD_INDEX" '(NR - 1) % n == i' > gate-shard.txt
+        test -s gate-shard.txt
+        echo "shard $SHARD_INDEX runs $(wc -l < gate-shard.txt) of $(wc -l < gate-nodes.txt) gate cases"
+        uv run --no-sync pytest -q --tb=short -n 2 --dist load --max-worker-restart 0 "@gate-shard.txt"
       shell: bash

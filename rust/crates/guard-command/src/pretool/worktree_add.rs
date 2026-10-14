@@ -2,17 +2,28 @@ use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+#[path = "worktree_add_chain.rs"]
+pub(super) mod chain;
+#[path = "worktree_add_names.rs"]
+mod names;
+
+pub(super) use names::valid_branch_name;
+use names::{valid_local_reference, valid_path_text};
+
 struct WorktreeAdd<'a> {
     leading: Vec<String>,
     /// The single `-C <dir>` value, applied by changing the proof's cwd
     /// (as Git does) instead of being passed on to the probes.
     chdir: Option<&'a str>,
-    branch: &'a str,
+    /// `None` for the detached form, which creates no branch.
+    branch: Option<&'a str>,
     destination: &'a str,
     reference: Option<&'a str>,
+    /// Neither `-b` nor `--detach`: Git checks out the local branch the
+    /// reference names when one exists, and detaches otherwise.
+    attach: bool,
 }
 
-const MAX_GIT_NAME_BYTES: usize = 256;
 const MAX_DESTINATION_BYTES: usize = 4096;
 
 pub(super) fn exact_safe_command(
@@ -27,6 +38,9 @@ pub(super) fn exact_safe_command(
         || !model.wrapper_chain.is_empty()
     {
         return false;
+    }
+    if chain::proven(model, context, deadline, execution_environment) {
+        return true;
     }
     let cwd_proof = model
         .segments
@@ -65,13 +79,14 @@ pub(super) fn exact_safe_command(
         if is_worktree {
             if worktree_seen
                 || segment.pipeline_index != 0
-                || !safe_segment(
+                || proven_checkout(
                     segment,
                     fetch_before,
                     proof_context,
                     deadline,
                     execution_environment,
                 )
+                .is_none()
             {
                 return false;
             }
@@ -236,48 +251,42 @@ pub(super) fn separator_between(
     )
 }
 
-fn safe_segment(
+/// The checkout a proven `git worktree add` segment creates, and the `-C`
+/// directory it runs in when one is given.
+fn proven_checkout(
     segment: &CommandSegmentV1,
     reference_may_move: bool,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> bool {
+) -> Option<(PathBuf, Option<String>)> {
     if !segment.environment_names.is_empty() {
-        return false;
+        return None;
     }
-    let Some(spec) = parse(segment) else {
-        return false;
-    };
+    let spec = parse(segment)?;
     let chdir_cwd = match spec.chdir {
-        Some(directory) => {
-            let Some(resolved) = resolve_chdir(directory, context) else {
-                return false;
-            };
-            Some(resolved)
-        }
+        Some(directory) => Some(resolve_chdir(directory, context)?),
         None => None,
     };
     let context = super::PathContext {
         cwd: chdir_cwd.as_deref().or(context.cwd),
         ..context
     };
-    let Some(destination) = fresh_destination(spec.destination, context) else {
-        return false;
-    };
-    let result = super::git_worktree::worktree_add_execution_free(
+    let destination = fresh_destination(spec.destination, context)?;
+    super::git_worktree::worktree_add_execution_free(
         segment.executable.as_deref().unwrap_or("git"),
         &spec.leading,
         &destination,
         spec.branch,
         spec.reference,
+        spec.attach,
         reference_may_move,
         context,
         deadline,
         execution_environment,
     )
-    .unwrap_or(false);
-    result
+    .unwrap_or(false)
+    .then_some((destination, chdir_cwd))
 }
 
 fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
@@ -323,13 +332,18 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
     }
     index += 1;
     let mut branch = None;
+    let mut detach = false;
     let mut destination = None;
     let mut reference = None;
     while let Some(argument) = arguments.get(index) {
         match argument.as_str() {
             "-q" | "--quiet" => index += 1,
+            "-d" | "--detach" => {
+                detach = true;
+                index += 1;
+            }
             "-b" if branch.is_none() && reference.is_none() => {
-                branch = arguments.get(index + 1).map(String::as_str);
+                branch = Some(arguments.get(index + 1)?.as_str());
                 index += 2;
             }
             _ if argument.starts_with('-') => return None,
@@ -344,9 +358,22 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
             _ => return None,
         }
     }
-    let branch = branch.filter(|value| valid_branch_name(value))?;
+    // With neither a reference nor `--detach` Git would create a branch
+    // named after the destination, which stays reviewed.
+    match branch {
+        Some(value) if detach || !valid_branch_name(value) => return None,
+        None if !detach && reference.is_none() => return None,
+        _ => {}
+    }
     let destination = destination.filter(|value| valid_path_text(value))?;
-    if reference.is_some_and(|value| !valid_local_reference(value)) {
+    // A bare name such as `feat/x` is accepted only without `-b` and
+    // `--detach`, where Git checks out the existing branch of that name (or
+    // detaches at what the name resolves to) and the probe reads the same
+    // commit. With `-b` or `--detach` the reference stays qualified.
+    let attach = branch.is_none() && !detach;
+    if reference.is_some_and(|value| {
+        !(valid_local_reference(value) || (attach && valid_branch_name(value)))
+    }) {
         return None;
     }
     Some(WorktreeAdd {
@@ -355,66 +382,8 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
         branch,
         destination,
         reference,
+        attach,
     })
-}
-
-pub(super) fn valid_branch_name(value: &str) -> bool {
-    valid_ref_component(value)
-        && !value.starts_with('-')
-        && !value.ends_with('.')
-        && !value.ends_with('/')
-        && !value.contains("..")
-        && !value.contains("@{")
-        && !value.ends_with(".lock")
-}
-
-fn valid_local_reference(value: &str) -> bool {
-    value == "HEAD"
-        || (value
-            .strip_prefix("refs/heads/")
-            .or_else(|| value.strip_prefix("refs/tags/"))
-            .or_else(|| value.strip_prefix("refs/remotes/"))
-            .or_else(|| value.strip_prefix("origin/"))
-            .is_some_and(valid_ref_component))
-}
-
-fn valid_ref_component(value: &str) -> bool {
-    value.len() <= MAX_GIT_NAME_BYTES
-        && !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/'))
-        && !value
-            .split('/')
-            .any(|part| part.is_empty() || part == "." || part == "..")
-        && !value.contains("..")
-        && !value.contains("@{")
-        && !value.ends_with('.')
-        && !value.ends_with('/')
-        && !value.ends_with(".lock")
-}
-
-/// A relative destination may start by climbing out of the repository, as in
-/// `../report-worktree`, the usual sibling layout; `fresh_destination` then
-/// requires the canonical parent to stay under home or an owned temporary
-/// directory.
-fn valid_path_text(value: &str) -> bool {
-    let absolute = value.strip_prefix('/');
-    let mut parts = absolute.unwrap_or(value).split('/').peekable();
-    if absolute.is_none() {
-        while parts.next_if_eq(&"..").is_some() {}
-    }
-    let parts: Vec<&str> = parts.collect();
-    value.len() <= MAX_DESTINATION_BYTES
-        && !parts.is_empty()
-        && value.trim() == value
-        && !value.starts_with('~')
-        && !value.contains([
-            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}', '\\',
-        ])
-        && !parts
-            .iter()
-            .any(|part| part.is_empty() || *part == "." || *part == "..")
 }
 
 /// The directory `git -C <dir>` enters: absolute or relative to the context

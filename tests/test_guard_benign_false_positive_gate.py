@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_e
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields
+from tests.native_gate_retry import UNAVAILABLE_REASON, review_with_unavailable_retry
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
@@ -64,7 +65,7 @@ _FIXED_TOOLS = {
 _ALLOWED_PR = {"unassigned"}
 # The session-* cases replay prompts users approved by hand. Those still
 # reviewed on Linux CI are recorded here until their fixes land.
-_PENDING_CEILING = 24
+_PENDING_CEILING = 19
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
@@ -201,13 +202,17 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     }
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
-    result = worker.review_http_payload(
-        payload=payload,
-        params={},
-        default_harness=case.harness,
-        home_dir=fixture.home,
-        guard_home=fixture.guard_home,
-        workspace=fixture.cwd(case.cwd),
+    # Approval baselines stay from before the first attempt, so a retry never hides a row.
+    result = review_with_unavailable_retry(
+        case.case_id,
+        lambda: worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness=case.harness,
+            home_dir=fixture.home,
+            guard_home=fixture.guard_home,
+            workspace=fixture.cwd(case.cwd),
+        ),
     )
     _ROWS[case.case_id] = approval_rows(worker.store, known)
     routed = _harness_route(case, result, payload, fixture)
@@ -336,6 +341,7 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         assert _decision(result) != "allow" or approvals > 0 or _contained(result), (
             f"negative control was allowed: {description}"
         )
+        assert _reason(result) != UNAVAILABLE_REASON, f"native review unavailable: {description}"
         return
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
     if case.case_id in _PENDING_FIX:

@@ -128,3 +128,71 @@ fn the_private_alternative_runs_without_review() {
         assert_ne!(action, "allow", "{command}");
     }
 }
+
+#[test]
+fn a_push_to_the_remote_a_private_create_adds_names_both_steps() {
+    for (command, create, push) in [
+        (
+            "gh repo create todo-app --private --source=. && git push -u origin main",
+            1,
+            2,
+        ),
+        (
+            "gh repo create todo-app --source . --private --remote origin -d \"A small app\" && git push --set-upstream origin main",
+            1,
+            2,
+        ),
+        (
+            "git add . && git commit -m \"Initial commit\" && gh repo create todo-app -s . --private && git push origin HEAD",
+            3,
+            4,
+        ),
+        (
+            "gh repo create todo-app --private --source=./ --remote=origin; git push -u origin main",
+            1,
+            2,
+        ),
+    ] {
+        let (action, code, reason) = review(command);
+        assert_eq!(action, "review", "{command}");
+        assert_eq!(code, "native_command_review_required", "{command}");
+        assert!(
+            reason.contains(&format!(
+                "step {push} of this command (`git push`) pushes to the remote that step {create} (`gh repo create`) adds"
+            )),
+            "{command}: {reason}"
+        );
+        assert!(
+            reason.contains("Run the steps as separate commands, in order"),
+            "{reason}"
+        );
+        assert!(!reason.contains("todo-app"), "{reason}");
+        assert!(!reason.contains("main"), "{reason}");
+    }
+}
+
+#[test]
+fn pushes_the_create_step_does_not_set_up_keep_other_reasons() {
+    for command in [
+        // No remote is added, or it is added under another name.
+        "gh repo create todo-app --private && git push -u origin main",
+        "gh repo create todo-app --private --source=. --remote upstream && git push -u origin main",
+        // The push runs before the remote exists, or there are two of them.
+        "git push -u origin main && gh repo create todo-app --private --source=.",
+        "gh repo create todo-app --private --source=. && git push origin main && git push origin topic",
+        // A push that is not the plain origin form, or another create shape.
+        "gh repo create todo-app --private --source=. && git push --force origin main",
+        "gh repo create todo-app --private --source=. && git -C ../other push origin main",
+        "gh repo create example-org/todo-app --private --source=. && git push -u origin main",
+        "GH_HOST=example.com gh repo create todo-app --private --source=. && git push -u origin main",
+        "/usr/local/bin/gh repo create todo-app --private --source=. && git push -u origin main",
+        "cd app && gh repo create todo-app --private --source=. && git push -u origin main",
+    ] {
+        let (action, _, reason) = review(command);
+        assert_ne!(action, "allow", "{command}");
+        assert!(
+            !reason.contains("Guard cannot check a remote before it exists"),
+            "{command}: {reason}"
+        );
+    }
+}

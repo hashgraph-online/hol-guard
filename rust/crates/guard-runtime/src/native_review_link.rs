@@ -19,10 +19,12 @@ const SESSION_PREFIX: &str = "gld1";
 const SESSION_AUDIENCE: &str = "guard-local-daemon";
 const SESSION_VERSION: &str = "guard-local-daemon-session.v1";
 const SESSION_TTL_MICROS: i64 = 12 * 60 * 60 * 1_000_000;
-const OPEN_GUARD: &str = "Open HOL Guard to approve or keep this blocked:";
+pub(crate) const OPEN_GUARD: &str = "Open HOL Guard to approve or keep this blocked:";
 const SIGNED_LINK_UNAVAILABLE: &str =
     "HOL Guard could not create a signed approval link; open Inbox from Guard on this device, then retry.";
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
+/// `auth_token_path(guard_home)` (`daemon/auth_token.py`).
+const AUTH_TOKEN_FILE: &str = "daemon-auth-token";
 
 /// `build_local_dashboard_session_token(auth_token=..., surface=...)` at
 /// `now_micros` (UTC microseconds since the epoch).
@@ -166,6 +168,22 @@ fn with_review_url(
         return Some(stripped.to_owned());
     }
     Some(format!("{stripped} {OPEN_GUARD} {live_url}."))
+}
+
+/// Whether `live_approval_review_url(url, guard_home=...)`
+/// (`approval_hook_copy.py`) hands `url` back unchanged, whether or not the
+/// caller can import Guard: `guard_home` holds no daemon auth token file, so
+/// none is ever loaded, or `url` is a link this module reproduces whose host
+/// `is_loopback_approval_url` rejects. A token file that exists counts as a
+/// token, however it reads.
+pub(crate) fn review_url_stays_unsigned(url: &str, guard_home: &std::path::Path) -> bool {
+    if approval_link(url).is_some_and(|link| !link.loopback) {
+        return true;
+    }
+    matches!(
+        guard_home.join(AUTH_TOKEN_FILE).symlink_metadata(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound
+    )
 }
 
 /// `native_review_reason(canonical_harness, reason, approval_url, guard_home=...)`

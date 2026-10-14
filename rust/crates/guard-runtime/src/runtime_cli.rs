@@ -17,29 +17,30 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if command == "self-test" && flag == "--json" => {
             write_json(&serde_json::json!({"ok": true, "capabilities": capabilities()}))
         }
-        #[cfg(unix)]
         [command, marker, config]
             if command == "claude-hook-bridge" && marker == claude_hook_bridge::BRIDGE_MARKER =>
         {
             claude_hook_bridge::run(config)
         }
-        #[cfg(unix)]
         [command, python_argv @ ..]
             if command == codex_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
-        #[cfg(unix)]
         [command, python_argv @ ..]
             if command == bounded_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(bounded_hook_bridge::run(python_argv))
         }
-        #[cfg(unix)]
         [command, python_argv @ ..]
             if command == cursor_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
+        }
+        [command, python_argv @ ..]
+            if command == mcp_relay::RELAY_COMMAND && python_argv.len() >= 2 =>
+        {
+            std::process::exit(mcp_relay::run(python_argv))
         }
         [command, flag] if command == "hook" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;

@@ -97,9 +97,12 @@ pub(super) fn evaluate(
     let language = input.get("language")?.as_str()?;
     if !matches!(language, "js" | "py")
         || !input.iter().all(|(key, value)| match key.as_str() {
-            "code" | "language" | "title" => value.is_string(),
-            "reset" => value.is_boolean(),
-            "timeout" => value.is_number(),
+            "code" | "language" => value.is_string(),
+            // Codex-style code mode sends `null` for an optional field the
+            // model left unset; it means the default, like an absent key.
+            "title" => value.is_string() || value.is_null(),
+            "reset" => value.is_boolean() || value.is_null(),
+            "timeout" => value.is_number() || value.is_null(),
             _ => false,
         })
     {

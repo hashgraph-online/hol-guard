@@ -146,6 +146,7 @@ mod read_only_fanout;
 pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
+pub mod developer_inspection_authority;
 pub mod environment_secret_dump;
 pub mod pretool;
 mod runtime_read_paths;

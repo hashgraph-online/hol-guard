@@ -14,10 +14,24 @@ pub(super) fn requires_review(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
+    // Reads in a checkout the same command creates were proven against the
+    // repository whose configuration the new worktree shares.
+    if super::worktree_add::chain::proven(model, context, deadline, execution_environment) {
+        return false;
+    }
     // A proven read prefix holds no Git segment and changes nothing a later
     // read depends on, so the floor judges the command from its `cd` onward.
     if let Some(rest) = super::segment_proof::after_read_prefix(model, context) {
         return requires_review(&rest, context, deadline, execution_environment);
+    }
+    if let Some(rest) = after_git_read_prefix(model, context, deadline, execution_environment) {
+        return requires_review(&rest, context, deadline, execution_environment);
+    }
+    // Past this point every Git read is probed in one directory. A later
+    // `cd` the read prefixes above did not account for moves the reads after
+    // it somewhere this probe never looked.
+    if git_after_later_cd(model) {
+        return true;
     }
     let destination = super::segment_proof::verified_cwd_compound_context(model, context);
     let read_context = super::PathContext {
@@ -103,12 +117,12 @@ pub(super) fn requires_review(
                 return false;
             }
             let inspection = inspections[index];
-            // Inert names (`CI`, `LANG`, ...) change no Git behavior, so the
-            // segment keeps its own permission decision.
+            // Inert names (`CI`, `LANG`, ...) and the commit identity change
+            // no Git behavior, so the segment keeps its own permission decision.
             segment
                 .environment_names
                 .iter()
-                .any(|name| !crate::command_compatibility::inert_environment_name(name))
+                .any(|name| !crate::command_compatibility::inert_git_environment_name(name))
                 || !super::directory_targets::drive_targets_quoted(segment)
                 || inspection == Some(false)
                 // Only inspection operations have a configuration proof to
@@ -117,4 +131,153 @@ pub(super) fn requires_review(
                 || (inspection.is_some() && index > 0 && (0..index).any(|prior| !settled(prior)))
         })
     })
+}
+
+/// The command from its only `cd` onward, when everything before the `cd`
+/// is a Git read proven helper-free in the reported directory, or a read the
+/// plain read prefix also accepts. `git log -5 && git status --short | head
+/// && cd ../other && git log -5` then gets the same floor as
+/// `cd ../other && git log -5`: a proven read writes no configuration, ref
+/// or hook the later reads could pick up. A Git write, a configuration change
+/// or anything that can run a hook leaves no proven read, so it stays in the
+/// floor's judgement of the whole command.
+fn after_git_read_prefix(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<CanonicalCommandV1> {
+    after_prefix(model, |prefix, index| {
+        let segment = &prefix.segments[index];
+        let git = segment
+            .executable
+            .as_deref()
+            .is_some_and(|executable| super::executable_basename(executable) == "git");
+        if git {
+            super::git_remote_ops::proven_read(
+                prefix,
+                index,
+                context,
+                deadline,
+                execution_environment,
+            )
+        } else {
+            super::segment_proof::cwd_read_executable(segment.executable.as_deref())
+                && super::segment_proof::exact_safe_segment_with_context(
+                    prefix, segment, false, context,
+                )
+        }
+    })
+}
+
+/// The command from its only `cd` onward when everything before the `cd` is
+/// a read the plain segment proofs accept, Git reads included. The allow path
+/// uses this lexical split; `requires_review` still insists that each Git
+/// read in the prefix is proven helper-free before it trusts the split.
+pub(super) fn after_safe_git_read_prefix(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: super::PathContext<'_>,
+) -> Option<CanonicalCommandV1> {
+    after_prefix(model, |prefix, index| {
+        let segment = &prefix.segments[index];
+        super::segment_proof::cwd_read_executable(segment.executable.as_deref())
+            && super::segment_proof::exact_safe_segment_with_context(
+                prefix,
+                segment,
+                allow_git_helper_context,
+                context,
+            )
+    })
+}
+
+fn after_prefix(
+    model: &CanonicalCommandV1,
+    proven_segment: impl Fn(&CanonicalCommandV1, usize) -> bool,
+) -> Option<CanonicalCommandV1> {
+    if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
+        return None;
+    }
+    let mut changes = model
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(_, segment)| segment.executable.as_deref() == Some("cd"));
+    let (start, _) = changes.next()?;
+    if start == 0 || changes.next().is_some() {
+        return None;
+    }
+    for index in 1..=start {
+        let separator = super::worktree_add::separator_between(model, index - 1, index)?;
+        let expected: &[&str] = if index == start {
+            &["&&"]
+        } else {
+            &["&&", "|"]
+        };
+        if !expected.contains(&separator.trim()) {
+            return None;
+        }
+    }
+    let mut prefix = model.clone();
+    prefix.segments.truncate(start);
+    let proven = (0..start).all(|index| {
+        let segment = &prefix.segments[index];
+        segment.environment_names.is_empty()
+            && segment.wrapper_chain.is_empty()
+            && !segment.path_overridden
+            && proven_segment(&prefix, index)
+    });
+    if !proven {
+        return None;
+    }
+    let mut rest = model.clone();
+    rest.segments = model.segments[start..].to_vec();
+    Some(rest)
+}
+
+/// Whether a Git inspection runs after a `cd` that is not the command's first
+/// segment. Other Git operations keep their own native permission floors,
+/// which judge the moved directory themselves.
+fn git_after_later_cd(model: &CanonicalCommandV1) -> bool {
+    let mut moved = false;
+    model.segments.iter().enumerate().any(|(index, segment)| {
+        let basename = segment
+            .executable
+            .as_deref()
+            .map(super::executable_basename);
+        if index > 0 && basename == Some("cd") {
+            moved = true;
+        }
+        moved && basename == Some("git") && may_inspect(&segment.arguments)
+    })
+}
+
+/// Whether Git arguments may name an inspection operation. Global options that
+/// relocate or reconfigure Git count as inspections, so they stay reviewed.
+fn may_inspect(arguments: &[String]) -> bool {
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
+        match argument.as_str() {
+            "-C" => index += 2,
+            "--no-pager" | "-P" | "--no-replace-objects" | "--literal-pathspecs" => index += 1,
+            option if option.starts_with('-') => return true,
+            operation => {
+                return matches!(
+                    operation,
+                    "status"
+                        | "diff"
+                        | "log"
+                        | "show"
+                        | "grep"
+                        | "branch"
+                        | "hash-object"
+                        | "config"
+                        | "merge-base"
+                        | "ls-tree"
+                        | "cat-file"
+                )
+            }
+        }
+    }
+    true
 }

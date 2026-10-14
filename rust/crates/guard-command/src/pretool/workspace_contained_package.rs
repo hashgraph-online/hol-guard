@@ -3,6 +3,14 @@
 //! Scripts, builds, tests and version probes run workspace code the sandbox
 //! bounds. Registry verbs and every other package ecosystem keep their
 //! existing admission.
+//!
+//! Cargo stays out even with a committed `Cargo.lock` and `--locked`. Its
+//! `build.rs` scripts and proc macros run dependency code like npm scripts,
+//! but a Node project keeps its tools and dependencies in `node_modules`
+//! inside the workspace. A rustup toolchain lives in `~/.rustup` and crate
+//! sources in `~/.cargo/registry`, beside `~/.cargo/credentials.toml`, all
+//! outside what the sandbox may read, so a contained `cargo check` cannot
+//! start. Admitting it needs read grants for those trees first.
 use crate::CanonicalCommandV1;
 
 // Node package managers. Their scripts, builds, tests and version probes run
@@ -143,3 +151,7 @@ pub(super) fn local_package_work(model: &CanonicalCommandV1, installed_runners: 
                 .any(|argument| REGISTRY_VERBS.contains(&argument.to_ascii_lowercase().as_str()))
     })
 }
+
+#[cfg(test)]
+#[path = "workspace_contained_cargo_tests.rs"]
+mod cargo_tests;

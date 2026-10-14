@@ -11,7 +11,8 @@
 //! file can whitelist a hidden file such as `.env`, and `rg` searches inside a
 //! directory named on its command line even when that directory is ignored.
 //! So every component between the repository root and the named directory
-//! must be visible and not plainly ignored, and any `.ignore` or `.rgignore`
+//! must be visible, or a hidden project-metadata directory such as `.github`,
+//! and not plainly ignored, and any `.ignore` or `.rgignore`
 //! file, or any negated pattern in a `.gitignore` or the repository's
 //! `info/exclude`, sends the search to review.
 use super::{tree, ReadContext};
@@ -76,7 +77,12 @@ fn reachable_by_default(root: &Path, operand: &Path, ignored: &Ignored) -> bool 
         let Some(name) = name.to_str() else {
             return false;
         };
-        if name.starts_with('.') || ignored.prunes(name, index == 0) {
+        // `rg` skips a hidden directory on its own, but searches one named on
+        // its command line. Only a project-metadata name the recursive walk
+        // also admits, such as `.github`, may be named; `.git` never is.
+        let refused_hidden =
+            name.starts_with('.') && !tree::descendant_allowed(&directory.join(name), root, false);
+        if refused_hidden || ignored.prunes(name, index == 0) {
             return false;
         }
         directory.push(name);

@@ -216,6 +216,6 @@ pub(crate) fn codex_hook_response(response: &[(String, PyVal)], event_name: &str
     PyVal::Dict(filtered)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "codex_hook_response_tests.rs"]
 mod tests;

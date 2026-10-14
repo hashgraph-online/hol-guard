@@ -17,8 +17,11 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publication import Native
 FEATURES = (DIRECT_HOOK_REVIEW_FACTS_FEATURE,)
 
 
+LISTENING = {"daemon_host": "127.0.0.1", "daemon_port": 4781}
+
+
 class _Store:
-    def __init__(self, state: object = None, source: object = "default") -> None:
+    def __init__(self, state: object = LISTENING, source: object = "default") -> None:
         self.state = state
         self._guard_source = source
 
@@ -54,19 +57,24 @@ def test_facts_bind_only_for_a_resident_that_accepts_them() -> None:
 @pytest.mark.parametrize(
     ("state", "origin"),
     [
-        (None, "http://127.0.0.1:4781"),
-        ({}, "http://127.0.0.1:4781"),
+        (None, None),
+        ({}, None),
+        ({"daemon_host": "127.0.0.1"}, None),
+        ({"daemon_host": "127.0.0.1", "daemon_port": 0}, None),
+        ({"approval_center_url": " "}, None),
         ({"daemon_host": "::1", "daemon_port": 4781}, "http://[::1]:4781"),
         ({"daemon_host": "127.0.0.1", "daemon_port": 5123}, "http://127.0.0.1:5123"),
-        ({"daemon_host": "127.0.0.1", "daemon_port": 0}, "http://127.0.0.1:4781"),
+        ({"approval_center_url": "http://localhost:6000/"}, "http://localhost:6000"),
         (
             {"approval_center_url": "http://localhost:6000/", "daemon_host": "127.0.0.1", "daemon_port": 5123},
             "http://localhost:6000",
         ),
     ],
 )
-def test_the_origin_is_the_one_the_daemon_links_a_queued_review_to(state: object, origin: str) -> None:
-    assert _bound(_Store(state))["approval_center_origin"] == origin
+def test_the_origin_is_the_one_the_daemon_links_a_queued_review_to(state: object, origin: str | None) -> None:
+    # Before the daemon records where it listens it would link the default
+    # port, which is not where its approval center will be, so no origin binds.
+    assert _bound(_Store(state)).get("approval_center_origin") == origin
 
 
 def test_a_fact_the_resident_cannot_accept_is_left_out(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -152,6 +160,29 @@ def test_an_unbound_or_closed_lane_is_not_rechecked() -> None:
     publisher._recheck_direct_lane_review_facts()
     assert publisher.closed_lane == 0
     assert not publisher._publish_event.is_set()
+
+
+def test_learning_the_listen_origin_after_the_first_publish_keeps_the_lane() -> None:
+    store = _Store(None)
+    publisher = _Publisher(store)
+    assert publisher._direct_lane_review_facts == (None, "/work/daemon")
+
+    store.state = {"daemon_host": "127.0.0.1", "daemon_port": 5123}
+    publisher._recheck_direct_lane_review_facts()
+    assert publisher.closed_lane == 0
+    assert publisher._renewal_after_generation is None
+    assert not publisher._publish_event.is_set()
+
+
+def test_a_moved_cwd_still_closes_a_lane_bound_without_an_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _Store(None)
+    publisher = _Publisher(store)
+    store.state = {"daemon_host": "127.0.0.1", "daemon_port": 5123}
+    monkeypatch.setattr(review.os, "getcwd", lambda: "/work/elsewhere")
+    publisher._recheck_direct_lane_review_facts()
+    assert publisher.closed_lane == 1
+    assert publisher._renewal_after_generation == 7
+    assert publisher._publish_event.is_set()
 
 
 class _LockedStore(_Store):

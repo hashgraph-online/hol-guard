@@ -9,12 +9,12 @@ import re
 import shlex
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .contained_output_filters import Stage, apply_filters, filter_chain, keep_lines
 from .restricted_pytest_validation import _path_is_within
 
-_COUNT = re.compile(r"[0-9]{1,6}")
 _MERGE = re.compile(r"2>&1(?=[ \t|]|\Z)")
 _HOME_CD = re.compile(r"[ \t]*cd[ \t]+~(?=/|[ \t])")
 _OPERATOR = frozenset("();<>|&\n")
@@ -30,21 +30,28 @@ _STATUS_ECHO = re.compile(
 
 @dataclass(frozen=True)
 class OutputFilter:
-    """A trailing `2>&1`, `| head|tail -N` or `; echo "<label>$?"`, applied in-process.
+    """A trailing `2>&1`, output filter chain or `; echo "<label>$?"`.
 
-    `kind` is "head" or "tail" for a bounded filter, else "all".
+    `kind` is "head" or "tail" for one bounded filter, "pipe" for any other
+    chain in `stages` (see `contained_output_filters`), else "all".
     """
 
     kind: str
     count: int
     merge_stderr: bool
     status_label: str | None = None
+    stages: tuple[Stage, ...] = ()
+    pipe_status: list[int] = field(default_factory=list, init=False, compare=False, repr=False)
 
     def status_line(self, exit_code: int) -> str | None:
-        """The echo's output; after a pipe, `$?` is the filter's own status."""
+        """The echo's output; after a pipe, `$?` is the last filter's own status."""
         if self.status_label is None:
             return None
-        return f"{self.status_label}{0 if self.kind in {'head', 'tail'} else exit_code}\n"
+        if self.kind == "pipe":
+            exit_code = self.pipe_status[-1] if self.pipe_status else 0
+        elif self.kind in {"head", "tail"}:
+            exit_code = 0
+        return f"{self.status_label}{exit_code}\n"
 
 
 def _lex(command: str) -> tuple[list[tuple[str, bool]], bool]:
@@ -117,17 +124,6 @@ def _lex(command: str) -> tuple[list[tuple[str, bool]], bool]:
     return tokens, exact
 
 
-def _bounded_filter(arguments: list[tuple[str, bool]]) -> int | None:
-    if any(operator for _value, operator in arguments):
-        return None
-    values = [value for value, _operator in arguments]
-    if len(values) == 1 and values[0].startswith("-") and _COUNT.fullmatch(values[0][1:]):
-        return int(values[0][1:])
-    if len(values) == 2 and values[0] == "-n" and _COUNT.fullmatch(values[1]):
-        return int(values[1])
-    return None
-
-
 def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
     """The repository holding a cd target outside the hook workspace, as native authority finds it.
 
@@ -155,6 +151,54 @@ def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
     return None
 
 
+_DIRECTORY_FLAGS = {"bun": ("--cwd",), "yarn": ("--cwd",), "npm": ("--prefix", "-C"), "pnpm": ("--dir", "-C")}
+_PLAIN_WORD = re.compile(r"[A-Za-z0-9/._@+=:,-]+")
+
+
+def _names_directory_flag(word: str, flags: tuple[str, ...]) -> bool:
+    return any(
+        word.startswith(flag) and (word == flag or word[len(flag)] == "=" or not flag.startswith("--"))
+        for flag in flags
+    )
+
+
+def _package_directory(tokens: list[tuple[str, bool]], base: Path) -> tuple[list[tuple[str, bool]], Path] | None:
+    """`bun --cwd <dir> run build` as `bun run build` in `<dir>`, as native authority reads it.
+
+    One directory flag, before the verb or right after `run`. The directory is
+    joined to the physical working directory and normalized lexically, as the
+    package manager's `path.resolve` does, then resolved on disk. Other
+    spellings return None and keep the unwrapped path.
+    """
+    flags = _DIRECTORY_FLAGS.get(tokens[0][0]) if tokens and not tokens[0][1] else None
+    if flags is None:
+        return None
+    end = next((index for index, (_value, operator) in enumerate(tokens) if operator), len(tokens))
+    words = [value for value, _operator in tokens[1:end]]
+    options = words[: words.index("--")] if "--" in words else words
+    if sum(_names_directory_flag(word, flags) for word in options) != 1:
+        return None
+    index = 1 if words[:1] == ["run"] else 0
+    flag = words[index] if index < len(words) else ""
+    if flag in flags and index + 1 < len(words):
+        value, consumed = words[index + 1], 2
+    elif "=" in flag and flag.split("=", 1)[0] in flags and flag.startswith("--"):
+        value, consumed = flag.split("=", 1)[1], 1
+    else:
+        return None
+    rest = words[:index] + words[index + consumed :]
+    if value.startswith(("-", "~")) or "//" in value or not _PLAIN_WORD.fullmatch(value) or not rest:
+        return None
+    # Only scripts are projected; `bun x`, `npm exec` and other runners keep
+    # their own tool-runner path, as on the native side.
+    if rest[0] not in ("run", "test"):
+        return None
+    directory = Path(os.path.realpath(os.path.normpath(os.path.join(os.path.realpath(base), value))))
+    if not directory.is_dir():
+        raise ValueError("package directory is not a directory")
+    return [tokens[0], *((word, False) for word in rest), *tokens[end:]], directory
+
+
 def _joined_list(tokens: list[tuple[str, bool]]) -> str | None:
     """`a && b && c` of plain words, rejoined, or None for any other shape."""
     segments: list[list[str]] = [[]]
@@ -179,7 +223,10 @@ def peel_contained_wrapper(
     repository (see `sibling_project_root`). A relative target is accepted only
     when it names a sibling repository's root from `cwd`, such as a linked
     worktree beside the checkout; after a cd into a sibling root, the core may
-    be an `&&` list of plain commands, which is re-authorized there. Raises
+    be an `&&` list of plain commands, which is re-authorized there. Only a cd
+    into a sibling root may end in `;`: the directory is resolved here and
+    nothing runs when it is gone, so the core never falls back to the
+    session directory the way the shell would after a failed cd. Raises
     ValueError (or OSError for a missing cd target) for shapes native
     authority never upgrades.
     """
@@ -197,8 +244,9 @@ def peel_contained_wrapper(
     output = None
     sibling_root = False
     if tokens[:1] == [("cd", False)]:
-        if len(tokens) < 4 or tokens[1][1] or tokens[2] != ("&&", True):
+        if len(tokens) < 4 or tokens[1][1] or tokens[2] not in (("&&", True), (";", True)):
             raise ValueError("unsupported cd prefix")
+        sequenced = tokens[2] == (";", True)
         spelled = tokens[1][0]
         # Only an unquoted leading `~` expands, as the native proof requires.
         # `~//x` is home/x. Joining home with a leading slash would drop home,
@@ -220,6 +268,8 @@ def peel_contained_wrapper(
         sibling_root = sibling_project_root(directory, home=home) == directory and not _path_is_within(
             directory, inside
         )
+        if sequenced and not sibling_root:
+            raise ValueError("unsupported cd prefix")
         tokens, wrapped = tokens[3:], True
         joined = _joined_list(tokens) if sibling_root else None
         if joined is not None:
@@ -228,17 +278,25 @@ def peel_contained_wrapper(
                 label = status.group(1) if status.group(1) is not None else status.group(2)
                 output = OutputFilter("all", 0, False, status_label=label)
             return joined, directory, output
+    elif exact and (package := _package_directory(tokens, cwd or workspace)) is not None:
+        tokens, directory = package
+        if not (
+            _path_is_within(directory, workspace.resolve(strict=True))
+            or sibling_project_root(directory, home=home) is not None
+        ):
+            raise ValueError("package directory outside the workspace")
+        wrapped = True
     if ("|", True) in tokens:
         index = tokens.index(("|", True))
-        program = tokens[index + 1 : index + 2]
-        count = _bounded_filter(tokens[index + 2 :])
-        if program not in ([("tail", False)], [("head", False)]) or count is None:
-            raise ValueError("unsupported output filter")
+        stages = filter_chain(tokens[index + 1 :])
         tokens = tokens[:index]
         merge = tokens[-1:] == [("2>&1", True)]
         if merge:
             tokens = tokens[:-1]
-        output = OutputFilter(program[0][0], count, merge)
+        if len(stages) == 1 and stages[0][0] in {"head", "tail"}:
+            output = OutputFilter(stages[0][0], int(stages[0][1]), merge)
+        else:
+            output = OutputFilter("pipe", 0, merge, stages=stages)
         wrapped = True
     elif tokens[-1:] == [("2>&1", True)]:
         tokens = tokens[:-1]
@@ -256,11 +314,12 @@ def peel_contained_wrapper(
 
 @contextlib.contextmanager
 def bounded_output(output: OutputFilter | None) -> Iterator[None]:
-    """Apply head/tail in-process; no external filter runs outside containment.
+    """Apply the output filters to the contained core's captured output.
 
     A bare `2>&1` is one file descriptor in the sandbox, so this wrapper does
-    not buffer that full stream. Head and tail still keep only the requested
-    lines of the replay.
+    not buffer that full stream. Head and tail keep only the requested lines
+    in-process; a grep stage runs the system grep on the captured text alone,
+    with arguments that name no file (see `contained_output_filters`).
     """
     if output is None or (output.kind == "all" and not output.merge_stderr):
         yield
@@ -276,10 +335,13 @@ def bounded_output(output: OutputFilter | None) -> Iterator[None]:
         with contextlib.redirect_stdout(captured), errors:
             yield
     finally:
-        lines = captured.getvalue().splitlines(keepends=True)
-        if output.kind == "head":
-            kept = lines[: output.count]
+        if output.kind == "pipe":
+            text, diagnostics, status = apply_filters(captured.getvalue(), output.stages)
+            output.pipe_status.append(status)
+            if diagnostics:
+                sys.stderr.write(diagnostics)
+                sys.stderr.flush()
         else:
-            kept = lines[len(lines) - output.count :] if output.count else []
-        destination.write("".join(kept))
+            text = "".join(keep_lines(captured.getvalue().splitlines(keepends=True), output.kind, output.count))
+        destination.write(text)
         destination.flush()

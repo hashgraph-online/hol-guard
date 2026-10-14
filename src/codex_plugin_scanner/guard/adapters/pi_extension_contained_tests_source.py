@@ -75,6 +75,8 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
         response.reason_code === "native_python_eval_readonly_containment_required") ||
       (profile === "node-eval-readonly-v1" &&
         response.reason_code === "native_node_eval_readonly_containment_required") ||
+      (profile === "node-eval-readonly-v1" &&
+        response.reason_code === "native_bun_eval_readonly_containment_required") ||
       (profile === "package-test-readonly-v1" &&
         response.reason_code === "native_package_test_readonly_containment_required") ||
       (profile === "node-build-output-v1" &&

@@ -358,7 +358,7 @@ fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
 
 /// `load_guard_daemon_auth_token` (manager.py:1284-:1290) —
 /// `daemon-auth-token`, private parent required.
-fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
+pub(crate) fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
     let token = read_private_regular_text(
         &guard_home.join("daemon-auth-token"),
         DAEMON_AUTH_TOKEN_MAX_BYTES,

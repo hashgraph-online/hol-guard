@@ -155,11 +155,13 @@ fn is_harness_tool(tool: &str) -> bool {
 }
 
 fn is_file_write_tool(tool: &str) -> bool {
+    // `MultiEdit` is one token, so it never matches the `edit` term by itself.
     tool_matches(
         tool,
         &[
             "write",
             "edit",
+            "multiedit",
             "patch",
             "replace",
             "delete",

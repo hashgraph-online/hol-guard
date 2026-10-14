@@ -1,7 +1,7 @@
 //! Native launch plan for `workspace-contained-v1`.
 use super::workspace_linked::admissible_checkout;
 use super::*;
-use crate::pretool::generic::{chain_literals, workspace_redirects};
+use crate::pretool::generic::{chain_literals, contained_publish, workspace_redirects};
 use crate::pretool::workspace_git_config::{linked_git_dirs, workspace_write_denials};
 use crate::pretool::workspace_git_environment::GitVariables;
 use crate::pretool::{command_shape, Shape, WORKSPACE_PROFILE};
@@ -23,6 +23,9 @@ struct Input {
     home: Option<PathBuf>,
     /// The caller's exported Git configuration variables, by value.
     git_environment: BTreeMap<String, String>,
+    /// The receipt runs the checks contained and the trailing Git steps after
+    /// them, outside the sandbox, once Guard proves those steps again.
+    publish_suffix: bool,
 }
 
 fn invalid(message: &str) -> RestrictedPytestError {
@@ -97,7 +100,20 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         ));
     }
     // Re-derive the decision from the exact bytes about to run.
-    let shape = exact_shape(&input.text, &workspace)
+    let (contained, native_suffix) = if input.publish_suffix {
+        let (checks, publish) = contained_publish::split(&input.text)
+            .ok_or_else(|| invalid("The command does not split into checks and Git steps."))?;
+        (checks, Some(publish))
+    } else {
+        (input.text.clone(), None)
+    };
+    let shape = exact_shape(&contained, &workspace)
+        .filter(|shape| {
+            native_suffix.is_none()
+                || (shape.bootstrap.is_none()
+                    && shape.prefix.is_none()
+                    && shape.remainder.is_none())
+        })
         .ok_or_else(|| invalid("The command is not eligible for the workspace sandbox."))?;
     let variables: GitVariables = input
         .git_environment
@@ -106,10 +122,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         .collect();
     let write_denials = workspace_write_denials(&workspace, input.home.as_deref(), &variables)
         .ok_or_else(|| invalid("The repository configuration is not eligible."))?;
-    let text = shape
-        .remainder
-        .clone()
-        .unwrap_or_else(|| input.text.clone());
+    let text = shape.remainder.clone().unwrap_or(contained);
     let (exec_roots, sandbox_path) =
         workspace_exec_roots(&input.search_path, input.home.as_deref(), &workspace);
     // A linked worktree's index, HEAD and objects live in the main checkout's
@@ -141,6 +154,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         "sandbox_path": sandbox_path,
         "bootstrap_git": shape.bootstrap,
         "prefix_command": shape.prefix,
+        "native_suffix": native_suffix,
         "denied_capabilities": [
             "network", "host-home-read", "host-secret-environment", "docker-socket",
             "workspace-credential-read", "git-execution-config-write", "privileged-operation"

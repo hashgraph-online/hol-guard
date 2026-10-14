@@ -15,10 +15,21 @@ from .supply_chain import PACKAGE_BLOCK_REASONS
 CATALOG = Path(__file__).with_name("scenarios.json")
 WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
 WATCH_OUTPUT = "ordinary-watch-fixture"
+_WINDOWS_DRIVE_PATH = re.compile(r"[A-Za-z]:\\.+")
 WATCH_PROMPT = (
     "Run the one exact bash command below once in this disposable fixture. "
     "Wait for its result and stop. Do not substitute tools or request approval."
 )
+
+
+def portable_path(value: str) -> str:
+    """Spell a Windows drive path with forward slashes.
+
+    Bash, PowerShell, and Windows APIs all accept ``C:/Users/...``, and
+    shlex leaves it unquoted. The backslash spelling needs POSIX quotes that
+    PowerShell does not join with a following ``/suffix``.
+    """
+    return value.replace("\\", "/") if _WINDOWS_DRIVE_PATH.fullmatch(value) else value
 
 
 @dataclass(frozen=True)
@@ -38,6 +49,7 @@ class Scenario:
         def expand(text: str, *, command: bool = False) -> str:
             """Substitute fixture values, quoting shell arguments and rejecting unresolved placeholders."""
             for key, value in values.items():
+                value = portable_path(value)
                 text = text.replace("{{" + key + "}}", shlex.quote(value) if command else value)
             if "{{" in text or "}}" in text:
                 raise ValueError(f"unresolved scenario placeholder: {self.id}")

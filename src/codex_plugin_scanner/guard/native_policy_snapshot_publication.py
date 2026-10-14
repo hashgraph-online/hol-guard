@@ -27,6 +27,10 @@ from .native_policy_snapshot_direct_lane_review import (
     with_review_facts,
 )
 from .native_policy_snapshot_direct_lane_saved import with_saved_decision_state
+from .native_policy_snapshot_direct_lane_structured import (
+    bound_structured_output_view,
+    with_structured_output_view,
+)
 from .native_policy_snapshot_harness_postures import (
     HARNESS_POSTURES_BINDING_KEY,
     valid_harness_postures,
@@ -88,6 +92,7 @@ class NativePolicySnapshotPublicationMixin:
                     publisher._republish_preserving_watch()
                 publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
                 publisher._recheck_direct_lane_review_facts()
+                publisher._recheck_direct_lane_structured_output()
             with publisher._condition:
                 if publisher._closed:
                     return
@@ -152,9 +157,37 @@ class NativePolicySnapshotPublicationMixin:
         current = recheckable_review_facts(publisher.store)
         if current is None or current == bound:
             return
+        # A lane published before the daemon recorded where it listens binds
+        # no origin, so learning that origin moves nothing the lane carries.
+        # The next publish binds it.
+        if bound[0] is None and current[1] == bound[1]:
+            return
+        publisher._rebind_direct_lane()
+
+    def _recheck_direct_lane_structured_output(self) -> None:
+        """Rebind the lane once the managed-policy view it carries moves.
+
+        Each reconcile compiles the configs again. A managed policy outside
+        the watched files, such as one in the Windows registry, changes the
+        view without changing an input, so it is compared here.
+        """
+
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        bound = publisher._direct_lane_structured_output
+        if bound is None or publisher._direct_lane_ack_target is None:
+            return
+        if publisher._compiled_structured_output_view == bound:
+            return
+        publisher._rebind_direct_lane()
+
+    def _rebind_direct_lane(self) -> None:
+        """Close the direct lane and queue a republish under the daemon's ACK."""
+
+        publisher = cast("NativePolicySnapshotPublisher", self)
         publisher._close_direct_lane_ack()
         with publisher._condition:
             publisher._direct_lane_review_facts = None
+            publisher._direct_lane_structured_output = None
             snapshot = publisher._snapshot
             generation = snapshot.get("generation") if snapshot is not None else None
             if publisher._closed or not publisher._acked or not isinstance(generation, int) or generation <= 0:
@@ -258,6 +291,11 @@ class NativePolicySnapshotPublicationMixin:
                 store=publisher.store,
                 features=resident_features,
                 blocked_request_mode=publisher._compiled_blocked_request_mode,
+            )
+            direct_lane = with_structured_output_view(
+                direct_lane,
+                features=resident_features,
+                view=publisher._compiled_structured_output_view,
             )
             resident_fingerprint_before = publisher._current_input_fingerprint()[1]
             try:
@@ -378,6 +416,9 @@ class NativePolicySnapshotPublicationMixin:
                             (direct_lane.get("approval_center_origin"), direct_lane.get("review_host_cwd"))
                             if isinstance(direct_lane, Mapping) and review_facts_bound(resident_features)
                             else None
+                        )
+                        publisher._direct_lane_structured_output = bound_structured_output_view(
+                            direct_lane, resident_features
                         )
                         evidence_drain = isinstance(direct_lane, Mapping) and direct_lane.get("evidence_drain") is True
                         publisher._publish_direct_lane_ack(snapshot, evidence_drain=evidence_drain)

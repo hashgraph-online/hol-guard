@@ -143,7 +143,7 @@ pub(crate) fn evaluate(request: &HookAuthorityStateRequestV1) -> Result<Value, &
         key: request
             .integrity_key_b64
             .as_deref()
-            .and_then(|encoded| Base64UrlUnpadded::decode_vec(encoded).ok()),
+            .and_then(|encoded| Base64UrlUnpadded::decode_vec(encoded).ok().map(Into::into)),
         key_id: request.integrity_key_id.as_deref(),
         now: &request.now,
         foreign_key: None,
@@ -219,7 +219,7 @@ fn dedupe(keys: impl IntoIterator<Item = String>) -> Vec<String> {
 
 struct Env<'a> {
     connection: &'a Connection,
-    key: Option<Vec<u8>>,
+    key: Option<zeroize::Zeroizing<Vec<u8>>>,
     key_id: Option<&'a str>,
     now: &'a str,
     /// Set by the direct hook lane, which holds a key the daemon published
@@ -330,7 +330,7 @@ fn direct_notice_transaction(
     let foreign_key = std::cell::Cell::new(false);
     let env = Env {
         connection: &connection,
-        key: key.map(|(bytes, _)| bytes.to_vec()),
+        key: key.map(|(bytes, _)| zeroize::Zeroizing::new(bytes.to_vec())),
         key_id: key.map(|(_, id)| id),
         now,
         foreign_key: Some(&foreign_key),
@@ -491,6 +491,7 @@ impl Env<'_> {
     }
 }
 
+pub(crate) mod direct_record;
 mod flows;
 mod store;
 

@@ -913,8 +913,11 @@ jobs:
         with:
           python-version: "3.12"
           suite: skill-identity
+          shard-index: 0
+          shard-count: 1
 
   macos-gates:
+    name: macos-gates (${{ matrix.shard-index }})
     needs: [plan, native-command-evaluators, macos-native-runtime]
     if: >-
       !cancelled() &&
@@ -923,7 +926,13 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
+    # One runner took over 30 minutes for the whole gate; three shards keep
+    # each well inside the limit.
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard-index: [0, 1, 2]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -932,6 +941,8 @@ jobs:
         with:
           python-version: "3.12"
           suite: gates
+          shard-index: ${{ matrix.shard-index }}
+          shard-count: 3
 
   # Shadow aggregate: reports the merged required-result contract. In shadow mode
   # it needs the full required set and evaluates the planner's lane choice so the

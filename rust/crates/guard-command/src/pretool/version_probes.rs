@@ -35,13 +35,14 @@ pub(super) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
     }
 }
 
-/// A segment that is only a lone version query. The probe reads no project
-/// file, so a verified `cd` before it changes nothing it does.
+/// A segment that is only a lone version query. The probe runs no project
+/// file, so a verified `cd` before it changes nothing it does. `node` and
+/// `python` use the interpreter proof in `safe_scalar`.
 pub(super) fn lone_probe_segment(segment: &crate::CommandSegmentV1) -> bool {
-    segment
-        .executable
-        .as_deref()
-        .is_some_and(|executable| safe_version_probe(executable, &segment.arguments))
+    segment.executable.as_deref().is_some_and(|executable| {
+        safe_version_probe(executable, &segment.arguments)
+            || super::safe_scalar::version_probe_arguments(executable, &segment.arguments)
+    })
 }
 
 fn single_flag_probe(basename: &str, flag: &str) -> bool {

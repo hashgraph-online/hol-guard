@@ -372,3 +372,48 @@ fn a_linked_worktree_writes_only_shared_stores_and_its_admin_entry() {
     });
     assert!(workspace_profile::compose(&value, &[], &[]).is_err());
 }
+
+#[test]
+fn every_profile_string_fits_seatbelts_literal_limit() {
+    // `sandbox-exec` fails with "Error reading string" once one literal
+    // reaches about 1,023 bytes. The first is a typical macOS temporary
+    // workspace; the second needs escaping in every protected pattern.
+    let quoted = format!("/private/tmp/{}/workspace", "\"".repeat(150));
+    for workspace in [
+        "/private/var/folders/x1/abcdefghijklmnopqrstuvwx0000gn/T/guard-work/fix-failing-node-test/workspace",
+        quoted.as_str(),
+    ] {
+        let mut value = input(workspace);
+        value.write_denials = vec![PathBuf::from(format!("{workspace}/tools/hook"))];
+        let profile = workspace_profile::compose(&value, &[], &[]).unwrap();
+        assert!(
+            longest_literal(&profile) <= 1000,
+            "longest Seatbelt literal for {workspace} is {} bytes",
+            longest_literal(&profile)
+        );
+    }
+}
+
+/// Bytes in the longest string literal of `profile`, escapes included.
+fn longest_literal(profile: &str) -> usize {
+    let (mut literal, mut quoted, mut escaped, mut longest) = (0usize, false, false, 0usize);
+    for byte in profile.bytes() {
+        if !quoted {
+            if byte == b'"' {
+                (quoted, literal) = (true, 0);
+            }
+            continue;
+        }
+        literal += 1;
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == b'"' {
+            quoted = false;
+            longest = longest.max(literal - 1);
+        }
+    }
+    assert!(!quoted);
+    longest
+}

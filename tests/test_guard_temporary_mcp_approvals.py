@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.temporary_mcp_approvals import (
 )
 
 
-def _risk(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
     tool_name = str(artifact.metadata.get("tool_name"))
     return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
 
@@ -91,7 +91,7 @@ def test_navigation_url_schema_is_routine_without_false_mismatch(tmp_path, nativ
         schema={"type": "object", "properties": {"url": {"type": "string"}}},
     )
     arguments = {"url": "https://hol.org"}
-    categories = _risk(native_context_digest, artifact, arguments).risk_categories
+    categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
 
     assert categories == ("browser_navigation", "browser_external_domain")
     assert _evaluate(tmp_path, GuardStore(tmp_path / "guard-home"), artifact, arguments).action != "review"
@@ -195,7 +195,7 @@ def test_queue_persists_browser_intent_for_bounded_grant_controls(tmp_path) -> N
         (("browser_interaction",), True),
     ],
 )
-def test_grant_contract_fails_closed_for_hard_risk(categories, eligible) -> None:
+def test_grant_contract_fails_closed_for_hard_projected_call(categories, eligible) -> None:
     artifact = _artifact(tool_name="click")
     payload = temporary_mcp_approval_payload(_browser_request(artifact, categories))
     assert (payload is not None) is eligible

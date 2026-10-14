@@ -25,6 +25,12 @@ pub(crate) use environment::{
     code_or_redirect_environment_name, inert_environment_name, plain_printed_name,
 };
 
+/// Whether `name` changes nothing about how the Git command it prefixes runs:
+/// an inert output or locale setting, or the commit identity.
+pub(crate) fn inert_git_environment_name(name: &str) -> bool {
+    environment::inert_environment_name(name) || environment::git_identity_environment_name(name)
+}
+
 pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     github::arguments_are_read_only(arguments, text)
 }
@@ -268,13 +274,21 @@ pub fn compatibility_observations_with_context(
         if assignment_prefix_is_unsupported(segment) {
             return Err("native_command_compatibility_context_unsupported");
         }
-        if segment
-            .environment_names
-            .iter()
-            .any(|name| !environment::inert_environment_name(name))
-        {
+        // The commit identity only names who Git records; it steers no other
+        // program.
+        let git = basename(segment) == "git";
+        if segment.environment_names.iter().any(|name| {
+            !(environment::inert_environment_name(name)
+                || git && environment::git_identity_environment_name(name))
+        }) {
             steered.push(index);
         }
+        // A trailing `2>&1` only joins stderr to the segment's own stdout. It
+        // writes no file and is not an operand, so the Git and GitHub CLI
+        // grammars attribute the command without it. A quoted `"2>&1"`
+        // operand is not a redirect and stays in place.
+        let merged = crate::pretool::without_stderr_merge(segment);
+        let cli_segment = merged.as_ref().unwrap_or(segment);
         match basename(segment).as_str() {
             "git" => {
                 let proof_context = match &leading_cd {
@@ -284,9 +298,9 @@ pub fn compatibility_observations_with_context(
                     },
                     _ => context,
                 };
-                git::observe_with_contexts(segment, index, &mut result, context, proof_context)
+                git::observe_with_contexts(cli_segment, index, &mut result, context, proof_context)
             }
-            "gh" => github::observe(segment, index, &mut result),
+            "gh" => github::observe(cli_segment, index, &mut result),
             _ => {}
         }
         domains::observe(command, segment, index, &mut result, context);

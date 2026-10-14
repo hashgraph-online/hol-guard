@@ -35,6 +35,23 @@ pub(crate) fn inert_environment_name(name: &str) -> bool {
     ) || name.starts_with("LC_")
 }
 
+/// The author and committer identity Git records in a new commit. Git reads
+/// them only as text for the commit header, so they cannot choose a
+/// repository, a configuration file or a program for Git to run. Every other
+/// `GIT_*` name (`GIT_DIR`, `GIT_CONFIG_*`, `GIT_PAGER`, `GIT_SSH_COMMAND`,
+/// ...) can, and stays non-inert.
+pub(crate) fn git_identity_environment_name(name: &str) -> bool {
+    matches!(
+        name,
+        "GIT_AUTHOR_NAME"
+            | "GIT_AUTHOR_EMAIL"
+            | "GIT_AUTHOR_DATE"
+            | "GIT_COMMITTER_NAME"
+            | "GIT_COMMITTER_EMAIL"
+            | "GIT_COMMITTER_DATE"
+    )
+}
+
 /// Variables that hold locations, the session's identity or display
 /// settings, never a credential, so printing them by name shows no secret.
 /// A name that fits no pattern here, such as `DATABASE_URL`, stays reviewed.

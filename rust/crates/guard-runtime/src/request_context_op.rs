@@ -29,6 +29,12 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
+    pub(crate) fn bounded_milliseconds(milliseconds: u64) -> Self {
+        Self {
+            started: Instant::now(),
+            limit: Duration::from_millis(milliseconds.min(9_000)),
+        }
+    }
     pub(crate) fn check(&self) -> Result<(), &'static str> {
         if self.started.elapsed() >= self.limit {
             return Err(BUDGET_EXCEEDED);

@@ -49,7 +49,6 @@ _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SERVICES}.request_artifacts", "build_file_read_request_artifact", 0),
     (f"{_SERVICES}.request_artifacts", "build_file_write_request_artifact", 0),
     (f"{_SERVICES}.request_artifacts", "command_list_candidate_texts", 0),
-    (f"{_SERVICES}.tool_action_requests", "extract_sensitive_tool_action_request", 0),
     (f"{_SERVICES}.benign_requests", "is_explicitly_benign_native_file_read_request", 0),
     (f"{_SERVICES}.benign_requests", "build_tool_action_request_artifact", 0),
     (f"{_SERVICES}.github_shell_capabilities", "classify_github_shell_capabilities", 0),

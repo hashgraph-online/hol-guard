@@ -146,7 +146,7 @@ pub(crate) fn authenticated_codex_hook_response(
     Ok(py_strip(&text).to_owned())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::hook_endpoint;
 

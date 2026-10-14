@@ -40,6 +40,19 @@ def test_relative_cd_into_a_sibling_root_peels_an_and_list(tmp_path: Path) -> No
     ) == ("npm test", worktree.resolve(), OutputFilter("tail", 5, merge_stderr=True))
 
 
+def test_a_sequence_after_cd_into_a_sibling_root_peels_like_an_and_list(tmp_path: Path) -> None:
+    home, workspace, worktree = linked_home(tmp_path)
+    assert peel_contained_wrapper(
+        f"cd {worktree}; node scripts/report.mjs", workspace=workspace, home=home, cwd=workspace
+    ) == ("node scripts/report.mjs", worktree.resolve(), None)
+    assert peel_contained_wrapper(
+        "cd ../project-report ; npm test && git status", workspace=workspace, home=home, cwd=workspace
+    ) == ("npm test && git status", worktree.resolve(), None)
+    # The cd target is resolved before anything runs; a missing root runs nothing.
+    with pytest.raises(OSError):
+        peel_contained_wrapper(f"cd {home / 'gone'}; npm test", workspace=workspace, home=home, cwd=workspace)
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -57,6 +70,11 @@ def test_relative_cd_into_a_sibling_root_peels_an_and_list(tmp_path: Path) -> No
         "cd ../project-report && npm test && && ls",
         "cd ../project-report && npm test && echo $HOME",
         "cd ../project-report && npm test; ls",
+        # `;` after the cd only for a sibling root, and nowhere later in the list.
+        "cd ../project-report; npm test; ls",
+        "cd ../project-report;; npm test",
+        "cd web; pytest -q",
+        "cd ../loose; pytest -q",
     ],
 )
 def test_other_relative_or_list_shapes_stay_rejected(tmp_path: Path, command: str) -> None:

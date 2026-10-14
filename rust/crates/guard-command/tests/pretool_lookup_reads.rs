@@ -227,6 +227,55 @@ fn git_grep_pager_and_fallback_configuration_still_ask() {
 }
 
 #[test]
+fn git_search_patterns_naming_environment_reads_proceed() {
+    let home = home();
+    let project = home.join("project");
+    let routed = format!(
+        "git -C {} grep -ln \"process.env.CI\" -- src | head -10",
+        project.to_str().unwrap()
+    );
+    for harness in HARNESSES {
+        for command in [
+            routed.as_str(),
+            "git grep -n \"\\.env\" -- src",
+            "git grep -e .ssh/ -e os.environ HEAD",
+            "git log --oneline -S \"process.env.CI\" -- src/one.ts | head -5",
+            "git log --oneline -G.env --grep=process.env",
+            "git log --oneline --grep .env",
+            "git log -S .ssh/ --author dev --oneline",
+        ] {
+            let result = classify(&home, harness, command);
+            assert_eq!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn git_searches_of_credential_paths_or_words_still_ask() {
+    let home = home();
+    for harness in ["omp", "codex"] {
+        for command in [
+            "git grep foo -- .env",
+            "git grep foo .env",
+            "git grep -f .env",
+            "git grep -n password",
+            "git grep -e .env -- src/.env.local",
+            "git log -S secret",
+            "git log -p -S process.env -- .env",
+            "git show HEAD:.env",
+            "git cat-file -p HEAD:.env.local",
+            "git diff -S .env",
+            "git log -p --author -S .env",
+            "git log -p --committer -G .ssh/id_rsa",
+            "git log -p --output out -S .env",
+        ] {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
 fn bun_x_no_install_typecheck_routes_to_the_readonly_tool() {
     let home = home();
     let result = classify(&home, "codex", "bun x --no-install tsc --noEmit");

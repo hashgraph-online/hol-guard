@@ -39,6 +39,7 @@ from tests.gauntlet_replay import (
     payload_input,
     write_global_gitconfig,
 )
+from tests.native_gate_retry import review_with_unavailable_retry
 
 _CASES = expand()
 # The benign gate already records, per Linux CI result, which ordinary cases still warn or review.
@@ -118,13 +119,17 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     }
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
-    result = worker.review_http_payload(
-        payload=payload,
-        params={},
-        default_harness=case.harness,
-        home_dir=fixture.home,
-        guard_home=fixture.guard_home,
-        workspace=fixture.cwd(case.cwd),
+    # Approval baselines stay from before the first attempt, so a retry never hides a row.
+    result = review_with_unavailable_retry(
+        case.case_id,
+        lambda: worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness=case.harness,
+            home_dir=fixture.home,
+            guard_home=fixture.guard_home,
+            workspace=fixture.cwd(case.cwd),
+        ),
     )
     if case.harness == "codex":
         result = route_codex(result, payload, fixture)

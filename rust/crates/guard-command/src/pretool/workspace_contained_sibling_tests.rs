@@ -104,6 +104,10 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
             "cd {} && npm run build && cat package.json",
             other.display()
         ),
+        // The sink resolves the root itself, so a failed `cd` never leaves
+        // the rest running in the session directory; `;` peels like `&&`.
+        format!("cd {}; node scripts/report.mjs", tree.display()),
+        format!("cd {} ; npm run build && ls dist", tree.display()),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -132,13 +136,26 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
             projects.display()
         ),
         format!("cd {} && npm run build && ls dist", projects.display()),
-        // A pipe or `;` is not the `&&` list the sink peels.
+        // A pipe, or `;` anywhere but right after the `cd`, is not the list
+        // the sink peels.
         format!(
             "cd {}/app-report && npm run build && ls | wc -l",
             projects.display()
         ),
         format!(
-            "cd {}/app-report; npm run build && ls dist",
+            "cd {}/app-report; npm run build; ls dist",
+            projects.display()
+        ),
+        format!(
+            "cd {}/app-report && npm run build; ls dist",
+            projects.display()
+        ),
+        // `;` after a cd into a plain directory still has no root to rebase.
+        format!("cd {}/plain; npm run build", projects.display()),
+        // An absolute operand does not move the workspace, so the compile
+        // would have to write `__pycache__` into the sibling from this one.
+        format!(
+            "python3 -m py_compile {}/app-report/scripts/report.py",
             projects.display()
         ),
         // The rest still faces every check it would from that root.

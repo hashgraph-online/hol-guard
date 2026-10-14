@@ -408,6 +408,7 @@ fn answer_with(
         &Context {
             harness: "claude-code",
             payload: &payload,
+            recorded_payload: &payload,
             workspace: &workspace,
             home_dir: vectors["home_dir"].as_str().unwrap(),
             guard_home: &guard_home,

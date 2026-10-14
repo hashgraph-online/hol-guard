@@ -150,7 +150,6 @@ pub(crate) fn validate_package_process_identity(
 /// The process runs this very executable path and started as recorded. Unlike
 /// `validate_package_process_identity` this never hashes a runtime, so a
 /// short-lived caller can afford it; a onefile copy elsewhere fails it.
-#[cfg(unix)]
 pub(crate) fn validate_same_executable_process_identity(
     process_id: u32,
     expected_start_marker: &str,

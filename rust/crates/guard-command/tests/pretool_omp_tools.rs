@@ -479,9 +479,18 @@ fn eval_requires_js_language_exact_tool_and_clean_envelope() {
         json!({"code": code, "language": "js", "url": "https://example.com"}),
         json!({"code": 5, "language": "js"}),
         json!({"language": "js"}),
+        json!({"code": null, "language": "js"}),
+        json!({"code": code, "language": null}),
+        json!({"code": code, "language": "js", "timeout": "30"}),
+        json!({"code": code, "language": "js", "reset": "no"}),
+        json!({"code": code, "language": "js", "title": 1}),
     ] {
         assert!(!allowed(&omp(&f, "eval", input.clone())), "{input}");
     }
+    // Code mode sends `null` for the optional fields the model left unset.
+    let unset =
+        json!({"code": code, "language": "js", "title": null, "timeout": null, "reset": null});
+    assert!(allowed(&omp(&f, "eval", unset)));
     let input = json!({"code": code, "language": "js"});
     assert!(allowed(&omp(&f, "eval", input.clone())));
     assert!(!allowed(&run(&f, "codex", "eval", input.clone())));

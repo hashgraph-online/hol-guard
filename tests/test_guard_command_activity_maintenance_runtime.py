@@ -52,12 +52,6 @@ class _FakeServer:
 
 
 class _ThreadStillStopping:
-    joined: bool = False
-
-    def join(self, timeout: float | None = None) -> None:
-        assert timeout == 5
-        self.joined = True
-
     def is_alive(self) -> bool:
         return True
 
@@ -88,8 +82,6 @@ def test_daemon_restart_rejects_a_still_stopping_maintenance_worker() -> None:
     service = object.__new__(daemon_server.GuardDaemonServer)
     worker = _ThreadStillStopping()
     service._command_activity_maintenance_thread = cast(threading.Thread, cast(object, worker))
-    service._join_command_activity_maintenance()
-    assert worker.joined is True
     assert service._command_activity_maintenance_thread is not None
     with pytest.raises(RuntimeError, match="still stopping"):
         service._require_command_activity_maintenance_stopped()

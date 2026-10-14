@@ -321,7 +321,6 @@ def _native_status(features: tuple[str, ...], path: Path):
     )
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="the native Claude bridge is POSIX-only")
 def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

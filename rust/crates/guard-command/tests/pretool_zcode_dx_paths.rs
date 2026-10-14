@@ -143,12 +143,13 @@ fn tool_bin_directories_list_metadata_only() {
         "ls -la ~/.cargo/bin/tool".to_owned(),
         "ls -la ~/.local/bin/helper".to_owned(),
         format!("ls -la {}/prefix/bin/npm", root.display()),
+        // A home dot-directory that stores no credentials lists by name.
+        "ls -la ~/.bun".to_owned(),
     ] {
         assert_eq!(shell(&allowed, &home, &cwd), "allow", "{allowed}");
     }
     for denied in [
         "ls -la ~/.bun/install/cache/secret",
-        "ls -la ~/.bun",
         "ls -la ~/.cargo/credentials.toml",
         "ls -la ~/.local/share/data",
         "ls -la ~/.local/bin/leak",

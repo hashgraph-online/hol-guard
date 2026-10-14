@@ -165,6 +165,11 @@ pub fn inline_eval(command: &[String]) -> Result<bool, RestrictedPytestError> {
     if PYTHON.is_match(basename(command)) {
         return Ok(python_runtime_args(command).is_some());
     }
+    if basename(command) == "bun" {
+        return Ok(
+            command.len() == 3 && matches!(command[1].as_str(), "-e" | "--eval" | "-p" | "--print")
+        );
+    }
     if !matches!(basename(command), "node" | "nodejs") {
         return Ok(false);
     }

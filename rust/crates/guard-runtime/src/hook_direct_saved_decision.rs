@@ -61,6 +61,9 @@ const ENVELOPE_BYTES: usize = 1_024;
 pub(super) struct Context<'a> {
     pub(super) harness: &'a str,
     pub(super) payload: &'a Map<String, Value>,
+    /// The payload as the daemon records it: no `hook_env`, and the
+    /// execution environment present even when the caller sent none.
+    pub(super) recorded_payload: &'a Map<String, Value>,
     pub(super) workspace: &'a str,
     pub(super) home_dir: &'a str,
     pub(super) guard_home: &'a str,
@@ -143,7 +146,11 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             Err(_) => {}
         }
     }
-    parsed["harness_response"] = consume::answer(context, &result, &exact, receipt, &artifact_id)?;
+    parsed["harness_response"] =
+        match consume::answer(context, &result, &exact, receipt, &artifact_id)? {
+            Some(response) => response,
+            None => review_queue::answer(context, &result, receipt, &exact, &token)?,
+        };
     Ok(parsed)
 }
 
@@ -397,9 +404,11 @@ mod query;
 mod consume;
 
 // Read once the direct lane queues a reviewed `PreToolUse` itself.
-#[allow(dead_code)]
 #[path = "hook_direct_review_request.rs"]
 mod review_request;
+
+#[path = "hook_direct_review_queue.rs"]
+mod review_queue;
 
 #[cfg(test)]
 #[path = "hook_direct_saved_decision_tests.rs"]

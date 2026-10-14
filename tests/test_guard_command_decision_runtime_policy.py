@@ -98,7 +98,7 @@ def test_resident_matcher_failure_reaches_final_runtime_policy(tmp_path: Path, n
     # An uncertain Git attribution is a real matcher failure the resident
     # reports as typed evidence; it must hold the command for review and stay
     # fail-closed at the final runtime policy without leaking matcher detail.
-    reviewed = real_native_command_evaluation("git cat-file -p HEAD")
+    reviewed = real_native_command_evaluation("git cat-file --batch-check")
     snapshot, payload, evaluation = reviewed.snapshot, reviewed.payload, reviewed.evaluation
     command = evaluation.command
     observations = payload["command_extensions"]["observations"]

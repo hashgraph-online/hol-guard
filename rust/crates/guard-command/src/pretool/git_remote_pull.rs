@@ -61,7 +61,7 @@ pub(super) fn fast_forward_inert(
     });
     !routed
         && !repository_lfs_program(repository)
-        && probe.hooks_inert(&["post-merge", "post-index-change"])
+        && probe.hooks_inert(["post-merge", "post-index-change"])
 }
 
 /// The filter `git lfs install` writes to the user's own configuration. A

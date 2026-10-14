@@ -18,6 +18,8 @@ pub(super) fn may_run(operation: &str, options: &[&str]) -> bool {
         // grep honors textconv only with --textconv, which its read proof
         // refuses.
         "branch" | "hash-object" | "config" | "grep" => false,
+        // Only the plain object-read forms, which never convert, reach the probe.
+        "ls-tree" | "cat-file" => false,
         _ => true,
     }
 }

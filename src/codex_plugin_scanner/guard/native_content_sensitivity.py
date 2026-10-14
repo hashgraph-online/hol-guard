@@ -56,8 +56,13 @@ def _binary_signature(status: NativeRuntimeStatus) -> tuple[int, ...] | None:
     )
 
 
-# A small query to a resident that has to be spawned first, and a large one.
+# A small query to a resident that has to be spawned first, a small query to
+# one that is already running, and a large one. The warm bound still has to
+# hold a round trip on a loaded machine and the resident's first query after
+# it starts, which builds its matchers; a shorter bound fails those checks
+# closed although nothing is wrong.
 _COLD_START_SECONDS = 4.0
+_WARM_QUERY_SECONDS = 2.0
 _LARGE_QUERY_SECONDS = 30.0
 
 
@@ -92,7 +97,7 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
     if len(body_bytes) > 12 * 1024 * 1024:
         raise NativeContentSensitivityError("native_content_sensitivity_request_invalid")
     # Without a caller deadline, runtime discovery and a resident spawn get
-    # their own bound; the 0.5 s budget is for a round trip to a warm resident.
+    # their own bound; a resident that is already running gets the warm one.
     deadline = (
         deadline_monotonic
         if deadline_monotonic is not None
@@ -115,7 +120,7 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
         and status.identity is not None
         and native_resident_client_ready(status.identity.path, home)
     ):
-        deadline = min(deadline, time.monotonic() + 0.5)
+        deadline = min(deadline, time.monotonic() + _WARM_QUERY_SECONDS)
     if (
         not status.available
         or not status.compatible
