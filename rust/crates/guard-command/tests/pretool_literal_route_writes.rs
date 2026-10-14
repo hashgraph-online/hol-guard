@@ -183,10 +183,11 @@ fn literal_route_writes_keep_every_other_screen() {
     let home_dotfile = f.home.join(".zshrc");
     let git_hook = f.project.join(".git/hooks/pre-commit");
     for path in [
-        // Other glob metacharacters and parent components stay rejected.
+        // Other glob metacharacters stay rejected, and parent components
+        // never reach past the workspace and verified home.
         "app/[id]/*.ts",
         "app/{a,b}/[id].ts",
-        "app/[id]/../../../outside/escape.ts",
+        "app/[id]/../../../../outside/escape.ts",
         // A bracketed directory that links elsewhere resolves to its target.
         "app/[link]/config",
         // Hidden and protected targets inside the workspace stay reviewed.

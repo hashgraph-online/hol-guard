@@ -93,9 +93,26 @@ fn bounded_write_target(
         // `$` never reaches a colon past the drive, such as an NTFS `::$DATA`
         // stream selector, so a literal name always names the file itself.
         || (value.contains('$') && value.char_indices().any(|(at, c)| c == ':' && at > 1))
-        || value.split(['/', '\\']).any(|part| part == "..")
+        || (!literal_names && value.split(['/', '\\']).any(|part| part == ".."))
     {
         return false;
+    }
+    if value.split(['/', '\\']).any(|part| part == "..") {
+        // A host file tool resolves `../notes.md` against its working
+        // directory by spelling, so screen that resolved path, but only when
+        // the filesystem walks `..` to the same place.
+        return parent_relative_write_target(value, home_dir, cwd, &workspace).is_some_and(
+            |resolved| {
+                bounded_write_target(
+                    &resolved,
+                    home_dir,
+                    cwd,
+                    directory,
+                    allow_home,
+                    literal_names,
+                )
+            },
+        );
     }
     if value.starts_with('~') && expand_home_read_path(value, home_dir).is_none() {
         return false;
@@ -142,6 +159,42 @@ fn bounded_write_target(
         && ((directory && canonical.is_dir()) || single_link_write_target(&canonical))
         && !autostart_write_target(&canonical)
         && !hooks_path::configured_hooks_write(&canonical, home_dir, workspace.to_str())
+}
+
+/// The absolute path a relative `..` write names, when the cwd's spelling and
+/// the filesystem agree on it. A symlinked cwd makes them differ, and is refused.
+fn parent_relative_write_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    workspace: &std::path::Path,
+) -> Option<String> {
+    let supplied = std::path::Path::new(value);
+    if value.starts_with('~') || supplied.has_root() || supplied.is_absolute() {
+        return None;
+    }
+    let root = cwd?;
+    let base = expand_home_read_path(root, home_dir).unwrap_or_else(|| root.to_owned());
+    let base = std::path::Path::new(&base);
+    if !base.is_absolute() {
+        return None;
+    }
+    let mut lexical = std::path::PathBuf::new();
+    for component in base.join(supplied).components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !lexical.pop() || lexical.parent().is_none() {
+                    return None;
+                }
+            }
+            other => lexical.push(other.as_os_str()),
+        }
+    }
+    let physical = super::worktree_writes::canonical_write_target(&workspace.join(supplied))?;
+    (super::worktree_writes::canonical_write_target(&lexical)? == physical)
+        .then(|| lexical.to_str().map(str::to_owned))
+        .flatten()
 }
 
 pub(super) fn safe_file_mutation_arguments(
