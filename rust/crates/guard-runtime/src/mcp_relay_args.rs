@@ -19,7 +19,7 @@ const PROXIES: [(&str, &str, &str, bool); 4] = [
 
 /// One parsed proxy launch. The server-identity fields (`home`, `server_id`,
 /// `source_scope`, `config_path`, `transport`) are parsed and validated now
-/// and feed the native decision authority that replaces the pending one.
+/// and feed the native decision authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) struct RelayArgs {
@@ -130,8 +130,20 @@ pub(crate) fn parse(argv: &[String]) -> Result<RelayArgs, String> {
             .unwrap_or_else(|| default_transport.to_owned()),
         command: required(scalars.command)?,
         args,
-        server_env_keys,
+        server_env_keys: env_keys(server_env_keys),
     })
+}
+
+/// `tuple(dict.fromkeys(key.strip() for key in keys if key.strip()))`.
+fn env_keys(keys: Vec<String>) -> Vec<String> {
+    let mut unique: Vec<String> = Vec::with_capacity(keys.len());
+    for key in keys {
+        let key = crate::context_digest::python_strip(&key);
+        if !key.is_empty() && !unique.iter().any(|seen| seen == key) {
+            unique.push(key.to_owned());
+        }
+    }
+    unique
 }
 
 fn proxy(command: &str) -> Option<(&'static str, &'static str, &'static str, bool)> {

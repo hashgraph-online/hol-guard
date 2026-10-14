@@ -5,16 +5,19 @@
 //! (`curl ... | sh` keeps its review because `sh` has no proof). Every option
 //! is allowlisted, so anything that sends a body, reads a local file, loads a
 //! config, carries credentials, routes through a proxy or socket, or writes a
-//! file keeps the normal review path.
+//! file other than a scratch file keeps the normal review path.
 //!
 //! Loopback, private, link-local and metadata addresses, rebinding names and
 //! names under reserved test suffixes stay reviewed: those resolve to local
-//! services rather than public content. The response body never reaches a
-//! file here; the redirect projection reviews `curl ... > file` through
+//! services rather than public content. The response body reaches a file
+//! only through `-o` naming a scratch file ([`output_targets`]); the redirect
+//! projection holds `curl ... > file` to the same targets through
 //! [`NETWORK_READ_REASON`]. A URL whose path, query or fragment holds a
 //! credential shape, a JWT or a long opaque token stays reviewed, since the
 //! request line itself can carry data to the host.
 
+#[path = "curl_output_targets.rs"]
+pub(in crate::pretool) mod output_targets;
 #[path = "url_secrets.rs"]
 mod url_secrets;
 
@@ -79,6 +82,7 @@ const CREDENTIAL_TERMS: [&str; 9] = [
 pub(super) fn safe_curl_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
 ) -> bool {
     if model.dialect != "posix" || segment.pipeline_index != 0 {
         return false;
@@ -105,7 +109,7 @@ pub(super) fn safe_curl_segment(
             index += 1;
             continue;
         }
-        let Some(consumed) = option_consumed(arguments, index) else {
+        let Some(consumed) = option_consumed(arguments, index, context) else {
             return false;
         };
         if let Some(url) = url_option(arguments, index) {
@@ -161,7 +165,11 @@ fn url_option(arguments: &[String], index: usize) -> Option<&str> {
 }
 
 /// How many arguments a proven option takes, or `None` when it is not proven.
-fn option_consumed(arguments: &[String], index: usize) -> Option<usize> {
+fn option_consumed(
+    arguments: &[String],
+    index: usize,
+    context: super::PathContext<'_>,
+) -> Option<usize> {
     let argument = arguments[index].as_str();
     if let Some(long) = argument.strip_prefix("--") {
         let (name, inline) = match long.split_once('=') {
@@ -177,7 +185,7 @@ fn option_consumed(arguments: &[String], index: usize) -> Option<usize> {
             None => arguments.get(index + 1)?.as_str(),
         };
         let consumed = if inline.is_some() { 1 } else { 2 };
-        return long_value_safe(&option, value).then_some(consumed);
+        return long_value_safe(&option, value, context).then_some(consumed);
     }
     let cluster = &argument[1..];
     for (offset, short) in cluster.char_indices() {
@@ -193,12 +201,12 @@ fn option_consumed(arguments: &[String], index: usize) -> Option<usize> {
         } else {
             (attached, 1)
         };
-        return short_value_safe(short, value).then_some(consumed);
+        return short_value_safe(short, value, context).then_some(consumed);
     }
     Some(1)
 }
 
-fn short_value_safe(short: char, value: &str) -> bool {
+fn short_value_safe(short: char, value: &str, context: super::PathContext<'_>) -> bool {
     let long = match short {
         'm' => "--max-time",
         'H' => "--header",
@@ -208,10 +216,10 @@ fn short_value_safe(short: char, value: &str) -> bool {
         'A' => "--user-agent",
         _ => return false,
     };
-    long_value_safe(long, value)
+    long_value_safe(long, value, context)
 }
 
-fn long_value_safe(option: &str, value: &str) -> bool {
+fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>) -> bool {
     if expands(value) {
         return false;
     }
@@ -221,7 +229,7 @@ fn long_value_safe(option: &str, value: &str) -> bool {
         "--header" => safe_header(value),
         // `%output{...}` makes curl write a file.
         "--write-out" => !value.to_ascii_lowercase().contains("%output"),
-        "--output" => value == "/dev/null",
+        "--output" => value == "/dev/null" || output_targets::scratch_output_target(value, context),
         "--user-agent" => !value.is_empty(),
         _ if NUMERIC_OPTIONS.contains(&option) => {
             !value.is_empty()

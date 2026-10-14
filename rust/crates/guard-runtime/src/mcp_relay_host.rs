@@ -21,7 +21,9 @@ const HOST_QUEUE: usize = 16;
 /// One read from the host.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum HostRead {
-    Message(Value),
+    /// A decoded object, with the host's `params.arguments` key order when it
+    /// is a `tools/call` whose arguments have more than one key.
+    Message(Value, Option<Vec<String>>),
     /// No message arrived within the requested timeout.
     Timeout,
     /// The host closed its output stream.
@@ -78,10 +80,27 @@ fn read_line(reader: &mut impl BufRead, limit: usize) -> io::Result<Line> {
 /// `json.loads(line)` followed by the proxy's use of the result as a dict.
 pub(crate) fn decode(line: &[u8]) -> HostRead {
     match serde_json::from_slice::<Value>(line) {
-        Ok(message @ Value::Object(_)) => HostRead::Message(message),
+        Ok(message @ Value::Object(_)) => {
+            let order = if needs_order(&message) {
+                crate::mcp_relay_order::argument_order(line)
+            } else {
+                None
+            };
+            HostRead::Message(message, order)
+        }
         Ok(_) => HostRead::Invalid("mcp_relay_host_message_not_object"),
         Err(_) => HostRead::Invalid("mcp_relay_host_message_invalid"),
     }
+}
+
+/// Whether the decoded map lost an argument order the decision depends on.
+fn needs_order(message: &Value) -> bool {
+    message.get("method").and_then(Value::as_str) == Some("tools/call")
+        && message
+            .get("params")
+            .and_then(|params| params.get("arguments"))
+            .and_then(Value::as_object)
+            .is_some_and(|arguments| arguments.len() > 1)
 }
 
 fn pump(reader: impl Read, sender: &mpsc::SyncSender<HostRead>) {
@@ -93,7 +112,7 @@ fn pump(reader: impl Read, sender: &mpsc::SyncSender<HostRead>) {
             Ok(Line::TooLong) => HostRead::Invalid("mcp_relay_host_message_too_large"),
             Err(_) => HostRead::Invalid("mcp_relay_host_read_failed"),
         };
-        let last = !matches!(item, HostRead::Message(_));
+        let last = !matches!(item, HostRead::Message(..));
         if sender.send(item).is_err() || last {
             return;
         }

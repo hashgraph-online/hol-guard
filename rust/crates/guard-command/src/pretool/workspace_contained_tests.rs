@@ -65,8 +65,6 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "echo hi > scratch.txt && rm scratch.txt",
         "rmdir node_modules/zod-dir",
         "rm -d build",
-        "cat package.json > copy.json && head -3 copy.json",
-        "find src -type f > files.txt; wc -l files.txt",
         "yarn build",
         "pnpm run test:unit",
         // These Git forms keep every uncommitted change reachable.

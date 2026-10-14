@@ -1,6 +1,7 @@
 //! Which literal output targets the redirect projection may remove: a path
 //! the shell opens as written, inside the working directory or a temporary
-//! root, never hidden, credential-shaped or reached through a symlink.
+//! root, never credential-shaped or reached through a symlink, and hidden
+//! only as a plain scratch path such as `.tmp/log.txt`.
 
 use crate::pretool::PathContext;
 
@@ -43,14 +44,21 @@ pub(super) fn safe_output_target(target: &str, context: PathContext<'_>) -> bool
     if target.starts_with('/') {
         return false;
     }
-    // Hidden components cover dotfiles, `.git/hooks`, and `.env` targets.
-    if path.components().any(|component| match component {
-        std::path::Component::Normal(name) => {
-            name.to_str().is_none_or(|name| name.starts_with('.'))
+    let mut hidden = false;
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(name) => match name.to_str() {
+                Some(name) => hidden |= name.starts_with('.'),
+                None => return false,
+            },
+            std::path::Component::RootDir | std::path::Component::CurDir => {}
+            _ => return false,
         }
-        std::path::Component::RootDir | std::path::Component::CurDir => false,
-        _ => true,
-    }) {
+    }
+    // Hidden components cover dotfiles, `.git/hooks`, `.env` and harness
+    // configuration. Only a plain scratch path the file-edit write check
+    // accepts, such as `.tmp/log.txt`, passes.
+    if hidden && !bounded_write(target, context) {
         return false;
     }
     let cwd = context
@@ -86,6 +94,10 @@ pub(super) fn bounded_write(target: &str, context: PathContext<'_>) -> bool {
     let path = std::path::Path::new(target);
     let under = |base: Option<&str>| base.is_some_and(|base| path.starts_with(base));
     if path.is_absolute() && under(context.home_dir) && !under(context.cwd) {
+        return false;
+    }
+    // Truncating an existing program replaces what a later step may run.
+    if crate::pretool::curl_reads::output_targets::existing_executable(target, context.cwd) {
         return false;
     }
     bounded_native_file_write_target(target, context.home_dir, context.cwd)

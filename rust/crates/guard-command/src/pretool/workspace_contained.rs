@@ -416,7 +416,8 @@ pub(super) fn convert(
         .map_or(command_text, |list| Some(list.text.as_str()));
     // After `cd <sibling root> &&` the sink runs the rest from that root, so
     // the rest is checked with the root as its workspace and working directory.
-    let sibling = sibling::sibling_list(model, context);
+    // One command after a `cd` elsewhere in a sibling runs whole from its root.
+    let sibling = sibling::sibling_run(model, context);
     let root = match &sibling {
         Some((root, _)) => root.to_str(),
         None => Some(cwd),
@@ -428,7 +429,8 @@ pub(super) fn convert(
     else {
         return;
     };
-    let shaped = sibling.as_ref().map_or(model, |(_, rest)| rest);
+    let rest = sibling.as_ref().and_then(|(_, rest)| rest.as_ref());
+    let shaped = rest.unwrap_or(model);
     let context = PathContext {
         cwd: Some(root),
         ..context
@@ -472,12 +474,7 @@ pub(super) fn convert(
             )
         })
         .is_none()
-        || command_shape(
-            shaped,
-            &workspace,
-            command_text.filter(|_| sibling.is_none()),
-        )
-        .is_none()
+        || command_shape(shaped, &workspace, command_text.filter(|_| rest.is_none())).is_none()
         || removal::destroys_workspace(result, issued, &workspace)
         || removal::loses_work(result, issued, context, execution_environment)
     {

@@ -104,6 +104,7 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
     directory(&root.join(".hidden"), 0o755);
     directory(&organization.join("existing"), 0o755);
     directory(&organization.join(".github"), 0o755);
+    directory(&home.join("Library/LaunchAgents"), 0o755);
     for destination in [
         root.join("shared/next"),
         root.join("group/next"),
@@ -112,6 +113,8 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
         organization.join("existing"),
         organization.join(".github/workflows"),
         organization.join("missing/next"),
+        // An autostart location stays reviewed below an owned temporary root.
+        home.join("Library/LaunchAgents/next"),
         std::path::PathBuf::from(format!("/tmp/guard-worktree-direct-{unique}")),
     ] {
         let command = format!("git worktree add {} -b refused HEAD", destination.display());
@@ -167,5 +170,109 @@ fn worktree_add_keeps_repository_filters_reviewed() {
         let result = evaluate(&home, &repository, &command);
         assert_ne!(result.minimum_action, "allow", "{key}");
         git(&home, &repository, &["config", "--unset", key]);
+    }
+}
+
+/// Checking out a branch that already exists into a fresh directory beside
+/// the checkout is the same action whether the target is spelled from the
+/// root or relative to the session, and whatever trails it in a pipe.
+#[test]
+fn worktree_add_attaches_an_existing_branch_beside_the_checkout() {
+    let unique = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let base = if cfg!(target_os = "macos") {
+        std::path::PathBuf::from("/tmp")
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target")
+    };
+    std::fs::create_dir_all(&base).unwrap();
+    let root = std::fs::canonicalize(base)
+        .unwrap()
+        .join(format!("guard-worktree-attach-{unique}"));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let code = home.join("code");
+    let repository = code.join("app");
+    let session = code.join("app-feature");
+    for path in [&root, &home, &code, &repository, &home.join("org")] {
+        directory(path, 0o755);
+    }
+    git(&home, &repository, &["init", "--quiet"]);
+    git(
+        &home,
+        &repository,
+        &["config", "user.name", "Guard Fixture"],
+    );
+    git(
+        &home,
+        &repository,
+        &["config", "user.email", "guard-fixture@example.invalid"],
+    );
+    std::fs::write(repository.join("tracked.txt"), "fixture\n").unwrap();
+    git(&home, &repository, &["add", "tracked.txt"]);
+    git(&home, &repository, &["commit", "--quiet", "-m", "fixture"]);
+    git(&home, &repository, &["branch", "feat/other-branch"]);
+    git(
+        &home,
+        &repository,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "feature",
+            "../app-feature",
+        ],
+    );
+
+    for command in [
+        format!(
+            "git worktree add {} feat/other-branch",
+            home.join("org/app-fixup").display()
+        ),
+        format!(
+            "git worktree add {} feat/other-branch 2>&1 | tail -2",
+            repository.join("wt-x").display()
+        ),
+        "git worktree add ../wt-y feat/other-branch 2>&1 | tail -2".to_owned(),
+        "git worktree add ../wt-z -b feat/y 2>&1 | tail -2".to_owned(),
+    ] {
+        let result = evaluate(&home, &session, &command);
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+
+    directory(&home.join(".config"), 0o755);
+    directory(&home.join("Library/LaunchAgents"), 0o755);
+    directory(&root.join("elsewhere"), 0o755);
+    std::os::unix::fs::symlink(root.join("elsewhere"), code.join("linked")).unwrap();
+    for command in [
+        format!(
+            "git worktree add {} feat/other-branch",
+            home.join(".config/app").display()
+        ),
+        format!(
+            "git worktree add {} feat/other-branch",
+            home.join("Library/LaunchAgents/next").display()
+        ),
+        format!(
+            "git worktree add {} feat/other-branch",
+            code.join("linked/wt").display()
+        ),
+        // Git would create a tracking branch from a remote-tracking ref or
+        // fail, so a name with no local branch is not proven.
+        "git worktree add ../wt-missing feat/missing-branch".to_owned(),
+    ] {
+        let result = evaluate(&home, &session, &command);
+        assert_ne!(result.minimum_action, "allow", "{command}");
     }
 }

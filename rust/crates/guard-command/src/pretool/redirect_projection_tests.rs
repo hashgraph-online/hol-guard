@@ -23,7 +23,7 @@ fn context() -> crate::pretool::PathContext<'static> {
     }
 }
 
-fn controls() -> CompiledNativeCommandControls {
+pub(super) fn controls() -> CompiledNativeCommandControls {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -63,15 +63,16 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
         ),
         ("ls > /dev/null && git status", "ls   && git status", false),
     ] {
+        let projection = project(command, context()).unwrap_or_else(|| panic!("{command}"));
+        // The test workspace does not exist, so no write is bounded.
         assert_eq!(
-            project(command, context()),
-            Some(RedirectProjection {
-                command: projected.to_owned(),
-                writes_file,
-                // The test workspace does not exist, so no write is bounded.
-                bounded_writes: !writes_file,
-                git_chain: None,
-            }),
+            (
+                projection.command.as_str(),
+                projection.writes_file,
+                projection.bounded_writes,
+                projection.git_chain,
+            ),
+            (projected, writes_file, !writes_file, None),
             "{command}"
         );
     }

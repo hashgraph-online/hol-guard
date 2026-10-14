@@ -85,6 +85,11 @@ const KNOWN_SKILL_DOC_ROOTS: &[&str] = &[
     ".agent/skills",
     ".claude/skills",
 ];
+/// Home roots where coding agents keep their own Markdown documents: OMP
+/// artifacts and the plan files Claude Code and Codex users write and read
+/// back. Only plain `.md` files below them qualify; see
+/// `known_artifact_doc_path`.
+const KNOWN_AGENT_DOC_ROOTS: &[&str] = &[".agent/artifacts", ".claude/plans", ".codex/plans"];
 
 fn lowered_parts(path: &Path) -> Vec<String> {
     path.components()
@@ -276,8 +281,9 @@ fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
 
 fn known_artifact_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
     let lexical = resolve_candidate(target, None, home).ok()?;
-    let root = home.join(".agent/artifacts");
-    let relative = lexical.strip_prefix(&root).ok()?;
+    let relative = KNOWN_AGENT_DOC_ROOTS
+        .iter()
+        .find_map(|root| lexical.strip_prefix(home.join(root)).ok())?;
     if contains_symlink_component(&lexical)
         || lexical
             .extension()

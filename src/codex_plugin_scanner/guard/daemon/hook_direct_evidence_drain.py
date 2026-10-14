@@ -7,7 +7,8 @@ channel and records them exactly as the daemon path does. After a
 command activity, and the command-line observation; after a reviewed
 ``PostToolUse`` it is the receipt, the binding capture, and the post-tool
 command activity; after a ``UserPromptSubmit`` it is the receipt and the
-binding capture alone. The publisher advertises the drain in the
+binding capture alone. A tool call the native MCP relay decided is recorded
+by ``mcp_relay_evidence_drain`` as the proxy records it. The publisher advertises the drain in the
 direct-lane binding only while it runs, so a resident never answers directly
 for a daemon that would leave the evidence behind.
 """
@@ -72,7 +73,11 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     from .hook_managed_install_state import _hook_harness_is_unmanaged
     from .hook_native_cli_observer import observe_native_pre_tool_cli
     from .hook_worker_native import _record_native_pre_activity
+    from .mcp_relay_evidence_drain import is_mcp_relay_evidence, record_mcp_relay_evidence
 
+    if is_mcp_relay_evidence(record):
+        # A relayed MCP tool call, recorded as the proxy records it.
+        return record_mcp_relay_evidence(host.store, host.guard_home, record)
     if not isinstance(record, Mapping):
         return False
     harness = record.get("harness")

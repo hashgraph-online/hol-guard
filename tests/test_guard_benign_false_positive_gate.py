@@ -65,7 +65,7 @@ _FIXED_TOOLS = {
 _ALLOWED_PR = {"unassigned"}
 # The session-* cases replay prompts users approved by hand. Those still
 # reviewed on Linux CI are recorded here until their fixes land.
-_PENDING_CEILING = 19
+_PENDING_CEILING = 7
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and

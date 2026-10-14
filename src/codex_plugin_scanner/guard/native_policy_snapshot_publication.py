@@ -93,6 +93,7 @@ class NativePolicySnapshotPublicationMixin:
                 publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
                 publisher._recheck_direct_lane_review_facts()
                 publisher._recheck_direct_lane_structured_output()
+                publisher._recheck_direct_lane_mcp_relay()
             with publisher._condition:
                 if publisher._closed:
                     return
@@ -188,6 +189,7 @@ class NativePolicySnapshotPublicationMixin:
         with publisher._condition:
             publisher._direct_lane_review_facts = None
             publisher._direct_lane_structured_output = None
+            publisher._direct_lane_mcp_relay = None
             snapshot = publisher._snapshot
             generation = snapshot.get("generation") if snapshot is not None else None
             if publisher._closed or not publisher._acked or not isinstance(generation, int) or generation <= 0:
@@ -297,6 +299,7 @@ class NativePolicySnapshotPublicationMixin:
                 features=resident_features,
                 view=publisher._compiled_structured_output_view,
             )
+            direct_lane = publisher._with_mcp_relay_view(direct_lane, resident_features)
             resident_fingerprint_before = publisher._current_input_fingerprint()[1]
             try:
                 business_source = publisher._compiled_business_source()
@@ -420,6 +423,7 @@ class NativePolicySnapshotPublicationMixin:
                         publisher._direct_lane_structured_output = bound_structured_output_view(
                             direct_lane, resident_features
                         )
+                        publisher._bind_mcp_relay_view(direct_lane, resident_features)
                         evidence_drain = isinstance(direct_lane, Mapping) and direct_lane.get("evidence_drain") is True
                         publisher._publish_direct_lane_ack(snapshot, evidence_drain=evidence_drain)
                     else:

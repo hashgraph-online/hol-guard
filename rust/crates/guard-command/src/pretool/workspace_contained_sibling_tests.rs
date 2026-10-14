@@ -192,3 +192,129 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
     )));
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
+
+/// Scripts in the linked worktree: a package whose `node_modules` links into
+/// the main checkout, as a worktree shares its installs, and a package whose
+/// link leaves both trees. Returns the directory outside home holding the
+/// link target and a config file.
+#[cfg(unix)]
+fn worktree_packages(main: &Path, tree: &Path) -> PathBuf {
+    let outside = tree
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("elsewhere");
+    for directory in [
+        main.join("web/node_modules/.bin"),
+        outside.join("node_modules/.bin"),
+        tree.join("web"),
+        tree.join("stray"),
+        tree.join("tools"),
+    ] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    for file in [
+        main.join("web/node_modules/.bin/report"),
+        main.join("web/node_modules/.bin/vite"),
+        outside.join("node_modules/.bin/report"),
+        outside.join("report.config.js"),
+        tree.join("scripts/report.sh"),
+        tree.join("tools/report"),
+    ] {
+        std::fs::write(file, "#!/bin/sh\n").unwrap();
+    }
+    std::os::unix::fs::symlink(main.join("web/node_modules"), tree.join("web/node_modules"))
+        .unwrap();
+    std::os::unix::fs::symlink(
+        outside.join("node_modules"),
+        tree.join("stray/node_modules"),
+    )
+    .unwrap();
+    outside
+}
+
+#[cfg(unix)]
+#[test]
+fn one_command_below_a_sibling_root_runs_contained_from_that_root() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    for command in [
+        format!("cd {}/scripts && ./report.sh", tree.display()),
+        format!(
+            "cd {}/scripts && ./report.sh 2>&1 | tail -15",
+            tree.display()
+        ),
+        // The root itself with an output filter is not the `&&` list above.
+        format!("cd {} && ./tools/report 2>&1 | tail -15", tree.display()),
+        // A worktree package reads its installs from the main checkout,
+        // which the sandbox mounts read-only for a linked worktree.
+        format!(
+            "cd {}/web && ./node_modules/.bin/report build",
+            tree.display()
+        ),
+    ] {
+        assert_eq!(
+            contained(&reason("omp", &home, &main, &command)),
+            host(),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
+    let (home, main, tree) = fixture();
+    let outside = worktree_packages(&main, &tree);
+    let config = outside.join("report.config.js");
+    for command in [
+        // The link resolves outside the repository and its main checkout.
+        format!(
+            "cd {}/stray && ./node_modules/.bin/report build",
+            tree.display()
+        ),
+        format!(
+            "cd {}/web && ./node_modules/.bin/report build --config {}",
+            tree.display(),
+            config.display()
+        ),
+        format!(
+            "cd {}/web && ./node_modules/.bin/report build --config={}",
+            tree.display(),
+            config.display()
+        ),
+        // Unproved, sequenced, or more than one command.
+        "cd ../app-report/scripts && ./report.sh".to_owned(),
+        format!("cd {}/scripts; ./report.sh", tree.display()),
+        format!("cd {}/scripts && ./report.sh && ls", tree.display()),
+        format!("cd {}/scripts && ./report.sh | wc -l", tree.display()),
+    ] {
+        assert!(
+            !contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
+    assert!(!contained(&reason(
+        "cursor",
+        &home,
+        &main,
+        &format!("cd {}/scripts && ./report.sh", tree.display())
+    )));
+    // macOS holds a Vite build to its own read-only output profile instead.
+    if !cfg!(target_os = "macos") {
+        let command = format!(
+            "cd {}/web && ./node_modules/.bin/vite build --config {}",
+            tree.display(),
+            config.display()
+        );
+        assert!(
+            !contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}

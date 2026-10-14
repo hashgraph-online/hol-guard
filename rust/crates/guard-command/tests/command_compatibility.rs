@@ -119,6 +119,27 @@ fn github_reads_have_permission_attribution_without_fabricated_rules() {
 }
 
 #[test]
+fn github_reads_keep_their_permission_after_a_stderr_merge() {
+    for command in [
+        "gh api repos/o/r/actions/jobs/1/logs 2>&1 | grep -A 6 \"Diff in\" | head -40",
+        "gh pr view 123 2>&1",
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert_eq!(observed.permission_matches.len(), 1, "{command}");
+        assert_eq!(
+            observed.permission_matches[0].permission_id,
+            "command.github.permission.read-remote"
+        );
+        assert!(!observed.permission_matches[0].uncertainty, "{command}");
+    }
+    // A quoted `2>&1` is an operand, not a redirect.
+    let quoted = compatibility_observations(&model("gh api repos/o/r '2>&1'"), None).unwrap();
+    assert_eq!(quoted.rule_matches[0].rule_id, "command.github.unknown");
+    assert!(quoted.rule_matches[0].uncertainty);
+}
+
+#[test]
 fn git_disabled_permission_attribution_is_not_lost_on_native_safe_commands() {
     for subcommand in ["status", "diff", "log", "show", "ls-files"] {
         let observed =

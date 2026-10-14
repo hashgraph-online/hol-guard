@@ -10,6 +10,8 @@ use targets::{bounded_write, safe_output_target};
 
 #[path = "redirect_git_chain.rs"]
 pub(super) mod git_chain;
+#[path = "redirect_leading_chain.rs"]
+mod leading_chain;
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -23,6 +25,9 @@ pub(super) struct RedirectProjection {
     /// The files written beside local Git writes when [`git_chain::admits`]
     /// takes a chain; `None` for every other projection.
     pub(super) git_chain: Option<Vec<String>>,
+    /// Every file written is a scratch file, where a network read's body
+    /// may be saved.
+    pub(super) scratch_writes: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,6 +53,11 @@ pub(super) fn project(
     let mut targets: Vec<String> = Vec::new();
     let mut bounded_writes = true;
     let mut temporary_writes = true;
+    let mut scratch_writes = true;
+    // Whether a separator, group or substitution came before a file write,
+    // so another step could run before the shell opens the file.
+    let mut separated = false;
+    let mut late_write = false;
     let mut index = 0usize;
     while index < chars.len() {
         let current = chars[index];
@@ -72,12 +82,17 @@ pub(super) fn project(
                 } else if current == '\\' {
                     escaped = true;
                 }
+                separated |= substitution(&chars, index);
                 out.push(current);
                 index += 1;
                 continue;
             }
             Quote::None => {}
         }
+        // `&>` is a redirect, not a separator.
+        separated |= matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
+            || (current == '&' && chars.get(index + 1) != Some(&'>'))
+            || substitution(&chars, index);
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -88,6 +103,7 @@ pub(super) fn project(
                 continue;
             }
             '>' => {
+                let written = targets.len();
                 index = remove_output_redirect(
                     &chars,
                     index,
@@ -97,6 +113,7 @@ pub(super) fn project(
                     &mut bounded_writes,
                     &mut temporary_writes,
                 )?;
+                late_write |= separated && targets.len() > written;
                 removed = true;
                 continue;
             }
@@ -134,12 +151,16 @@ pub(super) fn project(
     // a target, so a chain may only write absolute temp files beside peers.
     let temporary_chain = temporary_writes && super::super::chain_temporary::peers_only(&model);
     let chain = writes_file && model.segments.len() != 1 && !temporary_chain;
+    let leading_write = chain && bounded_writes && !late_write && leading_chain::admits(&model);
+    scratch_writes &= targets.iter().all(|target| {
+        crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
+    });
     let git_chain =
         (chain && bounded_writes && git_chain::admits(&model, &targets)).then_some(targets);
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none())
+        || (chain && git_chain.is_none() && !leading_write)
     {
         return None;
     }
@@ -158,7 +179,14 @@ pub(super) fn project(
         writes_file,
         bounded_writes,
         git_chain,
+        scratch_writes,
     })
+}
+
+/// `$(` or a backquote: a command substitution runs before the redirect
+/// that follows it opens its file.
+fn substitution(chars: &[char], index: usize) -> bool {
+    chars[index] == '`' || (chars[index] == '$' && chars.get(index + 1) == Some(&'('))
 }
 
 /// Keep the projected command's floors and raise them by any independent
@@ -187,9 +215,9 @@ fn redirect_disqualifies_containment(reason: &str) -> bool {
 pub(super) fn join(
     mut projected: PreToolResultV1,
     raw: PreToolResultV1,
-    writes_file: bool,
-    bounded_writes: bool,
+    projection: &RedirectProjection,
 ) -> PreToolResultV1 {
+    let (writes_file, bounded_writes) = (projection.writes_file, projection.bounded_writes);
     // Stripping a benign descriptor copy must not replace an allow the raw
     // command already earned. A file write still goes through the floors below.
     if !writes_file
@@ -198,7 +226,11 @@ pub(super) fn join(
     {
         return raw;
     }
-    if writes_file && redirect_disqualifies_containment(&projected.reason_code) {
+    // A network read's body may still be saved to a scratch file, which no
+    // tool loads on its own.
+    let scratch_body = projection.scratch_writes
+        && projected.reason_code == crate::pretool::curl_reads::NETWORK_READ_REASON;
+    if writes_file && !scratch_body && redirect_disqualifies_containment(&projected.reason_code) {
         projected.minimum_action = "review".into();
         projected.policy_action = "review".into();
         projected.decision = "deny".into();
@@ -209,8 +241,14 @@ pub(super) fn join(
     }
     projected.action.sensitive_target |= raw.action.sensitive_target;
     projected.action.bounded &= raw.action.bounded;
+    // The raw text's sandbox route is the fallback for a write the parser
+    // could not bound. Once the projection has bounded every target, it
+    // discharges that route the same way it discharges the generic review.
+    let contained_fallback =
+        bounded_writes && raw.reason_code == "native_workspace_containment_required";
     if raw.reason_code != "native_command_review_required"
         && raw.reason_code != "native_command_extension_evaluation_failed"
+        && !contained_fallback
         && rank(&raw.minimum_action) > rank(&projected.minimum_action)
     {
         projected.minimum_action = raw.minimum_action;
@@ -408,3 +446,7 @@ pub(super) fn boundary(value: Option<&char>) -> bool {
 #[cfg(test)]
 #[path = "redirect_projection_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "redirect_scratch_tests.rs"]
+mod scratch_tests;

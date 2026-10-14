@@ -393,3 +393,64 @@ def test_macos_profile_receives_the_linked_worktree(monkeypatch: pytest.MonkeyPa
         payload(), workspace=tmp_path, cwd=tmp_path, authorize=lambda original: receipt(), first_receipt=receipt()
     )
     assert profiles[0]["linked_git"] == LINKED
+
+
+def sibling_layout(tmp_path: Path) -> tuple[Path, Path, Path]:
+    home = tmp_path / "home"
+    session = home / "projects" / "app"
+    sibling = home / "projects" / "app-report"
+    for root in (session, sibling):
+        (root / ".git").mkdir(parents=True)
+        (root / "web").mkdir()
+    return home, session, sibling
+
+
+@pytest.mark.parametrize("target", ["sibling", "session"])
+def test_a_workspace_receipt_runs_a_cd_below_the_root_from_that_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: str
+) -> None:
+    # The sandbox starts only at its root, so the `cd` into a package directory
+    # runs inside it as issued instead of being peeled to a cwd it refuses.
+    home, session, sibling = sibling_layout(tmp_path)
+    root = sibling if target == "sibling" else session
+    command = f"cd {root / 'web'} && ./node_modules/.bin/vite build"
+    ran: list[tuple[object, Path, Path]] = []
+
+    def run(original: object, *, workspace: Path, cwd: Path, **kwargs: object) -> int:
+        ran.append((original, workspace, cwd))
+        return 0
+
+    monkeypatch.setattr(sink, "run_workspace_contained", run)
+    authorized: list[object] = []
+    status = sink.run_authorized_contained_test(
+        payload(command),
+        workspace=session,
+        timeout_seconds=20,
+        authorize=lambda original: authorized.append(original) or receipt(),
+        home_dir=home,
+    )
+    assert status == 0
+    assert authorized == [payload(command)]
+    assert ran == [(payload(command), root.resolve(), root.resolve())]
+
+
+def test_a_cd_below_a_sibling_root_without_a_workspace_receipt_never_runs_there(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home, session, sibling = sibling_layout(tmp_path)
+    command = f"cd {sibling / 'web'} && ./node_modules/.bin/vite build"
+    ran: list[object] = []
+    monkeypatch.setattr(sink, "run_workspace_contained", lambda *args, **kwargs: ran.append(args[0]) or 0)
+    other = receipt(
+        reason_code="native_pytest_readonly_containment_required", required_execution_profile="pytest-readonly-v2"
+    )
+    for denied in (None, receipt(observe_mode=True), other):
+        with pytest.raises(RestrictedPytestError):
+            sink.run_authorized_contained_test(
+                payload(command),
+                workspace=session,
+                timeout_seconds=20,
+                authorize=lambda original, denied=denied: denied if "cd " in str(original) else None,
+                home_dir=home,
+            )
+    assert ran == []

@@ -4,7 +4,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-pub(super) fn autostart_write_target(path: &std::path::Path) -> bool {
+pub(in crate::pretool) fn autostart_write_target(path: &std::path::Path) -> bool {
     let rendered = path
         .to_string_lossy()
         .replace('\\', "/")

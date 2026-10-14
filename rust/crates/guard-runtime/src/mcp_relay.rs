@@ -4,10 +4,11 @@
 //! `guard <harness>-mcp-proxy` command line, launches the verified executable
 //! with the scrubbed environment, and relays JSON-RPC between the host on
 //! stdio and the child without a Python process or per-frame resident round
-//! trips. Every `tools/call` is decided by a `RelayAuthority`; the authority
-//! wired here fails closed until the native decision op is connected, and the
-//! relay feature is not advertised in the runtime capabilities until then, so
-//! installers keep launching the Python proxy.
+//! trips. Every `tools/call` is decided in one round trip to the resident's
+//! `mcp_relay_decide` op, and anything it does not decide is blocked. The
+//! relay feature is not advertised in the runtime capabilities until the
+//! decisions it defers are covered, so installers keep launching the Python
+//! proxy.
 //!
 //! Unix only: the child session relies on process groups.
 
@@ -15,7 +16,7 @@
 pub(crate) const RELAY_COMMAND: &str = "mcp-relay";
 
 /// Capability string installers will gate relay selection on. It is not
-/// advertised until `tools/call` decisions are native.
+/// advertised until every `tools/call` route is native.
 #[cfg_attr(not(all(test, unix)), allow(dead_code))]
 pub(crate) const RELAY_FEATURE: &str = "mcp-stdio-relay-v1";
 
@@ -39,10 +40,10 @@ mod unix {
 
     use crate::guard_config_load::approval_wait_timeout_seconds;
     use crate::mcp_relay_args::parse;
-    use crate::mcp_relay_authority::PendingNativeAuthority;
     use crate::mcp_relay_core::{child_response_timeout, ChildLink, Relay, RelayExit};
     use crate::mcp_relay_host::LineHost;
     use crate::mcp_relay_launch::{inherited_environment, prepare, spawn};
+    use crate::mcp_relay_resident::{ProcessFacts, ResidentRelayAuthority};
 
     fn fail(reason: &str, status: i32) -> i32 {
         eprintln!("hol-guard mcp-relay: {reason}");
@@ -70,6 +71,7 @@ mod unix {
             Ok(launch) => launch,
             Err(reason) => return fail(&reason, 1),
         };
+        let authority = ResidentRelayAuthority::new(&args, &launch, &ProcessFacts::current());
         let mut child = match spawn(&args, &launch) {
             Ok(child) => child,
             Err(reason) => return fail(&reason, 1),
@@ -82,7 +84,7 @@ mod unix {
             }
         };
         let timeout = child_response_timeout(configured);
-        let mut relay = Relay::new(child, host, PendingNativeAuthority, timeout);
+        let mut relay = Relay::new(child, host, authority, timeout);
         let outcome = relay.serve();
         let mut child = relay.into_child();
         match outcome {

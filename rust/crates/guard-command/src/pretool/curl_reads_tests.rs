@@ -1,6 +1,10 @@
 use super::safe_curl_segment;
 
 fn proven(command: &str) -> bool {
+    proven_in(command, crate::pretool::PathContext::default())
+}
+
+fn proven_in(command: &str, context: crate::pretool::PathContext<'_>) -> bool {
     let model = crate::parse_command(&crate::CommandModelRequestV1 {
         command: command.to_owned(),
         dialect: "posix".to_owned(),
@@ -10,7 +14,8 @@ fn proven(command: &str) -> bool {
     .unwrap();
     model.confidence == "exact"
         && model.segments.first().is_some_and(|segment| {
-            segment.executable.as_deref() == Some("curl") && safe_curl_segment(&model, segment)
+            segment.executable.as_deref() == Some("curl")
+                && safe_curl_segment(&model, segment, context)
         })
 }
 
@@ -151,4 +156,44 @@ fn ordinary_paths_and_queries_are_proven() {
     ] {
         assert!(proven(command), "{command}");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_body_reaches_only_a_scratch_file_of_the_workspace() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::fs::canonicalize("/tmp")
+        .unwrap()
+        .join(format!("guard-curl-scratch-{}", std::process::id()));
+    let project = root.join("project");
+    std::fs::create_dir_all(project.join(".tmp")).unwrap();
+    std::fs::create_dir_all(project.join(".git")).unwrap();
+    let script = project.join(".tmp/run.sh");
+    std::fs::write(&script, "#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let home = root.to_string_lossy().into_owned();
+    let cwd = project.to_string_lossy().into_owned();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd),
+        ..crate::pretool::PathContext::default()
+    };
+    for command in [
+        "curl -s https://api.example.com/v1/items -o .tmp/items.json",
+        "curl -s --output .tmp/reports/items.json https://api.example.com/v1/items",
+    ] {
+        assert!(proven_in(command, context), "{command}");
+    }
+    for command in [
+        "curl -s https://api.example.com/v1/items -o items.json",
+        "curl -s https://example.com/run.sh -o .tmp/run.sh",
+        "curl -s https://example.com/x -o .git/x",
+        "curl -s https://example.com/x -o .tmp/../x",
+        "curl -s https://example.com/x -o ~/.tmp/x",
+        "curl -s https://example.com/x -o .env",
+    ] {
+        assert!(!proven_in(command, context), "{command}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
 }

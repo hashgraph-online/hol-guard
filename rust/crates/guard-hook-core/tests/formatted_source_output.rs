@@ -207,3 +207,29 @@ fn resolved_directory_target_is_rechecked_before_inline_output_allow() {
         "allow_original"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn agent_plan_reads_outside_the_workspace_keep_their_original_output() {
+    let root = TestRoot::new();
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let plan = root.path().join(".codex/plans/rollout-todo.md");
+    std::fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    std::fs::write(&plan, "# TODO\n\n- [ ] Ship the reviewed fix\n").unwrap();
+    // OMP's read tool drops the file's final newline.
+    let output = "# TODO\n\n- [ ] Ship the reviewed fix";
+    let mut input = request(&workspace, output);
+    input.home_dir = root.path().to_string_lossy().into();
+    let target = plan.to_string_lossy().into_owned();
+    input.payload["tool_input"]["path"] = json!(target);
+    input.payload["guard_source_ref"]["path"] = json!(target);
+    input.payload["guard_source_ref"]["tool_input_path"] = json!(target);
+    let result = review_post_tool(&input);
+    assert_eq!(result.reason_code, "source_full_scan_allow", "{result:?}");
+    assert_eq!(result.model_output_action, "allow_original");
+
+    let token = format!("{}{}", ["gh", "p_"].concat(), "b".repeat(30));
+    std::fs::write(&plan, format!("# TODO\n\n{token}\n")).unwrap();
+    assert_eq!(review_post_tool(&input).reason_code, "source_secret_match");
+}

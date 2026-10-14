@@ -216,7 +216,7 @@ pub(crate) fn evaluate(
 /// resident by its executable path, so after an update replaces that file a
 /// resident still running the old image must leave hooks to the daemon. Once
 /// superseded it stays so, without hashing the new file on every hook.
-fn runtime_current() -> bool {
+pub(crate) fn runtime_current() -> bool {
     static SUPERSEDED: AtomicBool = AtomicBool::new(false);
     if SUPERSEDED.load(Ordering::Relaxed) {
         return false;

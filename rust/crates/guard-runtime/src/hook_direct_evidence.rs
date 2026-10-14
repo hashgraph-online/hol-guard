@@ -26,7 +26,7 @@ const MAX_QUEUED_RECORDS: usize = 1_024;
 const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
 /// One drain page stays well under the resident response cap.
 const MAX_DRAIN_BYTES: usize = 1536 * 1024;
-const MAX_RECORD_BYTES: usize = 1024 * 1024;
+pub(crate) const MAX_RECORD_BYTES: usize = 1024 * 1024;
 const DEFAULT_DRAIN_RECORDS: usize = 256;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -93,24 +93,29 @@ impl Default for DirectEvidenceQueue {
 impl DirectEvidenceQueue {
     /// Queue one record, or refuse it when the queue cannot hold it.
     pub(crate) fn offer(&self, record: Value) -> bool {
+        self.try_offer(record).is_ok()
+    }
+
+    /// Queue one record, or hand it back when the queue cannot hold it.
+    pub(crate) fn try_offer(&self, record: Value) -> Result<(), Value> {
         let Ok(encoded) = serde_json::to_vec(&record) else {
-            return false;
+            return Err(record);
         };
         let bytes = encoded.len();
         if bytes > MAX_RECORD_BYTES {
-            return false;
+            return Err(record);
         }
         let Ok(mut state) = self.state.lock() else {
-            return false;
+            return Err(record);
         };
         if state.records.len() >= MAX_QUEUED_RECORDS || state.bytes + bytes > MAX_QUEUED_BYTES {
-            return false;
+            return Err(record);
         }
         let seq = state.next_seq;
         state.next_seq = state.next_seq.saturating_add(1);
         state.bytes += bytes;
         state.records.push_back(QueuedRecord { seq, bytes, record });
-        true
+        Ok(())
     }
 
     /// Acknowledge records the daemon already has, then copy the next page.

@@ -1519,6 +1519,10 @@
     min-width: calc(var(--spacing) * 11);
   }
 
+  .min-w-20 {
+    min-width: calc(var(--spacing) * 20);
+  }
+
   .min-w-24 {
     min-width: calc(var(--spacing) * 24);
   }
@@ -6858,6 +6862,10 @@
 
     .lg\:hidden {
       display: none;
+    }
+
+    .lg\:inline {
+      display: inline;
     }
 
     .lg\:table-cell {

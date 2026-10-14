@@ -449,7 +449,13 @@ fn fresh_destination(value: &str, context: super::PathContext<'_>) -> Option<Pat
     Some(destination)
 }
 
+/// A checkout in a workflow directory or an autostart location (a login
+/// item directory, a systemd unit tree) is reviewed whatever its parent, so
+/// the owned temporary carve-out above cannot place one there either.
 fn protected_worktree_destination(path: &Path) -> bool {
+    if super::safe_writes::autostart_write_target(path) {
+        return true;
+    }
     let parts: Vec<String> = path
         .components()
         .filter_map(|component| match component {

@@ -4,7 +4,8 @@ use super::read_paths::{
     bounded_file_read_target, existing_regular_read_target, expand_home_read_path,
     resolved_location_allowed,
 };
-use screens::{autostart_write_target, home_spelling_matches_target, shared_library_part};
+pub(super) use screens::autostart_write_target;
+use screens::{home_spelling_matches_target, shared_library_part};
 
 pub(super) fn bounded_file_write_target(
     value: &str,

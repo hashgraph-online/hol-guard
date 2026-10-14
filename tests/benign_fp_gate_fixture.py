@@ -165,15 +165,20 @@ def _node_toolchain(workspace: Path) -> None:
     _write(workspace / "package-lock.json", json.dumps({"lockfileVersion": 3, "packages": locked}) + "\n")
     _write(workspace / "tests" / "sample.test.ts", "export const sample = 1;\n")
     for name, version in _NODE_PACKAGES.items():
-        package = workspace / "node_modules" / name
-        manifest = {"name": name, "version": version, "bin": {name: f"./bin/{name}.js"}}
-        _write(package / "package.json", json.dumps(manifest) + "\n")
-        script = package / "bin" / f"{name}.js"
-        _write(script, f"#!/usr/bin/env node\nconsole.log('{name} {version}');\n")
-        script.chmod(0o755)
-        shim = workspace / "node_modules" / ".bin" / name
-        shim.parent.mkdir(parents=True, exist_ok=True)
-        shim.symlink_to(Path("..") / name / "bin" / f"{name}.js")
+        _node_package(workspace, name, version)
+
+
+def _node_package(workspace: Path, name: str, version: str) -> None:
+    """One installed package with its ``node_modules/.bin`` shim, as npm links it."""
+    package = workspace / "node_modules" / name
+    manifest = {"name": name, "version": version, "bin": {name: f"./bin/{name}.js"}}
+    _write(package / "package.json", json.dumps(manifest) + "\n")
+    script = package / "bin" / f"{name}.js"
+    _write(script, f"#!/usr/bin/env node\nconsole.log('{name} {version}');\n")
+    script.chmod(0o755)
+    shim = workspace / "node_modules" / ".bin" / name
+    shim.parent.mkdir(parents=True, exist_ok=True)
+    shim.symlink_to(Path("..") / name / "bin" / f"{name}.js")
 
 
 def _bun_lockfile(project: Path, packages: dict[str, str]) -> None:
@@ -202,7 +207,8 @@ def _session_worktree(org: Path, home: Path) -> None:
     # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
     _git(portal, "branch", "feat/discovery-review", home=home)
     (portal / ".deploy-production.lock.d").mkdir()
-    (portal / "node_modules").mkdir()
+    # Installed, gitignored test runner whose `.bin` shim agents list from another checkout.
+    _node_package(portal, "vitest", _NODE_PACKAGES["vitest"])
     worktree = org.parent / "app-portal-fix"
     _git(portal, "worktree", "add", "--quiet", "-b", "fix/report-lane", str(worktree), home=home)
     _write(worktree / "scripts" / "report.ts", "console.log(process.env.REPORT_WINDOW ?? '7d');\n")
@@ -227,6 +233,7 @@ def build_fixture(root: Path) -> BenignFixture:
     for directory in (home, guard_home):
         directory.mkdir(parents=True)
     _write(home / ".gitconfig", _LFS_GITCONFIG)
+    _write(home / ".rustup" / "settings.toml", 'version = "12"\ndefault_toolchain = "stable"\n')
     # Synthetic credential file so the negative controls have a real target.
     _write(home / ".agent" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
     _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
@@ -265,6 +272,8 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
+    # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
+    _git(parent, "branch", "feat/other-branch", home=home)
     _node_toolchain(worktree)
     _bun_lockfile(worktree, _NODE_PACKAGES)
     _write(worktree / "test_calc.py", "assert 1 + 1 == 2\nprint('ok')\n")
@@ -320,6 +329,7 @@ def build_fixture(root: Path) -> BenignFixture:
         _write(repository / ".github" / "workflows" / "ci.yml", "name: ci\n")
         _write(repository / "src" / "index.ts", f"export const name = '{name}';\n")
         _write(repository / "README.md", f"# {name}\n")
+        _write(repository / "src" / "lib.rs", "pub fn name() -> &'static str {\n    \"fixture\"\n}\n")
         if name == "service-api":
             _write(repository / "contracts" / "commands.json", '{"commands": []}\n')
             _write(repository / "validation" / "schema.json", '{"type": "object"}\n')
@@ -336,6 +346,13 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(tmp_org / "app" / "README.md", "# app\n")
     _write(home / ".nvm" / "versions" / "node" / "v25.2.1" / "lib" / "node_modules" / "npm" / "package.json", "{}\n")
     _write(home / ".bun" / "install" / "global" / "node_modules" / "vite" / "package.json", "{}\n")
+    # Installed dependency and toolchain source under hidden home directories.
+    pipx_site = home / ".local" / "pipx" / "venvs" / "tool" / "lib" / "python3.12" / "site-packages"
+    _write(pipx_site / "pkg" / "mod.py", "_COLD_START = 0.5\n")
+    _write(home / ".local" / "lib" / "python3.12" / "site-packages" / "pkg" / "mod.py", "X = 1\n")
+    _write(home / ".cargo" / "registry" / "src" / "index" / "serde-1.0.0" / "src" / "lib.rs", "pub fn serde() {}\n")
+    rustlib_core = home / ".rustup" / "toolchains" / "stable" / "lib" / "rustlib" / "src" / "rust" / "library" / "core"
+    _write(rustlib_core / "src" / "lib.rs", "//! core\n")
     _write(tmp_org / "app" / "package.json", '{"name": "app", "version": "1.0.0"}\n')
     _write(tmp_org / "app" / "src" / "index.ts", "export const railStage = 1;\n")
     _write(tmp_org / "app" / "tests" / "index.test.ts", "import { railStage } from '../src';\n")

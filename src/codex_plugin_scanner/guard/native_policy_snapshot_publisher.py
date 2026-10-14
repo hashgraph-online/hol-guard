@@ -19,6 +19,7 @@ from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_direct_lane_mcp_relay import NativePolicySnapshotMcpRelayMixin
 from .native_policy_snapshot_harness_postures import binding_with_harness_postures
 from .native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
@@ -109,6 +110,7 @@ def ensure_native_launch_resident_verifier(store: GuardStore) -> None:
 class NativePolicySnapshotPublisher(
     NativePolicySnapshotWorkspaceReadinessMixin,
     NativePolicySnapshotPublicationMixin,
+    NativePolicySnapshotMcpRelayMixin,
     NativePolicySnapshotPublisherInputs,
 ):
     """Asynchronously publish an authenticated snapshot and expose its barrier."""

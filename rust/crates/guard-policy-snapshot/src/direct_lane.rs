@@ -90,6 +90,10 @@ pub struct DirectLaneBindingV1 {
     pub review_host_cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structured_output_config: Option<serde_json::Value>,
+    /// The per-harness tool-call configuration and extension layers the
+    /// daemon decides a relayed MCP tool call with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_relay: Option<serde_json::Value>,
 }
 
 /// A process environment whose `Debug` output never shows the values.

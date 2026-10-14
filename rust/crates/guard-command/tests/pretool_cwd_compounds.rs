@@ -34,7 +34,7 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
             ("&& cat one.txt || cat one.txt", false),
             ("&& cat alias.txt", false),
             ("&& cat .env", false),
-            ("; cat one.txt", false),
+            ("; cat one.txt", true),
             ("|| cat one.txt", false),
             ("| cat one.txt", false),
             ("&& cd .. && cat one.txt", false),

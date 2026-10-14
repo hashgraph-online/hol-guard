@@ -247,7 +247,8 @@ def run_authorized_contained_test(
     if peeled is not None:
         # The wrapped original must carry the receipt; the core is then
         # re-authorized in its resolved directory by the recursive call.
-        if not _contained_receipt(authorize(payload)):
+        receipt = authorize(payload)
+        if not _contained_receipt(receipt):
             raise _reject()
         core, directory, output = peeled
         if not _path_is_within(directory, workspace.resolve(strict=True)):
@@ -255,6 +256,19 @@ def run_authorized_contained_test(
             if sibling is None:
                 raise _reject()
             workspace = sibling
+        if directory != workspace.resolve(strict=True) and receipt_matches(receipt) and isinstance(receipt, Mapping):
+            # The workspace sandbox starts only at its root, where Rust
+            # classified the whole text, so the `cd` runs inside it as issued.
+            return run_workspace_contained(
+                payload,
+                workspace=workspace,
+                cwd=workspace,
+                authorize=authorize,
+                first_receipt=receipt,
+                home_dir=home_dir,
+                timeout_seconds=timeout_seconds,
+                merge_stderr=merge_stderr,
+            )
         with bounded_output(output):
             exit_code = run_authorized_contained_test(
                 {**payload, "cwd": str(directory), "tool_input": {**tool_input, "command": core}},

@@ -35,6 +35,8 @@ fn parses_the_installed_codex_proxy_argv() {
         "--server-env-key",
         "API_TOKEN",
         "--server-env-key=REGION",
+        "--server-env-key= API_TOKEN ",
+        "--server-env-key=  ",
         "--server-id=abc",
         "--source-scope",
         "global",

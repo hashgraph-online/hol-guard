@@ -552,6 +552,10 @@
         "reason": "Reviewed: module is a decision, parser/scanner, transport, process-dispatch or containment component invoked by a runtime route."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/daemon/mcp_relay_evidence_drain.py",
+        "reason": "Reviewed and retained in runtime scope: the direct-evidence drain hands each MCP tool call the native relay decided to the receipt writers the Python MCP proxy calls. It validates the queued record, records a forward or block exactly as the resident decided it, and drops any record it cannot validate; it never recomputes a verdict."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/cli/codex_live_hook_completion.py",
           "src/codex_plugin_scanner/guard/cli/codex_output_safety.py",
@@ -1897,6 +1901,72 @@
         "evidence": "Every caller of apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible is outside runtime scope: the daemon control-plane routes (server_control_routes_post.py, server_control_policy.py), the dashboard read routes (server_dashboard_runtime_read.py) and the guard approvals command (cli/approval_commands.py). The remaining symbols are reached only from apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible. The retained in-scope part of approvals.py (request queueing, build_approval_request_url, primary_approval_request, silent_review_center_url) does not reference them, and the report validates this reference closure on every run."
       },
       {
+        "id": "daemon-health-details-probe",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/daemon/client.py",
+        "symbols": [
+          "_HEALTH_PROBE_DEADLINE_SECONDS",
+          "_interrupt_health_socket",
+          "read_guard_health_details"
+        ],
+        "entry_points": [],
+        "reason": "Reading the daemon's authenticated health details to confirm a live daemon's identity. Only daemon identity checks during start, update and doctor flows call it; hook and MCP proxy requests use the surface client instead.",
+        "evidence": "The only caller of read_guard_health_details is daemon/live_identity.py, which is outside runtime scope. _interrupt_health_socket and _HEALTH_PROBE_DEADLINE_SECONDS are reached only from read_guard_health_details. The retained client (GuardSurfaceDaemonClient, the loaders and the error classes) does not reference them, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "codex-hook-health-intercept-check",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/codex_hook_registration.py",
+        "symbols": [
+          "_HEALTH_INTERCEPT_EVENTS",
+          "_matcher_covers_shell",
+          "_group_has_active_guard_shell_handler",
+          "live_guard_codex_hooks_intercept"
+        ],
+        "entry_points": [],
+        "reason": "Checking whether the installed Codex hooks still route shell tool calls through Guard, for the hook health report. It inspects installed configuration and never runs on a hook call.",
+        "evidence": "The only caller of live_guard_codex_hooks_intercept is codex_hook_health.py, which is outside runtime scope. The private helpers are reached only from it. The retained hook registration and doctor-finalization code does not reference these symbols, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "cursor-hook-health-and-rebind-check",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py",
+        "symbols": [
+          "live_guard_cursor_hooks_intercept",
+          "live_cursor_hooks_use_frozen_control_plane"
+        ],
+        "entry_points": [],
+        "reason": "Checking whether the installed Cursor hooks still point at Guard's hook script, for the hook health report and the rebind repair. It inspects installed configuration and never runs on a hook call.",
+        "evidence": "live_guard_cursor_hooks_intercept is called only from cursor_hook_health.py and live_cursor_hooks_use_frozen_control_plane only from cursor_hook_rebind.py; both are outside runtime scope. The retained frozen hook runner, managed command builder and artifact detection do not reference these two functions, and the report validates this reference closure on every run. cursor_hook_config.py is a runtime root because run_frozen_cursor_hook runs on every Cursor hook call; that entry point does not reach the excluded symbols.",
+        "root_function": true
+      },
+      {
+        "id": "opencode-install-proxy-check",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/adapters/opencode_pretool.py",
+        "symbols": [
+          "opencode_config_has_mcp_servers",
+          "_mcp_command_uses_guard_proxy",
+          "opencode_config_uses_guard_proxy"
+        ],
+        "entry_points": [],
+        "reason": "Checking whether OpenCode configuration declares MCP servers and routes them through the Guard proxy, for the native install checks. It reads configuration files during install and doctor, not during a tool call.",
+        "evidence": "The only caller of opencode_config_has_mcp_servers and opencode_config_uses_guard_proxy is cli/native_install_checks.py, which is outside runtime scope. _mcp_command_uses_guard_proxy is reached only from opencode_config_uses_guard_proxy. The retained plugin path, source and install helpers do not reference them, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "edge-event-outbox-builders",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/edge_events.py",
+        "symbols": [
+          "build_memory_decision_event_envelope",
+          "build_runtime_session_event",
+          "build_access_graph_snapshot_event"
+        ],
+        "entry_points": [],
+        "reason": "Building Cloud edge events for queued memory decisions, runtime session reports and access-graph snapshots. These are assembled by background delivery and the supervisor, after any hook decision has returned.",
+        "evidence": "build_memory_decision_event_envelope is called only from memory_decision_outbox.py, build_runtime_session_event only from runtime/runner.py and build_access_graph_snapshot_event only from access_graph_events.py; all three callers are outside runtime scope. The retained receipt, policy and harness-usage builders do not reference them, and the report validates this reference closure on every run."
+      },
+      {
         "id": "extension-control-dashboard-resolution",
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
@@ -1998,6 +2068,44 @@
         "entry_points": [],
         "reason": "Audit receipt metadata, advisory aliases, CI gate results, empty outcomes and Cloud audit normalization shape the workspace supply-chain audit report. Install-time package decisions do not call them.",
         "evidence": "rg -l 'native_audit_receipt_metadata|native_advisory_aliases|native_ci_gate_result|native_empty_audit_outcome|native_normalize_cloud_audit_response' src -g '*.py' lists only supply_chain_workspace_audit.py outside native_package_audit_projection.py; it is not in the runtime import closure."
+      },
+      {
+        "id": "managed-policy-delivery-sync",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/policy_bundle_delivery.py",
+        "symbols": [
+          "validated_managed_policy_delivery",
+          "effective_policy_bundle_acknowledgement"
+        ],
+        "entry_points": [],
+        "reason": "Validating a managed policy delivery received from Cloud and building the acknowledgement the supervisor reports back. Both run in background sync, not when a hook or MCP proxy request is decided.",
+        "evidence": "validated_managed_policy_delivery is called only from runtime/managed_controls_sync.py and daemon/managed_policy_delivery.py, and effective_policy_bundle_acknowledgement only from runtime/runner.py; all three callers are outside runtime scope. The retained effective_projection_digest and policy_bundle_acknowledgement_payload do not reference them, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "aibom-inventory-instruction-roles",
+        "category": "offline_reporting",
+        "path": "src/codex_plugin_scanner/guard/aibom_detection.py",
+        "symbols": [
+          "InstructionRole",
+          "_DOC_DIRECTORY_ROLES",
+          "_NAME_ROLES",
+          "instruction_role_for_path",
+          "discover_shared_workspace_aibom_artifacts"
+        ],
+        "entry_points": [],
+        "reason": "Classifying instruction files by role and listing shared workspace AIBOM artifacts for the inventory contract. Inventory is built for reports and Cloud sync, not on a hook call.",
+        "evidence": "instruction_role_for_path is called only from inventory_contract_metadata.py and discover_shared_workspace_aibom_artifacts only from inventory_contract.py; both are outside runtime scope. InstructionRole and the role tables are reached only from these two. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference them, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "review-event-sequence-recovery-binding",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/store_review_event_outbox_binding.py",
+        "symbols": [
+          "normalized_delivery_binding"
+        ],
+        "entry_points": [],
+        "reason": "Normalizing a stored delivery binding while recovering review-event outbox sequences. Recovery runs in background Cloud delivery.",
+        "evidence": "The only caller of normalized_delivery_binding is store_review_event_sequence_recovery.py, which is outside runtime scope. The retained binding helpers (bind_review_events_for_request, load_review_oauth_binding, review_event_oauth_subject_hash) do not reference it, and the report validates this reference closure on every run."
       }
     ],
     "dynamic_imports": [

@@ -231,11 +231,17 @@ pub(super) fn contained(
     // A projection that earns a plain allow runs in the sandbox too: the
     // redirects still need its confinement, and the command needs nothing
     // the sandbox withholds when it stays offline.
-    // A single command the bounded-write projection takes runs directly
-    // instead; one it declines, such as a write to `.tool-versions`, runs here.
-    let single = super::redirect_projection::project(command, context).is_none();
+    // A command the bounded-write projection takes runs directly instead: a
+    // single command, or a chain whose only write is its first step's,
+    // followed by plain readers. One it declines, such as a write to
+    // `.tool-versions`, or a chain beside local Git writes, runs here.
+    let direct = super::redirect_projection::project(command, context);
+    let single = direct.is_none();
+    let runs_directly = direct
+        .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
     let allowed = projected.minimum_action == "allow"
         && !projected.action.sensitive_target
+        && !runs_directly
         && stays_offline(&projected_text, single);
     if projected.reason_code != crate::pretool::workspace_contained::REASON && !allowed {
         return None;

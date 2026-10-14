@@ -399,10 +399,16 @@ mod mcp_relay_authority;
 mod mcp_relay_catalog;
 #[cfg(unix)]
 mod mcp_relay_core;
+mod mcp_relay_decide;
 #[cfg(unix)]
 mod mcp_relay_host;
 #[cfg(unix)]
 mod mcp_relay_launch;
+#[cfg(unix)]
+mod mcp_relay_order;
+mod mcp_relay_pending;
+#[cfg(unix)]
+mod mcp_relay_resident;
 mod mcp_runtime_evidence_op;
 mod mcp_sensitive_read;
 #[cfg(test)]

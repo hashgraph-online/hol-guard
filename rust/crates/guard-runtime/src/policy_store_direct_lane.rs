@@ -54,6 +54,8 @@ pub(crate) struct DirectLaneBinding {
     /// The managed-policy view the daemon resolves Pi structured output
     /// mediation from.
     pub(crate) structured_output_config: Option<serde_json::Value>,
+    /// The tool-call view the daemon decides a relayed MCP tool call with.
+    pub(crate) mcp_relay: Option<serde_json::Value>,
 }
 
 /// The daemon's policy-integrity key, held only in memory.
@@ -99,6 +101,7 @@ impl DirectLaneBinding {
             policy_integrity_state: None,
             review: DirectLaneReviewFacts::default(),
             structured_output_config: None,
+            mcp_relay: None,
         }
     }
 }
@@ -173,6 +176,7 @@ impl PolicySnapshotStore {
                     binding.review_host_cwd,
                 ),
                 structured_output_config: binding.structured_output_config,
+                mcp_relay: binding.mcp_relay,
             })
         });
         match self.direct_lane.lock() {

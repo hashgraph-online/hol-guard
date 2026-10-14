@@ -69,9 +69,15 @@ pub(super) fn admits(model: &CanonicalCommandV1, targets: &[String]) -> bool {
 }
 
 /// A target the shell resolves against the working directory: no root, no
-/// drive and no Windows separator.
+/// drive, no Windows separator and no hidden part. The projection admits a
+/// scratch path such as `.tmp/log.txt`, which this form does not need.
 fn relative(target: &str) -> bool {
-    !target.is_empty() && !target.starts_with('/') && !target.contains([':', '\\'])
+    !target.is_empty()
+        && !target.starts_with('/')
+        && !target.contains([':', '\\'])
+        && !target
+            .split('/')
+            .any(|part| part.starts_with('.') && part != ".")
 }
 
 /// A leading option such as `-C`, `-c core.hooksPath=...` or `--git-dir`

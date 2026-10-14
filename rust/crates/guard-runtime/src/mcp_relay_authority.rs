@@ -3,10 +3,10 @@
 //! The relay owns transport only. Each `tools/call` is handed to a
 //! `RelayAuthority`, which either answers it (block, approval required,
 //! repair) or forwards it bound to the catalog authority it was decided
-//! against. The authority that ships with the transport is
-//! `PendingNativeAuthority`: until the fused native decision op lands it
-//! answers every call with the proxy's fail-closed "no native decision"
-//! response, so the relay can never forward a call nobody decided.
+//! against. The relay ships with `ResidentRelayAuthority`, which asks the
+//! resident's fused decision op and answers anything it did not decide with
+//! the proxy's fail-closed "no native decision" response, so the relay can
+//! never forward a call nobody decided.
 
 use serde_json::{json, Map, Value};
 
@@ -19,12 +19,14 @@ const SYNC_FAILED: &str =
 
 /// A `tools/call` the authority allowed, bound to the catalog it saw.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct ForwardTicket {
     /// The exact request to write to the child.
     pub(crate) message: Value,
     /// The catalog authority the decision was made against.
     pub(crate) expected: CatalogSnapshot,
+    /// The authority's handle on this forward's held evidence, so a nested
+    /// call completing first never commits or drops the outer call's record.
+    pub(crate) evidence: Option<String>,
 }
 
 /// The authority's answer for one `tools/call`.
@@ -32,9 +34,7 @@ pub(crate) struct ForwardTicket {
 pub(crate) enum ToolCallVerdict {
     /// Reply to the host without contacting the child.
     Respond(Value),
-    /// Forward to the child once the catalog still matches. Only the native
-    /// decision op (and the relay tests) construct it.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Forward to the child once the catalog still matches.
     Forward(ForwardTicket),
 }
 
@@ -45,6 +45,7 @@ pub(crate) trait RelayAuthority {
         &mut self,
         message: &Value,
         params: &Map<String, Value>,
+        order: Option<&[String]>,
         catalog: &RelayCatalog,
     ) -> ToolCallVerdict;
 
@@ -53,17 +54,24 @@ pub(crate) trait RelayAuthority {
 
     /// Record a forwarded call's outcome and return the host response.
     fn complete(&mut self, ticket: ForwardTicket, response: Value) -> Value;
+
+    /// Finish recording after the host was sent a response, so that work
+    /// never delays the response itself.
+    fn settle(&mut self) {}
 }
 
-/// Fail-closed authority used until the native decision op is wired in.
+/// Fail-closed authority that decides nothing.
+#[cfg(test)]
 #[derive(Debug, Default)]
 pub(crate) struct PendingNativeAuthority;
 
+#[cfg(test)]
 impl RelayAuthority for PendingNativeAuthority {
     fn decide(
         &mut self,
         message: &Value,
         params: &Map<String, Value>,
+        _order: Option<&[String]>,
         _catalog: &RelayCatalog,
     ) -> ToolCallVerdict {
         ToolCallVerdict::Respond(no_decision_response(message.get("id"), params))

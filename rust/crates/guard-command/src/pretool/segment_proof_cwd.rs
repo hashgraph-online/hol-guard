@@ -157,6 +157,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "sort"
                 | "uniq"
                 | "cut"
+                | "tr"
                 | "du"
                 | "df"
                 | "diff"

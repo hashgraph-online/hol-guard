@@ -47,14 +47,29 @@ fn read_line_enforces_the_limit_including_the_newline() {
 }
 
 #[test]
+fn decode_keeps_the_argument_order_of_a_tools_call() {
+    let call = br#"{"method":"tools/call","params":{"name":"x","arguments":{"z":1,"a":2}}}"#;
+    let HostRead::Message(_, order) = decode(call) else {
+        panic!("expected a message");
+    };
+    assert_eq!(order, Some(vec!["z".to_owned(), "a".to_owned()]));
+    let single = br#"{"method":"tools/call","params":{"arguments":{"z":1}}}"#;
+    assert!(matches!(decode(single), HostRead::Message(_, None)));
+    let other = br#"{"method":"tools/list","params":{"arguments":{"z":1,"a":2}}}"#;
+    assert!(matches!(decode(other), HostRead::Message(_, None)));
+    let repeated = br#"{"method":"tools/call","params":{"arguments":{"z":1,"a":2,"z":3}}}"#;
+    assert!(matches!(decode(repeated), HostRead::Message(_, None)));
+}
+
+#[test]
 fn decode_accepts_only_json_objects() {
     assert_eq!(
         decode(b"{\"jsonrpc\":\"2.0\",\"id\":1}\n"),
-        HostRead::Message(json!({"jsonrpc": "2.0", "id": 1}))
+        HostRead::Message(json!({"jsonrpc": "2.0", "id": 1}), None)
     );
     assert_eq!(
         decode(b"  {\"a\":1}  \r\n"),
-        HostRead::Message(json!({"a": 1}))
+        HostRead::Message(json!({"a": 1}), None)
     );
     assert_eq!(
         decode(b"[1]\n"),
@@ -83,8 +98,8 @@ fn pump_forwards_messages_then_eof() {
     assert_eq!(
         drain(b"{\"id\":1}\n{\"id\":2}\n"),
         vec![
-            HostRead::Message(json!({"id": 1})),
-            HostRead::Message(json!({"id": 2})),
+            HostRead::Message(json!({"id": 1}), None),
+            HostRead::Message(json!({"id": 2}), None),
             HostRead::Eof,
         ]
     );
@@ -95,7 +110,7 @@ fn pump_stops_at_the_first_invalid_line() {
     assert_eq!(
         drain(b"{\"id\":1}\nnot json\n{\"id\":2}\n"),
         vec![
-            HostRead::Message(json!({"id": 1})),
+            HostRead::Message(json!({"id": 1}), None),
             HostRead::Invalid("mcp_relay_host_message_invalid"),
         ]
     );
@@ -133,7 +148,7 @@ fn pump_reports_a_read_failure() {
 #[test]
 fn line_host_reads_messages_and_reports_eof_repeatedly() {
     let mut host = LineHost::spawn(Cursor::new(b"{\"id\":1}\n".to_vec()), Vec::new()).unwrap();
-    assert_eq!(host.next(None), HostRead::Message(json!({"id": 1})));
+    assert_eq!(host.next(None), HostRead::Message(json!({"id": 1}), None));
     assert_eq!(host.next(Some(Duration::from_secs(5))), HostRead::Eof);
     assert_eq!(host.next(None), HostRead::Eof);
     assert_eq!(host.next(Some(Duration::from_millis(1))), HostRead::Eof);

@@ -79,7 +79,10 @@ struct FakeHost {
 impl FakeHost {
     fn with(messages: Vec<Value>) -> Self {
         Self {
-            inbox: messages.into_iter().map(HostRead::Message).collect(),
+            inbox: messages
+                .into_iter()
+                .map(|message| HostRead::Message(message, None))
+                .collect(),
             sent: Vec::new(),
         }
     }

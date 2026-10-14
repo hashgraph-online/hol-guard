@@ -27,6 +27,16 @@ pub(super) fn requires_review(
     if let Some(rest) = after_git_read_prefix(model, context, deadline, execution_environment) {
         return requires_review(&rest, context, deadline, execution_environment);
     }
+    // After `cd <dir>;` the rest runs in either directory, so each Git read
+    // must be helper-free in both.
+    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
+        let moved = super::PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return requires_review(&rest, moved, deadline, execution_environment)
+            || requires_review(&rest, context, deadline, execution_environment);
+    }
     // Past this point every Git read is probed in one directory. A later
     // `cd` the read prefixes above did not account for moves the reads after
     // it somewhere this probe never looked.

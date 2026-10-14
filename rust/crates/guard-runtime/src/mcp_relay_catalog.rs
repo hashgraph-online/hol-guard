@@ -84,6 +84,11 @@ impl RelayCatalog {
         }
     }
 
+    /// The advertised definition of `name` (`self._tool_catalog.get(name)`).
+    pub(crate) fn definition(&self, name: &str) -> Option<&Value> {
+        self.catalog.get(name)
+    }
+
     /// `_catalog_authority_matches`: an unserializable catalog never matches.
     pub(crate) fn matches(&self, expected: &CatalogSnapshot) -> bool {
         let current = self.snapshot();

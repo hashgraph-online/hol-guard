@@ -41,7 +41,12 @@ export function normalizeHarnessPostures(value: unknown): Record<string, GuardPr
   return result;
 }
 
-function globalPosture(settings: GuardSettings): GuardProtectionPostureValue {
+/**
+ * The posture every app inherits: the explicit machine posture when set, the
+ * legacy observe mode as Watch, otherwise Protected. Rows and every summary
+ * line must derive their label from this one function so they cannot disagree.
+ */
+export function globalPosture(settings: GuardSettings): GuardProtectionPostureValue {
   if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
   if (settings.mode === "observe") return "watch";
   return "protected";

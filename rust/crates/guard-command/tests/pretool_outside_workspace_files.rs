@@ -221,14 +221,14 @@ fn global_package_trees_list_without_nested_hidden_tool_state() {
             "ls ~/.bun/install/global/node_modules 2>/dev/null",
             "ls ~/.nvm/versions/node/v1.0.0/lib/node_modules/",
             "ls -la ~/.nvm/versions/node/v1.0.0/lib/node_modules/npm",
+            // Installed package trees are readable source; a recursive
+            // listing shows only their file names.
+            "ls -R ~/.bun/install/global/node_modules",
             // Tool directories below a home dot-directory list by name.
             "ls ~/.bun/install/cache",
             "ls ~/.bun",
         ],
-        &[
-            "ls ~/.nvm/.cache/node_modules",
-            "ls -R ~/.bun/install/global/node_modules",
-        ],
+        &["ls ~/.nvm/.cache/node_modules"],
     );
 }
 
@@ -323,6 +323,7 @@ fn cd_sequences_prove_reads_in_both_directories() {
     let allowed = [
         format!("cd {sibling} && ls src; ls tests"),
         format!("cd {sibling} && ls src; ls tests; ls"),
+        format!("cd {sibling}; ls src"),
         format!("cd {sibling} && ls src; ls tests;"),
         format!("cd {sibling} && ls; node --version"),
         format!("cd {sibling} && node -v; ls"),
@@ -331,7 +332,6 @@ fn cd_sequences_prove_reads_in_both_directories() {
     let reviewed = [
         format!("cd {sibling} && ls src; cat .env"),
         format!("cd {sibling} && ls src; rm -f existing.txt"),
-        format!("cd {sibling}; ls src"),
         format!("cd {sibling} || ls src; ls tests"),
         format!("cd {ssh} && ls; ls"),
         format!("cd {sibling} && ls; node -e 1"),

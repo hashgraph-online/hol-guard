@@ -6,6 +6,11 @@
 //!   `&&` or `|` run only in the new directory; every segment after a `;`
 //!   runs there when the `cd` succeeded and in the original directory when
 //!   it failed, so each is proven against both.
+//! * `cd <dir>; ls src`: nothing is chained to the `cd`, so every later
+//!   segment runs in `<dir>` when the `cd` succeeded and in the original
+//!   directory when it failed. Each is proven against both. A Git read is
+//!   admitted only without helper context; the Git execution-context floor
+//!   inspects its configuration in both directories.
 //! * `touch <f> && echo ok || echo fail; rm -f <f>`: a write probe that
 //!   creates one new file and removes it again. The file must not exist
 //!   before the command runs, so the trailing `rm` can only remove what the
@@ -58,50 +63,92 @@ pub(in crate::pretool) fn exact_safe_sequence(
             || created_file_probe(model, context))
 }
 
-fn cd_then_read_sequence(
-    model: &CanonicalCommandV1,
-    allow_git_helper_context: bool,
-    context: PathContext<'_>,
-) -> bool {
-    let first = &model.segments[0];
-    let Some(separators) = separators(model) else {
-        return false;
-    };
+/// The verified directory a leading plain `cd <dir>` moves to.
+fn leading_cd_target(model: &CanonicalCommandV1, context: PathContext<'_>) -> Option<String> {
+    let first = model.segments.first()?;
     if first.executable.as_deref() != Some("cd")
         || !plain_segment(first)
         || first.pipeline_index != 0
         || sensitive_command(&first.text)
         || !crate::pretool::directory_targets::drive_targets_quoted(first)
         || !crate::pretool::directory_targets::home_targets_unquoted(first)
-        || separators.first().map(String::as_str) != Some("&&")
-        || !separators.iter().any(|separator| separator == ";")
+    {
+        return None;
+    }
+    let [target] = first.arguments.as_slice() else {
+        return None;
+    };
+    crate::pretool::safe_reads::verified_cwd_target(target, context)
+}
+
+fn changes_directory(segment: &CommandSegmentV1) -> bool {
+    segment
+        .executable
+        .as_deref()
+        .is_none_or(|name| matches!(executable_basename(name), "cd" | "pushd" | "popd"))
+}
+
+/// `cd <dir>; <rest>` with no other directory change: `<rest>` runs in the
+/// returned directory when the `cd` succeeded and in the original directory
+/// when it failed. The rest keeps the original text and spans.
+pub(in crate::pretool) fn leading_semicolon_cd(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<(String, CanonicalCommandV1)> {
+    if !exact_model(model)
+        || separators(model)?.first().map(String::as_str) != Some(";")
+        || model.segments[1..].iter().any(changes_directory)
+    {
+        return None;
+    }
+    let cwd = leading_cd_target(model, context)?;
+    let mut rest = model.clone();
+    rest.segments = model.segments[1..].to_vec();
+    Some((cwd, rest))
+}
+
+fn cd_then_read_sequence(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    let Some(separators) = separators(model) else {
+        return false;
+    };
+    let leading_semicolon = separators.first().map(String::as_str) == Some(";");
+    if !(leading_semicolon
+        || (separators.first().map(String::as_str) == Some("&&")
+            && separators.iter().any(|separator| separator == ";")))
         || !separators
             .iter()
             .all(|separator| matches!(separator.as_str(), "&&" | "|" | ";"))
     {
         return false;
     }
-    let [target] = first.arguments.as_slice() else {
-        return false;
-    };
-    let Some(cwd) = crate::pretool::safe_reads::verified_cwd_target(target, context) else {
+    let Some(cwd) = leading_cd_target(model, context) else {
         return false;
     };
     let moved = PathContext {
         cwd: Some(&cwd),
         ..context
     };
+    // After a leading `;` the Git floor splits the command and inspects each
+    // Git read in both directories. A read that needs the helper probe stays
+    // reviewed, because that probe runs in one directory only.
+    let allow_git_helper_context = allow_git_helper_context && !leading_semicolon;
     let mut after_semicolon = false;
     model.segments[1..]
         .iter()
         .zip(&separators)
         .all(|(segment, separator)| {
             after_semicolon |= separator == ";";
-            let executable = segment.executable.as_deref();
+            let executable = segment.executable.as_deref().map(executable_basename);
             plain_segment(segment)
-                && (cwd_read_executable(executable)
+                && !changes_directory(segment)
+                && (cwd_read_executable(segment.executable.as_deref())
                     || crate::pretool::version_probes::lone_probe_segment(segment))
-                && executable.is_some_and(|name| !matches!(executable_basename(name), "git" | "gh"))
+                && executable
+                    .is_some_and(|name| name != "gh" && (name != "git" || leading_semicolon))
                 && exact_safe_segment_with_context(model, segment, allow_git_helper_context, moved)
                 && (!after_semicolon
                     || exact_safe_segment_with_context(
