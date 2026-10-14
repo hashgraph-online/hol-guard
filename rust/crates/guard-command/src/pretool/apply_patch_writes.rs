@@ -135,7 +135,10 @@ pub(super) fn routine_apply_patch(patch: &str, home_dir: Option<&str>, cwd: Opti
         return false;
     };
     targets.iter().all(|target| {
-        super::safe_writes::bounded_native_file_write_target(target, home_dir, cwd)
+        // Codex resolves patch paths literally against cwd and never expands
+        // `~`, so a tilde target would be screened as a different file.
+        !target.starts_with('~')
+            && super::safe_writes::bounded_native_file_write_target(target, home_dir, cwd)
             && !protected_target(target, &workspace, cwd)
     })
 }

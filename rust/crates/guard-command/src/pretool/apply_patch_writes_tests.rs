@@ -156,6 +156,14 @@ fn sibling_project_in_verified_home_matches_host_write_tools() {
         let command = patch(&[&format!("*** Add File: {}", target.display())]);
         assert!(!proven(&review("codex", &command, &fixture)), "{command}");
     }
+    // Codex writes `~/notes.md` under cwd, not the home directory.
+    for header in [
+        "*** Add File: ~/notes.md",
+        "*** Update File: ~/other-project/notes.md",
+    ] {
+        let command = patch(&[header]);
+        assert!(!proven(&review("codex", &command, &fixture)), "{command}");
+    }
 }
 
 #[test]
