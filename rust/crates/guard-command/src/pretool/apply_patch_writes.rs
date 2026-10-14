@@ -2,7 +2,7 @@
 //!
 //! Codex sends the whole patch as `tool_input.command`. That text is an edit
 //! description, not a shell command, so it gets its own bounded proof: every
-//! header must name an added or updated file that the ordinary workspace write
+//! header must name an added or updated file that the native file write
 //! proof accepts and that is not agent instruction or VCS metadata. Deletes,
 //! moves, environment selectors, unknown lines and malformed or oversized
 //! patches stay unproven.
@@ -123,7 +123,10 @@ pub(super) fn apply_patch_targets(patch: &str) -> Option<Vec<String>> {
     (mode == Mode::Ended && !targets.is_empty()).then_some(targets)
 }
 
-/// True only when every patch target is an ordinary workspace file write.
+/// True only when every patch target is an ordinary file write that the
+/// host Write and Edit tools would also be allowed: the workspace, a linked
+/// worktree or the verified home, with home execution-control files and the
+/// agent-instruction and VCS names below still reviewed.
 pub(super) fn routine_apply_patch(patch: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
     let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
         return false;
@@ -132,7 +135,7 @@ pub(super) fn routine_apply_patch(patch: &str, home_dir: Option<&str>, cwd: Opti
         return false;
     };
     targets.iter().all(|target| {
-        super::safe_writes::bounded_file_write_target(target, home_dir, cwd)
+        super::safe_writes::bounded_native_file_write_target(target, home_dir, cwd)
             && !protected_target(target, &workspace, cwd)
     })
 }
