@@ -189,26 +189,34 @@ pub(crate) fn list_approval_request_page(
         &format!("select {SUMMARY_COLUMNS} from approval_requests {sql} {ORDER} limit ?"),
         &params,
     )?;
-    // Python projected every row before mapping any of them.
-    let projections = rows
-        .iter()
-        .map(|row| project(row, guard_home))
-        .collect::<StoreResult<Vec<_>>>()?;
-    let summaries = rows
-        .iter()
-        .zip(&projections)
-        .map(|(row, projection)| summary(row, projection))
-        .collect::<StoreResult<Vec<_>>>()?;
     let has_more = rows.len() as i64 > remaining;
-    let wanted = summaries.len().min(usize::try_from(remaining).unwrap_or(0));
+    let wanted = rows.len().min(usize::try_from(remaining).unwrap_or(0));
     let mut items = Vec::new();
     let mut bytes = 0;
-    for summary in summaries.into_iter().take(wanted) {
-        bytes += serde_json::to_vec(&summary).map_or(0, |encoded| encoded.len());
-        if !items.is_empty() && bytes > PAGE_BYTES {
-            break;
+    let mut summary_error = None;
+    // Rows project one at a time and stop at the byte budget; rows past the
+    // cut project in the chunk that returns them. Python projected every
+    // fetched row before summarizing any, so a projection error wins over an
+    // earlier summary error: once a summary fails, the remaining rows, the
+    // probe row included, are still projected.
+    for (index, row) in rows.iter().enumerate() {
+        let projection = project(row, guard_home)?;
+        if summary_error.is_some() || index >= wanted {
+            continue;
         }
-        items.push(Value::Object(summary));
+        match summary(row, &projection) {
+            Ok(summary) => {
+                bytes += serde_json::to_vec(&summary).map_or(0, |encoded| encoded.len());
+                if !items.is_empty() && bytes > PAGE_BYTES {
+                    break;
+                }
+                items.push(Value::Object(summary));
+            }
+            Err(error) => summary_error = Some(error),
+        }
+    }
+    if let Some(error) = summary_error {
+        return Err(error);
     }
     if items.len() < wanted {
         let after = continuation(&rows[items.len() - 1]);
