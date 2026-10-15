@@ -1009,6 +1009,7 @@ export function App() {
               onRepairHarness={handleRepairHarness}
               onRepairProtection={handleRepairProtection}
               onOpenAppDetail={handleOpenAppDetail}
+              onRuntimeRefresh={refreshStateWithoutResult}
             />
           </Suspense>
         ) : null

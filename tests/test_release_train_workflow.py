@@ -219,8 +219,9 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert "alpha:3.0:refs/heads/release/3.0" in dispatch_gate["run"]
     assert "stable:main:refs/heads/main" in dispatch_gate["run"]
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
-    assert jobs["build"]["needs"] == "authorize-release"
+    assert jobs["build"]["needs"] == ["authorize-release", "resolve-alpha-version"]
     build_condition = jobs["build"]["if"]
+    assert "needs.authorize-release.result == 'success'" in build_condition
     assert "github.event_name != 'workflow_dispatch' || github.run_attempt == 1" in build_condition
     assert "github.event_name != 'push' || github.run_attempt == 1" in build_condition
     assert "alpha-cross-platform" not in jobs

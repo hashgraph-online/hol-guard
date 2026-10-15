@@ -74,7 +74,8 @@ pub struct GitExecutionSafetyRequestV1 {
     /// Branch for `push_origin`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
-    /// Ref for `worktree_add`.
+    /// Ref for `worktree_add`. For `push_origin`, `HEAD` says the command
+    /// creates `branch` at the checked-out commit and switches to it first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
 }

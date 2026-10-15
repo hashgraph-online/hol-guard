@@ -477,3 +477,16 @@ def test_codex_bridge_proxy_execution_environment_matches_guard_collector(
         monkeypatch.setenv(name, value)
 
     assert _load_entry()._codex_execution_environment() == collect_hook_execution_environment()
+
+
+def test_codex_bridge_omits_surrogate_loader_values_and_keeps_the_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib/\udcff")
+    frozen = _load_entry()._codex_execution_environment()
+    collected = collect_hook_execution_environment()
+    assert frozen == collected
+    assert frozen["library_search_paths"] == {}
+    assert "LD_LIBRARY_PATH" in frozen["environment_names"]

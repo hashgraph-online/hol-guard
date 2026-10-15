@@ -149,7 +149,10 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                 return false;
             }
             targets.push(argument.as_str());
-            if unsafe_search_value(SearchValueRole::Path, argument, context) && !recursive {
+            if unsafe_search_value(SearchValueRole::Path, argument, context)
+                && !recursive
+                && !proven_glob(argument, context)
+            {
                 return false;
             }
         } else {
@@ -171,8 +174,16 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                         context,
                         &excluded_files,
                         &excluded_directories,
-                    )
+                        true,
+                    ) || proven_glob(target, context)
                 })))
+}
+
+/// A shell glob operand whose every expansion is screened, and whose matched
+/// directories are walked like a recursive search root. This is how a glob
+/// into a sibling repository, such as `~/code/api/src/*.ts`, is proven.
+fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
+    value.contains(['*', '?', '[']) && tree::safe_glob_search_operand(value, context)
 }
 
 fn exact_exclusion(value: &str) -> bool {

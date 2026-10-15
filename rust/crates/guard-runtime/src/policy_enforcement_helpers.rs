@@ -12,15 +12,33 @@ pub(super) struct FloorInput<'a> {
     pub(super) reason_code: &'a str,
     pub(super) prompt_classes: &'a [NativePromptRiskClassV1],
     pub(super) benign_prompt: bool,
+    /// The command is a proven install that runs no lifecycle scripts.
+    pub(super) package_scripts_disabled: bool,
 }
 
-pub(super) fn policy_floor(
+/// The setting that set a policy floor, so a raised result can say why.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FloorCause {
+    Default,
+    Harness,
+    Subprocess,
+    Network,
+    Unknown,
+    ChangedHash,
+    UnknownPublisher,
+    Artifact,
+    Publisher,
+    Risk(&'static str),
+}
+
+/// The policy floor and the first setting that reached it.
+pub(super) fn policy_floor_with_cause(
     policy: &EffectiveNativePolicyV3,
     compiled: &CompiledEffectivePolicy,
     harness: &str,
     action_type: PreToolActionTypeV1,
     input: &FloorInput<'_>,
-) -> Result<String, String> {
+) -> Result<(String, FloorCause), String> {
     let facts = input.facts;
     let mut floor = if input.benign_prompt
         && matches!(
@@ -31,40 +49,65 @@ pub(super) fn policy_floor(
     } else {
         policy.default_action.clone()
     };
+    let mut cause = FloorCause::Default;
+    let mut raise = |floor: &mut String, action: &str, by: FloorCause| -> Result<(), String> {
+        let joined = join_action(floor, action)?;
+        if joined != *floor {
+            *floor = joined;
+            cause = by;
+        }
+        Ok(())
+    };
     if let Some(action) = compiled.harness_actions.get(harness) {
-        floor = join_action(&floor, action)?;
+        raise(&mut floor, action, FloorCause::Harness)?;
     }
     if matches!(
         action_type,
         PreToolActionTypeV1::Command | PreToolActionTypeV1::ProcessService
     ) {
-        floor = join_action(&floor, &policy.subprocess_action)?;
+        raise(
+            &mut floor,
+            &policy.subprocess_action,
+            FloorCause::Subprocess,
+        )?;
     }
     if matches!(
         action_type,
         PreToolActionTypeV1::Network | PreToolActionTypeV1::Browser
     ) {
-        floor = join_action(&floor, &policy.new_network_domain_action)?;
+        raise(
+            &mut floor,
+            &policy.new_network_domain_action,
+            FloorCause::Network,
+        )?;
     }
     if action_type == PreToolActionTypeV1::Unknown {
         // An unknown PostToolUse operation has no safe automatic allow
         // proof, even when the configured default is permissive.
-        floor = join_action(&floor, "review")?;
+        raise(&mut floor, "review", FloorCause::Unknown)?;
     }
     if facts.changed_hash {
-        floor = join_action(&floor, &policy.changed_hash_action)?;
+        raise(
+            &mut floor,
+            &policy.changed_hash_action,
+            FloorCause::ChangedHash,
+        )?;
     }
     if facts.publisher_relevant && facts.publisher.is_none() {
-        floor = join_action(&floor, &policy.unknown_publisher_action)?;
+        raise(
+            &mut floor,
+            &policy.unknown_publisher_action,
+            FloorCause::UnknownPublisher,
+        )?;
     }
     if let Some(artifact) = facts.artifact.as_deref() {
         if let Some(action) = policy_map_action(&policy.artifact_actions, artifact)? {
-            floor = join_action(&floor, &action)?;
+            raise(&mut floor, &action, FloorCause::Artifact)?;
         }
     }
     if let Some(publisher) = facts.publisher.as_deref() {
         if let Some(action) = policy_map_action(&policy.publisher_actions, publisher)? {
-            floor = join_action(&floor, &action)?;
+            raise(&mut floor, &action, FloorCause::Publisher)?;
         }
     }
     let harness_risks = compiled.harness_risk_actions.get(harness);
@@ -74,16 +117,19 @@ pub(super) fn policy_floor(
         input.reason_code,
         input.prompt_classes,
     ) {
+        if risk == "package_script" && input.package_scripts_disabled {
+            continue;
+        }
         if let Some(action) = policy_map_action(&policy.risk_actions, risk)? {
-            floor = join_action(&floor, &action)?;
+            raise(&mut floor, &action, FloorCause::Risk(risk))?;
         }
         if let Some(harness_map) = harness_risks {
             if let Some(action) = policy_map_action(harness_map, risk)? {
-                floor = join_action(&floor, &action)?;
+                raise(&mut floor, &action, FloorCause::Risk(risk))?;
             }
         }
     }
-    Ok(floor)
+    Ok((floor, cause))
 }
 
 pub(super) fn action_rank(action: &str) -> Option<u8> {

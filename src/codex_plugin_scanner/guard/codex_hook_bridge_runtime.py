@@ -63,11 +63,18 @@ class TrustedHookLaunch(Protocol):
 
 
 def bounded_hook_input(limit: int) -> str | None:
-    data = sys.stdin.read(limit + 1)
-    try:
-        encoded_size = len(data.encode("utf-8"))
-    except UnicodeError:
-        return None
+    # Codex sends UTF-8; text-mode stdin would decode it with the Windows code page.
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:
+        data = sys.stdin.read(limit + 1)
+        try:
+            encoded_size = len(data.encode("utf-8"))
+        except UnicodeError:
+            return None
+    else:
+        raw = stream.read(limit + 1)
+        encoded_size = len(raw)
+        data = raw.decode("utf-8-sig", errors="replace")
     if encoded_size > limit:
         return None
     return data if data.strip() else "{}"

@@ -1,6 +1,5 @@
+use crate::git_helper_fixture as fixture;
 use serde_json::json;
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
 
 #[test]
 fn indexed_submodules_require_review_unless_all_submodule_processing_is_disabled() {

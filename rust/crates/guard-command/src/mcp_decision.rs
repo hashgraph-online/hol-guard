@@ -355,16 +355,6 @@ fn persisted_mcp_digest(material: &Value) -> Result<String, &'static str> {
     Ok(format!("{:x}", Sha256::digest(&bytes)))
 }
 
-pub fn mcp_tool_content_digest(
-    request: &guard_contracts::McpToolContentDigestRequestV1,
-) -> Result<String, &'static str> {
-    persisted_mcp_digest(&json!({
-        "arguments": request.arguments,
-        "artifact_id": request.artifact_id,
-        "config_path": request.config_path,
-    }))
-}
-
 pub fn mcp_tool_approval_digest(
     request: &guard_contracts::McpToolApprovalDigestRequestV1,
 ) -> Result<String, &'static str> {

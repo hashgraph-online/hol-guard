@@ -207,3 +207,221 @@ fn resolved_directory_target_is_rechecked_before_inline_output_allow() {
         "allow_original"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn agent_plan_reads_outside_the_workspace_keep_their_original_output() {
+    let root = TestRoot::new();
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let plan = root.path().join(".codex/plans/rollout-todo.md");
+    std::fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    std::fs::write(&plan, "# TODO\n\n- [ ] Ship the reviewed fix\n").unwrap();
+    // OMP's read tool drops the file's final newline.
+    let output = "# TODO\n\n- [ ] Ship the reviewed fix";
+    let mut input = request(&workspace, output);
+    input.home_dir = root.path().to_string_lossy().into();
+    let target = plan.to_string_lossy().into_owned();
+    input.payload["tool_input"]["path"] = json!(target);
+    input.payload["guard_source_ref"]["path"] = json!(target);
+    input.payload["guard_source_ref"]["tool_input_path"] = json!(target);
+    let result = review_post_tool(&input);
+    assert_eq!(result.reason_code, "source_full_scan_allow", "{result:?}");
+    assert_eq!(result.model_output_action, "allow_original");
+
+    let token = format!("{}{}", ["gh", "p_"].concat(), "b".repeat(30));
+    std::fs::write(&plan, format!("# TODO\n\n{token}\n")).unwrap();
+    assert_eq!(review_post_tool(&input).reason_code, "source_secret_match");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn slices_that_show_no_secret_are_reviewed_on_their_own() {
+    let root = TestRoot::new();
+    let source = root.path().join("example.py");
+    let token = format!("{}{}", ["gh", "p_"].concat(), "b".repeat(30));
+    let begin = ["-----BEGIN ", "PRIVATE KEY-----"].concat();
+    let end = ["-----END ", "PRIVATE KEY-----"].concat();
+    let mut lines: Vec<String> = (1..=30).map(|number| format!("step({number})")).collect();
+    lines[1] = format!("token = '{token}'");
+    lines[19] = begin;
+    lines[20] = "c2xpY2Ugb2YgYSBrZXk=".into();
+    lines[21] = end;
+    std::fs::write(&source, lines.join("\n") + "\n").unwrap();
+    let slice = |rows: &[usize]| {
+        let body: Vec<String> = rows
+            .iter()
+            .map(|number| format!("{number}:{}", lines[number - 1]))
+            .collect();
+        format!("[example.py#ABCD]\n{}", body.join("\n"))
+    };
+
+    let clean = review_post_tool(&request(root.path(), &slice(&[10, 11, 12])));
+    assert_eq!(clean.reason_code, "output_scan_allow", "{clean:?}");
+    assert_eq!(clean.model_output_action, "allow_original");
+    let collapsed = format!("{}\n13-18:  … }}", slice(&[10, 11, 12]));
+    let clean = review_post_tool(&request(root.path(), &collapsed));
+    assert_eq!(clean.reason_code, "output_scan_allow", "{clean:?}");
+    // A range anchored by its enclosing block's first and last lines leaves
+    // the omitted lines between them, the secret included, unshown.
+    let anchored_rows = |runs: &[&[usize]]| {
+        let rows: Vec<String> = runs
+            .iter()
+            .map(|run| {
+                run.iter()
+                    .map(|number| format!("{number}:{}", lines[number - 1]))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect();
+        format!(
+            "[example.py#ABCD]\n{}\n\n[Showing lines 10-12 of 30]",
+            rows.join("\n…\n")
+        )
+    };
+    let clean = review_post_tool(&request(
+        root.path(),
+        &anchored_rows(&[&[1], &[10, 11, 12], &[30]]),
+    ));
+    assert_eq!(clean.reason_code, "output_scan_allow", "{clean:?}");
+
+    for blocked in [
+        // The secret itself, the lines just below it, and a key body.
+        slice(&[2]),
+        slice(&[5, 6]),
+        slice(&[21]),
+        format!("{}\n19-24:  …", slice(&[12])),
+        // An anchor row is a shown line like any other.
+        anchored_rows(&[&[2], &[10, 11, 12], &[30]]),
+        anchored_rows(&[&[1], &[10, 11, 12], &[21]]),
+        // Rows that are not the file's lines keep the whole-file decision.
+        "[example.py#ABCD]\n10:step(9)".into(),
+        "[example.py#ABCD]\nstep(10)".into(),
+    ] {
+        let result = review_post_tool(&request(root.path(), &blocked));
+        assert_eq!(result.reason_code, "source_secret_match", "{blocked:?}");
+    }
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn slices_of_a_value_far_below_its_credential_name_stay_blocked() {
+    let root = TestRoot::new();
+    let source = root.path().join("example.py");
+    let value = ["s3cr3t", "Value", "1234"].concat();
+    let quoted = format!("\"{value}\"");
+    let layouts: [&[&str]; 2] = [
+        &["api_key =", "", "", "", ""],
+        &["api_key", "", "", "", "=", "", "", ""],
+    ];
+    for layout in layouts {
+        let mut lines: Vec<String> = (1..=6).map(|number| format!("step({number})")).collect();
+        lines.extend(layout.iter().map(|line| line.to_string()));
+        lines.push(quoted.clone());
+        lines.extend((1..=6).map(|number| format!("done({number})")));
+        std::fs::write(&source, lines.join("\n") + "\n").unwrap();
+        let value_line = lines.len() - 6;
+        let row = |number: usize| format!("{number}:{}", lines[number - 1]);
+        let slice = |rows: &[usize]| {
+            let body: Vec<String> = rows.iter().map(|number| row(*number)).collect();
+            format!("[example.py#ABCD]\n{}", body.join("\n"))
+        };
+
+        for blocked in [
+            slice(&[value_line]),
+            slice(&[value_line, value_line + 1]),
+            format!("{}\n{}-{}:  …", slice(&[3]), 4, value_line),
+        ] {
+            let result = review_post_tool(&request(root.path(), &blocked));
+            assert_eq!(result.reason_code, "source_secret_match", "{blocked:?}");
+        }
+        // Lines the match does not reach are still reviewed on their own.
+        let clean = review_post_tool(&request(root.path(), &slice(&[value_line + 2])));
+        assert_eq!(clean.reason_code, "output_scan_allow", "{clean:?}");
+        let clean = review_post_tool(&request(root.path(), &slice(&[1, 2, 3])));
+        assert_eq!(clean.reason_code, "output_scan_allow", "{clean:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn search_path_lists_are_rechecked_entry_by_entry() {
+    let root = TestRoot::new();
+    let workspace = root.path().join("workspace");
+    let auth = workspace.join("src/components/auth");
+    let queries = workspace.join("scripts/queries.json");
+    std::fs::create_dir_all(&auth).unwrap();
+    std::fs::create_dir_all(queries.parent().unwrap()).unwrap();
+    std::fs::write(auth.join("email-auth.tsx"), "export {}\n").unwrap();
+    std::fs::write(&queries, "{}\n").unwrap();
+
+    let search = |path: String| {
+        let mut input = request(&workspace, "match\n");
+        let payload = input.payload.as_object_mut().unwrap();
+        payload.remove("guard_source_ref");
+        payload.insert("tool_name".into(), json!("grep"));
+        input.payload["tool_input"] = json!({"pattern": "attempt_id", "path": path});
+        review_post_tool(&input)
+    };
+
+    // Joined, the source file's `auth` directory and the JSON file name read
+    // as one credential path; OMP searches them as two ordinary files.
+    let list = format!(
+        "{};{}",
+        auth.join("email-auth.tsx").display(),
+        queries.display()
+    );
+    assert_eq!(search(list).model_output_action, "allow_original");
+    let relative = search("src/components/auth/email-auth.tsx; scripts/queries.json".into());
+    assert_eq!(relative.model_output_action, "allow_original");
+
+    let dotenv = format!("{};{}", queries.display(), workspace.join(".env").display());
+    assert_eq!(search(dotenv).reason_code, "sensitive_path");
+    let credentials = format!("{};{}", workspace.join(".ssh").display(), queries.display());
+    assert_eq!(search(credentials).reason_code, "sensitive_path");
+
+    // A literal path containing `;` is what OMP opens, so it is judged whole.
+    let literal = workspace.join("secrets;notes");
+    std::fs::create_dir_all(&literal).unwrap();
+    std::fs::write(literal.join("data.json"), "{}\n").unwrap();
+    let whole = search(literal.join("data.json").to_string_lossy().into_owned());
+    assert_eq!(whole.reason_code, "sensitive_path");
+}
+
+#[cfg(unix)]
+#[test]
+fn external_source_named_for_a_credential_feature_is_scanned() {
+    let root = TestRoot::new();
+    let workspace = root.path().join("workspace");
+    let sibling = root.path().join("sibling");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::create_dir_all(sibling.join(".git")).unwrap();
+    std::fs::create_dir_all(sibling.join("src/credentials")).unwrap();
+    let read = |file: &std::path::Path, body: &str| {
+        std::fs::write(file, body).unwrap();
+        let target = file.to_string_lossy().into_owned();
+        let output = format!("[{target}#ABCD]\n1:{}", body.trim_end());
+        let mut input = request(&workspace, &output);
+        input.payload["tool_input"]["path"] = json!(target);
+        input.payload["guard_source_ref"]["path"] = json!(target);
+        input.payload["guard_source_ref"]["tool_input_path"] = json!(target);
+        review_post_tool(&input)
+    };
+
+    let source = sibling.join("src/auth-session.ts");
+    let allowed = read(&source, "export const step = 1;\n");
+    assert_eq!(allowed.model_output_action, "allow_original", "{allowed:?}");
+
+    let token = format!("{}{}", ["gh", "p_"].concat(), "b".repeat(30));
+    let secret = read(&source, &format!("export const value = '{token}';\n"));
+    assert_ne!(secret.model_output_action, "allow_original");
+
+    for file in [
+        sibling.join("auth.json"),
+        sibling.join("api-token.txt"),
+        sibling.join("src/credentials/session.ts"),
+    ] {
+        let result = read(&file, "inert fixture\n");
+        assert_eq!(result.reason_code, "no_output_to_review", "{file:?}");
+    }
+}

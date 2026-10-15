@@ -48,8 +48,19 @@ def input_digest(value: dict) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _unverified_row(row: dict, code: str) -> dict:
+    """Keep an unverifiable observation as a failed attempt with its cause."""
+    kept = {key: row[key] for key in ("event", "tool", "tool_call_id", "elapsed_ms", "http_status") if key in row}
+    return {**kept, "observer_error": True, "observer_error_code": code}
+
+
 def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[dict]:
-    """Check original observer bytes before exporting comparable public inputs."""
+    """Check original observer bytes before exporting comparable public inputs.
+
+    A row whose input cannot be verified becomes an observer error naming the
+    check it failed. The judge counts it as a failed attempt, and the other
+    rows of the case stay available.
+    """
     result = []
     for row in rows:
         if row.get("observer_error") or row.get("transport_error"):
@@ -57,13 +68,19 @@ def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[
             continue
         raw = row.get("input_json")
         if not isinstance(raw, str) or len(raw.encode("utf-8")) > 256_000:
-            raise ValueError("missing or oversized original Guard input")
+            result.append(_unverified_row(row, "input_missing_or_oversized"))
+            continue
         observed_digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         if observed_digest != row.get("input_sha256"):
-            raise ValueError("original Guard input does not match its observed digest")
-        value = json.loads(raw)
+            result.append(_unverified_row(row, "input_digest_mismatch"))
+            continue
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = None
         if not isinstance(value, dict):
-            raise ValueError("Guard input must be a complete object")
+            result.append(_unverified_row(row, "input_not_object"))
+            continue
         public_input = redact_value(value, replacements)
         public_row = {key: item for key, item in row.items() if key not in {"input_json", "input_sha256"}}
         public_row.update(
@@ -98,7 +115,7 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     return actual == enriched
 
 
-def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any]) -> bool:
+def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any], result: Any = None) -> bool:
     """Bind resolved read paths without accepting a different target or read options."""
     if reviewed == completed:
         return True
@@ -111,6 +128,29 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     original, resolved = reviewed[key], completed[key]
     if not isinstance(original, str) or not isinstance(resolved, str):
         return False
+    # A bare `:raw` returns the whole file without line formatting, so its
+    # result must still prove the same resolved source from the first line.
+    selector = re.fullmatch(r"(.+):(?:([1-9][0-9]*)(?:-([1-9][0-9]*))?|raw)", original)
+    if selector:
+        base, first, last = selector.groups()
+        first = first or "1"
+        if last is not None and int(last) < int(first):
+            return False
+        details = result.get("details") if isinstance(result, dict) else None
+        if not isinstance(details, dict):
+            return False
+        meta, display = details.get("meta"), details.get("displayContent")
+        source = meta.get("source") if isinstance(meta, dict) else None
+        if (
+            not isinstance(source, dict)
+            or source != {"type": "path", "value": resolved}
+            or not isinstance(display, dict)
+            or display.get("startLine") != int(first)
+        ):
+            return False
+        # The actual SDK result proves it resolved a selector rather than read
+        # a literal colon-named file. Guard alone cannot supply that proof.
+        original = base
     # Windows agents resolve with backslash separators. Accept them only when
     # the whole resolved path is in that form and the reviewed path has no
     # backslash, so a POSIX name containing one never matches a different file.

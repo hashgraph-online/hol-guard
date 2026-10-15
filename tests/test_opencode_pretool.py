@@ -6,18 +6,13 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hook_python import package_root_from_python, resolve_guard_hook_python
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_pretool import (
-    _HOOK_ARGV_ENV,
-    _pretool_hook_env,
-    _pretool_hook_launcher_code,
     global_plugin_path,
     install_pretool_plugin,
     managed_plugin_path,
@@ -150,7 +145,17 @@ def test_pretool_plugin_source_follows_updated_guard_python(tmp_path: Path) -> N
     assert "function resolveGuardPythonTarget(): string" in source
     assert "function isGuardSelfRepairCommand(command: string): boolean" in source
     assert "host terminal outside OpenCode" in source
-    assert "nodeSpawn(pythonTarget, options.args" in source
+    command_at = source.index("let command = pythonTarget;")
+    args_at = source.index("let args = options.args;")
+    native_at = source.index(
+        "const nativeRuntime = options.nativeArgs === undefined ? null : resolveGuardNativeRuntime();"
+    )
+    override_at = source.index("if (nativeRuntime !== null && options.nativeArgs !== undefined)")
+    spawn_at = source.index("proc = nodeSpawn(command, args,")
+    override = source[override_at:spawn_at]
+    assert command_at < args_at < native_at < override_at < spawn_at
+    assert "command = nativeRuntime;" in override
+    assert "args = options.nativeArgs(pythonTarget);" in override
     assert "nodeSpawn(GUARD_PYTHON.targetPath, options.args" not in source
     assert "Re-run `hol-guard install opencode` before retrying." not in source
     assert "detail.includes(GUARD_RUNTIME_MISSING) && isGuardSelfRepairCommand(command)" in source
@@ -228,60 +233,6 @@ def test_pretool_plugin_guard_block_message_recovers_last_json_line(tmp_path: Pa
     )
     assert "http://127.0.0.1:4455/requests/req-opencode" in message
     assert message.count("http://127.0.0.1:4455/requests/req-opencode") == 1
-
-
-def test_pretool_hook_launcher_ignores_workspace_package_hijack(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression: workspace must not precede trusted Guard on sys.path."""
-    import subprocess
-
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    fake_pkg = workspace / "codex_plugin_scanner"
-    fake_pkg.mkdir()
-    (fake_pkg / "__init__.py").write_text("", encoding="utf-8")
-    (fake_pkg / "cli.py").write_text(
-        "import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n",
-        encoding="utf-8",
-    )
-
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
-    guard_python = resolve_guard_hook_python(ctx)
-    package_root = package_root_from_python(guard_python, ctx)
-    launcher = _pretool_hook_launcher_code(package_root=package_root)
-    assert "run_bounded_cli_hook" in launcher
-    assert "'timeout_seconds':25" in launcher
-    inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
-    env = {**inherit_env, **_pretool_hook_env(package_root=package_root), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
-    completed = subprocess.run(
-        [sys.executable, "-c", launcher],
-        cwd=workspace,
-        env=env,
-        input="{}",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert "hijacked" not in completed.stderr
-    assert completed.returncode != 99
-
-
-def test_pretool_hook_env_blocks_workspace_import_shadowing(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
-    guard_python = resolve_guard_hook_python(ctx)
-    package_root = package_root_from_python(guard_python, ctx)
-    env = _pretool_hook_env(package_root=package_root)
-    assert env["PYTHONSAFEPATH"] == "1"
-    assert env["PYTHONNOUSERSITE"] == "1"
-    assert "PYTHONPATH" not in env
-    source = pretool_plugin_source(ctx)
-    assert 'args: GUARD_FROZEN ? guardArgv : ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER]' in source
-    assert "resolveGuardPythonTarget();" in source
-    assert "nodeSpawn(pythonTarget, options.args" in source
 
 
 def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) -> None:

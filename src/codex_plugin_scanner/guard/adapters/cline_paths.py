@@ -68,14 +68,6 @@ def cline_plugin_root(context: HarnessContext) -> Path:
     return root
 
 
-def is_cline_owned_path(context: HarnessContext, path: Path) -> bool:
-    """Return true when a path is inside the user's writable Cline roots."""
-
-    candidate = path.resolve(strict=False)
-    roots = (context.home_dir.resolve(strict=False), cline_data_dir(context).resolve(strict=False))
-    return any(candidate == root or candidate.is_relative_to(root) for root in roots)
-
-
 def ensure_safe_cline_destination(context: HarnessContext, path: Path) -> Path:
     """Validate nodes from the trusted root down and return the rebuilt destination."""
 
@@ -120,5 +112,4 @@ __all__ = [
     "cline_hook_roots",
     "cline_plugin_root",
     "ensure_safe_cline_destination",
-    "is_cline_owned_path",
 ]

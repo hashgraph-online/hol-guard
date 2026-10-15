@@ -136,41 +136,6 @@ def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: py
     assert second["root"] == first["root"] and len(calls) == 1
 
 
-def test_wheel_cache_requires_a_matching_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "arm64")
-    # The rebuild path must not depend on this host actually carrying cargo/jq.
-    monkeypatch.setattr(qualify_setup.shutil, "which", lambda tool: "/bin/" + tool)
-    tag = "macosx_11_0_arm64"
-    store = tmp_path / "cache" / "wheels" / f"{SHA}-{tag}"
-    for level in (store.parent.parent, store.parent, store):
-        level.mkdir(mode=0o700)
-    wheel_bytes = b"fake wheel bytes"
-    (store / f"hol_guard-1.0.0-{tag}.whl").write_bytes(wheel_bytes)
-    calls: list[list[str]] = []
-
-    def fake_logged(argv: list[str], *, cwd: Path, log: Path, **_kw: Any) -> None:
-        calls.append(argv)
-        if argv[:3] == ["nice", "-n", "10"]:
-            dist = cwd / "native-dist"
-            dist.mkdir(parents=True, exist_ok=True)
-            (dist / f"hol_guard-1.0.0-{tag}.whl").write_bytes(b"new wheel bytes")
-
-    monkeypatch.setattr(qualify_setup, "run_logged", fake_logged)
-
-    # A stale digest record rebuilds; the cache stores and digests the new wheel.
-    (store / "wheel.sha256").write_text("0" * 64 + "\n")
-    result = qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run")
-    digest = hashlib.sha256(b"new wheel bytes").hexdigest()
-    assert result == {"path": str(store / f"hol_guard-1.0.0-{tag}.whl"), "sha256": digest, "cached": False}
-    assert any(argv[:3] == ["nice", "-n", "10"] and argv[-1].endswith("build-native-wheel-macos.sh") for argv in calls)
-    assert (store / "wheel.sha256").read_text().strip() == digest
-
-    calls.clear()
-    result = qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run")
-    assert result["cached"] is True and not calls
-
-
 def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
     defaults = {
         "sha": SHA,
@@ -186,6 +151,7 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "work_parent": tmp_path / "w",
         "wheel": None,
         "sdk_root": tmp_path / "sdk",
+        "release_profile_wheel": False,
         "keep_work": False,
         "timeout": 300.0,
         "max_inference_rounds": 32,
@@ -217,7 +183,12 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
     monkeypatch.setattr(
         qualify_setup,
         "ensure_wheel",
-        lambda *_a, **_k: {"path": str(wheel), "sha256": hashlib.sha256(b"wheel").hexdigest(), "cached": True},
+        lambda *_a, **_k: {
+            "path": str(wheel),
+            "sha256": hashlib.sha256(b"wheel").hexdigest(),
+            "cached": True,
+            "profile": "release",
+        },
     )
 
     def fake_candidate(_repo: Path, _sha: str, run_root: Path, _wheel: Path) -> Path:
@@ -254,6 +225,7 @@ def _summary(cases: list[dict[str, Any]], passed: bool, qualified: bool = True) 
         "merge_qualified": passed and qualified,
         "stopped_early": False,
         "cases": cases,
+        "interruptions": {"benign_cases": 1, "benign_interruptions": 0},
         "inference_usage": {"prompt_tokens": 5, "rounds": 1, "rounds_with_usage": 1},
     }
 
@@ -269,6 +241,10 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     assert kwargs["expected_sha"] == SHA
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert result["qualified"] is True and result["independent_verifier"] is True
+    assert set(result["phase_seconds"]) == {
+        "preflight", "source", "wheel", "install", "live_cases", "verify", "cleanup",
+    }
+    assert all(seconds >= 0 for seconds in result["phase_seconds"].values())
     assert result["attempts"][0]["pass"] is True
     # Passing attempts remove their short work root; it stays out of `kept`.
     assert result["attempts"][0]["work_root"] == str((tmp_path / "w" / "1").resolve())
@@ -375,6 +351,7 @@ def test_setup_command_group_is_reaped_when_the_driver_is_interrupted(
 def test_cold_wheel_build_requires_cargo_and_jq(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(qualify_setup, "git_show", lambda *_a, **_k: b"")
     monkeypatch.setattr(qualify_setup.shutil, "which", lambda _tool: None)
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "no-home"))
     with pytest.raises(RuntimeError, match="cargo"):
@@ -386,7 +363,7 @@ def test_cold_wheel_build_requires_cargo_and_jq(tmp_path: Path, monkeypatch: pyt
     wheel = tmp_path / "hol_guard-1.0.0-any.whl"
     wheel.write_bytes(b"wheel")
     result = qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", wheel=wheel)
-    assert result["path"] == str(wheel)
+    assert result["path"] == str(wheel) and result["profile"] == "supplied"
 
 
 def test_parser_and_list_do_not_require_a_posix_uid(monkeypatch: pytest.MonkeyPatch, capsys) -> None:

@@ -1,13 +1,14 @@
 """Typed client for the native MCP tool-evidence owner; no Python evaluator.
 
-Rust owns two projections of an MCP tool call: the risk signals and summary
-text (including browser scope, argument, schema, and target-redaction checks),
-and the portal firewall evidence for ``mcp_server`` and ``tool_call``
-artifacts. Python ships artifact/argument DTOs, binds the answer to the
-request by ``request_id`` and canonical ``request_sha256``, and renders it.
-Any transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
-(never another exception type); nothing here ever recomputes a signal,
-summary, or fingerprint locally, and a failure is never an empty result.
+Rust owns the portal firewall evidence for ``mcp_server`` and ``tool_call``
+artifacts. Python ships the artifact DTO, binds the answer to the request by
+``request_id`` and canonical ``request_sha256``, and renders it. Any
+transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
+(never another exception type); nothing here ever recomputes a fingerprint
+locally, and a failure is never an empty result.
+
+``risk_input`` builds the risk DTO the MCP proxy sends with its
+``call_projection`` check, which renders the risk signals and summary.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from typing import Any
 
 from .models import GuardArtifact
 from .native_context import (
-    _MCP_RISK_CATEGORIES,
     _canonical_request_sha256,
     _native_error,
     _native_runtime_status_memo,
@@ -29,12 +29,14 @@ from .native_context import (
     ensure_resident_prerequisite,
 )
 from .native_resident_client import native_resident_client_request
+from .native_resident_prerequisite_reason import prerequisite_unavailable_code
 from .native_runtime import _isolated_environment
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
+from .runtime.json_safe_copy import json_safe_copy
 
 _FEATURE = "mcp-tool-evidence-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
@@ -50,17 +52,12 @@ class NativeMcpToolEvidenceError(ValueError):
     """The native owner could not supply bound, typed MCP tool evidence."""
 
 
-def _json_value(value: object) -> Any:
-    """JSON-safe copy of a value; ``default=str`` mirrors every other DTO."""
-    return json.loads(json.dumps(value, default=str))
-
-
 def _arguments_dto(arguments: object) -> dict[str, object]:
     if isinstance(arguments, Mapping):
-        return {"format": "mapping", "entries": _json_value([(str(key), value) for key, value in arguments.items()])}
+        return {"format": "mapping", "entries": json_safe_copy([(str(key), value) for key, value in arguments.items()])}
     if isinstance(arguments, str):
         return {"format": "json", "text": arguments}
-    return {"format": "other", "value": _json_value(arguments)}
+    return {"format": "other", "value": json_safe_copy(arguments)}
 
 
 def risk_input(
@@ -70,9 +67,9 @@ def risk_input(
     risk_categories: tuple[str, ...] | None = None,
     summary_code: str | None = None,
 ) -> dict[str, object]:
-    """Transport-only DTO for the ``risk`` subop."""
+    """Transport-only risk DTO for the proxy's ``call_projection`` check."""
     return {
-        "artifact": _json_value(
+        "artifact": json_safe_copy(
             {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)}
         ),
         "arguments": _arguments_dto(arguments),
@@ -88,7 +85,7 @@ def _string_pairs(value: object) -> list[list[str]]:
 
 
 def _record(value: object) -> dict[str, object] | None:
-    return _json_value(value) if isinstance(value, dict) else None
+    return json_safe_copy(value) if isinstance(value, dict) else None
 
 
 def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
@@ -110,10 +107,10 @@ def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
         "env": _string_pairs(metadata.get("env")),
         "mcp_server_identity": _record(metadata.get("mcp_server_identity")),
         "mcp_tool_identity": _record(metadata.get("mcp_tool_identity")),
-        "tool_schema": _json_value(metadata.get("tool_schema")),
-        "tool_description": _json_value(metadata.get("tool_description")),
-        "tool_names": _json_value(metadata.get("tool_names")),
-        "tool_names_camel": _json_value(metadata.get("toolNames")),
+        "tool_schema": json_safe_copy(metadata.get("tool_schema")),
+        "tool_description": json_safe_copy(metadata.get("tool_description")),
+        "tool_names": json_safe_copy(metadata.get("tool_names")),
+        "tool_names_camel": json_safe_copy(metadata.get("toolNames")),
     }
 
 
@@ -136,13 +133,11 @@ def native_mcp_tool_evidence_request(
         "request_id": uuid.uuid4().hex,
         "subop": subop,
         "guard_home": str(guard_home),
-        "risk": payload if subop == "risk" else None,
         "firewall": payload if subop == "firewall" else None,
     }
     status = _native_runtime_status_memo()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
@@ -155,7 +150,9 @@ def native_mcp_tool_evidence_request(
     except Exception as error:
         raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_prerequisite_unavailable") from error
     if not prerequisite:
-        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_prerequisite_unavailable")
+        raise NativeMcpToolEvidenceError(
+            prerequisite_unavailable_code("native_mcp_tool_evidence_prerequisite_unavailable", guard_home)
+        )
     try:
         request_sha256 = _canonical_request_sha256(request)
         # Rust bounds the ASCII-escaped canonical form, which can exceed the
@@ -226,45 +223,11 @@ def native_mcp_tool_evidence_request(
     return verified
 
 
-def _string_list(value: object) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise NativeMcpToolEvidenceError(_INVALID_RESULT)
-    return value
-
-
-def _validated_risk_payload(payload: dict[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    categories = _string_list(payload.get("risk_categories"))
-    signals = _string_list(payload.get("signals"))
-    summary = payload.get("summary")
-    if (
-        not isinstance(summary, str)
-        or len(signals) != len(categories)
-        or any(category not in _MCP_RISK_CATEGORIES for category in categories)
-    ):
-        raise NativeMcpToolEvidenceError(_INVALID_RESULT)
-    return tuple(categories), tuple(signals), summary
-
-
 def _validated_firewall_payload(payload: dict[str, Any]) -> dict[str, object] | None:
     patch = payload.get("metadata_patch")
     if "metadata_patch" not in payload or not (patch is None or isinstance(patch, dict)):
         raise NativeMcpToolEvidenceError(_INVALID_RESULT)
     return patch
-
-
-def native_tool_risk_evidence(
-    artifact: GuardArtifact,
-    arguments: object,
-    *,
-    risk_categories: tuple[str, ...] | None = None,
-    summary_code: str | None = None,
-) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """Return native ``(risk_categories, signals, summary)`` for one tool call."""
-    return native_mcp_tool_evidence_request(
-        "risk",
-        risk_input(artifact, arguments, risk_categories=risk_categories, summary_code=summary_code),
-        validate=_validated_risk_payload,
-    )
 
 
 def native_firewall_metadata_patch(artifact: GuardArtifact) -> dict[str, object] | None:

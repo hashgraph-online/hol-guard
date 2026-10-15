@@ -8,13 +8,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.local_supply_chain import audit_receipt_metadata
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.package_firewall_receipts import package_firewall_receipt_metadata
-from codex_plugin_scanner.guard.shim_probe import protect_evaluator_evidence
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.supply_chain_workspace_audit import audit_receipt_metadata
 from tests.shim_execution_helpers import write_fake_manager_script
 
 
@@ -30,16 +29,6 @@ def _harness_context(tmp_path: Path) -> MagicMock:
     context.workspace_dir = workspace_dir
     context.guard_home = guard_home
     return context
-
-
-def test_protect_evaluator_evidence_includes_evaluator_source() -> None:
-    evidence = protect_evaluator_evidence(
-        {
-            "supply_chain_evaluation": {"source": "guard-cloud", "evidence_ids": ["ev-1"]},
-            "verdict": {"action": "allow"},
-        },
-    )
-    assert evidence["evaluator_source"] == "guard-cloud"
 
 
 def test_package_firewall_receipt_metadata_records_audit_manager_subset_from_posture() -> None:

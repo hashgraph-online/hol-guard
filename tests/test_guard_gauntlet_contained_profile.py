@@ -121,6 +121,7 @@ def _assessment_inputs(case, *, filesystem=None, events=None, wrapper_workspace=
             "input": original_input,
             "input_sha256": original_digest,
             "observed_input_sha256": "a" * 64,
+            "rendered_fields": [],
             "native_observation": {
                 "native_receipt": {
                     "authority": "rust",
@@ -152,6 +153,7 @@ def _assessment_inputs(case, *, filesystem=None, events=None, wrapper_workspace=
             "input": tool_input,
             "input_sha256": digest,
             "observed_input_sha256": "b" * 64,
+            "rendered_fields": [],
         },
     ]
     return {

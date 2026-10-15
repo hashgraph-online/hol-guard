@@ -1,7 +1,106 @@
 import { test, expect } from 'bun:test';
-import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
+import { authorized, convertMessages, convertTools, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
+  StreamedArguments, nativeBackend,
   requireTransportSelection, thinkingLevel, promptCacheKey, usageChunk,
-  REQUEST_MODEL, THINKING_LEVELS } from './luna_adapter';
+  REQUEST_MODEL, THINKING_LEVELS, keepStreamAlive } from './luna_adapter';
+
+test('tool conversion preserves strictness and the original optional result schema', async () => {
+  const parameters = { type: 'object', properties: { data: { type: 'object' },
+    error: { type: 'string' } }, required: [], additionalProperties: false };
+  for (const strict of [undefined, false, true]) {
+    const [tool] = convertTools([{ type: 'function', function: { name: 'yield', parameters,
+      ...(strict === undefined ? {} : { strict }) } }]);
+    expect(tool.strict).toBe(strict ?? false);
+    expect(tool.parameters).toBe(parameters);
+    expect(tool.parameters.required).toEqual([]);
+    await expect(tool.execute()).rejects.toThrow('cannot execute tools');
+  }
+  expect(() => convertTools([{ type: 'function', function: { strict: 'false' } }])).toThrow();
+  expect(() => convertTools([{ type: 'custom' }])).toThrow();
+});
+
+test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned Responses encoder keeps non-strict fields optional', async () => {
+  const root = process.env.GUARD_GAUNTLET_SDK_ROOT!;
+  const entry = Bun.resolveSync('@oh-my-pi/pi-ai', root);
+  const { convertOpenAICodexResponsesTools } = await import(
+    new URL('./providers/openai-codex-responses.ts', `file://${entry}`).href);
+  const parameters = { type: 'object', properties: { data: { type: 'string' },
+    error: { type: 'string' } }, required: [], additionalProperties: false };
+  for (const strict of [undefined, false, true]) {
+    const tools = convertTools([{ type: 'function', function: { name: 'yield', parameters,
+      ...(strict === undefined ? {} : { strict }) } }]);
+    const [wire] = convertOpenAICodexResponsesTools(tools, {});
+    expect(wire.strict).toBe(strict ?? false);
+    if (strict) {
+      expect(wire.parameters.required).toEqual(['data', 'error']);
+      expect(wire.parameters.properties.error.anyOf).toContainEqual({ type: 'null' });
+    } else {
+      expect(wire.parameters.required).toEqual([]);
+      expect(wire.parameters.properties.error.type).toBe('string');
+    }
+  }
+});
+
+test('silent inference emits only SSE comments and releases its heartbeat timer', () => {
+  const chunks: string[] = [];
+  let tick = () => {};
+  let stopped = 0;
+  const stop = keepStreamAlive(chunk => chunks.push(new TextDecoder().decode(chunk)),
+    () => { throw new Error('Unexpected stream error'); }, callback => {
+      tick = callback;
+      return () => { stopped++; };
+    });
+  expect(chunks).toEqual([': native-luna keepalive\n\n']);
+  tick();
+  expect(chunks).toHaveLength(2);
+  expect(chunks.every(chunk => chunk.startsWith(': ') && !chunk.includes('data:'))).toBe(true);
+  stop(); stop(); tick();
+  expect(stopped).toBe(1);
+  expect(chunks).toHaveLength(2);
+});
+
+test('a disconnected stream stops its timer and reports the transport failure', () => {
+  let tick = () => {};
+  let stopped = false;
+  let disconnected = false;
+  const failure = new Error('closed stream');
+  const errors: unknown[] = [];
+  const stop = keepStreamAlive(() => { if (disconnected) throw failure; },
+    error => errors.push(error), callback => { tick = callback; return () => { stopped = true; }; });
+  disconnected = true;
+  tick(); tick(); stop();
+  expect(stopped).toBe(true);
+  expect(errors).toEqual([failure]);
+});
+
+test('HTTP headers arrive while inference is silent and later payload bytes remain intact', async () => {
+  let release = () => {};
+  let stop = () => {};
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const payload = new TextEncoder().encode('data: {"literal":"雪\\n"}\n\n');
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
+    fetch() {
+      const stream = new ReadableStream<Uint8Array>({
+        start(sink) {
+          stop = keepStreamAlive(chunk => sink.enqueue(chunk), error => sink.error(error));
+          void pending.then(() => { stop(); sink.enqueue(payload); sink.close(); });
+        },
+        cancel() { stop(); },
+      });
+      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } });
+    },
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.port}`, { signal: AbortSignal.timeout(2000) });
+    const reader = response.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(': native-luna keepalive\n\n');
+    release();
+    expect(Buffer.from((await reader.read()).value!)).toEqual(Buffer.from(payload));
+    expect((await reader.read()).done).toBe(true);
+  } finally {
+    release(); stop(); server.stop(true);
+  }
+});
 
 test('native streaming tool argument bytes are preserved across arbitrary splits', () => {
   const indices = new Map<number, number>();
@@ -139,4 +238,25 @@ test('a conversation must end with a user or tool message', () => {
   expect(() => requirePromptable(convertMessages([{ role: 'user', content: 'u' },
     { role: 'assistant', content: 'a' }]))).toThrow();
   expect(requirePromptable(convertMessages([{ role: 'user', content: 'u' }])).length).toBe(1);
+});
+
+test('only listed native backends load, each with its own efforts', () => {
+  expect(nativeBackend(undefined)).toMatchObject({ provider: 'openai-codex', id: 'gpt-6-luna', sse: true });
+  const devin = nativeBackend('devin/swe-2');
+  expect(devin).toMatchObject({ provider: 'devin', id: 'swe-2', sse: false });
+  expect(thinkingLevel('high', devin.levels)).toBe('high');
+  expect(() => thinkingLevel('max', devin.levels)).toThrow();
+  expect(() => thinkingLevel('max')).toThrow();
+  expect(() => nativeBackend('openrouter/anything')).toThrow('Unsupported native backend');
+});
+
+test('a backend without SSE bytes sends its native arguments once, or keeps a complete stream', () => {
+  const wire = new StreamedArguments();
+  const call = { type: 'toolcall_end', contentIndex: 0, toolCall: { arguments: { command: 'ls' } } };
+  expect(wire.remaining(call)).toBe('{"command":"ls"}');
+  expect(wire.remaining(call)).toBe('');
+  const streamed = new StreamedArguments();
+  streamed.streamed.set(1, '{"path":');
+  expect(() => streamed.remaining({ ...call, contentIndex: 1 })).toThrow('Incomplete native argument stream');
+  expect(() => new StreamedArguments().remaining({ contentIndex: 2, toolCall: { arguments: [] } })).toThrow();
 });

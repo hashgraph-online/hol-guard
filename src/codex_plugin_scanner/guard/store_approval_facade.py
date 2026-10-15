@@ -6,10 +6,12 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_native_review_approvals import consume_native_review_approval as consume_native_retry
 
 
 class StoreApprovalsMixin:
+    def matching_native_review_block(self, **identity: object) -> bool:
+        return self._native_store_call("matching_native_review_block", identity) is True
+
     def consume_native_review_approval(
         self,
         *,
@@ -21,17 +23,23 @@ class StoreApprovalsMixin:
         workspace: str | None,
         now: str,
     ) -> bool:
-        with self._connect() as connection:
-            return consume_native_retry(
-                connection,
-                harness=harness,
-                artifact_id=artifact_id,
-                artifact_name=artifact_name,
-                artifact_hash=artifact_hash,
-                launch_target=launch_target,
-                workspace=workspace,
-                now=now,
+        # The resident owns the identity grammar, the latest-decision rule, the
+        # five-minute window and the single spend; an unavailable resident
+        # raises a sqlite error, which the caller treats as no reuse.
+        return bool(
+            self._native_store_call(
+                "consume_native_review_approval",
+                {
+                    "harness": harness,
+                    "artifact_id": artifact_id,
+                    "artifact_name": artifact_name,
+                    "artifact_hash": artifact_hash,
+                    "launch_target": launch_target,
+                    "workspace": workspace,
+                    "now": now,
+                },
             )
+        )
 
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:
@@ -40,6 +48,7 @@ class StoreApprovalsMixin:
                 request,
                 now,
                 oauth_source=self._guard_source,
+                guard_home=self.guard_home,
             )
             bind_review_events_for_request(
                 connection,
@@ -271,15 +280,7 @@ class StoreApprovalsMixin:
                 """,
                 params,
             ).fetchall()
-            matching_ids = [
-                str(row["request_id"])
-                for row in rows
-                if approval_request_surfaces_are_resolvable(
-                    row["policy_action"],
-                    row["decision_v2_json"],
-                    row["action_envelope_json"],
-                )
-            ]
+            matching_ids = resolvable_approval_request_ids(connection, rows)
             self._resolve_approval_request_ids(
                 connection,
                 matching_ids,
@@ -368,18 +369,14 @@ class StoreApprovalsMixin:
                 """,
                 (harness,),
             ).fetchall()
-            matching_ids = [
-                str(row["request_id"])
+            candidates = [
+                row
                 for row in rows
                 if _path_within_workspace(str(row["config_path"]), workspace)
                 and (artifact_id is None or row["artifact_id"] == artifact_id)
                 and (artifact_id is None or artifact_hash is None or row["artifact_hash"] == artifact_hash)
-                and approval_request_surfaces_are_resolvable(
-                    row["policy_action"],
-                    row["decision_v2_json"],
-                    row["action_envelope_json"],
-                )
             ]
+            matching_ids = resolvable_approval_request_ids(connection, candidates)
             self._resolve_approval_request_ids(
                 connection,
                 matching_ids,

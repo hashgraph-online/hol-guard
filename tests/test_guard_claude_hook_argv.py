@@ -290,5 +290,79 @@ def test_exec_hook_does_not_run_marker_embedded_in_workspace_path(tmp_path: Path
     )
 
     assert result.returncode == 0
-    assert result.stderr == ""
+    # The resident writes phase timing when it answers the prompt. Those lines
+    # are not the injected command. Anything else on stderr still fails.
+    unexpected = [line for line in result.stderr.splitlines() if not line.startswith("native_resident_phase ")]
+    assert unexpected == []
     assert not marker_path.exists()
+
+
+def _native_status(features: tuple[str, ...], path: Path):
+    from codex_plugin_scanner.guard.native_runtime_values import (
+        NativeRuntimeCapabilities,
+        NativeRuntimeIdentity,
+        NativeRuntimeStatus,
+    )
+
+    return NativeRuntimeStatus(
+        mode="auto",
+        available=True,
+        compatible=True,
+        reason="ok",
+        identity=NativeRuntimeIdentity(path=path, size=1, mtime_ns=1, sha256="0" * 64),
+        capabilities=NativeRuntimeCapabilities(
+            protocol_version=1,
+            runtime_version="0",
+            rule_digest="0" * 64,
+            build_sha="0" * 40,
+            target="test",
+            features=features,
+        ),
+    )
+
+
+def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+    from codex_plugin_scanner.guard.adapters import claude_hook_argv
+
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: _native_status((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
+    )
+    context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
+
+    argv = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
+
+    assert argv[:3] == (
+        str(runtime),
+        claude_hook_argv.NATIVE_CLAUDE_HOOK_COMMAND,
+        claude_hook_argv.CLAUDE_GUARD_DAEMON_HOOK_MARKER,
+    )
+    config = json.loads(argv[3])
+    assert config["state_path"] == str(context.guard_home / "daemon-state.json")
+    assert config["fallback_command"] == list(claude_hook_argv.guard_hook_command_parts(context))
+    assert config["recovery_command"]
+    assert all(isinstance(part, str) for part in config["recovery_command"])
+
+
+def test_daemon_hook_keeps_the_python_bridge_without_the_native_feature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+    from codex_plugin_scanner.guard.adapters import claude_hook_argv
+
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
+    )
+    context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
+
+    argv = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
+
+    assert argv[:2] == (sys.executable, "-c")
+    assert "recovery_command" not in json.loads(argv[-1])

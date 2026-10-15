@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -61,6 +61,9 @@ def _install(monkeypatch: pytest.MonkeyPatch, payload: object, **overrides: obje
         return response
 
     monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(
+        transport, "native_runtime_status", lambda **_: SimpleNamespace(available=True, compatible=True)
+    )
     monkeypatch.setattr(transport, "_resident_request", fake_request)
     return seen
 
@@ -80,8 +83,8 @@ def test_inspect_decodes_bound_complete_identity(tmp_path: Path, monkeypatch: py
 
     assert identity.status == "complete"
     assert identity.directory_hash == _HASH_A
-    assert seen[0]["command"]["kind"] == "inspect"
-    assert Path(seen[0]["command"]["skill_document"]).is_absolute()
+    assert seen[0]["command"]["kind"] == "inspect_encoded"
+    assert seen[0]["command"]["skill_document_hex"] == transport._encoded_path(tmp_path / "skill" / "SKILL.md")
 
 
 @pytest.mark.parametrize(
@@ -174,7 +177,7 @@ def test_discovery_decodes_documents_and_issues(tmp_path: Path, monkeypatch: pyt
     assert discovery.documents == (tmp_path / "a" / "SKILL.md",)
     assert discovery.issues[0].path == tmp_path / "b"
     assert discovery.issues[0].issue_id == "0123456789abcdef"
-    assert seen[0]["command"]["kind"] == "discover"
+    assert seen[0]["command"]["kind"] == "discover_encoded"
 
 
 @pytest.mark.parametrize(
@@ -206,13 +209,26 @@ def test_discovery_malformed_payload_yields_single_native_unavailable_issue(
     assert issue.path == tmp_path
 
 
-def test_missing_root_without_a_runtime_is_an_empty_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_native_outage_cannot_claim_a_root_is_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: False)
 
     discovery = transport.native_discover_skill_documents(tmp_path / "absent", limits=_LIMITS)
 
     assert discovery.documents == ()
-    assert discovery.issues == ()
+    assert len(discovery.issues) == 1
+    assert discovery.issues[0].failure_reason == "native_unavailable"
+
+
+def test_incomplete_helper_keeps_the_caller_reason_without_a_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(transport, "_exchange", lambda *_args, **_kwargs: None)
+
+    identity = transport.native_incomplete_skill_directory_identity("unreadable_entry")
+
+    assert identity.failure_reason == "unreadable_entry"
+    assert identity.status == "incomplete"
+    assert identity.incomplete_state_hash == "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73"
 
 
 def test_existing_root_without_a_runtime_is_one_unavailable_issue(
@@ -226,37 +242,19 @@ def test_existing_root_without_a_runtime_is_one_unavailable_issue(
     assert [issue.failure_reason for issue in discovery.issues] == ["native_unavailable"]
 
 
-def test_portable_python_is_required_on_windows_and_for_non_utf8_paths(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    assert not transport.portable_python_required(tmp_path / "SKILL.md", tmp_path)
-    assert transport.portable_python_required(tmp_path / os.fsdecode(b"bad-\xff-name") / "SKILL.md")
-    monkeypatch.setattr(transport, "_is_windows", lambda: True)
-    assert transport.portable_python_required(tmp_path)
-
-
-def test_wrappers_route_to_portable_python_where_native_cannot_serve(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_wrappers_always_route_to_native(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import skill_directory_discovery as discovery_module
     from codex_plugin_scanner.guard import skill_directory_identity as identity_module
 
     calls: list[str] = []
-    for module, native_name, portable_name in (
-        (identity_module, "native_inspect_skill_directory", "portable_inspect_skill_directory"),
-        (discovery_module, "native_discover_skill_documents", "portable_discover_skill_documents"),
-    ):
-        monkeypatch.setattr(module, native_name, lambda *a, **k: calls.append("native"))
-        monkeypatch.setattr(module, portable_name, lambda *a, **k: calls.append("portable"))
-    monkeypatch.setattr(identity_module, "portable_python_required", lambda *paths: True)
-    monkeypatch.setattr(discovery_module, "portable_python_required", lambda *paths: True)
-
+    monkeypatch.setattr(identity_module, "native_inspect_skill_directory", lambda *a, **k: calls.append("inspect"))
+    monkeypatch.setattr(discovery_module, "native_discover_skill_documents", lambda *a, **k: calls.append("discover"))
     identity_module.inspect_skill_directory(tmp_path / "SKILL.md", scope_root=tmp_path)
     discovery_module.discover_skill_documents(tmp_path)
-    assert calls == ["portable", "portable"]
+    assert calls == ["inspect", "discover"]
 
-    monkeypatch.setattr(identity_module, "portable_python_required", lambda *paths: False)
-    monkeypatch.setattr(discovery_module, "portable_python_required", lambda *paths: False)
-    identity_module.inspect_skill_directory(tmp_path / "SKILL.md", scope_root=tmp_path)
-    discovery_module.discover_skill_documents(tmp_path)
-    assert calls == ["portable", "portable", "native", "native"]
+
+def test_all_os_paths_require_native_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(transport, "_is_windows", lambda: True)
+
+    assert transport._encoded_path(tmp_path) == str(tmp_path).encode("utf-16-le", "surrogatepass").hex()

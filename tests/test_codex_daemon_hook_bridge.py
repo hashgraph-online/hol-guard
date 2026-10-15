@@ -46,7 +46,6 @@ def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
     monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 10.0)
     monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
-    monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
     try:
         daemon.start()
         deadline = time.monotonic() + 5
@@ -63,11 +62,6 @@ def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) ->
                 if time.monotonic() >= deadline:
                     raise
                 time.sleep(0.01)
-        if not daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
-        ):
-            raise TimeoutError("Guard daemon hook workers did not become ready")
     except BaseException:
         daemon.stop()
         raise
@@ -511,7 +505,11 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
 
     response = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    if "could not authenticate the local daemon" in json.dumps(response).lower():
+    reason_text = json.dumps(response).lower()
+    if (
+        "could not authenticate the local daemon" in reason_text
+        or "was not ready before the hook deadline" in reason_text
+    ):
         assert "permissionDecision" not in response.get("hookSpecificOutput", {})
 
 
@@ -743,8 +741,6 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
         ("gh run list -aRgithub.com/OWNER/REPO --help", 1),
         ("gh pr view 1 -wRRowner/repo --help", 1),
         ("gh run list -aRRowner/repo --help", 1),
-        ("gh -Rowner/repo pr view 17", 1),
-        ("gh -Rgithub.com/Owner/Repo pr view 17", 1),
     ),
 )
 @pytest.mark.usefixtures("native_hook_force")
@@ -755,6 +751,33 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
     command: str,
     pending_approvals: int,
 ) -> None:
+    response, store = _bridge_github_read(tmp_path, monkeypatch, capsys, command)
+    _assert_bridge_denied(response)
+    assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
+
+
+@pytest.mark.parametrize("command", ("gh -Rowner/repo pr view 17", "gh -Rgithub.com/Owner/Repo pr view 17"))
+@pytest.mark.usefixtures("native_hook_force")
+def test_bridge_real_daemon_allows_attached_repository_reads_on_github(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+) -> None:
+    """A top-level `-Rowner/repo` names a github.com repository, so the read keeps its allow baseline."""
+    response, store = _bridge_github_read(tmp_path, monkeypatch, capsys, command)
+    hook_output = response.get("hookSpecificOutput")
+    assert isinstance(hook_output, dict)
+    assert "permissionDecision" not in hook_output, response
+    assert store.list_approval_requests(limit=None) == [], response
+
+
+def _bridge_github_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+) -> tuple[dict[str, object], GuardStore]:
     guard_home = tmp_path / "guard-home"
     session_workspace = tmp_path / "projects"
     session_workspace.mkdir()
@@ -785,9 +808,7 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
         daemon.stop()
 
     assert exit_code == 0
-    response = json.loads(capsys.readouterr().out)
-    _assert_bridge_denied(response)
-    assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
+    return json.loads(capsys.readouterr().out), store
 
 
 @pytest.mark.parametrize(

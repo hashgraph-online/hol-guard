@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from enum import Enum
 
 CONTRACT_VERSION = "guard-mcp.v1"
@@ -46,8 +45,6 @@ class HarnessName(str, Enum):
 VALID_HARNESSES = frozenset(h.value for h in HarnessName)
 VALID_DECISIONS = frozenset(d.value for d in DecisionCategory)
 VALID_KINDS = frozenset(k.value for k in ResultKind)
-
-_ID_PATTERN = re.compile(r"^(receipt|artifact|inventory|device):[a-zA-Z0-9_-]+$")
 
 
 def make_opaque_id(kind: str, internal_id: str) -> str:

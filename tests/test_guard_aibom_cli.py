@@ -66,7 +66,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
     import urllib.error
 
     from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"
@@ -112,7 +112,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
             "failedCount": 0,
         }
 
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", guard_sync_request)
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", respond)
 
@@ -688,7 +688,7 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     store = GuardStore(tmp_path / "guard")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
@@ -716,7 +716,7 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
         )
 
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", _raise_404)
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
 
     summary = sync_aibom_snapshots(
@@ -749,7 +749,7 @@ def test_sync_aibom_snapshots_404_reports_only_remaining_batch(
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     store = GuardStore(tmp_path / "guard")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
@@ -787,7 +787,7 @@ def test_sync_aibom_snapshots_404_reports_only_remaining_batch(
         return response
 
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", respond)
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
 
     summary = sync_aibom_snapshots(
@@ -824,7 +824,7 @@ def test_sync_aibom_snapshots_skips_oversized_snapshot_and_syncs_valid_snapshot(
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     store = GuardStore(tmp_path / "guard")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
@@ -857,7 +857,7 @@ def test_sync_aibom_snapshots_skips_oversized_snapshot_and_syncs_valid_snapshot(
         "_batch_inventory_events",
         plan_mixed_snapshots,
     )
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         runner,
@@ -909,7 +909,7 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     store = GuardStore(tmp_path / "guard")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
@@ -947,7 +947,7 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
         )
 
     monkeypatch.setattr(aibom_cli, "_batch_inventory_events", plan_mixed_snapshots)
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", reject_valid_batch)
 
@@ -996,7 +996,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     store = GuardStore(tmp_path / "guard")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
@@ -1035,7 +1035,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
         raise OSError("network unavailable")
 
     monkeypatch.setattr(aibom_cli, "_batch_inventory_events", plan_mixed_snapshots)
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", fail_valid_batch)
 

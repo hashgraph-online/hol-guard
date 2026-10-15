@@ -30,30 +30,23 @@ pub(super) fn lockfile_parse_warning_result(
     Some(pkg)
 }
 
-#[allow(dead_code)]
-pub(super) fn lockfile_ecosystem(file_name: &str) -> String {
-    let name = std::path::Path::new(file_name)
+/// Ecosystem of a lockfile, given its file name or the parser's format label
+/// (`LockfileParseResult.format`); mirrors `_lockfile_ecosystem`.
+pub(super) fn lockfile_ecosystem(file_name_or_format: &str) -> String {
+    let name = std::path::Path::new(file_name_or_format)
         .file_name()
         .map(|n| n.to_string_lossy().to_lowercase())
         .unwrap_or_default();
-    if name.contains("package-lock")
-        || name.contains("npm-shrinkwrap")
-        || name.contains("pnpm")
-        || name.contains("yarn")
-        || name.contains("bun")
-    {
-        "npm".into()
-    } else if name.contains("cargo") {
-        "cargo".into()
-    } else if name.contains("composer") {
-        "composer".into()
-    } else if name.contains("gemfile") {
-        "gem".into()
-    } else if name.contains("poetry") || name.contains("pipfile") || name.contains("uv") {
-        "pypi".into()
-    } else {
-        "npm".into()
+    match name.as_str() {
+        "poetry.lock" | "uv.lock" | "pipfile.lock" | "poetry-lock" | "uv-lock" | "pipenv-lock" => {
+            "pypi"
+        }
+        "cargo.lock" | "cargo-lock" => "cargo",
+        "composer.lock" | "composer-lock" => "packagist",
+        "gemfile.lock" | "bundler-lock" => "rubygems",
+        _ => "npm",
     }
+    .into()
 }
 
 #[allow(dead_code)]
@@ -70,99 +63,45 @@ pub(super) fn package_has_incomplete_lockfile(
         .any(|r| !r.complete)
 }
 
-// `block_package_from_offline` — builds a block result from the offline bundle evaluation.
-#[allow(dead_code)]
-pub(super) fn block_package_from_offline(
-    offline: &Map<String, Value>,
-    bundle_response: &SupplyChainBundleResponse,
-    package_match: &Map<String, Value>,
-    resolved_version: Option<&str>,
-) -> Map<String, Value> {
-    let mut r = offline.clone();
-    if let Some(v) = resolved_version {
-        r.insert("resolvedVersion".to_string(), Value::String(v.to_string()));
-    }
-    let _ = (bundle_response, package_match);
-    r
-}
-
-// `_bundle_package_result` — build a package result from a bundle package match.
-#[allow(dead_code)]
-pub(super) fn bundle_package_result(
-    deps: &SupplyChainEvalDeps<'_>,
-    target: &Map<String, Value>,
-    package_match: &Map<String, Value>,
-    bundle_response: &SupplyChainBundleResponse,
-    resolved_version: Option<&str>,
-    _now_timestamp: Option<f64>,
-) -> Option<Map<String, Value>> {
-    let action = optional_string_map(package_match, "defaultAction")
-        .unwrap_or_else(|| "monitor".to_string());
-    let decision = match action.as_str() {
-        "block" | "deny" => "block",
-        "ask" => "ask",
-        "warn" => "warn",
-        _ => "monitor",
-    };
-    let mut reason = Map::new();
-    reason.insert("code".to_string(), Value::String("bundle_package".into()));
-    reason.insert(
-        "message".to_string(),
-        Value::String(format!(
-            "Bundle {} signals {} for {}.",
-            bundle_response.payload_hash,
-            decision,
-            bundle_package_label(package_match)
-        )),
-    );
-    reason.insert("severity".to_string(), Value::String("medium".into()));
-    let mut pkg = package_target_result(target, decision, vec![reason], None);
-    for (key, src) in [
-        ("sourceIdentity", "source_identity"),
-        ("sourceRepository", "source_repository"),
-        ("sourceRevisionKind", "source_revision_kind"),
-    ] {
-        pkg.insert(
-            key.to_string(),
-            optional_string(target.get(src))
-                .map(Value::String)
-                .unwrap_or(Value::Null),
-        );
-    }
-    if let Some(fix) = optional_string_map(package_match, "recommendedFixVersion") {
-        if !fix.is_empty() {
-            pkg.insert("recommendedFixVersion".to_string(), Value::String(fix));
-        }
-    }
-    if let Some(v) = resolved_version {
-        pkg.insert("resolvedVersion".to_string(), Value::String(v.to_string()));
-    }
-    let _ = deps;
-    Some(pkg)
-}
-
 // `_incomplete_lockfile_fallback_target`
 #[allow(dead_code)]
 pub(super) fn incomplete_lockfile_fallback_target(
     parse_result: &LockfileParseResult,
 ) -> Map<String, Value> {
+    let ecosystem = match parse_result.format.as_str() {
+        "bundler-lock" => "rubygems",
+        "cargo-lock" => "cargo",
+        "composer-lock" => "packagist",
+        "pipenv-lock" | "poetry-lock" | "uv-lock" => "pypi",
+        _ => "npm",
+    };
+    let package_manager = match parse_result.format.as_str() {
+        "bun-lock" => "bun",
+        "bundler-lock" => "bundler",
+        "cargo-lock" => "cargo",
+        "composer-lock" => "composer",
+        "pipenv-lock" => "pipenv",
+        "pnpm-lock" => "pnpm",
+        "poetry-lock" => "poetry",
+        "uv-lock" => "uv",
+        "yarn-lock" => "yarn",
+        _ => "npm",
+    };
     let mut target = Map::new();
-    target.insert(
-        "ecosystem".to_string(),
-        Value::String(lockfile_ecosystem(&parse_result.format)),
-    );
+    target.insert("ecosystem".to_string(), Value::String(ecosystem.into()));
     target.insert(
         "name".to_string(),
         Value::String("unresolved-lockfile".into()),
     );
     target.insert("namespace".to_string(), Value::Null);
-    target.insert("version".to_string(), Value::Null);
-    target.insert("range".to_string(), Value::Null);
-    target.insert("package_manager".to_string(), Value::String("npm".into()));
     target.insert(
-        "package_name".to_string(),
-        Value::String("unresolved-lockfile".into()),
+        "package_manager".to_string(),
+        Value::String(package_manager.into()),
     );
+    target.insert("range".to_string(), Value::Null);
+    target.insert("version".to_string(), Value::Null);
+    target.insert("redacted_command".to_string(), Value::Null);
+    target.insert("alias".to_string(), Value::Null);
     target
 }
 
@@ -284,38 +223,4 @@ pub(super) fn cloud_fallback_reason(code: &str, message: &str) -> Map<String, Va
     reason.insert("severity".into(), Value::String("unknown".into()));
     reason.insert("source".into(), Value::String("guard-cloud".into()));
     reason
-}
-
-/// `_bundle_reason_message` (:5166-5186) — human-readable message for a bundle
-/// package decision reason.
-// supply_chain_package_eval.py:5166-5186
-#[allow(dead_code)]
-pub(super) fn bundle_reason_message(
-    package: &Map<String, Value>,
-    decision: &str,
-    reason: &str,
-    stale: bool,
-) -> String {
-    let package_label = bundle_package_label(package);
-    if stale {
-        return match decision {
-            "block" => format!(
-                "Cached bundle is stale, but Guard still blocked {package_label} from advisory intelligence."
-            ),
-            "ask" => format!(
-                "Cached bundle is stale, so Guard still requires approval for {package_label}."
-            ),
-            "warn" => format!("Cached bundle is stale, so Guard still warns on {package_label}."),
-            _ => format!("Cached bundle is stale, so Guard kept {package_label} in monitor mode."),
-        };
-    }
-    match reason {
-        "known_malware_or_kev" => {
-            format!("Cached bundle flagged {package_label} from advisory intelligence.")
-        }
-        "maintainer_compromise" => {
-            format!("Cached bundle flagged {package_label} for probable maintainer compromise.")
-        }
-        _ => format!("Cached bundle matched {package_label}."),
-    }
 }

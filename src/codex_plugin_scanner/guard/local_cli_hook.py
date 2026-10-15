@@ -8,7 +8,7 @@ from .local_cli_trust import matching_local_cli_grant, utc_now
 from .models import GuardAction
 from .native_local_cli_identity import LocalCliIdentityUnavailableError, track_local_cli_identity_failures
 from .runtime.custom_extension_suggestion import observation_path_class
-from .runtime.local_cli_compound import identify_unlisted_cli_identities
+from .runtime.local_cli_identity import identify_unlisted_cli_identities
 from .runtime.package_json_scripts import identify_package_json_scripts, recognize_package_json_scripts
 
 

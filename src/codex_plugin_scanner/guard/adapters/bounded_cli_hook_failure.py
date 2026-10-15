@@ -33,21 +33,6 @@ def _is_prompt_event(event_name: str) -> bool:
     }
 
 
-def watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
-    if grok_observe_event(harness, event_name):
-        return {}
-    if harness == "copilot":
-        return {"permissionDecision": "allow"}
-    if harness in _DECISION_HOOK_HARNESSES:
-        return {"decision": "allow"}
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "permissionDecision": "allow",
-        }
-    }
-
-
 def _observe_payload(harness: str, event_name: str, reason: str) -> dict[str, object]:
     if harness == "copilot":
         return {"permissionDecision": "allow"}
@@ -62,17 +47,9 @@ def _observe_payload(harness: str, event_name: str, reason: str) -> dict[str, ob
 
 def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
     if _is_prompt_event(event_name):
-        from ..daemon.hook_worker_responses import harness_json_from_native_prompt
+        from ..daemon.hook_fail_closed import fail_closed_response
 
-        return harness_json_from_native_prompt(
-            harness,
-            {
-                "decision": "deny",
-                "minimum_action": "block",
-                "reason_code": "native_prompt_unavailable",
-                "reason": "HOL Guard could not complete native prompt review safely.",
-            },
-        ), 0
+        return fail_closed_response(harness, event_name), 0
     if harness == "copilot":
         if _is_permission_event(event_name):
             return {
@@ -111,15 +88,14 @@ def failure_payload(
     payload: dict[str, object] | None = None,
     continue_session: bool = False,
 ) -> tuple[dict[str, object], int]:
-    """Preserve caller compatibility without treating request shape as authority.
+    """Fixed fail-closed payload per harness when review cannot finish.
 
-    recording_only requires independently acknowledged mode authority. A raw
-    local configuration flag cannot establish it during evaluation failure.
+    recording_only and continue_session are accepted for caller compatibility
+    and ignored: request shape never turns an outage into an allow.
     """
+    del recording_only, continue_session, payload
     if grok_observe_event(harness, event_name):
         return {}, 0
-    if recording_only:
-        return watch_continue_payload(harness, event_name), 0
     pauses = hook_event_pauses_when_unavailable(event_name)
     if not pauses:
         # Observations continue processing completed activity without authorizing a tool action.

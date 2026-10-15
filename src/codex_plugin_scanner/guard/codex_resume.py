@@ -1,12 +1,27 @@
-"""Codex browser approval resume orchestration and diagnostics."""
+"""Codex browser approval resume orchestration and diagnostics.
+
+The native resident owns the resume record: it seeds it from the queued Codex
+operation, decides each retry, sends the continuation to the original thread
+and records the outcome (``codex_request_resume`` op). Python keeps the
+storage gate around the call, the live-hook checks a deferral needs and the
+capability report. A resident that cannot answer resumes nothing.
+"""
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
 
-from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
+from .codex_app_server import default_codex_app_server_socket_available
+from .native_context import ensure_resident_prerequisite
+from .native_execution import _resident_request
+from .native_store_policy import _payload
 from .store import GuardStore
+from .store_base import sqlite_connect_timeout_seconds
 
 
 class ResumeNotSupportedError(ValueError):
@@ -16,57 +31,34 @@ class ResumeNotSupportedError(ValueError):
         super().__init__("resume_not_supported")
 
 
-_THREAD_ID_KEYS = (
-    "codex_thread_id",
-    "thread_id",
-    "threadId",
-    "conversation_id",
-    "conversationId",
-    "session_id",
-    "sessionId",
-)
+class ResumeUnavailableError(ValueError):
+    """Raised when the native resident gave no answer for a status read or retry."""
+
+    def __init__(self) -> None:
+        super().__init__("resume_unavailable")
 
 
-def _int_value(value: object, default: int = 0) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return default
+_FEATURE = "codex-request-resume-v1"
+_REQUEST_SCHEMA = "guard-codex-request-resume-request.v1"
+_RESULT_SCHEMA = "guard-codex-request-resume-result.v1"
+_MAX_REQUEST_BYTES = 64 * 1024
+_MAX_TIMEOUT_MS = 60_000
+_MAX_BUSY_TIMEOUT_MS = 10_000
+_DEFAULT_CONTINUE_TIMEOUT_SECONDS = 5.0
+_TRANSPORT_GRACE_SECONDS = 5.0
+_REFUSALS = {"not_found", "not_resolved", "resume_not_supported"}
 
 
 def seed_request_resume_record(store: GuardStore, *, request_id: str, now: str) -> dict[str, object] | None:
-    request = store.get_approval_request(request_id)
-    if request is None or str(request.get("harness")) != "codex":
-        return None
-    operation = store.get_guard_operation_for_approval_request(request_id)
-    metadata = operation.get("metadata") if isinstance(operation, dict) else None
-    thread_id = _first_string(metadata, _THREAD_ID_KEYS) if isinstance(metadata, Mapping) else None
-    strategy = "manual-only"
-    if thread_id is not None:
-        strategy = "codex-app-server-thread"
-    store.seed_request_resume(
-        request_id=request_id,
-        operation_id=str(operation["operation_id"]) if isinstance(operation, dict) else None,
-        harness="codex",
-        strategy=strategy,
-        supported=thread_id is not None,
-        thread_id=thread_id,
-        now=now,
-    )
-    return store.get_request_resume(request_id)
+    payload = _resume_call(store, call="seed", request_id=request_id, now=now)
+    return _resume(payload)
 
 
 def get_request_resume_status(store: GuardStore, *, request_id: str, now: str) -> dict[str, object] | None:
-    resume = store.get_request_resume(request_id)
-    if resume is not None:
-        return resume
-    return seed_request_resume_record(store, request_id=request_id, now=now)
+    payload = _resume_call(store, call="status", request_id=request_id, now=now)
+    if payload is None:
+        raise ResumeUnavailableError()
+    return _resume(payload)
 
 
 def retry_request_resume(
@@ -77,61 +69,25 @@ def retry_request_resume(
     force: bool = False,
     timeout_seconds: float | None = None,
 ) -> dict[str, object]:
-    request = store.get_approval_request(request_id)
-    if request is None:
-        raise ValueError("not_found")
-    if str(request.get("harness")) != "codex":
-        raise ResumeNotSupportedError()
-    action = request.get("resolution_action")
-    if not isinstance(action, str) or not action:
-        raise ValueError("not_resolved")
-    resume = get_request_resume_status(store, request_id=request_id, now=now)
-    if resume is None:
-        raise ResumeNotSupportedError()
-    if action == "block":
-        attempt_count = _int_value(resume.get("attempt_count")) + 1
-        return _skip_blocked_resume(
-            store=store,
-            request_id=request_id,
-            resume=resume,
-            attempt_count=attempt_count,
-            now=now,
-        )
-    if str(resume.get("status")) == "sent" and not force:
-        return {
-            **resume,
-            "status": "already_sent",
-            "message": "HOL Guard already sent Codex a continuation message for this request.",
-        }
-    if str(resume.get("status")) == "in_progress":
-        return resume
-    attempt_count = _int_value(resume.get("attempt_count")) + 1
-    store.update_request_resume(
+    payload = _resume_call(
+        store,
+        call="retry",
         request_id=request_id,
-        resolution_action=action,
-        strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
-        supported=bool(resume.get("supported")) if resume.get("supported") is not None else None,
-        status="in_progress",
-        reason="attempting_resume",
-        message="Sending Codex a continuation message...",
-        last_error=None,
-        attempt_count=attempt_count,
-        last_attempt_at=now,
-        sent_at=str(resume.get("sent_at")) if isinstance(resume.get("sent_at"), str) else None,
         now=now,
-    )
-    refreshed = store.get_request_resume(request_id)
-    if refreshed is None:
-        raise ResumeNotSupportedError()
-    final = _finalize_resume_attempt(
-        store=store,
-        request_id=request_id,
-        action=action,
-        resume=refreshed,
-        now=now,
+        force=force,
         timeout_seconds=timeout_seconds,
     )
-    return final
+    if payload is None:
+        raise ResumeUnavailableError()
+    error = payload.get("error")
+    if error in _REFUSALS:
+        if error == "resume_not_supported":
+            raise ResumeNotSupportedError()
+        raise ValueError(error)
+    resume = _resume(payload)
+    if resume is None:
+        raise ResumeNotSupportedError()
+    return resume
 
 
 def defer_request_resume_to_live_hook(
@@ -156,37 +112,10 @@ def defer_request_resume_to_live_hook(
         event_name == "PreToolUse" and _pretool_bridge_wait_is_active(store, operation, now=now)
     ):
         return None
-    resume = get_request_resume_status(store, request_id=request_id, now=now)
-    if resume is None:
-        return None
-    attempt_count = _int_value(resume.get("attempt_count"))
-    if action == "block":
-        return _skip_blocked_resume(
-            store=store,
-            request_id=request_id,
-            resume=resume,
-            attempt_count=attempt_count,
-            now=now,
-        )
-    message = (
-        "Decision saved. Codex is still waiting for this browser decision, "
-        "so HOL Guard will let the original Codex action continue without starting a second headless run."
-    )
-    store.update_request_resume(
-        request_id=request_id,
-        resolution_action=action,
-        strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
-        supported=bool(resume.get("supported")) if resume.get("supported") is not None else None,
-        status="pending",
-        reason="live_hook_waiting",
-        message=message,
-        last_error=None,
-        attempt_count=attempt_count,
-        last_attempt_at=now,
-        sent_at=str(resume.get("sent_at")) if isinstance(resume.get("sent_at"), str) else None,
-        now=now,
-    )
-    return store.get_request_resume(request_id)
+    payload = _resume_call(store, call="defer", request_id=request_id, now=now, action=action)
+    if payload is None:
+        raise ResumeUnavailableError()
+    return _resume(payload)
 
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
@@ -256,209 +185,67 @@ def _parse_timestamp(value: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _finalize_resume_attempt(
-    *,
+def _resume_call(
     store: GuardStore,
+    *,
+    call: str,
     request_id: str,
-    action: str,
-    resume: dict[str, object],
     now: str,
-    timeout_seconds: float | None,
-) -> dict[str, object]:
-    strategy = str(resume["strategy"])
-    supported = bool(resume["supported"])
-    thread_id = str(resume["thread_id"]) if resume.get("thread_id") is not None else None
-    attempt_count = _int_value(resume.get("attempt_count"))
-    if strategy == "manual-only" or not supported:
-        message = _manual_resume_message(action)
-        store.update_request_resume(
-            request_id=request_id,
-            resolution_action=action,
-            strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
-            supported=bool(resume.get("supported")) if resume.get("supported") is not None else None,
-            status="skipped",
-            reason="session_not_found",
-            message=message,
-            last_error=None,
-            attempt_count=attempt_count,
-            last_attempt_at=now,
-            sent_at=None,
-            now=now,
-        )
-        result = store.get_request_resume(request_id)
-        if result is None:
-            raise ResumeNotSupportedError()
-        return result
-
-    raw_result = _dispatch_resume_attempt(
-        store=store,
-        request_id=request_id,
-        action=action,
-        strategy=strategy,
-        thread_id=thread_id,
-        timeout_seconds=timeout_seconds,
-    )
-    normalized = _normalize_dispatch_result(
-        action=action,
-        strategy=strategy,
-        thread_id=thread_id,
-        raw_result=raw_result,
-    )
-    sent_at = now if normalized["status"] == "sent" else str(resume.get("sent_at")) if resume.get("sent_at") else None
-    store.update_request_resume(
-        request_id=request_id,
-        resolution_action=action,
-        strategy=str(normalized["strategy"]),
-        supported=bool(normalized["supported"]),
-        status=str(normalized["status"]),
-        reason=str(normalized["reason"]) if normalized.get("reason") is not None else None,
-        message=str(normalized["message"]) if normalized.get("message") is not None else None,
-        last_error=str(normalized["last_error"]) if normalized.get("last_error") is not None else None,
-        attempt_count=attempt_count,
-        last_attempt_at=now,
-        sent_at=sent_at,
-        now=now,
-    )
-    result = store.get_request_resume(request_id)
-    if result is None:
-        raise ResumeNotSupportedError()
-    return result
-
-
-def _skip_blocked_resume(
-    *,
-    store: GuardStore,
-    request_id: str,
-    resume: dict[str, object],
-    attempt_count: int,
-    now: str,
-) -> dict[str, object]:
-    store.update_request_resume(
-        request_id=request_id,
-        resolution_action="block",
-        strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
-        supported=False,
-        status="skipped",
-        reason="blocked_not_resumed",
-        message=_blocked_resume_message(),
-        last_error=None,
-        attempt_count=attempt_count,
-        last_attempt_at=now,
-        sent_at=None,
-        now=now,
-    )
-    result = store.get_request_resume(request_id)
-    if result is None:
-        raise ResumeNotSupportedError()
-    return result
-
-
-def _dispatch_resume_attempt(
-    *,
-    store: GuardStore,
-    request_id: str,
-    action: str,
-    strategy: str,
-    thread_id: str | None,
-    timeout_seconds: float | None,
+    action: str | None = None,
+    force: bool = False,
+    timeout_seconds: float | None = None,
 ) -> dict[str, object] | None:
-    if thread_id is None:
-        return None
+    """Run one call in the resident under the shared storage gate.
 
-    app_server_result = resume_codex_thread_for_request(
-        store=store,
-        request_id=request_id,
-        action=action,
-        **({"timeout_seconds": timeout_seconds} if timeout_seconds is not None else {}),
-    )
-    if app_server_result is None:
-        return {
-            "status": "skipped",
-            "reason": "session_not_found",
-            "thread_id": thread_id,
-            "strategy": strategy,
-            "supported": False,
-        }
-    return app_server_result
+    Returns the bound payload, or ``None`` when the resident gave no answer.
+    """
 
-
-def _normalize_dispatch_result(
-    *,
-    action: str,
-    strategy: str,
-    thread_id: str | None,
-    raw_result: dict[str, object] | None,
-) -> dict[str, object]:
-    if raw_result is None:
-        return {
-            "status": "skipped",
-            "reason": "session_not_found",
-            "message": _manual_resume_message(action),
-            "last_error": None,
-            "thread_id": thread_id,
-            "strategy": strategy,
-            "supported": False,
-        }
-    effective_strategy = str(raw_result.get("strategy") or strategy)
-    raw_status = str(raw_result.get("status") or "")
-    raw_reason = str(raw_result.get("reason") or "unknown")
-    raw_thread_id = str(raw_result.get("thread_id")) if raw_result.get("thread_id") is not None else thread_id
-    raw_last_error = str(raw_result.get("last_error")) if raw_result.get("last_error") is not None else None
-    raw_supported = raw_result.get("supported")
-    supported = raw_supported if isinstance(raw_supported, bool) else raw_status != "skipped"
-    if raw_status == "sent":
-        message = "HOL Guard sent Codex a continuation message in the original chat."
-        return {
-            "status": "sent",
-            "reason": raw_reason,
-            "message": message,
-            "last_error": None,
-            "thread_id": raw_thread_id,
-            "strategy": effective_strategy,
-            "supported": True,
-        }
-    if raw_reason in {"socket_not_available", "unsafe_socket_path", "turn_start_timeout", "turn_start_error"}:
-        return {
-            "status": "failed",
-            "reason": raw_reason,
-            "message": _failed_resume_message(action),
-            "last_error": raw_last_error or str(raw_result.get("message") or raw_reason),
-            "thread_id": raw_thread_id,
-            "strategy": effective_strategy,
-            "supported": True,
-        }
-    return {
-        "status": "failed" if raw_status == "failed" else "skipped",
-        "reason": raw_reason,
-        "message": _failed_resume_message(action) if raw_status == "failed" else _manual_resume_message(action),
-        "last_error": raw_last_error or str(raw_result.get("message") or raw_reason)
-        if raw_status == "failed"
-        else None,
-        "thread_id": raw_thread_id,
-        "strategy": effective_strategy,
-        "supported": supported,
+    seconds = _DEFAULT_CONTINUE_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
+    timeout_ms = max(1, min(_MAX_TIMEOUT_MS, int(seconds * 1000)))
+    busy_timeout_ms = max(1, min(_MAX_BUSY_TIMEOUT_MS, int(sqlite_connect_timeout_seconds() * 1000)))
+    home = Path(store.guard_home)
+    wire: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": f"codex-request-resume-{uuid4().hex}",
+        "approval_request_id": request_id,
+        "call": call,
+        "action": action,
+        "force": force,
+        "now": now,
+        "store_path": str(store.path),
+        "guard_home": str(home),
+        "busy_timeout_ms": busy_timeout_ms,
+        "home_dir": str(Path.home()),
+        "temp_dir": tempfile.gettempdir(),
+        "cwd": os.getcwd(),
+        "timeout_ms": timeout_ms,
     }
+    if not ensure_resident_prerequisite(home):
+        return None
+    try:
+        with store._hold_storage_gate(exclusive=False):  # pyright: ignore[reportPrivateUsage]
+            try:
+                response = _resident_request(
+                    operation="codex_request_resume",
+                    request=wire,
+                    guard_home=home,
+                    timeout_seconds=(timeout_ms + busy_timeout_ms) / 1000 + _TRANSPORT_GRACE_SECONDS,
+                    required_feature=_FEATURE,
+                    response_schema=_RESULT_SCHEMA,
+                    max_request_bytes=_MAX_REQUEST_BYTES,
+                    record_success=False,
+                )
+            except (TypeError, ValueError, OSError, RuntimeError):
+                response = None
+    except (OSError, TimeoutError):
+        return None
+    store._repair_store_permissions()  # pyright: ignore[reportPrivateUsage]
+    return _payload(response, wire, home)
 
 
-def _manual_resume_message(action: str) -> str:
-    return (
-        "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. "
-        "Return to that chat and retry; a new tool call may require fresh approval."
-    )
-
-
-def _failed_resume_message(action: str) -> str:
-    return (
-        "Decision recorded for the original request. HOL Guard could not send a continuation to the original "
-        "Codex chat. Return to that chat and retry; a new tool call may require fresh approval."
-    )
-
-
-def _blocked_resume_message() -> str:
-    return (
-        "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. "
-        "Do not retry that action in Codex. Ask for a safe alternative instead."
-    )
+def _resume(payload: Mapping[str, object] | None) -> dict[str, object] | None:
+    resume = payload.get("resume") if payload is not None else None
+    return dict(resume) if isinstance(resume, dict) else None
 
 
 def _first_string(mapping: Mapping[str, object], keys: tuple[str, ...]) -> str | None:

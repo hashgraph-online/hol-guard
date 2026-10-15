@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import shutil
 import sys
@@ -14,6 +15,23 @@ assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
+
+
+@pytest.mark.parametrize(
+    ("path", "operation", "category"),
+    [
+        ("src/codex_plugin_scanner/guard/native_rich_command_model.py", "compress", "transport_encode"),
+        ("src/codex_plugin_scanner/guard/native_rich_command_model.py", "open", "unclassified_python_content_io"),
+        ("src/codex_plugin_scanner/guard/other_client.py", "compress", "unclassified_python_content_io"),
+    ],
+)
+def test_request_codec_classification_does_not_allow_archive_io(path, operation, category):
+    node = ast.parse(f"def request():\n    return gzip.{operation}(b'wire')\n").body[0]
+    assert isinstance(node, ast.FunctionDef)
+    record = MODULE.FunctionRecord(path, "request", "request", node)
+    observations = list(MODULE._observations(record))
+    assert len(observations) == 1
+    assert observations[0].category == category
 
 
 def _copy_gate_sources(root: Path) -> None:
@@ -177,13 +195,3 @@ def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str
         edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
         with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):
             MODULE.validate(tmp_path)
-
-
-def test_extracted_command_factor_hashes_retain_decision_time_ownership() -> None:
-    path = "src/codex_plugin_scanner/guard/runtime/command_native_factors.py"
-    original = "src/codex_plugin_scanner/guard/runtime/command_evaluation.py"
-    assert MODULE._category(path, "hash") == MODULE._category(original, "hash")
-    assert MODULE._category(path, "hash") == "pending_authority_migration"
-    assert MODULE._category(path, "filesystem") == "unclassified_python_io"
-    assert MODULE._category(path, "decode") == "unclassified_python_content_io"
-    assert MODULE._category(path, "archive") == "unclassified_python_content_io"

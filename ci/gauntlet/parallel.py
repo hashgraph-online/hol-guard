@@ -30,6 +30,11 @@ CANCEL_GRACE_SECONDS = 90.0
 T = TypeVar("T")
 
 
+def qualification_jobs() -> int:
+    """Use available host headroom without exceeding the tested worker ceiling."""
+    return min(MAX_JOBS, max(1, (os.cpu_count() or 2) // 2))
+
+
 class CaseWorkerHandle(Protocol):
     """One started worker owned by the scheduler."""
 

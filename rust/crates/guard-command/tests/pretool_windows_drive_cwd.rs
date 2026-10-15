@@ -2,8 +2,7 @@
 use serde_json::json;
 use std::path::Path;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 #[test]
 fn windows_drive_cwd_targets_bind_only_the_exact_workspace_spelling() {

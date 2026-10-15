@@ -15,6 +15,65 @@ use super::evaluate_skill_directory_identity_request;
 use crate::skill_identity_canon::incomplete_state_hash_for_label;
 
 const VECTORS: &str = include_str!("../tests/fixtures/skill_directory_identity_vectors.json");
+const PORTABLE_VECTORS: &str =
+    include_str!("../tests/fixtures/skill_directory_portable_vectors.json");
+
+#[test]
+fn portable_original_outcomes_replay_through_encoded_native_requests() {
+    use std::os::unix::ffi::OsStrExt;
+    let fixture: Value = serde_json::from_str(PORTABLE_VECTORS).unwrap();
+    for action in ["inspect", "discover"] {
+        for case in fixture[action].as_array().unwrap() {
+            let base = TempBase::new(case["name"].as_str().unwrap());
+            build(&base.0, case);
+            let limits = limits_of(case);
+            let command = if action == "inspect" {
+                SkillDirectoryCommandV1::InspectEncoded {
+                    skill_document_hex: hex::encode(
+                        base.0
+                            .join(case["document"].as_str().unwrap())
+                            .as_os_str()
+                            .as_bytes(),
+                    ),
+                    scope_root_hex: hex::encode(
+                        base.0
+                            .join(case.get("scope").and_then(Value::as_str).unwrap_or(""))
+                            .as_os_str()
+                            .as_bytes(),
+                    ),
+                    path_encoding: "os_bytes".to_owned(),
+                    limits,
+                }
+            } else {
+                SkillDirectoryCommandV1::DiscoverEncoded {
+                    skill_root_hex: hex::encode(
+                        base.0
+                            .join(case["root"].as_str().unwrap())
+                            .as_os_str()
+                            .as_bytes(),
+                    ),
+                    path_encoding: "os_bytes".to_owned(),
+                    limits,
+                }
+            };
+            let reply = run(&SkillDirectoryIdentityRequestV1 {
+                schema: SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA.to_owned(),
+                request_id: "portable-vector".to_owned(),
+                guard_home: base.0.to_string_lossy().into_owned(),
+                command,
+            });
+            let mut expected = case["expected"].clone();
+            if cfg!(target_os = "linux") {
+                if let Some(overrides) = case.get("expected_linux").and_then(Value::as_object) {
+                    for (key, value) in overrides {
+                        expected[key] = value.clone();
+                    }
+                }
+            }
+            assert_eq!(reply["payload"], expected, "{} {}", action, case["name"]);
+        }
+    }
+}
 
 struct TempBase(PathBuf);
 

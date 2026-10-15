@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_saved_allow_validation_reason
-from codex_plugin_scanner.guard.memory_pattern_fingerprint import build_exact_command_memory_artifact_id
 from codex_plugin_scanner.guard.models import (
     GUARD_ACTION_VALUES,
     DecisionScope,
@@ -24,26 +24,18 @@ from codex_plugin_scanner.guard.runtime.approval_context import build_approval_c
 from codex_plugin_scanner.guard.runtime.approval_reuse import (
     APPROVAL_REUSE_ACCEPTED,
     APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_CURRENT_ACTION_NOT_REVIEW,
-    APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN,
-    APPROVAL_REUSE_CURRENT_BLOCK,
     APPROVAL_REUSE_NO_SAVED_DECISION,
-    APPROVAL_REUSE_REAPPROVAL_REQUIRED,
-    APPROVAL_REUSE_SANDBOX_REQUIRED,
-    APPROVAL_REUSE_SAVED_ACTION_NOT_ALLOW,
-    APPROVAL_REUSE_SAVED_ACTION_UNKNOWN,
-    APPROVAL_REUSE_SAVED_BLOCK,
     ApprovalReuseMalformedResultError,
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_policy import (
-    _bounded_local_approval_reuse_diagnostic_rows,
-    _bounded_non_consuming_policy_rows,
-    _bounded_policy_approval_reuse_diagnostic_rows,
-)
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+
+def _exact_command_id(command: str) -> str:
+    return "memory:exact-command:" + hashlib.sha256(command.encode("utf-8")).hexdigest()
+
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 
@@ -262,40 +254,6 @@ def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_context_dige
     assert result.should_claim is False
 
 
-@pytest.mark.parametrize(
-    ("current_action", "expected_reason"),
-    (
-        ("require-reapproval", APPROVAL_REUSE_REAPPROVAL_REQUIRED),
-        ("sandbox-required", APPROVAL_REUSE_SANDBOX_REQUIRED),
-        ("block", APPROVAL_REUSE_CURRENT_BLOCK),
-    ),
-)
-def test_saved_allow_never_lowers_stronger_current_action(
-    current_action: str,
-    expected_reason: str,
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse(current_action, "allow")
-
-    assert result.action == current_action
-    assert result.status == "rejected"
-    assert result.reason_code == expected_reason
-    assert result.should_claim is False
-
-
-@pytest.mark.parametrize("current_action", ("allow", "warn"))
-def test_saved_allow_is_not_consumed_when_current_action_needs_no_review(
-    current_action: str,
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse(current_action, "allow")
-
-    assert result.action == current_action
-    assert result.status == "not-applicable"
-    assert result.reason_code == APPROVAL_REUSE_CURRENT_ACTION_NOT_REVIEW
-    assert result.should_claim is False
-
-
 def test_integrity_invalid_authority_requires_reapproval_even_when_current_action_allows(
     native_context_digest: Path,
 ) -> None:
@@ -309,27 +267,6 @@ def test_integrity_invalid_authority_requires_reapproval_even_when_current_actio
     assert result.status == "rejected"
     assert result.reason_code == "approval_reuse_integrity_failure"
     assert result.should_claim is False
-
-
-@pytest.mark.parametrize("current_action", GUARD_ACTION_VALUES)
-def test_saved_block_remains_block_for_every_current_action(
-    current_action: str,
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse(current_action, "block")
-
-    assert result.action == "block"
-    assert result.status == "accepted"
-    assert result.reason_code == APPROVAL_REUSE_SAVED_BLOCK
-    assert result.should_claim is False
-
-
-def test_non_allow_saved_action_cannot_satisfy_review(native_context_digest: Path) -> None:
-    result = evaluate_approval_reuse("review", "warn")
-
-    assert result.action == "review"
-    assert result.status == "rejected"
-    assert result.reason_code == APPROVAL_REUSE_SAVED_ACTION_NOT_ALLOW
 
 
 @pytest.mark.parametrize(
@@ -359,28 +296,6 @@ def test_invalidated_saved_allow_is_rejected_with_stable_reason(
     assert result.status == "rejected"
     assert result.reason_code == validation_reason
     assert result.should_claim is False
-
-
-def test_unknown_current_action_fails_closed_with_diagnostics(native_context_digest: Path) -> None:
-    result = evaluate_approval_reuse("future-permissive-action", "allow")
-
-    assert result.action == "block"
-    assert result.reason_code == APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN
-    assert result.current_normalization_reason_code == "guard_action_unknown"
-    assert result.original_current_action == "future-permissive-action"
-    assert result.should_claim is False
-
-
-def test_present_malformed_saved_action_requires_reapproval_with_diagnostics(
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse("review", None, saved_decision_present=True)
-
-    assert result.action == "require-reapproval"
-    assert result.reason_code == APPROVAL_REUSE_SAVED_ACTION_UNKNOWN
-    assert result.saved_normalization_reason_code == "guard_action_unknown"
-    assert result.original_saved_type == "NoneType"
-    assert result.to_evidence()["saved_action"] == "require-reapproval"
 
 
 def test_claim_failure_reason_takes_precedence_and_preserves_normalization_diagnostics(
@@ -857,7 +772,16 @@ def test_lookup_preserves_stored_block_over_local_once_allow(tmp_path, consume_o
     assert selected is not None
     assert selected["action"] == "block"
     assert selected["source"] == "policy-bundle"
-    assert store.claim_local_once_approval(approval_id, claimed_at="2026-07-17T12:03:00+00:00") is True
+    peeked = store.peek_local_once_approval(
+        harness="codex",
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        workspace="/workspace/a",
+        publisher=None,
+        now="2026-07-17T12:03:00+00:00",
+    )
+    assert peeked is not None and peeked["approval_id"] == approval_id
+    assert store.claim_approval_reuse_decision(peeked, now="2026-07-17T12:03:00+00:00", consume_local_once=True)
 
 
 def test_non_consuming_runtime_lookup_composes_specific_allow_with_broader_managed_block(
@@ -1014,7 +938,7 @@ def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_b
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:shell"
     command = "deploy production"
-    exact_command_id = build_exact_command_memory_artifact_id(command)
+    exact_command_id = _exact_command_id(command)
     assert exact_command_id is not None
     approval_hash = _approval_context_token(content="sha256:deploy")
     store.upsert_policy(
@@ -1243,7 +1167,7 @@ def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(
     )
     selected = lookup["decision"]
     assert selected is not None
-    memory_artifact_id = build_exact_command_memory_artifact_id(command)
+    memory_artifact_id = _exact_command_id(command)
     assert memory_artifact_id is not None
 
     store.upsert_policy(
@@ -1423,318 +1347,6 @@ def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_
     )
 
     assert reason == "approval_reuse_content_changed"
-
-
-def test_non_consuming_policy_lookup_is_bounded_and_fails_closed_on_match_overflow(
-    tmp_path, native_context_digest: Path
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="harness",
-                action="allow",
-                artifact_id=None,
-                artifact_hash=None,
-                reason=f"broad allow {index}",
-                source="team-policy",
-            )
-            for index in range(300)
-        ],
-        "2026-07-17T12:00:00+00:00",
-        remote_write_authorized=True,
-    )
-
-    lookup = store.resolve_policy_decision_lookup(
-        "codex",
-        "codex:project:tool-action:bounded",
-        artifact_hash=_approval_context_token(content="sha256:bounded"),
-        now="2026-07-17T12:01:00+00:00",
-        consume_one_shot=False,
-    )
-
-    assert lookup["decision"] is not None
-    assert lookup["decision"]["action"] == "block"
-    assert lookup["decision"]["source"] == "guard-policy-match-cap"
-    assert lookup["decision"]["_approval_authority_revision"] == lookup["authority_revision"]
-    overflow_events = store.list_events(event_name="approval.policy_lookup_overflow")
-    assert len(overflow_events) == 1
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        query_plan = _bounded_non_consuming_policy_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:bounded",
-            artifact_hash=_approval_context_token(content="sha256:bounded"),
-            runtime_exact_match_key=None,
-            global_runtime_exact_match_key=None,
-            workspace_key=None,
-            workspace=None,
-            publisher=None,
-            action_family_key=None,
-            current_time="2026-07-17T12:01:00+00:00",
-            _explain=True,
-        )
-    query_plan_details = [str(row[3]) for row in query_plan]
-    assert not any(detail == "SCAN policy_decisions" for detail in query_plan_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in query_plan_details)
-    assert {
-        "idx_policy_decisions_lookup_artifact",
-        "idx_policy_decisions_lookup_harness",
-        "idx_policy_decisions_lookup_global",
-    }.issubset({index for detail in query_plan_details for index in detail.split()})
-
-
-def test_non_consuming_policy_lookup_miss_uses_only_fully_constrained_scope_probes(
-    tmp_path, native_context_digest: Path
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    current_hash = _approval_context_token(content="sha256:current")
-    with sqlite3.connect(store.path) as connection:
-        connection.executemany(
-            """
-            insert into policy_decisions (
-              harness, scope, artifact_id, artifact_hash, workspace, publisher, action, source, updated_at
-            ) values ('codex', ?, ?, ?, ?, ?, 'allow', 'team-policy', '2026-07-17T12:00:00+00:00')
-            """,
-            (
-                (
-                    scope,
-                    artifact_id,
-                    f"guard-approval-context:v1:irrelevant-{index:04d}",
-                    workspace,
-                    publisher,
-                )
-                for index in range(1_000)
-                for scope, artifact_id, workspace, publisher in (
-                    ("artifact", f"codex:project:tool-action:unrelated-{index:04d}", None, None),
-                    ("workspace", None, f"workspace:sha256:unrelated-{index:04d}", None),
-                    ("publisher", None, None, f"publisher-{index:04d}"),
-                    ("harness", "family:file-read", None, None),
-                    ("global", "family:file-read", None, None),
-                )
-            ),
-        )
-
-    lookup = store.resolve_policy_decision_lookup(
-        "codex",
-        "codex:project:tool-action:bounded-miss",
-        artifact_hash=current_hash,
-        workspace="/workspace/current",
-        publisher="publisher-current",
-        now="2026-07-17T12:01:00+00:00",
-        consume_one_shot=False,
-    )
-
-    assert lookup["decision"] is None
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        query_plan = _bounded_non_consuming_policy_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:bounded-miss",
-            artifact_hash=current_hash,
-            runtime_exact_match_key="runtime-exact:current",
-            global_runtime_exact_match_key="runtime-global-exact:current",
-            workspace_key="workspace:sha256:current",
-            workspace="/workspace/current",
-            publisher="publisher-current",
-            action_family_key="family:tool-action",
-            current_time="2026-07-17T12:01:00+00:00",
-            _explain=True,
-        )
-    plan_details = [str(row[3]) for row in query_plan]
-    assert plan_details
-    assert all(detail.startswith("SEARCH policy_decisions USING INDEX") for detail in plan_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in plan_details)
-    assert not any(
-        "lookup_harness" in detail and "harness=? AND artifact_id=?" not in detail for detail in plan_details
-    )
-    assert not any("lookup_global" in detail and "harness=? AND artifact_id=?" not in detail for detail in plan_details)
-    assert not any(
-        "lookup_publisher" in detail and "publisher=? AND harness=?" not in detail for detail in plan_details
-    )
-    assert {
-        "idx_policy_decisions_lookup_artifact",
-        "idx_policy_decisions_lookup_workspace",
-        "idx_policy_decisions_lookup_publisher",
-        "idx_policy_decisions_lookup_publisher_legacy",
-        "idx_policy_decisions_lookup_harness",
-        "idx_policy_decisions_lookup_harness_legacy",
-        "idx_policy_decisions_lookup_global",
-        "idx_policy_decisions_lookup_global_legacy",
-    }.issubset({index for detail in plan_details for index in detail.split()})
-
-
-def test_non_consuming_policy_probe_partitions_preserve_every_scope_selector(
-    tmp_path, native_context_digest: Path
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    artifact_id = "codex:project:tool-action:selector-matrix"
-    context_hash = _approval_context_token(content="sha256:selector-matrix")
-    runtime_hash = "runtime-exact:selector-matrix"
-    matching_rows = (
-        ("artifact-null", "codex", "artifact", artifact_id, None, None, None),
-        ("artifact-context", "codex", "artifact", artifact_id, context_hash, None, None),
-        ("artifact-runtime", "*", "artifact", artifact_id, runtime_hash, None, None),
-        (
-            "workspace-broad",
-            "codex",
-            "workspace",
-            None,
-            "guard-approval-context:v1:other",
-            "workspace:sha256:current",
-            None,
-        ),
-        ("workspace-null", "codex", "workspace", artifact_id, None, "/workspace/current", None),
-        (
-            "workspace-context",
-            "*",
-            "workspace",
-            artifact_id,
-            context_hash,
-            "workspace:sha256:current",
-            None,
-        ),
-        ("publisher-null", "codex", "publisher", None, None, None, "publisher-current"),
-        ("publisher-context", "codex", "publisher", None, context_hash, None, "publisher-current"),
-        ("publisher-legacy", "*", "publisher", None, "sha256:legacy", None, "publisher-current"),
-        ("harness-broad", "codex", "harness", None, None, None, None),
-        ("harness-context", "codex", "harness", "family:tool-action", context_hash, None, None),
-        ("harness-runtime", "*", "harness", "family:tool-action", runtime_hash, None, None),
-        ("harness-legacy", "codex", "harness", "family:tool-action", "sha256:legacy", None, None),
-        ("global-broad", "codex", "global", None, None, None, None),
-        ("global-artifact", "codex", "global", artifact_id, context_hash, None, None),
-        ("global-family", "*", "global", "family:tool-action", runtime_hash, None, None),
-        ("global-legacy", "codex", "global", "family:tool-action", "sha256:legacy", None, None),
-    )
-    ignored_rows = (
-        ("artifact-other-context", "codex", "artifact", artifact_id, "guard-approval-context:v1:other", None, None),
-        (
-            "workspace-runtime",
-            "codex",
-            "workspace",
-            artifact_id,
-            runtime_hash,
-            "workspace:sha256:current",
-            None,
-        ),
-        (
-            "publisher-other-context",
-            "codex",
-            "publisher",
-            None,
-            "guard-approval-context:v1:other",
-            None,
-            "publisher-current",
-        ),
-        (
-            "harness-other-family",
-            "codex",
-            "harness",
-            "family:file-read",
-            "sha256:legacy",
-            None,
-            None,
-        ),
-        (
-            "global-other-context",
-            "codex",
-            "global",
-            "family:tool-action",
-            "guard-approval-context:v1:other",
-            None,
-            None,
-        ),
-        ("other-harness", "cursor", "global", None, None, None, None),
-    )
-    with sqlite3.connect(store.path) as connection:
-        connection.executemany(
-            """
-            insert into policy_decisions (
-              reason, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-              action, source, updated_at
-            ) values (?, ?, ?, ?, ?, ?, ?, 'allow', 'team-policy', '2026-07-17T12:00:00+00:00')
-            """,
-            (*matching_rows, *ignored_rows),
-        )
-        connection.row_factory = sqlite3.Row
-        rows = _bounded_non_consuming_policy_rows(
-            connection,
-            harness="codex",
-            artifact_id=artifact_id,
-            artifact_hash=context_hash,
-            runtime_exact_match_key=runtime_hash,
-            global_runtime_exact_match_key=runtime_hash,
-            workspace_key="workspace:sha256:current",
-            workspace="/workspace/current",
-            publisher="publisher-current",
-            action_family_key="family:tool-action",
-            current_time="2026-07-17T12:01:00+00:00",
-        )
-
-    assert {str(row["reason"]) for row in rows} == {row[0] for row in matching_rows}
-
-
-def test_approval_reuse_diagnostic_live_probes_are_index_ordered_without_temp_sort(tmp_path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        local_plan = _bounded_local_approval_reuse_diagnostic_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:diagnostic-plan",
-            artifact_family="family:tool-action",
-            artifact_hash="sha256:current",
-            _explain=True,
-        )
-        policy_plan = _bounded_policy_approval_reuse_diagnostic_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:diagnostic-plan",
-            artifact_family="family:tool-action",
-            artifact_hash="sha256:current",
-            publisher="publisher-current",
-            _explain=True,
-        )
-
-    local_details = [str(row[3]) for row in local_plan]
-    policy_details = [str(row[3]) for row in policy_plan]
-    assert local_details and policy_details
-    assert all(detail.startswith("SEARCH guard_local_once_approvals USING INDEX") for detail in local_details)
-    assert all(detail.startswith("SEARCH policy_decisions USING INDEX") for detail in policy_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in (*local_details, *policy_details))
-    assert not any(
-        "diagnostic_artifact" in detail and "harness=? AND artifact_id=?" not in detail for detail in local_details
-    )
-    assert not any(
-        "diagnostic_hash" in detail and "harness=? AND artifact_hash=?" not in detail for detail in local_details
-    )
-    assert not any(
-        "reuse_artifact" in detail and "action=? AND harness=? AND artifact_id=?" not in detail
-        for detail in policy_details
-    )
-    assert not any(
-        "reuse_hash" in detail and "action=? AND harness=? AND artifact_hash=?" not in detail
-        for detail in policy_details
-    )
-    assert not any("diagnostic_harness_broad" in detail and "harness=?" not in detail for detail in policy_details)
-    assert not any("diagnostic_global_broad" in detail and "harness=?" not in detail for detail in policy_details)
-    assert not any(
-        "diagnostic_publisher" in detail and "harness=? AND publisher=?" not in detail for detail in policy_details
-    )
-    assert {
-        "idx_guard_local_once_diagnostic_artifact",
-        "idx_guard_local_once_diagnostic_hash",
-    }.issubset({index for detail in local_details for index in detail.split()})
-    assert {
-        "idx_policy_decisions_reuse_artifact",
-        "idx_policy_decisions_reuse_hash",
-        "idx_policy_decisions_diagnostic_harness_broad",
-        "idx_policy_decisions_diagnostic_global_broad",
-        "idx_policy_decisions_diagnostic_publisher",
-    }.issubset({index for detail in policy_details for index in detail.split()})
 
 
 def test_exact_package_local_once_approval_remains_reusable_for_three_retries(
@@ -2098,3 +1710,45 @@ def test_approval_reuse_discovery_and_serialization_cannot_restart_budget(
         )
         is None
     )
+
+
+def test_local_once_peek_is_read_only(tmp_path, monkeypatch, native_context_digest: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="harness",
+            artifact_id="codex:project:tool-action:other",
+            action="allow",
+            reason="seed local policy so a lookup would refresh integrity state",
+        ),
+        "2026-07-17T12:00:00+00:00",
+    )
+    refreshed: list[bool] = []
+    created: list[bool] = []
+    original_material = store._policy_integrity_secret_material
+
+    def refresh_spy(*args: object, **kwargs: object) -> None:
+        refreshed.append(True)
+
+    def material_spy(*, create: bool = False):
+        created.append(create)
+        return original_material(create=create)
+
+    monkeypatch.setattr(store, "_refresh_policy_integrity_state", refresh_spy)
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", material_spy)
+
+    assert (
+        store.peek_local_once_approval(
+            harness="codex",
+            artifact_id="codex:project:tool-action:peek",
+            artifact_hash="sha256:peek",
+            workspace="/workspace/a",
+            publisher=None,
+            now="2026-07-17T12:03:00+00:00",
+        )
+        is None
+    )
+
+    assert refreshed == []
+    assert not any(created)

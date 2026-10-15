@@ -23,8 +23,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeGuard
 
-from ..aibom_detection import extend_detection_with_workspace_aibom
-from ..models import GuardArtifact, HarnessDetection
+from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection
+from ..models import HarnessDetection
+from ..native_path_anchor import anchor_to_process_directory
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import (
@@ -49,18 +50,11 @@ from .zcode_config import (
     ZCODE_ENV_HINTS,
     ZCODE_HOOK_EVENT_NAMES,
     ZCODE_HOOKS_EVENTS_KEY,
-    ZCODE_MARKETPLACE_FILE,
     ZCODE_PLUGIN_CACHE_DIR,
-    ZCODE_PLUGIN_MANIFEST_DIR,
-    ZCODE_PLUGIN_MANIFEST_FILE,
     ZCODE_PLUGIN_MARKETPLACES_DIR,
     ZCODE_PRETOOL_MATCHERS,
     ZCODE_V2_CONFIG_FILE,
     ZCODE_V2_DIR,
-    append_cli_config_artifacts,
-    append_found_path,
-    append_marketplace_artifacts,
-    append_plugin_manifest_artifacts,
     dedupe_hook_entries,
     hook_event_groups,
     is_guard_managed_hook_command,
@@ -157,60 +151,29 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         return any(os.environ.get(name) for name in ZCODE_ENV_HINTS)
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
-
-        for config_path in self._config_candidates(context):
-            if not config_path.is_file():
-                continue
-            append_found_path(found_paths, config_path)
-            payload = _json_payload(config_path)
-            if payload:
-                scope = self._scope_for(context, config_path)
-                append_cli_config_artifacts(
-                    harness=self.harness,
-                    artifacts=artifacts,
-                    payload=payload,
-                    config_path=config_path,
-                    scope=scope,
-                )
-
-        # Current ZCode desktop builds keep provider/app state under ~/.zcode/v2;
-        # its presence marks an install even before the CLI config exists.
-        v2_config = self._zcode_home_dir(context) / ZCODE_V2_DIR / ZCODE_V2_CONFIG_FILE
-        if v2_config.is_file():
-            append_found_path(found_paths, v2_config)
-
-        for plugins_root, scope in self._plugins_candidates(context):
-            if not plugins_root.is_dir():
-                continue
-            for marketplace_dir in sorted(entry for entry in plugins_root.iterdir() if entry.is_dir()):
-                for plugin_dir in sorted(entry for entry in marketplace_dir.iterdir() if entry.is_dir()):
-                    for version_dir in sorted(entry for entry in plugin_dir.iterdir() if entry.is_dir()):
-                        manifest_path = version_dir / ZCODE_PLUGIN_MANIFEST_DIR / ZCODE_PLUGIN_MANIFEST_FILE
-                        if not manifest_path.is_file():
-                            continue
-                        append_plugin_manifest_artifacts(
-                            harness=self.harness,
-                            artifacts=artifacts,
-                            found_paths=found_paths,
-                            plugin_root=version_dir,
-                            scope=scope,
-                        )
-
-        for marketplaces_root, scope in self._marketplaces_candidates(context):
-            if not marketplaces_root.is_dir():
-                continue
-            for marketplace_dir in sorted(entry for entry in marketplaces_root.iterdir() if entry.is_dir()):
-                marketplace_file = marketplace_dir / ZCODE_MARKETPLACE_FILE
-                if marketplace_file.is_file():
-                    append_marketplace_artifacts(
-                        harness=self.harness,
-                        artifacts=artifacts,
-                        found_paths=found_paths,
-                        marketplace_file=marketplace_file,
-                        scope=scope,
-                    )
+        # The native resident reads the configs, plugin cache and marketplaces;
+        # Python anchors the paths and scopes and fails closed without it.
+        artifacts, found_paths = native_adapter_detection(
+            "zcode_detect",
+            {
+                "harness": self.harness,
+                "configs": [
+                    {"path": anchor_to_process_directory(path), "scope": self._scope_for(context, path)}
+                    for path in self._config_candidates(context)
+                ],
+                "v2_config": anchor_to_process_directory(
+                    self._zcode_home_dir(context) / ZCODE_V2_DIR / ZCODE_V2_CONFIG_FILE
+                ),
+                "plugin_roots": [
+                    {"path": anchor_to_process_directory(path), "scope": scope}
+                    for path, scope in self._plugins_candidates(context)
+                ],
+                "marketplace_roots": [
+                    {"path": anchor_to_process_directory(path), "scope": scope}
+                    for path, scope in self._marketplaces_candidates(context)
+                ],
+            },
+        )
 
         runtime_signal = self._detect_runtime_signal()
         command_available = _command_available(self.executable)
@@ -227,8 +190,8 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             harness=self.harness,
             installed=installed,
             command_available=command_available,
-            config_paths=tuple(found_paths),
-            artifacts=tuple(artifacts),
+            config_paths=found_paths,
+            artifacts=artifacts,
             warnings=tuple(dict.fromkeys(warnings)),
         )
         return extend_detection_with_workspace_aibom(

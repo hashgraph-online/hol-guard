@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -43,7 +44,8 @@ _TOOL_GLOSSARY = {
     "claude-code": "In this harness, 'bash' means the Bash tool and the native read, write and edit tools "
     "are Read, Write and Edit.",
     "codex": "In this harness, 'bash' means your shell command tool. You have no separate read tool; "
-    "when a native read is requested, read the file with one shell command such as cat. Edits use apply_patch.",
+    "when a native read is requested, read the file with one shell command such as cat. apply_patch is your "
+    "native write and edit tool: create files with it and change them with it.",
     "cursor": "In this harness, 'bash' means your shell tool and the native read, write and edit tools "
     "are your file read, write and edit tools.",
 }
@@ -67,6 +69,14 @@ class Harness:
 
     def home_environment(self, home: Path) -> dict[str, str]:
         return {key: str(home / relative) for key, relative in self.home_env.items()}
+
+    def keychain_environment(self) -> dict[str, str]:
+        """The account name a macOS CLI matches its Keychain login against."""
+        if not (self.macos_keychain and sys.platform == "darwin"):
+            return {}
+        import pwd
+
+        return {"USER": pwd.getpwuid(os.getuid()).pw_name}
 
     def executable(self, explicit: str | None = None) -> str:
         """Resolve the CLI the operator selected or the first one on PATH."""
@@ -336,6 +346,18 @@ def _login_lock(source: Path) -> Iterator[None]:
         yield
     finally:
         lock.rmdir()
+
+
+def keep_login_shell_path(home: Path, path: str) -> None:
+    """Restore the runner's PATH order in macOS login shells such as Codex's ``zsh -lc``.
+
+    path_helper in /etc/zprofile moves the system directories first, so BSD tools
+    would shadow the GNU ones the fixture puts on PATH. ~/.zprofile runs after it.
+    """
+    if sys.platform != "darwin":
+        return
+    with (home / ".zprofile").open("a", encoding="utf-8") as profile:
+        profile.write(f"export PATH={shlex.quote(path)}\n")
 
 
 def credential_environment(harness: Harness) -> dict[str, str]:

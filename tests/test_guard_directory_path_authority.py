@@ -87,13 +87,13 @@ def test_temporary_workspace_requires_existing_owned_directory(tmp_path: Path, m
     handler = object.__new__(server_module._GuardDaemonHandler)
 
     assert handler._validate_hook_directory_path("workspace", str(workspace), roots=()) == workspace.resolve()
-    assert handler._validated_owned_temporary_hook_workspace(str(tmp_path / "missing")) is None
+    assert directory_path_authority.validated_owned_temporary_workspace(str(tmp_path / "missing")) is None
     file_path = tmp_path / "file"
     file_path.write_text("not a directory", encoding="utf-8")
-    assert handler._validated_owned_temporary_hook_workspace(str(file_path)) is None
+    assert directory_path_authority.validated_owned_temporary_workspace(str(file_path)) is None
     owner = workspace.stat().st_uid
     monkeypatch.setattr(server_module.os, "getuid", lambda: owner + 1)
-    assert handler._validated_owned_temporary_hook_workspace(str(workspace)) is None
+    assert directory_path_authority.validated_owned_temporary_workspace(str(workspace)) is None
 
 
 def test_temporary_root_is_not_itself_a_hook_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,4 +101,4 @@ def test_temporary_root_is_not_itself_a_hook_workspace(tmp_path: Path, monkeypat
     monkeypatch.setattr(server_module.tempfile, "gettempdir", lambda: str(tmp_path))
 
     assert handler._normalized_hook_workspace_string(str(tmp_path)) is None
-    assert handler._validated_owned_temporary_hook_workspace(str(tmp_path)) is None
+    assert directory_path_authority.validated_owned_temporary_workspace(str(tmp_path)) is None

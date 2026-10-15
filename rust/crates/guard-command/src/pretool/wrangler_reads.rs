@@ -3,6 +3,9 @@
 //! Only metadata, help and the signed-in identity are admitted. Every other
 //! subcommand or flag can deploy, mutate remote resources or load project code
 //! and keeps the normal review path.
+//!
+//! `npx wrangler` is not admitted. It runs whatever the workspace's
+//! `node_modules` provides, and the workspace controls that directory.
 
 pub(super) fn safe_wrangler_arguments(arguments: &[String]) -> bool {
     match arguments {

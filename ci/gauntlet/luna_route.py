@@ -31,6 +31,19 @@ BACKEND = ("openai-codex", "gpt-6-luna")
 # Low is accepted only as an explicit opt-in for A/B cost comparisons.
 EFFORTS = ("medium", "high", "low")
 DEFAULT_EFFORT = "medium"
+# Each native backend the adapter may load, with the efforts its pinned catalog entry accepts.
+# Devin SWE-2 runs through the same Oh My Pi login store; it has no low effort.
+BACKENDS: dict[tuple[str, str], tuple[str, ...]] = {BACKEND: EFFORTS, ("devin", "swe-2"): ("medium", "high")}
+
+
+def parse_backend(value: str) -> tuple[str, str]:
+    """Accept only a known provider/model pair spelled the way Oh My Pi names it."""
+    provider, _, model = value.partition("/")
+    if (provider, model) not in BACKENDS:
+        raise ValueError("--native-route supports " + ", ".join("/".join(pair) for pair in BACKENDS))
+    return provider, model
+
+
 STARTUP_SECONDS = 60.0
 STOP_SECONDS = 5.0
 # Only what Bun and Oh My Pi's auth discovery need. Provider keys are not forwarded.
@@ -53,9 +66,10 @@ _WINDOWS_ENVIRONMENT_KEYS = (
 )
 
 
-def identity(effort: str) -> str:
+def identity(effort: str, backend: tuple[str, str] = BACKEND) -> str:
     """Provider identity recorded in evidence, naming the backend, its effort and the adapter."""
-    return f"{BACKEND[0]}/{BACKEND[1]}/{effort} via {ADAPTER_ID} (loopback Chat Completions to Responses)"
+    wire = "Responses" if backend == BACKEND else "native " + backend[0]
+    return f"{backend[0]}/{backend[1]}/{effort} via {ADAPTER_ID} (loopback Chat Completions to {wire})"
 
 
 def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
@@ -77,7 +91,7 @@ def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
     return root
 
 
-def validate_ready(line: str, effort: str = DEFAULT_EFFORT) -> dict[str, Any]:
+def validate_ready(line: str, effort: str = DEFAULT_EFFORT, backend: tuple[str, str] = BACKEND) -> dict[str, Any]:
     """Accept only the adapter's own loopback readiness record for the expected backend and effort."""
     try:
         ready = json.loads(line)
@@ -90,7 +104,7 @@ def validate_ready(line: str, effort: str = DEFAULT_EFFORT) -> dict[str, Any]:
     port = ready.get("port")
     if (
         ready.get("adapter") != ADAPTER_ID
-        or (ready.get("provider"), ready.get("model")) != BACKEND
+        or (ready.get("provider"), ready.get("model")) != backend
         or ready.get("thinking") != effort
         or type(port) is not int
         or not 1024 <= port <= 65535
@@ -102,11 +116,19 @@ def validate_ready(line: str, effort: str = DEFAULT_EFFORT) -> dict[str, Any]:
 class NativeLunaRoute:
     """Own one adapter process in its own process group and always reap it."""
 
-    def __init__(self, *, omp: str | None = None, sdk_root: Path | None = None, effort: str = DEFAULT_EFFORT):
+    def __init__(
+        self,
+        *,
+        omp: str | None = None,
+        sdk_root: Path | None = None,
+        effort: str = DEFAULT_EFFORT,
+        backend: tuple[str, str] = BACKEND,
+    ):
         """Resolve the SDK root and the Bun executable without starting anything."""
-        if effort not in EFFORTS:
-            raise ValueError("--native-luna-route supports Luna " + " or ".join(EFFORTS))
+        if effort not in BACKENDS.get(backend, ()):
+            raise ValueError(f"{'/'.join(backend)} supports " + " or ".join(BACKENDS.get(backend, ())))
         self.effort = effort
+        self.backend = backend
         self.sdk_root = sdk_root_for(omp, sdk_root)
         found = shutil.which("bun")
         if not found:
@@ -123,7 +145,7 @@ class NativeLunaRoute:
             "base_url": f"http://127.0.0.1:{self.port}/v1",
             "model": REQUEST_MODEL,
             "api_key": self._token,
-            "identity": identity(self.effort),
+            "identity": identity(self.effort, self.backend),
             "allow_loopback": True,
             "max_rounds": max_rounds,
             "timeout": timeout,
@@ -136,6 +158,7 @@ class NativeLunaRoute:
         environment = {key: os.environ[key] for key in keys if key in os.environ}
         environment["GUARD_GAUNTLET_ROUTE_TOKEN"] = self._token
         environment["GUARD_GAUNTLET_LUNA_THINKING"] = self.effort
+        environment["GUARD_GAUNTLET_NATIVE_BACKEND"] = "/".join(self.backend)
         command = [str(self.bun), "run", str(ADAPTER), str(self.sdk_root)]
         streams = {
             "stdin": subprocess.PIPE,
@@ -174,7 +197,7 @@ class NativeLunaRoute:
                 raise RuntimeError("Luna adapter did not start in time") from exc
             if not line:
                 raise RuntimeError("Luna adapter exited before it was ready; check the Oh My Pi ChatGPT login")
-            self.port = validate_ready(line, self.effort)["port"]
+            self.port = validate_ready(line, self.effort, self.backend)["port"]
         except BaseException:
             self.stop()
             raise

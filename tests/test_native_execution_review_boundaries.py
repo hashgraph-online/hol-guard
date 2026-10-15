@@ -11,6 +11,8 @@ import pytest
 from codex_plugin_scanner.guard import config, local_supply_chain, native_execution, native_prompt
 from codex_plugin_scanner.guard.contained_workspace_write_execution import ContainedWriteOperation
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.native_shim_admin import NativeShimAdminError
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import local_mcp_stdio, runner
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.types import PromptRequest, PromptRequestClass
@@ -140,7 +142,7 @@ def test_prompt_transport_errors_are_explicit(monkeypatch, error):
 
     monkeypatch.setattr(native_execution, "prompt_analyze_native", fail)
     with pytest.raises(native_prompt.NativePromptAnalysisError, match="native_prompt_analysis_unavailable"):
-        runner._prompt_analyze_native("extract", prompt_text="test")
+        guard_run_evaluation._prompt_analyze_native("extract", prompt_text="test")
 
 
 def test_prompt_programming_errors_are_not_hidden(monkeypatch):
@@ -149,7 +151,7 @@ def test_prompt_programming_errors_are_not_hidden(monkeypatch):
 
     monkeypatch.setattr(native_execution, "prompt_analyze_native", fail)
     with pytest.raises(RuntimeError, match="programming regression"):
-        runner._prompt_analyze_native("extract", prompt_text="test")
+        guard_run_evaluation._prompt_analyze_native("extract", prompt_text="test")
 
 
 @pytest.mark.parametrize("native", [[{"request_id": "r", "request_class": "read"}, None], [None]])
@@ -157,15 +159,17 @@ def test_prompt_extraction_rejects_every_malformed_native_result(monkeypatch, na
     monkeypatch.setattr(native_prompt, "analyze", lambda *_args, **_kwargs: native)
     assert not hasattr(runner, "_extract_prompt_requests_python")
     with pytest.raises(native_prompt.NativePromptAnalysisError, match="invalid_result"):
-        runner.extract_prompt_requests("test")
+        native_prompt.extract_prompt_requests("test")
 
 
 def test_artifact_translation_rejects_partial_native_results(monkeypatch, tmp_path):
-    monkeypatch.setattr(runner, "_prompt_policy_path", lambda *_: tmp_path / "policy")
-    monkeypatch.setattr(runner, "_prompt_analyze_native", lambda *_args, **_kwargs: [{"artifact_id": "a"}, None])
+    monkeypatch.setattr(guard_run_evaluation, "_prompt_policy_path", lambda *_: tmp_path / "policy")
+    monkeypatch.setattr(
+        guard_run_evaluation, "_prompt_analyze_native", lambda *_args, **_kwargs: [{"artifact_id": "a"}, None]
+    )
     assert not hasattr(runner, "_prompt_requests_to_artifacts_python")
     with pytest.raises(native_prompt.NativePromptAnalysisError, match="invalid_result"):
-        runner.prompt_requests_to_artifacts(
+        guard_run_evaluation.prompt_requests_to_artifacts(
             detection=SimpleNamespace(harness="claude-code"), context=SimpleNamespace(guard_home=tmp_path), requests=[]
         )
 
@@ -187,25 +191,32 @@ def test_approval_filter_cannot_turn_non_string_into_permission(monkeypatch):
         severity=1,
         confidence=1.0,
     )
-    assert runner.should_force_reapproval([request], {"approved_prompt_classes": [42, "read"]})
+    assert native_prompt.should_force_reapproval([request], {"approved_prompt_classes": [42, "read"]})
     assert captured["approved_classes"] == ["read"]
 
 
-@pytest.mark.parametrize("native,expected", [(["npm"], ["npm"]), (["npm", None], ["fallback"]), ({}, ["fallback"])])
-def test_supported_manager_list_is_validated(monkeypatch, tmp_path, native, expected):
+def test_supported_manager_list_stays_on_the_static_contract(monkeypatch, tmp_path):
     monkeypatch.setattr(local_supply_chain, "package_shim_dashboard_status", lambda _: {})
-    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda: ("fallback",))
-    monkeypatch.setattr(native_execution, "shim_admin_native", lambda *_args, **_kwargs: native)
+    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda _guard_home=None: ("fallback",))
     result = local_supply_chain._build_package_manager_protection(SimpleNamespace(guard_home=tmp_path))
-    assert result["supported_managers"] == expected
+    assert result["supported_managers"] == ["fallback"]
+
+
+def test_package_manager_protection_degrades_when_the_resident_cannot_answer(monkeypatch, tmp_path):
+    def unavailable(_context):
+        raise NativeShimAdminError("native_shim_admin_unavailable")
+
+    monkeypatch.setattr(local_supply_chain, "package_shim_dashboard_status", unavailable)
+    monkeypatch.setattr(local_supply_chain, "package_shim_supported_managers", lambda _guard_home=None: ("npm",))
+    result = local_supply_chain._build_package_manager_protection(SimpleNamespace(guard_home=tmp_path))
+    assert result["path_status"] == "unavailable"
+    assert result["protected_managers"] == []
 
 
 @pytest.mark.parametrize(
     "translator",
     [
-        native_execution._contained_node_result,
-        native_execution._contained_typescript_result,
-        native_execution._contained_package_script_result,
+        native_execution._contained_runner_result,
         native_execution._contained_workspace_write_result,
     ],
 )
@@ -228,6 +239,8 @@ def test_package_script_native_returns_dataclass_not_unvalidated_dict(monkeypatc
         "bun",
         ["run", "test"],
         guard_home=tmp_path,
+        shim_directory=tmp_path,
+        environment={},
     )
     assert isinstance(result, ContainedPackageScriptResult)
     assert isinstance(result.proof, PositiveProof)
@@ -239,6 +252,8 @@ def test_package_script_native_returns_dataclass_not_unvalidated_dict(monkeypatc
             "bun",
             ["run", "test"],
             guard_home=tmp_path,
+            shim_directory=tmp_path,
+            environment={},
         )
         is None
     )

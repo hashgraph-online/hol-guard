@@ -183,33 +183,32 @@ def test_real_interleaving_proves_resident_and_explicit_or_terminal_native_overl
     barrier = threading.Barrier(2, timeout=1)
     native_overloads = [0]
 
-    from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview
     from scripts.native_slo_route_provenance import RequestRouteTracker
 
-    class Runner:
-        def _record_route_metric(self, route: str) -> None:
-            metrics.record_route(route)
+    class Worker:
+        def __init__(self) -> None:
+            self.metrics = metrics
 
-        def review(self, *, payload: Mapping[str, object], harness: str) -> HookProcessReview:
+        def review_http_payload(self, *, payload: Mapping[str, object], harness: str) -> dict[str, object]:
             barrier.wait()
             if harness == "codex":
-                self._record_route_metric("native_resident")
+                self.metrics.record_route("native_resident")
                 response = {"decision": "allow"}
             else:
-                self._record_route_metric("native_fail_safe")
+                self.metrics.record_route("native_fail_safe")
                 if explicit:
                     response = {"decision": "deny", "reason_code": "daemon_capacity"}
                 else:
                     native_overloads[0] += 1
                     response = {"decision": "deny", "reason_code": "native_hook_edge_unavailable"}
             barrier.wait()
-            return HookProcessReview(response, None)
+            return response
 
-    runner = Runner()
-    tracker = RequestRouteTracker(runner)
+    worker = Worker()
+    tracker = RequestRouteTracker(worker)
 
     def request(_daemon: object, *, harness: str, request_payload: Mapping[str, object], **_kwargs: object) -> object:
-        return runner.review(payload=request_payload, harness=harness).payload
+        return worker.review_http_payload(payload=request_payload, harness=harness)
 
     session = cast(
         AdapterSession,

@@ -21,7 +21,13 @@ def test_scenario_tool_inventory_matches_actual_task():
 
     for scenario in load_catalog():
         tools = set(_scenario_tools(scenario).split(","))
-        if scenario.oracle == "home-copy-task":
+        if scenario.oracle == "native-tools":
+            expected = set(scenario.required_tools) | ({"bash"} if scenario.commands else set())
+            # The SDK requires the actual read tool behind eval's tool.read.
+            if "eval" in scenario.required_tools:
+                expected.add("read")
+            assert tools == expected
+        elif scenario.oracle == "home-copy-task":
             assert tools == {"bash", "read"}
         elif scenario.commands:
             assert tools == {"bash"}
@@ -70,6 +76,7 @@ def observed_case(command="echo fixture", *, blocked=False):
                 "input": dict(args),
                 "input_sha256": input_digest(args),
                 "observed_input_sha256": "c" * 64,
+                "rendered_fields": [],
                 "tool": "bash",
                 "decision": "deny" if blocked else "allow",
                 "http_status": 200,
@@ -86,6 +93,7 @@ def observed_case(command="echo fixture", *, blocked=False):
                     "input": dict(args),
                     "input_sha256": input_digest(args),
                     "observed_input_sha256": "c" * 64,
+                    "rendered_fields": [],
                     "tool": "bash",
                     "decision": "allow",
                     "http_status": 200,
@@ -466,6 +474,22 @@ def test_command_placeholders_are_shell_quoted_without_changing_native_paths(wor
         {workspace: "{{workspace}}", shlex.quote(workspace): "{{workspace}}"},
     )
     assert exported[0]["args"]["command"] == scenario.commands[0]
+
+
+def test_windows_placeholders_render_as_unquoted_forward_slash_paths():
+    """Keep `{{home}}/suffix` one argument in bash and PowerShell, and redact it back."""
+    import shlex
+
+    from ci.gauntlet.input_evidence import fixture_path_aliases, redact_value
+
+    home = "C:\\Users\\tester\\work\\case-05\\home"
+    scenario = Scenario("windows-root", "allow", "commands", "Read {{home}}/notes.md", ("cat {{home}}/notes.md",))
+    rendered = scenario.render({"home": home})
+    assert rendered.prompt == "Read C:/Users/tester/work/case-05/home/notes.md"
+    assert rendered.commands == ("cat C:/Users/tester/work/case-05/home/notes.md",)
+    assert shlex.split(rendered.commands[0]) == ["cat", "C:/Users/tester/work/case-05/home/notes.md"]
+    replacements = fixture_path_aliases({home: "{{home}}"})
+    assert redact_value(rendered.commands[0], replacements) == scenario.commands[0]
 
 
 @pytest.mark.parametrize("name", ["id", "expectation", "oracle", "prompt", "path"])

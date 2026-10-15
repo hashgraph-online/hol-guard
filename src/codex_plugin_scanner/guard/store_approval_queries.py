@@ -71,9 +71,9 @@ class StoreApprovalQueriesMixin:
                 exclude_watch_only=exclude_watch_only,
             )
 
-    def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+    def get_approval_request(self, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         with self._connect() as connection:
-            return load_approval_request(connection, request_id)
+            return load_approval_request(connection, request_id, derive_scope=derive_scope)
 
     def get_approval_extension_allow_hint(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
@@ -149,9 +149,6 @@ class StoreApprovalQueriesMixin:
             return None
         value = row["oldest_created_at"]
         return str(value) if isinstance(value, str) and value else None
-
-    def count_pending_requests(self, *, harness: str | None = None, search: str | None = None) -> int:
-        return self.count_approval_requests(status="pending", harness=harness, search=search)
 
     def clear_approval_requests(self, *, harness: str | None = None, status: str | None = None) -> int:
         conditions: list[str] = []

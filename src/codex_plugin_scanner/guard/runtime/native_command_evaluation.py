@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..native_command_effect import NativeCommandEffectMalformedError
 from ..native_command_model import _canonical_command_from_native
 from ..native_pretool import review_pre_tool_native
 from .command_evaluation import CompositeCommandEvaluation, evaluate_command
@@ -40,12 +41,21 @@ def review_command_native(
     compatibility_action_class: str | None = None,
     compatibility_reason: str | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    timeout_seconds: float = 0.5,
+    record_health: bool = True,
 ) -> NativeCommandEvaluation | None:
     """Return a bound native projection, or None without a usable native result."""
     snapshot = extension_control_snapshot or current_extension_control_snapshot()
     if snapshot is None or snapshot.authority_failure is not None:
         return None
-    native = review_pre_tool_native(command, guard_home=guard_home, cwd=cwd, home_dir=home_dir)
+    native = review_pre_tool_native(
+        command,
+        guard_home=guard_home,
+        cwd=cwd,
+        home_dir=home_dir,
+        timeout_seconds=timeout_seconds,
+        record_health=record_health,
+    )
     if native is None:
         return None
     model = native.get("command_model")
@@ -65,8 +75,9 @@ def review_command_native(
             workflow_authorization=workflow_authorization,
             extension_control_snapshot=snapshot,
             native_extension_evidence=native,
+            guard_home=guard_home,
         )
-    except NativeCommandExtensionEvidenceError:
+    except (NativeCommandExtensionEvidenceError, NativeCommandEffectMalformedError):
         return None
     # Native classification and host policy resolution are distinct stages:
     # an authenticated permission/workflow proof can authorize a review-class

@@ -101,6 +101,21 @@ pub enum SkillDirectoryCommandV1 {
         skill_root: String,
         limits: SkillDirectoryLimitsV1,
     },
+    /// Lossless OS path transport, including POSIX non-UTF8 names.
+    InspectEncoded {
+        skill_document_hex: String,
+        scope_root_hex: String,
+        path_encoding: String,
+        limits: SkillDirectoryLimitsV1,
+    },
+    DiscoverEncoded {
+        skill_root_hex: String,
+        path_encoding: String,
+        limits: SkillDirectoryLimitsV1,
+    },
+    Incomplete {
+        reason: SkillDirectoryFailureV1,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

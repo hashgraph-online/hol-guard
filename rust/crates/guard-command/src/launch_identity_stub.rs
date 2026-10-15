@@ -10,6 +10,7 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+pub use crate::launch_identity_common::package_request_launch_identity_material;
 use crate::launch_identity_common::{
     launch_argv_digest, normalized_launch_cwd, runtime_launch_argv, RuntimeLaunchArgv,
 };
@@ -158,6 +159,22 @@ pub fn build_runtime_launch_identity(
     // never claims it was verified.
     let effective_cwd = normalized_launch_cwd(cwd);
     let launch_cwd = effective_cwd.to_string_lossy().into_owned();
+    // A skill or other artifact with no command has nothing to launch. Match
+    // the Unix identity: a stable not-applicable record, with no reuse nonce.
+    // Real commands stay non-reusable below.
+    if command.is_null() || command.as_str() == Some("") {
+        return json!({
+            "argv_sha256": launch_argv_digest(&[]),
+            "entrypoint": {"kind": "not-applicable", "status": "not_applicable"},
+            "executable": {
+                "command": Value::Null,
+                "path": Value::Null,
+                "status": "not_applicable",
+                "launch_cwd": launch_cwd,
+            },
+            "launch_cwd": launch_cwd,
+        });
+    }
     let (argv_digest, executable_cmd) = match runtime_launch_argv(command, args, structured_command)
     {
         // The executable names the parsed first token of the launch vector,
@@ -312,6 +329,35 @@ mod tests {
         // Two launches of the same vector produce distinct nonces, so a saved
         // approval can never pin a stable identity on this platform.
         assert_ne!(first, second);
+        let absent = build_runtime_launch_identity(
+            &Value::Null,
+            &[],
+            false,
+            false,
+            None,
+            Some(cwd),
+            None,
+            None,
+        );
+        let absent_again = build_runtime_launch_identity(
+            &Value::Null,
+            &[],
+            false,
+            false,
+            None,
+            Some(cwd),
+            None,
+            None,
+        );
+        assert_eq!(absent, absent_again);
+        assert_eq!(
+            absent
+                .get("executable")
+                .and_then(|entry| entry.get("status"))
+                .and_then(Value::as_str),
+            Some("not_applicable")
+        );
+        assert!(absent.get("reuse_nonce").is_none());
         assert!(!runtime_launch_identity_matches(
             &first,
             &command,

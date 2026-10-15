@@ -150,6 +150,7 @@ fn store_and_envelope_with_runtime(
             &serde_json::to_value(guard_policy_snapshot::PolicySnapshotPushV1 {
                 schema: POLICY_SNAPSHOT_PUSH_SCHEMA.into(),
                 snapshot: signed.clone(),
+                direct_lane: None,
             })
             .unwrap(),
         )
@@ -171,6 +172,7 @@ fn store_and_envelope_with_runtime(
             source_ref_external_allowed: false,
             execution_environment: None,
         },
+        recording_only: false,
     };
     (root, store, envelope)
 }

@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_evaluation import (
+    CommandEvaluationInput,
+    evaluate_command,
+    evaluate_commands_batch,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -31,6 +41,44 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
 from codex_plugin_scanner.guard.runtime.native_command_evaluation import NativeCommandEvaluation
 
 ROOT = Path(__file__).resolve().parents[1]
+_NATIVE_TEST_GUARD_HOME: Path | None = None
+
+
+def native_test_guard_home(*, seed_key_only: bool = False) -> Path:
+    """Return a per-process Guard home so resident tests never touch a real install.
+
+    ``seed_key_only`` is for offline corpus workers that only need the
+    resident's on-disk prerequisite: it writes a random owner-private verifier
+    key instead of provisioning a real store, which would import the whole
+    scanner package into every worker and cost tens of MiB each.
+    """
+
+    global _NATIVE_TEST_GUARD_HOME
+    if _NATIVE_TEST_GUARD_HOME is None:
+        home = Path(tempfile.mkdtemp(prefix="hol-guard-native-test-")).resolve()
+        atexit.register(shutil.rmtree, home, ignore_errors=True)
+        if seed_key_only:
+            from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+                NATIVE_POLICY_VERIFIER_KEY_NAME,
+                NATIVE_RUNTIME_STATE_DIRECTORY,
+            )
+
+            state_dir = home / NATIVE_RUNTIME_STATE_DIRECTORY
+            state_dir.mkdir(mode=0o700)
+            key_path = state_dir / NATIVE_POLICY_VERIFIER_KEY_NAME
+            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(os.urandom(32))
+        else:
+            # Provision the resident prerequisite up front so its one-time store
+            # initialisation never eats the first command's request deadline.
+            from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
+
+            ensure_resident_prerequisite(home)
+        _NATIVE_TEST_GUARD_HOME = home
+    return _NATIVE_TEST_GUARD_HOME
+
+
 _NATIVE_REGRESSION_ENV = "HOL_GUARD_NATIVE_REGRESSION"
 _NATIVE_RUNTIME_ENV = "HOL_GUARD_NATIVE_BINARY"
 _NATIVE_SOURCE_COMPILER_ENV = "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"
@@ -149,11 +197,8 @@ def real_native_command_evaluation(
         managed_controls=managed_controls,
         global_lockdown=global_lockdown,
         managed_global_lockdown=managed_global_lockdown,
+        health=active_snapshot.health if active_snapshot is not None else AuthorityHealth.PROTECTED,
     )
-    if active_snapshot is not None and active_snapshot.authority_failure is not None:
-        # Retain the resident payload intact while exercising the independent
-        # host authority-health floor, as when authority fails after a review.
-        fixture = replace(fixture, snapshot=replace(fixture.snapshot, health=active_snapshot.health))
     return project_native_review_fixture(
         fixture,
         cwd=cwd,
@@ -184,8 +229,42 @@ def project_native_review_fixture(
         home_dir=home_dir,
         extension_control_snapshot=fixture.snapshot,
         native_extension_evidence=fixture.payload,
+        guard_home=native_test_guard_home(),
     )
     return NativeCommandEvaluation(evaluation, fixture.payload, fixture.snapshot)
+
+
+def project_native_review_fixtures_batch(
+    fixtures: Sequence[RealNativeReviewFixture],
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> tuple[NativeCommandEvaluation, ...]:
+    """Project many fixtures through the batched resident op (offline corpora only).
+
+    Same inputs and projection as ``project_native_review_fixture`` per fixture;
+    only the resident round trips are amortized.
+    """
+
+    entries: list[CommandEvaluationInput] = []
+    for fixture in fixtures:
+        canonical = _canonical_command_from_native(fixture.command, fixture.payload["command_model"])
+        assert canonical is not None
+        entries.append(
+            CommandEvaluationInput(
+                command_text=fixture.command,
+                canonical_command=canonical,
+                native_extension_evidence=fixture.payload,
+                extension_control_snapshot=fixture.snapshot,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+        )
+    evaluations = evaluate_commands_batch(entries, guard_home=native_test_guard_home(seed_key_only=True))
+    return tuple(
+        NativeCommandEvaluation(evaluation, fixture.payload, fixture.snapshot)
+        for evaluation, fixture in zip(evaluations, fixtures, strict=True)
+    )
 
 
 def inspect_command_native_test(command: str, **kwargs: object) -> dict[str, object]:
@@ -278,6 +357,7 @@ def real_native_review_fixture(
     managed_controls: tuple[tuple[str, str, str], ...] = (),
     global_lockdown: bool = False,
     managed_global_lockdown: bool = False,
+    health: AuthorityHealth = AuthorityHealth.PROTECTED,
 ) -> RealNativeReviewFixture:
     """Return the complete native result and its unchanged control binding.
 
@@ -295,6 +375,7 @@ def real_native_review_fixture(
         managed_controls=managed_controls,
         global_lockdown=global_lockdown,
         managed_global_lockdown=managed_global_lockdown,
+        health=health,
     )[0]
 
 
@@ -330,6 +411,7 @@ def real_native_review_fixtures(
     managed_controls: tuple[tuple[str, str, str], ...] = (),
     global_lockdown: bool = False,
     managed_global_lockdown: bool = False,
+    health: AuthorityHealth = AuthorityHealth.PROTECTED,
 ) -> tuple[RealNativeReviewFixture, ...]:
     """Return bounded native evaluations with their unmodified offline binding."""
 
@@ -347,6 +429,11 @@ def real_native_review_fixtures(
         ],
         **({"global_lockdown": True} if global_lockdown else {}),
         **({"managed_global_lockdown": True} if managed_global_lockdown else {}),
+        # The resident checks the effective digest against every binding field,
+        # health included, and evidence is bound to it. Authority health must
+        # therefore be fixed when the evidence is produced, never swapped on a
+        # snapshot afterwards.
+        **({"health": health.value} if health is not AuthorityHealth.PROTECTED else {}),
         "cases": [{"id": f"case-{index}", "command": command} for index, command in enumerate(commands)],
     }
     if cwd is not None and home_dir is not None:
@@ -362,11 +449,11 @@ def real_native_review_fixtures(
     )
     assert completed.returncode == 0, completed.stderr.decode(errors="replace")
     result = json.loads(completed.stdout)
+    del completed  # drop the raw JSON bytes before the parsed rows are retained
     assert result["schema"] == "guard.command-extension-evaluation-batch-results.v1"
     binding = result["control_binding"]
     assert binding["program_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest
     assert binding["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    assert binding["health"] == "protected"
     assert binding["revision"] == 1
     assert binding["managed_revision"] == int(bool(managed_controls) or managed_global_lockdown)
     layer_specs = [(ControlLayerKind.LOCAL_ADMIN, controls, global_lockdown)]
@@ -389,14 +476,17 @@ def real_native_review_fixtures(
         for kind, values, lockdown in layer_specs
     )
     assert binding["layers"] == [_layer_payload(layer) for layer in layers]
-    snapshot = ExtensionControlRuntimeSnapshot(
-        health=AuthorityHealth.PROTECTED,
-        revision=binding["revision"],
-        catalog_digest=binding["catalog_digest"],
-        effective_digest=binding["effective_digest"],
-        layers=layers,
-        managed_revision=binding["managed_revision"],
+    assert binding["health"] == health.value
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            health=health,
+            revision=binding["revision"],
+            catalog_digest=binding["catalog_digest"],
+            layers=layers,
+            managed_revision=binding["managed_revision"],
+        )
     )
+    assert snapshot.effective_digest == binding["effective_digest"]
     rows = result["cases"]
     assert [row["id"] for row in rows] == [f"case-{index}" for index in range(len(commands))]
     return tuple(

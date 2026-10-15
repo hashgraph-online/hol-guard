@@ -251,12 +251,12 @@ fn nonempty_string(value: Option<&Value>) -> Option<&str> {
 
 /// `str.isspace()` adds the ASCII information separators to Unicode
 /// White_Space, which is what `char::is_whitespace` implements.
-fn python_whitespace(character: char) -> bool {
+pub(crate) fn python_whitespace(character: char) -> bool {
     character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
 }
 
 /// `pathlib.Path(path).name`: the last non-empty, non-`.` component.
-fn python_path_name(path: &str) -> String {
+pub(crate) fn python_path_name(path: &str) -> String {
     #[cfg(windows)]
     let path = {
         let bytes = path.as_bytes();

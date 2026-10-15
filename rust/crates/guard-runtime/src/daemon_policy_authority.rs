@@ -29,13 +29,20 @@
 //! authority.
 
 use std::fs;
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io;
+use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::process::{Child, Command, Stdio};
+#[cfg(unix)]
 use std::sync::mpsc;
+#[cfg(unix)]
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -61,7 +68,9 @@ const DAEMON_STATE_JSON_MAX_BYTES: u64 = 64 * 1024;
 const DAEMON_RESPONSE_MAX_BYTES: usize = 256 * 1024;
 /// `_GUARD_DAEMON_PROCESS_QUERY_MAX_BYTES` / `_TIMEOUT_SECONDS`
 /// (manager.py:111-:112).
+#[cfg(unix)]
 const PROCESS_QUERY_MAX_BYTES: usize = 1024 * 1024;
+#[cfg(unix)]
 const PROCESS_QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Health-request deadline (manager.py:1206 uses `health_timeout=1.0`;
 /// policy_authority_client.py:35 uses 2s for the policy socket).
@@ -69,6 +78,7 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
 /// Policy request socket timeout (policy_authority_client.py:35).
 const POLICY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Trusted `ps` locations (manager.py:112, :2556-:2562).
+#[cfg(unix)]
 const POSIX_PS_PATHS: [&str; 2] = ["/bin/ps", "/usr/bin/ps"];
 /// Launcher basenames recognized in serve argv (manager.py:2885-:2894).
 const RECOGNIZED_LAUNCHERS: [&str; 4] = [
@@ -321,7 +331,7 @@ fn load_authenticated_daemon_identity(guard_home: &Path) -> Option<(Map<String, 
 
 /// `load_authenticated_daemon_state` (discovery.py:110-:123): the
 /// discovery key authenticates the state payload via an HMAC.
-fn load_authenticated_daemon_state(guard_home: &Path) -> Option<Map<String, Value>> {
+pub(crate) fn load_authenticated_daemon_state(guard_home: &Path) -> Option<Map<String, Value>> {
     let discovery_key = load_daemon_discovery_key(guard_home)?;
     let raw = read_private_regular_text(
         &guard_home.join("daemon-state.json"),
@@ -348,7 +358,7 @@ fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
 
 /// `load_guard_daemon_auth_token` (manager.py:1284-:1290) —
 /// `daemon-auth-token`, private parent required.
-fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
+pub(crate) fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
     let token = read_private_regular_text(
         &guard_home.join("daemon-auth-token"),
         DAEMON_AUTH_TOKEN_MAX_BYTES,
@@ -395,7 +405,7 @@ fn verify_daemon_state(payload: &Map<String, Value>, discovery_key: &str) -> boo
 
 /// `canonical_discovery_payload` (discovery.py:72-:73): compact sorted
 /// JSON.
-fn canonical_discovery_payload(payload: &Map<String, Value>) -> Vec<u8> {
+pub(crate) fn canonical_discovery_payload(payload: &Map<String, Value>) -> Vec<u8> {
     // serde_json's Value::Object is a BTreeMap, so iteration is
     // already key-sorted; compact separators match Python's
     // (",", ":"). ensure_ascii is the default for json.dumps, so
@@ -485,7 +495,7 @@ fn write_json_string(s: &str, out: &mut Vec<u8>) {
 
 /// Raw HMAC-SHA256 over an arbitrary message (single-shot; the crate's
 /// `hmac_sha256` is label+nonce shaped for the resident protocol).
-fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> Vec<u8> {
+pub(crate) fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> Vec<u8> {
     const BLOCK: usize = 64;
     let mut key_block = [0u8; BLOCK];
     if key.len() > BLOCK {
@@ -819,6 +829,7 @@ fn trusted_posix_ps_path() -> Option<PathBuf> {
 }
 
 /// `_bounded_process_query_stdout` (manager.py:2661-:2731).
+#[cfg(unix)]
 fn bounded_process_query_stdout(args: &[&str]) -> Option<String> {
     let mut child: Child = Command::new(args[0])
         .args(&args[1..])

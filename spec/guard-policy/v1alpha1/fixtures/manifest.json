@@ -2,7 +2,9 @@
   "valid": [
     "valid/basic.yaml",
     "valid/extensions-and-scalars.yaml",
-    "valid/business-selector.yaml"
+    "valid/business-selector.yaml",
+    "valid/with-tests.yaml",
+    "valid/enforceable-scopes.yaml"
   ],
   "invalid": {
     "invalid/anchor-alias.yaml": "yaml_anchor",

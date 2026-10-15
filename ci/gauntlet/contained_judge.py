@@ -11,6 +11,8 @@ from typing import Any
 from ci.native_runtime.probe_workflow_matrix import assert_execution, contained_vitest_cases
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase
 
+from .contained_core import receipt_is_authoritative
+from .contained_core import workspace_identity_matches as _contained_workspace_identity_matches
 from .evidence import reconcile, sha256_bytes
 from .fixtures import digest_file
 from .input_evidence import input_digest
@@ -137,52 +139,6 @@ def _contained_wrapper_argv(
     return argv, None
 
 
-def _contained_receipt_is_authoritative(observation: dict[str, Any], expected_reason: str) -> bool:
-    """Require the Rust receipt that denied the original input for containment."""
-    native = observation.get("native_observation")
-    receipt = native.get("native_receipt") if isinstance(native, dict) else None
-    if not isinstance(receipt, dict):
-        return False
-    if (
-        observation.get("decision") != "deny"
-        or observation.get("reason_code") != expected_reason
-        or observation.get("policy_action") != "sandbox-required"
-        or not isinstance(native, dict)
-        or native.get("required_execution_profile") != "vitest-readonly-v1"
-        or receipt.get("authority") != "rust"
-        or receipt.get("harness") != "omp"
-        or receipt.get("event_name") != "PreToolUse"
-        or receipt.get("decision") != "deny"
-        or receipt.get("policy_action") != "sandbox-required"
-        or receipt.get("reason_code") != expected_reason
-        or receipt.get("request_id") != observation.get("probe_request_id")
-    ):
-        return False
-    if not isinstance(receipt.get("decision_id"), str) or not receipt["decision_id"]:
-        return False
-    binding = receipt.get("command_extensions")
-    if not isinstance(binding, dict):
-        return False
-    return all(
-        re.fullmatch(r"[0-9a-f]{64}", binding.get(key, ""))
-        for key in ("program_digest", "catalog_digest", "trust_digest")
-    )
-
-
-def _contained_workspace_identity_matches(observed: object, expected: object) -> bool:
-    """Treat macOS /tmp aliases as one workspace without accepting relative paths."""
-    if not isinstance(observed, str) or not isinstance(expected, str):
-        return False
-    observed_path = Path(observed)
-    expected_path = Path(expected)
-    if not observed_path.is_absolute() or not expected_path.is_absolute():
-        return False
-    try:
-        return observed_path.resolve() == expected_path.resolve()
-    except (OSError, RuntimeError, ValueError):
-        return False
-
-
 def _contained_guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
@@ -248,7 +204,7 @@ def _contained_guard_inventory(
             return {}, "contained Guard observation tool differs from bash sink"
         if pre[0].get("input") != expected_input:
             return {}, "native Guard did not review the exact original contained command"
-        if not _contained_receipt_is_authoritative(pre[0], case.protected_reason or ""):
+        if not receipt_is_authoritative(pre[0], case.protected_reason or "", "vitest-readonly-v1"):
             return {}, "original contained command lacks an authoritative Rust denial receipt"
         wrapper = call.get("args", {}).get("command")
         if post[0].get("decision") != "allow" or post[0].get("input", {}).get("command") != wrapper:

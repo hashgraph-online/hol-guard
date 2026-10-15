@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import append_artifact
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_mcp_tool_evidence import NativeMcpToolEvidenceError
@@ -207,12 +206,8 @@ def test_skill_artifact_emits_skill_firewall_metadata(tmp_path) -> None:
     assert stable_id.startswith("skill:")
 
 
-def test_append_artifact_enriches_mcp_server_metadata() -> None:
-    artifacts: list[GuardArtifact] = []
-    seen: set[str] = set()
-    append_artifact(
-        artifacts,
-        seen,
+def test_firewall_enriches_mcp_server_metadata() -> None:
+    enriched = enrich_artifact_with_mcp_skill_firewall(
         GuardArtifact(
             artifact_id="opencode:project:filesystem",
             name="filesystem",
@@ -227,8 +222,7 @@ def test_append_artifact_enriches_mcp_server_metadata() -> None:
         ),
     )
 
-    assert len(artifacts) == 1
-    assert "mcpSkillFirewall" in artifacts[0].metadata
+    assert "mcpSkillFirewall" in enriched.metadata
 
 
 def test_descriptor_digest_failure_names_the_native_reason(monkeypatch: pytest.MonkeyPatch) -> None:

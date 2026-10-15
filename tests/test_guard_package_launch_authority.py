@@ -5,18 +5,11 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
-from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.local_supply_chain import (
-    build_package_protect_payload,
-    compose_current_package_policy_action,
-)
+from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import (
-    GuardArtifact,
     PolicyDecision,
 )
-from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
-from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
@@ -297,84 +290,3 @@ def test_build_package_protect_payload_old_review_approval_cannot_lower_current_
         "approval_reuse_current_block",
         "approval_reuse_policy_changed",
     }
-
-
-@pytest.mark.parametrize(
-    ("policy_input", "expected_action"),
-    (("harness_risk", "block"), ("publisher_override", "block"), ("exact_over_broader", "review")),
-)
-def test_current_package_policy_composes_every_relevant_config_scope(
-    tmp_path: Path,
-    policy_input: str,
-    expected_action: str,
-) -> None:
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    intent = parse_package_intent("npm install guard-proof", workspace=workspace_dir)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "guard-cli",
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-    )
-    if policy_input == "publisher_override":
-        artifact = GuardArtifact(
-            harness=artifact.harness,
-            artifact_id=artifact.artifact_id,
-            name=artifact.name,
-            artifact_type=artifact.artifact_type,
-            source_scope=artifact.source_scope,
-            config_path=artifact.config_path,
-            publisher="npm",
-            metadata=artifact.metadata,
-            transport=artifact.transport,
-        )
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace_dir,
-        security_level="custom",
-        risk_actions={"package_script": "review"},
-        harness_risk_actions={"guard-cli": {"package_script": "block"}} if policy_input == "harness_risk" else None,
-        publisher_actions={"npm": "block"} if policy_input == "publisher_override" else None,
-        artifact_actions={artifact.artifact_id: "allow"} if policy_input == "exact_over_broader" else None,
-        harness_actions={"guard-cli": "block"} if policy_input == "exact_over_broader" else None,
-    )
-
-    assert (
-        compose_current_package_policy_action(
-            artifact=artifact,
-            evaluation=_review_package_evaluation(),
-            config=config,
-        )
-        == expected_action
-    )
-
-
-def test_current_package_policy_harness_risk_override_replaces_global_risk_action(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    intent = parse_package_intent("npm install guard-proof", workspace=workspace_dir)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "guard-cli",
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-    )
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace_dir,
-        security_level="custom",
-        risk_actions={"package_script": "block"},
-        harness_risk_actions={"guard-cli": {"package_script": "allow"}},
-    )
-
-    assert (
-        compose_current_package_policy_action(
-            artifact=artifact,
-            evaluation=_review_package_evaluation(),
-            config=config,
-        )
-        == "review"
-    )

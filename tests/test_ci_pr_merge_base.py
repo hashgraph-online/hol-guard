@@ -8,7 +8,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
 
 from scripts import prepare_extension_contribution as prepare
 from scripts.ci.pr_merge_base import comparison_base
@@ -126,24 +125,3 @@ def test_ref_names_and_malformed_shas_are_rejected(tmp_path: Path, invalid: str)
         comparison_base(invalid, merge, root=checkout)
     with pytest.raises(ValueError, match="full GitHub commit SHAs"):
         comparison_base(head, invalid, root=checkout)
-
-
-def test_builder_binds_the_event_head_and_merge_without_weakening_validation() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text())
-    events = workflow.get("on", workflow.get(True))
-    assert "pull_request" in events and "pull_request_target" not in events
-    assert workflow["permissions"] == {"contents": "read"}
-    steps = workflow["jobs"]["authoring"]["steps"]
-    checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
-    assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
-    base = next(step for step in steps if step.get("id") == "contribution-base")
-    assert base["env"]["PR_HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
-    assert base["env"]["PR_MERGE_SHA"] == "${{ github.sha }}"
-    assert "builder-evidence/checkout.txt" in base["run"]
-    assert "continue-on-error" not in base
-    preparation = next(step for step in steps if step.get("name") == "Prepare and verify current extension projections")
-    assert preparation["env"]["COMPARISON_BASE"] == "${{ steps.contribution-base.outputs.sha }}"
-    assert '--changed-from "$COMPARISON_BASE"' in preparation["run"]
-    assert "scripts/prepare_extension_contribution.py --check" in preparation["run"]
-    assert "continue-on-error" not in preparation
-    assert steps.index(base) < steps.index(preparation)

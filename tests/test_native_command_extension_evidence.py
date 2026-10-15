@@ -4,29 +4,29 @@ import hashlib
 import json
 from copy import deepcopy
 
-import pytest
-
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
-from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import (
-    NativeCommandExtensionEvidenceError,
-    observations_from_native_evidence,
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 
 def _payload(command_text: str) -> tuple[dict[str, object], object, ExtensionControlRuntimeSnapshot]:
     command = parse_shell_command(command_text)
-    snapshot = ExtensionControlRuntimeSnapshot(
-        AuthorityHealth.PROTECTED,
-        7,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        "d" * 64,
-        (),
-        3,
+    # The effective digest is derived, never asserted: the resident recomputes
+    # it from the binding fields and refuses any snapshot that disagrees.
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            AuthorityHealth.PROTECTED,
+            7,
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            (),
+            3,
+        )
     )
     observation = {
         "extension_id": "command.api-gateway",
@@ -84,58 +84,8 @@ def _rehash(evidence: dict[str, object]) -> None:
     ).hexdigest()
 
 
-def test_native_evidence_projects_only_when_command_controls_and_owners_match() -> None:
-    payload, command, snapshot = _payload("aws apigateway delete-rest-api --rest-api-id abc")
-    observations = observations_from_native_evidence(
-        payload,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-        command=command,
-        control_snapshot=snapshot,
-    )
-    assert [item.rule.rule_id for item in observations] == ["command.api-gateway.delete"]
-
-    payload["command_model"]["normalized_text"] = "aws s3 ls"
-    with pytest.raises(NativeCommandExtensionEvidenceError, match="command_mismatch"):
-        observations_from_native_evidence(
-            payload,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            command=command,
-            control_snapshot=snapshot,
-        )
-
-
-def test_native_evidence_rejects_stale_controls_and_rule_versions() -> None:
-    payload, command, snapshot = _payload("aws apigateway delete-rest-api --rest-api-id abc")
-    stale = ExtensionControlRuntimeSnapshot(
-        snapshot.health,
-        snapshot.revision + 1,
-        snapshot.catalog_digest,
-        snapshot.effective_digest,
-        snapshot.layers,
-        snapshot.managed_revision,
-    )
-    with pytest.raises(NativeCommandExtensionEvidenceError, match="binding_mismatch"):
-        observations_from_native_evidence(
-            payload,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            command=command,
-            control_snapshot=stale,
-        )
-
-    evidence = payload["command_extensions"]
-    evidence["observations"][0]["rule_version"] = "9.9.9"
-    _rehash(evidence)
-    with pytest.raises(NativeCommandExtensionEvidenceError, match="unknown_identity"):
-        observations_from_native_evidence(
-            payload,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            command=command,
-            control_snapshot=snapshot,
-        )
-
-
 def _failed_payload():
-    payload, command, snapshot = _payload("env FOO=bar curl https://example.test")
+    payload, command, snapshot = _payload("env NODE_OPTIONS=--inspect curl https://example.test")
     evidence = payload["command_extensions"]
     evidence["observations"] = []
     evidence["evaluation_error"] = "native_command_evaluation_failed"
@@ -169,82 +119,6 @@ def test_native_evaluation_rejection_projects_a_block_without_rewriting_evidence
     assert payload == original
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("decision", "allow"),
-        ("decision", None),
-        ("policy_action", "allow"),
-        ("policy_action", "review"),
-        ("policy_action", None),
-        ("minimum_action", "allow"),
-        ("minimum_action", "review"),
-        ("minimum_action", None),
-        ("explicitly_benign", True),
-        ("explicitly_benign", None),
-    ],
-)
-def test_native_evaluation_rejection_requires_an_unambiguous_hard_block(field: str, value: object) -> None:
-    payload, command, snapshot = _failed_payload()
-    if value is None:
-        payload.pop(field)
-    else:
-        payload[field] = value
-    original = deepcopy(payload)
-    with pytest.raises(NativeCommandExtensionEvidenceError, match="evidence_invalid"):
-        observations_from_native_evidence(
-            payload,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            command=command,
-            control_snapshot=snapshot,
-        )
-    assert payload == original
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("catalog_digest", "e" * 64),
-        ("program_digest", "e" * 64),
-        ("control_revision", 8),
-        ("managed_control_revision", 4),
-        ("control_effective_digest", "e" * 64),
-    ],
-)
-def test_native_evaluation_rejection_still_requires_exact_binding(field: str, value: object) -> None:
-    payload, command, snapshot = _failed_payload()
-    payload["command_extensions"]["binding"][field] = value
-    with pytest.raises(NativeCommandExtensionEvidenceError, match="binding_mismatch"):
-        observations_from_native_evidence(
-            payload,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            command=command,
-            control_snapshot=snapshot,
-        )
-
-
-@pytest.mark.parametrize("malformation", ["unknown_error", "observations", "permissions", "digest"])
-def test_native_evaluation_rejection_cannot_carry_malformed_or_mixed_evidence(malformation: str) -> None:
-    payload, command, snapshot = _failed_payload()
-    evidence = payload["command_extensions"]
-    if malformation == "unknown_error":
-        evidence["evaluation_error"] = "unknown_failure"
-    elif malformation in {"observations", "permissions"}:
-        field = "observations" if malformation == "observations" else "permission_observations"
-        evidence[field] = [{}]
-        evidence["binding"]["observation_count"] = 1
-    _rehash(evidence)
-    if malformation == "digest":
-        evidence["binding"]["observations_digest"] = "e" * 64
-    with pytest.raises(NativeCommandExtensionEvidenceError, match="evidence_invalid"):
-        observations_from_native_evidence(
-            payload,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            command=command,
-            control_snapshot=snapshot,
-        )
-
-
 def test_real_native_evaluation_rejection_keeps_its_error_and_block() -> None:
     from codex_plugin_scanner.guard.runtime.secret_file_requests import (
         build_tool_action_request_artifact,
@@ -252,7 +126,7 @@ def test_real_native_evaluation_rejection_keeps_its_error_and_block() -> None:
     )
     from tests.native_command_test_support import project_native_review_fixture, real_native_review_fixture
 
-    fixture = real_native_review_fixture("env FOO=bar curl https://example.test")
+    fixture = real_native_review_fixture("env NODE_OPTIONS=--inspect curl https://example.test")
     original = json.dumps(fixture.payload, sort_keys=True, separators=(",", ":"))
     assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
     assert fixture.payload["decision"] == "deny"

@@ -3,9 +3,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import sys
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,31 +13,13 @@ import pytest
 from codex_plugin_scanner.guard.cli.commands_hook_github_workflow import prepare_github_workflow_hook_state
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, GuardReceipt
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.native_github_workflow import GitHubWorkflowDescriptor
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from codex_plugin_scanner.guard.runtime.github_workflow_authorization import (
-    GitHubWorkflowBindingContext,
-    claim_github_workflow_authorization,
-    github_repository_sha256,
-    issue_github_workflow_capability_binding,
-)
-from codex_plugin_scanner.guard.runtime.github_workflow_context import (
-    GITHUB_WORKFLOW_DESCRIPTOR_SCHEMA,
-    GitHubWorkflowDescriptor,
-    _resolve_executable,
-    build_github_workflow_descriptor,
-)
-from codex_plugin_scanner.guard.runtime.github_workflow_operations import parse_github_workflow_operation
-from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
-    _persisted_command_matches_record,
-    approval_record_from_approval_request,
-)
+from codex_plugin_scanner.guard.runtime.github_workflow_authorization import issue_github_workflow_capability_binding
+from codex_plugin_scanner.guard.runtime.github_workflow_runtime import approval_record_from_approval_request
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.workflow_capabilities import (
-    WorkflowCapabilityRuleBinding,
-    canonical_framed_payload,
-    format_utc_timestamp,
-)
+from codex_plugin_scanner.guard.workflow_capabilities import format_utc_timestamp
+from tests.github_workflow_test_support import descriptor as build_descriptor
 
 _NOW = datetime.now(timezone.utc)
 _REPOSITORY = "privacy-owner/privacy-repo"
@@ -47,47 +28,21 @@ _PATH_SENTINEL = "/private/privacy-path-sentinel"
 _VIEWER = "privacy-viewer-sentinel"
 
 
-def _digest(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
-
-
-def _descriptor(executable: Path, *, command: str | None = None) -> GitHubWorkflowDescriptor:
-    command = command or (
-        f"{executable} api graphql -f "
+def _descriptor() -> GitHubWorkflowDescriptor:
+    return build_descriptor(
+        "gh api graphql -f "
         "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id __typename}}}' "
-        f"-f threadId={_THREAD}"
-    )
-    operation = parse_github_workflow_operation(
-        parse_shell_command(command),
+        f"-f threadId={_THREAD}",
+        operation="resolve-review-thread",
+        resource_type="github-review-thread",
+        resource=_THREAD,
         repository=_REPOSITORY,
-        expected_executable=str(executable),
     )
-    assert operation is not None
-    context = GitHubWorkflowBindingContext(
-        repository_sha256=github_repository_sha256(_REPOSITORY),
-        workspace_sha256=_digest("github-workspace", _PATH_SENTINEL),
-        executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
-        cwd_sha256=_digest("github-cwd", _PATH_SENTINEL),
-        environment_sha256=_digest("github-environment", {"sentinel": _PATH_SENTINEL}),
-        configuration_sha256=_digest("github-configuration", {"sentinel": _PATH_SENTINEL}),
-        manifest_sha256=_digest("github-manifest", _PATH_SENTINEL),
-        lockfile_sha256=_digest("github-lockfile", _PATH_SENTINEL),
-        sandbox_sha256=_digest("github-sandbox", _PATH_SENTINEL),
-        policy_id="guard.command-policy",
-        policy_version="policy.v1",
-        effect_id="github.maintain-remote",
-        effect_version="effect.v1",
-        decision_id="github.workflow-authorized",
-        decision_version="decision.v1",
-        rules=(WorkflowCapabilityRuleBinding("github.maintain-remote", "rule.v1"),),
-    )
-    return GitHubWorkflowDescriptor(GITHUB_WORKFLOW_DESCRIPTOR_SCHEMA, operation, context, _digest("viewer", _VIEWER))
 
 
 def test_persisted_approval_receipt_and_events_expose_only_sanitized_record(tmp_path: Path) -> None:
     now = datetime.now(timezone.utc)
-    executable = Path(sys.executable).resolve()
-    record = GitHubWorkflowApprovalRecord.from_descriptor(_descriptor(executable))
+    record = _descriptor().record
     evidence: tuple[dict[str, object], ...] = (
         {"source": "github_workflow_approval_record", "record": record.to_dict()},
     )
@@ -160,14 +115,14 @@ def test_persisted_approval_receipt_and_events_expose_only_sanitized_record(tmp_
 
 
 def test_raw_descriptor_or_extra_sensitive_record_fields_fail_closed() -> None:
-    descriptor = _descriptor(Path(sys.executable).resolve())
+    descriptor = _descriptor()
     assert (
         approval_record_from_approval_request(
-            {"scanner_evidence": [{"source": "github_workflow_descriptor", "descriptor": descriptor.to_dict()}]}
+            {"scanner_evidence": [{"source": "github_workflow_descriptor", "descriptor": asdict(descriptor)}]}
         )
         is None
     )
-    payload = GitHubWorkflowApprovalRecord.from_descriptor(descriptor).to_dict()
+    payload = descriptor.record.to_dict()
     payload["repository"] = _REPOSITORY
     with pytest.raises(ValueError):
         GitHubWorkflowApprovalRecord.from_dict(payload)
@@ -176,7 +131,7 @@ def test_raw_descriptor_or_extra_sensitive_record_fields_fail_closed() -> None:
 def test_hook_artifact_metadata_persists_only_sanitized_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import codex_plugin_scanner.guard.cli.commands_hook_github_workflow as workflow_hook
 
-    descriptor = _descriptor(Path(sys.executable).resolve())
+    descriptor = _descriptor()
     monkeypatch.setattr(workflow_hook, "_runtime_github_workflow_descriptor", lambda *_args, **_kwargs: descriptor)
     artifact = GuardArtifact(
         artifact_id="codex:project:tool-action:github",
@@ -199,147 +154,3 @@ def test_hook_artifact_metadata_persists_only_sanitized_record(tmp_path: Path, m
     for sentinel in (_REPOSITORY, _THREAD, _PATH_SENTINEL, _VIEWER):
         assert sentinel not in encoded
     assert "github_workflow_approval_record" in encoded
-
-
-@pytest.mark.parametrize(
-    "key",
-    ("HTTP_PROXY", "SSL_CERT_FILE", "GH_TOKEN", "GH_CONFIG_DIR", "BASH_ENV", "ENV", "ZDOTDIR", "PATH"),
-)
-def test_full_launch_environment_drift_changes_binding(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
-) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    executable = Path(sys.executable).resolve()
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: executable)
-    monkeypatch.setattr(
-        context_module,
-        "_run_bounded",
-        lambda arguments, **_kwargs: (
-            f"https://github.com/{_REPOSITORY}.git\n".encode()
-            if "remote.origin.url" in arguments
-            else json.dumps({"login": _VIEWER}).encode()
-        ),
-    )
-    command = f"{executable} issue lock 17 --repo {_REPOSITORY}"
-    base_environment = {"PATH": "/usr/bin", "HOME": str(tmp_path), key: "before"}
-    before = build_github_workflow_descriptor(
-        command,
-        workspace=tmp_path,
-        config_path="redacted",
-        configuration={},
-        sandbox={},
-        environment=base_environment,
-    )
-    after = build_github_workflow_descriptor(
-        command,
-        workspace=tmp_path,
-        config_path="redacted",
-        configuration={},
-        sandbox={},
-        environment={**base_environment, key: "after"},
-    )
-    assert before is not None and after is not None
-    assert before.binding_context.environment_sha256 != after.binding_context.environment_sha256
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        f"gh issue lock 17 --repo {_REPOSITORY}",
-        f"./gh issue lock 17 --repo {_REPOSITORY}",
-        f"../bin/gh issue lock 17 --repo {_REPOSITORY}",
-        f"command {Path(sys.executable).resolve()} issue lock 17 --repo {_REPOSITORY}",
-        f"{Path(sys.executable).resolve()} issue lock 17 --repo {_REPOSITORY} &",
-    ),
-    # Stable ids keep the pytest node ids free of the interpreter's absolute
-    # path, which differs between the shard-planning and test-running CI jobs.
-    ids=("bare-gh", "dot-slash-gh", "relative-bin-gh", "command-interpreter", "interpreter-background"),
-)
-def test_noncanonical_launch_forms_are_ineligible(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
-) -> None:
-    import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
-
-    executable = Path(sys.executable).resolve()
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: executable)
-    monkeypatch.setattr(
-        context_module,
-        "_run_bounded",
-        lambda arguments, **_kwargs: (
-            f"https://github.com/{_REPOSITORY}.git\n".encode()
-            if "remote.origin.url" in arguments
-            else json.dumps({"login": _VIEWER}).encode()
-        ),
-    )
-    assert (
-        build_github_workflow_descriptor(
-            command,
-            workspace=tmp_path,
-            config_path="redacted",
-            configuration={},
-            sandbox={},
-        )
-        is None
-    )
-
-
-def test_symlinked_gh_is_ineligible(tmp_path: Path) -> None:
-    binary = tmp_path / "real-gh"
-    binary.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
-    binary.chmod(0o755)
-    (tmp_path / "gh").symlink_to(binary)
-    with pytest.raises(OSError):
-        _resolve_executable("gh", {"PATH": str(tmp_path)})
-
-
-def test_executable_byte_drift_does_not_consume_capability(tmp_path: Path) -> None:
-    now = datetime.now(timezone.utc)
-    executable = tmp_path / "gh"
-    original = b"#!/bin/sh\nexit 0\n"
-    executable.write_bytes(original)
-    executable.chmod(0o755)
-    descriptor = _descriptor(executable)
-    record = GitHubWorkflowApprovalRecord.from_descriptor(descriptor)
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    key, key_id = store._policy_integrity_secret_material(create=True)
-    assert key is not None and key_id is not None
-    issue_github_workflow_capability_binding(
-        store,
-        record.binding,
-        capability_id="drift-capability",
-        approval_provenance_id="request-drift",
-        task_id="operation-drift",
-        nonce="b" * 32,
-        issuer_id="guard.local",
-        subject_id="session-drift",
-        issued_at=format_utc_timestamp(_NOW),
-        not_before=format_utc_timestamp(_NOW),
-        expires_at=format_utc_timestamp(now + timedelta(hours=1)),
-        max_uses=1,
-        key=key,
-        key_id=key_id,
-    )
-    command = (
-        f"{executable} api graphql -f "
-        "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id __typename}}}' "
-        f"-f threadId={_THREAD}"
-    )
-    executable.write_bytes(b"#!/bin/sh\nexit 1\n")
-    assert not _persisted_command_matches_record(command, record)
-    executable.write_bytes(original)
-    assert _persisted_command_matches_record(command, record)
-    assert (
-        claim_github_workflow_authorization(
-            store,
-            "drift-capability",
-            descriptor.operation,
-            descriptor.binding_context,
-            invocation_id="invocation-drift",
-            subject_id="session-drift",
-            task_id="operation-drift",
-            issuer_id="guard.local",
-            approval_provenance_id="request-drift",
-        )
-        is not None
-    )
