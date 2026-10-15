@@ -138,6 +138,16 @@ pub(super) fn split_execution_segments(
     if quote != Quote::None || escaped {
         return Err("malformed_shell_quoting");
     }
+    // `ls;` is `ls`: one `;` or newline may end the command. A dangling `&&`,
+    // `||` or `|` still continues it, and `ls; ;` still fails.
+    let terminated = segment_start > 0
+        && matches!(chars[segment_start - 1], ';' | '\n')
+        && chars[segment_start..]
+            .iter()
+            .all(|value| value.is_whitespace());
+    if terminated && !segments.is_empty() {
+        return Ok(segments);
+    }
     push_segment(
         &chars,
         segment_start,
@@ -231,15 +241,34 @@ pub(super) fn is_stderr_to_null_redirect(
     start: usize,
     preserve_backslash: bool,
 ) -> bool {
-    // Only Unix's fixed stderr sink is inert; arbitrary paths and descriptors
-    // must still pass through the unsupported-redirection guard.
-    cfg!(unix)
+    // Only a fixed stderr sink known to be inert is dropped; arbitrary paths
+    // and descriptors must still pass through the unsupported-redirection
+    // guard.
+    stderr_null_sink_is_inert()
         && chars.get(start..start.saturating_add(11))
             == Some(&['2', '>', '/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l'])
         && starts_at_shell_token_boundary(chars, start, preserve_backslash)
         && chars.get(start + 11).is_none_or(|value| {
             is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
         })
+}
+
+/// `/dev/null` is the null device on Unix. On Windows, Git Bash (the shell
+/// harnesses run POSIX commands in) maps it to the null device too, while
+/// PowerShell and cmd open `\dev\null` on the shell's current drive. That
+/// open fails without writing anything while the drive has no `\dev`. The
+/// shell may have changed drive since Guard started, or earlier in the same
+/// command, so the sink is inert only while no drive letter has a `\dev`.
+fn stderr_null_sink_is_inert() -> bool {
+    cfg!(unix)
+        || (cfg!(windows)
+            && (b'A'..=b'Z').all(|drive| {
+                std::fs::symlink_metadata(format!("{}:\\dev", drive as char)).is_err_and(|error| {
+                    // Not found, no such drive, or no media in the drive.
+                    error.kind() == std::io::ErrorKind::NotFound
+                        || matches!(error.raw_os_error(), Some(15 | 21))
+                })
+            }))
 }
 
 pub(super) fn starts_at_shell_token_boundary(
@@ -302,6 +331,20 @@ pub(crate) fn shell_tokens(
     command: &str,
     preserve_backslash: bool,
 ) -> Result<Vec<String>, &'static str> {
+    shell_tokens_mode(command, preserve_backslash, true)
+}
+
+pub(crate) fn shell_tokens_preserving_redirects(
+    command: &str,
+) -> Result<Vec<String>, &'static str> {
+    shell_tokens_mode(command, false, false)
+}
+
+fn shell_tokens_mode(
+    command: &str,
+    preserve_backslash: bool,
+    exclude_stderr_redirect: bool,
+) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut token = String::new();
     let mut token_started = false;
@@ -341,7 +384,8 @@ pub(crate) fn shell_tokens(
                 }
             }
             Quote::None => match current {
-                '2' if !token_started
+                '2' if exclude_stderr_redirect
+                    && !token_started
                     && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
                 {
                     // A shell redirection is not an argv operand. Preserve it

@@ -50,6 +50,33 @@ fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
 }
 
 #[test]
+fn one_trailing_terminator_ends_the_command() {
+    for command in ["ls;", "ls ;  ", "ls\n", "ls src; ls tests;"] {
+        let parsed = parse_command(&request(command)).unwrap();
+        assert_eq!(parsed.confidence, "exact", "{command:?}");
+        assert!(
+            parsed
+                .segments
+                .iter()
+                .all(|segment| !segment.text.is_empty()),
+            "{command:?}"
+        );
+    }
+    assert_eq!(parse_command(&request("ls;")).unwrap().segments.len(), 1);
+    // These are POSIX parser results. A Windows host retries input POSIX
+    // cannot prove as PowerShell, where an empty statement (`ls; ;`) is valid.
+    crate::powershell_reads::with_posix_powershell_host(|| {
+        for command in [";", "ls; ;", "ls;;", "ls &&", "ls ||", "ls |"] {
+            assert_ne!(
+                parse_command(&request(command)).unwrap().confidence,
+                "exact",
+                "{command:?}"
+            );
+        }
+    });
+}
+
+#[test]
 fn redirect_boundary_respects_backslash_profile() {
     let escaped: Vec<char> = "foo\\ 2>&1".chars().collect();
     assert!(!starts_at_shell_token_boundary(&escaped, 5, false));

@@ -54,10 +54,9 @@ def test_activity_read_only_authority_upgrade_is_unavailable(tmp_path: Path, mon
 
 
 def test_workflow_native_unavailable_does_not_fabricate_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    descriptor = object()
+    descriptor = SimpleNamespace(record=None, command_identity="command-security-v2:test")
     store = SimpleNamespace(read_extension_control_authority_for_registry=lambda *_args, **_kwargs: object())
     monkeypatch.setattr(workflow_hook, "_runtime_github_workflow_descriptor", lambda *_args, **_kwargs: descriptor)
-    monkeypatch.setattr(workflow_hook.GitHubWorkflowApprovalRecord, "from_descriptor", lambda _descriptor: None)
     monkeypatch.setattr(workflow_hook, "github_workflow_capability_required", lambda *_args: True)
     monkeypatch.setattr(workflow_hook, "claim_resolved_github_workflow_authorization", lambda *_args: object())
     monkeypatch.setattr(

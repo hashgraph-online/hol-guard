@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import CompositeComma
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.runtime.github_workflow_authorization import GitHubWorkflowAuthorization
-from tests.native_command_test_support import real_native_review_fixture
+from tests.native_command_test_support import native_test_guard_home, real_native_review_fixture
 
 
 def evaluate_native_workflow_command(
@@ -63,4 +63,5 @@ def evaluate_native_workflow_command(
         compatibility_action_class=compatibility_action_class,
         compatibility_reason=compatibility_reason,
         workflow_authorization=workflow_authorization,
+        guard_home=native_test_guard_home(),
     )

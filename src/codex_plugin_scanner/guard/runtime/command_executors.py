@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .. import native_execution as _native_execution
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..cli.install_commands import (
@@ -25,9 +23,7 @@ from ..config import load_guard_config
 from ..continuation_runtime import continue_request_after_application
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
-    build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
-    resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
 from ..package_shim_status import record_package_shim_audit_result
@@ -38,6 +34,7 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
+from ..supply_chain_workspace_audit import build_workspace_audit_payload, resolve_supply_chain_audit_workspace_dir
 from .audit_workspace import audit_workspace_is_bound_to_context, bind_relative_audit_workspace
 from .command_payload import mapping as _mapping
 from .command_payload import optional_text as _text
@@ -145,54 +142,24 @@ def _execute_package_shim_operation(
         payload = bind_relative_audit_workspace(payload, context)
     command_context = _package_shim_context(payload, base_context=context, store=store)
     if operation == "guard.packageShims.status":
-        _native_status = _native_execution.shim_admin_native(
-            "status",
-            guard_home=command_context.guard_home,
-            path_env=os.environ.get("PATH"),
-        )
-        if isinstance(_native_status, dict):
-            return _result(_native_status, generated_at=generated_at)
         return _result(package_shim_status(command_context), generated_at=generated_at)
     if operation == "guard.packageShims.install":
-        managers = _package_shim_managers(payload)
-        _native_install = _native_execution.shim_admin_native(
-            "activate",
-            guard_home=command_context.guard_home,
-            install_managers=list(managers) if managers else None,
-            path_env=os.environ.get("PATH"),
-        )
-        if isinstance(_native_install, dict):
-            return _result(_native_install, generated_at=generated_at)
+        managers = _package_shim_managers(payload, guard_home=command_context.guard_home)
         return _result(activate_package_shims(command_context, managers=managers), generated_at=generated_at)
     if operation == "guard.packageShims.repair":
-        managers = _package_shim_managers(payload)
-        _native_repair = _native_execution.shim_admin_native(
-            "repair",
-            guard_home=command_context.guard_home,
-            install_managers=list(managers) if managers else None,
-        )
-        if isinstance(_native_repair, dict):
-            return _result(_native_repair, generated_at=generated_at)
+        managers = _package_shim_managers(payload, guard_home=command_context.guard_home)
         return _result(
             activate_package_shims(command_context, managers=managers, repair=True),
             generated_at=generated_at,
         )
     if operation == "guard.packageShims.remove":
-        managers = _package_shim_managers(payload)
+        managers = _package_shim_managers(payload, guard_home=command_context.guard_home)
         return _waiting_local_confirm(
             _package_shim_remove_confirmation_payload(managers),
             generated_at=generated_at,
         )
     if operation == "guard.packageShims.test":
-        managers = _package_shim_managers(payload)
-        _native_probe = _native_execution.shim_admin_native(
-            "probe_intercepts",
-            guard_home=command_context.guard_home,
-            managers=list(managers) if managers else None,
-            workspace_dir=command_context.workspace_dir,
-        )
-        if isinstance(_native_probe, dict):
-            return _result(_native_probe, generated_at=generated_at)
+        managers = _package_shim_managers(payload, guard_home=command_context.guard_home)
         return _result(
             probe_package_shim_intercepts(
                 command_context,
@@ -225,7 +192,9 @@ def _execute_package_shim_operation(
         )
         audit_payload["exit_code"] = exit_code
         if exit_code == 0:
-            record_package_shim_audit_result(command_context, audited_at=generated_at)
+            proof = record_package_shim_audit_result(command_context, audited_at=generated_at)
+            if isinstance(proof, dict):
+                audit_payload.update(proof)
         return _result(audit_payload, generated_at=generated_at)
     return {
         "failureCode": "unsupported_operation",
@@ -412,7 +381,7 @@ def _package_shim_context(
     )
 
 
-def _package_shim_managers(payload: dict[str, object]) -> tuple[str, ...] | None:
+def _package_shim_managers(payload: dict[str, object], *, guard_home: Path) -> tuple[str, ...] | None:
     managers = payload.get("managers")
     if managers is None:
         return None
@@ -423,7 +392,7 @@ def _package_shim_managers(payload: dict[str, object]) -> tuple[str, ...] | None
         raise ValueError("invalid_managers")
     if len(normalized) != len(set(normalized)):
         raise ValueError("duplicate_manager")
-    supported = set(package_shim_supported_managers())
+    supported = set(package_shim_supported_managers(guard_home))
     if not set(normalized).issubset(supported):
         raise ValueError("unsupported_manager")
     return normalized

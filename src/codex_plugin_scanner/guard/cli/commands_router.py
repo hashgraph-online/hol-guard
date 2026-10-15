@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from .commands_support_workspace import _resolve_guard_workspace
 
 
-from ..native_runtime import native_mode
 from ._commands_shared import *
+from .approval_gate_prompt import print_approval_gate_error
 from .commands_lifecycle_gate import enforce_lifecycle_gate
 from .commands_parser_helpers import *
 
@@ -91,6 +91,8 @@ _COMMON_HANDLERS = {
     "cloud-review": "_run_guard_cloud_review_command",
     "daemon": "_run_guard_daemon_command",
     "hook": "_run_guard_hook_command",
+    "hooks": "_run_guard_hooks_command",
+    "repair": "_run_guard_repair_command",
 }
 
 
@@ -147,6 +149,17 @@ def run_guard_command(
         from .extension_builder_commands import run_extension_builder_command
 
         return run_extension_builder_command(args, output_stream=output_stream)
+    if args.guard_command == "policy":
+        from .commands_dispatch_policy_dx import FILE_COMMANDS, run_policy_file_command
+
+        if args.policy_command in FILE_COMMANDS:
+            # These read one policy file and need neither a Guard home nor a store, so they run in CI.
+            return _invoke_guard_handler(
+                run_policy_file_command,
+                args,
+                input_text=input_text,
+                output_stream=output_stream,
+            )
     handler = _resolve_guard_handler(_EARLY_HANDLERS, args.guard_command)
     if callable(handler):
         return _invoke_guard_handler(
@@ -191,12 +204,7 @@ def run_guard_command(
     try:
         enforce_lifecycle_gate(args, guard_home=guard_home)
     except ApprovalGateError as error:
-        payload = approval_gate_cli_payload(error)
-        if bool(getattr(args, "json", False)):
-            print(json.dumps(payload, sort_keys=True), file=output_stream or sys.stdout)
-        else:
-            print(f"Error: {error}", file=sys.stderr)
-        return 4
+        return print_approval_gate_error(error, as_json=bool(getattr(args, "json", False)), output_stream=output_stream)
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)
     if callable(handler):
@@ -221,7 +229,7 @@ def run_guard_command(
     except (TimeoutError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
-    if args.guard_command == "hook" and native_mode() in {"auto", "force"}:
+    if args.guard_command == "hook":
         # Native hooks receive the raw envelope before any request-time
         # configuration or policy-file read.  HookWorker's startup publisher
         # owns the cached ACKed snapshot; a barrier miss returns fail-safe.

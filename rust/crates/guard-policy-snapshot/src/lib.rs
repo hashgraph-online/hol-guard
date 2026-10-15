@@ -24,6 +24,12 @@ pub mod business_source_authority;
 mod canonical;
 #[path = "policy_snapshot_crypto.rs"]
 mod crypto;
+mod direct_lane;
+pub use direct_lane::{
+    DirectLaneBindingV1, DirectLaneEnvironmentV1, DirectLaneInputV1,
+    DirectLanePolicyIntegrityStateV1, DirectLaneSecretV1, DirectLaneStatV1, DIRECT_LANE_MAX_INPUTS,
+    DIRECT_LANE_MAX_PATH_BYTES, DIRECT_LANE_MAX_WORKSPACES,
+};
 #[path = "policy_snapshot_validation.rs"]
 mod validation;
 pub use validation::{inspect_unverified_content, validate_v3};
@@ -178,6 +184,11 @@ pub struct PolicySnapshotV3 {
 pub struct PolicySnapshotPushV1 {
     pub schema: String,
     pub snapshot: PolicySnapshotV3,
+    /// Freshness binding for the direct resident hook lane. When absent the
+    /// lane stays closed for this snapshot and every hook takes the daemon
+    /// path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct_lane: Option<DirectLaneBindingV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -310,7 +321,8 @@ fn valid_selector_key(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
 }
 
-fn normalized_harness_selector(value: &str) -> Option<String> {
+/// Canonical harness selector shared with the resident MCP policy composition.
+pub fn normalized_harness_selector(value: &str) -> Option<String> {
     if !valid_selector_key(value) {
         return None;
     }
@@ -361,7 +373,9 @@ pub use observed_mcp::{
 };
 use observed_mcp::{validate_mcp_provider_actions, validate_mcp_tool_actions};
 
-fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
+/// Shape and bound checks for one effective policy, shared with the publisher
+/// composition so both reject exactly the same inputs.
+pub fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
     for action in [
         &policy.default_action,
         &policy.unknown_publisher_action,

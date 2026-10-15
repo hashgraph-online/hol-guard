@@ -1,0 +1,164 @@
+{
+  "cases": [
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiIiwibWFuaWZlc3RfcGF0aCI6Ii9oL20uanNvbiIsInF1ZXJ5IjoiYT1iIiwiZmFsbGJhY2tfY29tbWFuZCI6WyJ4Il0sInN0YXJ0X2NvbW1hbmQiOlsieSJdLCJob29rX3RpbWVvdXRzIjp7IlByZVRvb2xVc2UiOjMwfX0",
+      "decoded": "{\"state_path\":\"\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjozLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9fQ",
+      "decoded": "{\"state_path\":3,\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJxdWVyeSI6ImE9YiIsImZhbGxiYWNrX2NvbW1hbmQiOlsieCJdLCJzdGFydF9jb21tYW5kIjpbInkiXSwiaG9va190aW1lb3V0cyI6eyJQcmVUb29sVXNlIjozMH19",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOm51bGwsImZhbGxiYWNrX2NvbW1hbmQiOlsieCJdLCJzdGFydF9jb21tYW5kIjpbInkiXSwiaG9va190aW1lb3V0cyI6eyJQcmVUb29sVXNlIjozMH19",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":null,\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbImEiLDFdLCJzdGFydF9jb21tYW5kIjpbInkiXSwiaG9va190aW1lb3V0cyI6eyJQcmVUb29sVXNlIjozMH19",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"a\",1],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6InkiLCJob29rX3RpbWVvdXRzIjp7IlByZVRvb2xVc2UiOjMwfX0",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":\"y\",\"hook_timeouts\":{\"PreToolUse\":30}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnt9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiQSI6MiwiQiI6dHJ1ZSwiQyI6My41LCJEIjoiOSJ9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"A\":2,\"B\":true,\"C\":3.5,\"D\":\"9\"}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiQSI6MiwiQiI6MywiQyI6LTR9fQ",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"A\":2,\"B\":3,\"C\":-4}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOlsxXX0",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":[1]}"
+    },
+    {
+      "argument": "ew",
+      "decoded": "{"
+    },
+    {
+      "argument": "e30",
+      "decoded": "{}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9LCJleHRyYSI6eyJrIjoxfX0",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30},\"extra\":{\"k\":1}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiL2gvZGFlbW9uLXN0YXRlLmpzb24iLCJtYW5pZmVzdF9wYXRoIjoiL2gvbS5qc29uIiwicXVlcnkiOiJhPWIiLCJmYWxsYmFja19jb21tYW5kIjpbIngiXSwic3RhcnRfY29tbWFuZCI6WyJ5Il0sImhvb2tfdGltZW91dHMiOnsiUHJlVG9vbFVzZSI6MzB9LCJxdWVyeSI6ImR1cCJ9",
+      "decoded": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30},\"query\":\"dup\"}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjogIkM6XFxVc2Vyc1xcWm9cdTAwZWJcXC5ob2wtZ3VhcmRcXGRhZW1vbi1zdGF0ZS5qc29uIiwgIm1hbmlmZXN0X3BhdGgiOiAiQzpcXFVzZXJzXFxab1x1MDBlYlxcLmhvbC1ndWFyZFxcY29kZXgtaG9va3MuanNvbiIsICJxdWVyeSI6ICJob21lPUMlM0ElNUNVc2VycyU1Q1pvJUMzJUFCIiwgImZhbGxiYWNrX2NvbW1hbmQiOiBbIkM6XFxQUk9HUkF-MVxcUHl0aG9uXFxweXRob24uZXhlIiwgIi1JIiwgIi1tIiwgImd1YXJkIl0sICJzdGFydF9jb21tYW5kIjogWyJDOlxcUFJPR1JBfjFcXFB5dGhvblxccHl0aG9uLmV4ZSIsICItSSIsICItbSIsICJndWFyZCIsICJkYWVtb24iXSwgImhvb2tfdGltZW91dHMiOiB7IlByZVRvb2xVc2UiOiAzMCwgIlVzZXJQcm9tcHRTdWJtaXQiOiA2MCwgIlN0b3AiOiAyfX0",
+      "decoded": "{\"state_path\": \"C:\\\\Users\\\\Zo\\u00eb\\\\.hol-guard\\\\daemon-state.json\", \"manifest_path\": \"C:\\\\Users\\\\Zo\\u00eb\\\\.hol-guard\\\\codex-hooks.json\", \"query\": \"home=C%3A%5CUsers%5CZo%C3%AB\", \"fallback_command\": [\"C:\\\\PROGRA~1\\\\Python\\\\python.exe\", \"-I\", \"-m\", \"guard\"], \"start_command\": [\"C:\\\\PROGRA~1\\\\Python\\\\python.exe\", \"-I\", \"-m\", \"guard\", \"daemon\"], \"hook_timeouts\": {\"PreToolUse\": 30, \"UserPromptSubmit\": 60, \"Stop\": 2}}"
+    },
+    {
+      "argument": "eyJzdGF0ZV9wYXRoIjoiQzpcXFVzZXJzXFxab8OrXFwuaG9sLWd1YXJkXFxkYWVtb24tc3RhdGUuanNvbiIsIm1hbmlmZXN0X3BhdGgiOiJDOlxcVXNlcnNcXFpvw6tcXC5ob2wtZ3VhcmRcXGNvZGV4LWhvb2tzLmpzb24iLCJxdWVyeSI6ImhvbWU9QyUzQSU1Q1VzZXJzJTVDWm8lQzMlQUIiLCJmYWxsYmFja19jb21tYW5kIjpbIkM6XFxQUk9HUkF-MVxcUHl0aG9uXFxweXRob24uZXhlIiwiLUkiLCItbSIsImd1YXJkIl0sInN0YXJ0X2NvbW1hbmQiOlsiQzpcXFBST0dSQX4xXFxQeXRob25cXHB5dGhvbi5leGUiLCItSSIsIi1tIiwiZ3VhcmQiLCJkYWVtb24iXSwiaG9va190aW1lb3V0cyI6eyJQcmVUb29sVXNlIjozMCwiVXNlclByb21wdFN1Ym1pdCI6NjAsIlN0b3AiOjJ9fQ",
+      "decoded": "{\"state_path\":\"C:\\\\Users\\\\Zoë\\\\.hol-guard\\\\daemon-state.json\",\"manifest_path\":\"C:\\\\Users\\\\Zoë\\\\.hol-guard\\\\codex-hooks.json\",\"query\":\"home=C%3A%5CUsers%5CZo%C3%AB\",\"fallback_command\":[\"C:\\\\PROGRA~1\\\\Python\\\\python.exe\",\"-I\",\"-m\",\"guard\"],\"start_command\":[\"C:\\\\PROGRA~1\\\\Python\\\\python.exe\",\"-I\",\"-m\",\"guard\",\"daemon\"],\"hook_timeouts\":{\"PreToolUse\":30,\"UserPromptSubmit\":60,\"Stop\":2}}"
+    },
+    {
+      "argument": "",
+      "decoded": null
+    },
+    {
+      "argument": "e30",
+      "decoded": "{}"
+    },
+    {
+      "argument": "e31",
+      "decoded": "{}"
+    },
+    {
+      "argument": "e3",
+      "decoded": "{"
+    },
+    {
+      "argument": "ezE",
+      "decoded": "{1"
+    },
+    {
+      "argument": "QUJDR",
+      "decoded": null
+    },
+    {
+      "argument": "e30=",
+      "decoded": null
+    },
+    {
+      "argument": "e30==",
+      "decoded": null
+    },
+    {
+      "argument": "e3+",
+      "decoded": null
+    },
+    {
+      "argument": "e3/",
+      "decoded": null
+    },
+    {
+      "argument": "e 30",
+      "decoded": null
+    },
+    {
+      "argument": "e30\n",
+      "decoded": null
+    },
+    {
+      "argument": "é30",
+      "decoded": null
+    },
+    {
+      "argument": "77u_e30",
+      "decoded": null
+    },
+    {
+      "argument": "W10",
+      "decoded": null
+    },
+    {
+      "argument": "_w",
+      "decoded": null
+    },
+    {
+      "argument": "eyJ٠",
+      "decoded": null
+    },
+    {
+      "argument": "7Q",
+      "decoded": null
+    },
+    {
+      "argument": "7aCA",
+      "decoded": null
+    },
+    {
+      "argument": "e-0",
+      "decoded": null
+    }
+  ]
+}

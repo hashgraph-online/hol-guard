@@ -193,20 +193,6 @@ class HarnessCapabilityReport:
             "capabilities": [capability.to_dict() for capability in self.capabilities],
         }
 
-    def to_json(self) -> str:
-        """Render the deterministic machine representation."""
-
-        from .capability_report import render_capability_report_json
-
-        return render_capability_report_json(self)
-
-    def to_markdown(self) -> str:
-        """Render the deterministic Markdown representation."""
-
-        from .capability_report import render_capability_report_markdown
-
-        return render_capability_report_markdown(self)
-
 
 CapabilityReport = HarnessCapabilityReport
 
@@ -252,12 +238,6 @@ class HarnessProtectionContract:
     @property
     def capability_report(self) -> tuple[HarnessEventCapability, ...]:
         """Compatibility alias for the additive per-event report rows."""
-
-        return self.capability_events
-
-    @property
-    def event_capabilities(self) -> tuple[HarnessEventCapability, ...]:
-        """Compatibility alias for callers using the event-oriented name."""
 
         return self.capability_events
 

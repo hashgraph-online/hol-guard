@@ -92,16 +92,16 @@ pub(super) const NPM_REGISTRY_METADATA_BASE_URL: &str = "https://registry.npmjs.
 pub(super) const PYPI_REGISTRY_METADATA_BASE_URL: &str = "https://pypi.org/pypi";
 
 #[allow(dead_code)]
-pub(super) const TARBALL_SCAN_TIMEOUT_SECONDS: u64 = 2;
+pub const TARBALL_SCAN_TIMEOUT_SECONDS: u64 = 2;
 
 #[allow(dead_code)]
 pub(super) const TARBALL_SCAN_MAX_BYTES: u64 = 6 * 1024 * 1024;
 
 #[allow(dead_code)]
-pub(super) const TARBALL_SCAN_MAX_FILES: usize = 500;
+pub const TARBALL_SCAN_MAX_FILES: usize = 500;
 
 #[allow(dead_code)]
-pub(super) const TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES: u64 = 256 * 1024;
+pub const TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES: u64 = 256 * 1024;
 
 #[allow(dead_code)]
 pub(super) const EXTERNAL_ARCHIVE_MAX_TARGETS: usize = 4;
@@ -110,7 +110,7 @@ pub(super) const EXTERNAL_ARCHIVE_MAX_TARGETS: usize = 4;
 pub(super) const EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES: u64 = 12 * 1024 * 1024;
 
 #[allow(dead_code)]
-pub(super) const EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS: f64 = 8.0;
+pub const EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS: f64 = 8.0;
 
 #[allow(dead_code)]
 pub(super) const CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS: f64 = 15.0 * 60.0;

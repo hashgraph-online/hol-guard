@@ -1,0 +1,3138 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": null
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {}
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": []
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "5300ed0fabc7e270acce0ed6f1a575ec29129cc30c617e1e31540b6ebdc0e411",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": "invalid"
+      }
+    },
+    {
+      "expected": {
+        "args": [
+          "",
+          "--help"
+        ],
+        "command": "node",
+        "config_sha256": "275cd27446f9db402948f60f43c9c86b6f51a93e2c097d44d9b5dadedb4f432a",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "args": [
+            "",
+            "--help",
+            1
+          ],
+          "command": " node "
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [
+          "worker.js",
+          "--stdio"
+        ],
+        "command": "node",
+        "config_sha256": "6e7ed93307ea87f40fbf609b82e03d83ab5080c76018f7d45d775d0630078714",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "args": [
+            "--stdio"
+          ],
+          "command": [
+            "",
+            "node",
+            "worker.js",
+            null
+          ]
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "9cec72db478a82a380af8a2a6a76b9ca2147af908c7d33bb63baf3db49da5697",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "args": "ignored",
+          "command": ""
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "ba6cb8a4ec19be8be3e51495f34954ab39999d91692d6cfb1781b89797436d14",
+        "env_keys": [
+          "PATH",
+          "TOKEN"
+        ],
+        "environment": {
+          "PATH": "bin"
+        },
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "env": {
+            "": "ignored",
+            "PATH": "bin",
+            "TOKEN": 1
+          }
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "1632f70097611dc39ce99e38057ac62c91d731a774233b08cda1f4d92613ad17",
+        "env_keys": [],
+        "environment": {},
+        "transport": "http"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "url": "https://example.invalid/mcp"
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "bffa2f226b10aeee06db4895abd3ccb077e0af4d56f5bc746f5c1dddafdfbaf5",
+        "env_keys": [],
+        "environment": {},
+        "transport": "http"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "transport": " STREAMABLE_HTTP "
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "f029acfe5a233502d897fab95f29734a08d3f9a1ac1cf563e665119fc76b8680",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "transport": "",
+          "type": "http"
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "0eb5664cd3e70bf0c10f0eaf3cdb76e1dc76dda504e96fdf6403bf90618f811e",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "type": "local"
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "9c734efce96c8dac60bb9e9244bd468880359e9fbcb78cc2067f0692b180e3c4",
+        "env_keys": [],
+        "environment": {},
+        "transport": "custom"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "type": "custom"
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "7fa909395a3eb54f4b7bfd8ed679bc8f25ceae4bd5155721397d92f1319d6d54",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "tools": {
+            "echo": {
+              "description": " config ",
+              "inputSchema": {}
+            }
+          }
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "9c19932b0a67a20758a94f3254bd437cf3bb57423c5ebb331d7ec855ed3476b9",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "tools": [
+            {
+              "name": "echo",
+              "schema": [
+                1
+              ]
+            },
+            {
+              "name": "other"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": "node",
+        "config_sha256": "6c23cd79029888f9e2610b8266992acceebb0305e49041a30879db68c7f9b5a5",
+        "env_keys": [
+          "PATH"
+        ],
+        "environment": {
+          "PATH": "bin"
+        },
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "command": "\u001cnode\u001f",
+          "env": {
+            "\u001c": "ignored",
+            "PATH": "bin"
+          }
+        }
+      }
+    },
+    {
+      "expected": {
+        "args": [],
+        "command": null,
+        "config_sha256": "8e36a49f1cf3d4c41effe2ea71bd0ff9bb7811f0e0b210ccd27987f21de4c9cc",
+        "env_keys": [],
+        "environment": {},
+        "transport": "stdio"
+      },
+      "operation": "server_fields",
+      "params": {
+        "config": {
+          "args": [
+            1.25,
+            -0.0,
+            1e+20
+          ],
+          "description": "\u03a9 \u6771\u4eac"
+        }
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": null,
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": null,
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": null,
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": null,
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": null,
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {},
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {},
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {},
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {},
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {},
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": [],
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": [],
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": [],
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": [],
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": [],
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": "invalid",
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": "invalid",
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": "invalid",
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": "invalid",
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": "invalid",
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "",
+            "--help",
+            1
+          ],
+          "command": " node "
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "",
+            "--help",
+            1
+          ],
+          "command": " node "
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "",
+            "--help",
+            1
+          ],
+          "command": " node "
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "",
+            "--help",
+            1
+          ],
+          "command": " node "
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "",
+            "--help",
+            1
+          ],
+          "command": " node "
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "--stdio"
+          ],
+          "command": [
+            "",
+            "node",
+            "worker.js",
+            null
+          ]
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "--stdio"
+          ],
+          "command": [
+            "",
+            "node",
+            "worker.js",
+            null
+          ]
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "--stdio"
+          ],
+          "command": [
+            "",
+            "node",
+            "worker.js",
+            null
+          ]
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "--stdio"
+          ],
+          "command": [
+            "",
+            "node",
+            "worker.js",
+            null
+          ]
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            "--stdio"
+          ],
+          "command": [
+            "",
+            "node",
+            "worker.js",
+            null
+          ]
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": "ignored",
+          "command": ""
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": "ignored",
+          "command": ""
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": "ignored",
+          "command": ""
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": "ignored",
+          "command": ""
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": "ignored",
+          "command": ""
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "env": {
+            "": "ignored",
+            "PATH": "bin",
+            "TOKEN": 1
+          }
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "env": {
+            "": "ignored",
+            "PATH": "bin",
+            "TOKEN": 1
+          }
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "env": {
+            "": "ignored",
+            "PATH": "bin",
+            "TOKEN": 1
+          }
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "env": {
+            "": "ignored",
+            "PATH": "bin",
+            "TOKEN": 1
+          }
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "env": {
+            "": "ignored",
+            "PATH": "bin",
+            "TOKEN": 1
+          }
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "url": "https://example.invalid/mcp"
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "url": "https://example.invalid/mcp"
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "url": "https://example.invalid/mcp"
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "url": "https://example.invalid/mcp"
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "url": "https://example.invalid/mcp"
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": " STREAMABLE_HTTP "
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": " STREAMABLE_HTTP "
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": " STREAMABLE_HTTP "
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": " STREAMABLE_HTTP "
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": " STREAMABLE_HTTP "
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": "",
+          "type": "http"
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": "",
+          "type": "http"
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": "",
+          "type": "http"
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": "",
+          "type": "http"
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "transport": "",
+          "type": "http"
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "local"
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "local"
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "local"
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "local"
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "local"
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "custom"
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "custom"
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "custom"
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "custom"
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "type": "custom"
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "config",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": {
+            "echo": {
+              "description": " config ",
+              "inputSchema": {}
+            }
+          }
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": {
+            "echo": {
+              "description": " config ",
+              "inputSchema": {}
+            }
+          }
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": {
+            "echo": {
+              "description": " config ",
+              "inputSchema": {}
+            }
+          }
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "config",
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": {
+            "echo": {
+              "description": " config ",
+              "inputSchema": {}
+            }
+          }
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": {
+            "echo": {
+              "description": " config ",
+              "inputSchema": {}
+            }
+          }
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": [
+          1
+        ]
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": [
+            {
+              "name": "echo",
+              "schema": [
+                1
+              ]
+            },
+            {
+              "name": "other"
+            }
+          ]
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": [
+            {
+              "name": "echo",
+              "schema": [
+                1
+              ]
+            },
+            {
+              "name": "other"
+            }
+          ]
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": [
+            {
+              "name": "echo",
+              "schema": [
+                1
+              ]
+            },
+            {
+              "name": "other"
+            }
+          ]
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": [
+            {
+              "name": "echo",
+              "schema": [
+                1
+              ]
+            },
+            {
+              "name": "other"
+            }
+          ]
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": [
+          1
+        ]
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "tools": [
+            {
+              "name": "echo",
+              "schema": [
+                1
+              ]
+            },
+            {
+              "name": "other"
+            }
+          ]
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "command": "\u001cnode\u001f",
+          "env": {
+            "\u001c": "ignored",
+            "PATH": "bin"
+          }
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "command": "\u001cnode\u001f",
+          "env": {
+            "\u001c": "ignored",
+            "PATH": "bin"
+          }
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "command": "\u001cnode\u001f",
+          "env": {
+            "\u001c": "ignored",
+            "PATH": "bin"
+          }
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "command": "\u001cnode\u001f",
+          "env": {
+            "\u001c": "ignored",
+            "PATH": "bin"
+          }
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "command": "\u001cnode\u001f",
+          "env": {
+            "\u001c": "ignored",
+            "PATH": "bin"
+          }
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            1.25,
+            -0.0,
+            1e+20
+          ],
+          "description": "\u03a9 \u6771\u4eac"
+        },
+        "payload": {},
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "top",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            1.25,
+            -0.0,
+            1e+20
+          ],
+          "description": "\u03a9 \u6771\u4eac"
+        },
+        "payload": {
+          "description": " top ",
+          "schema": {
+            "ignored": true
+          },
+          "tool_schema": null
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "nested",
+        "schema": {}
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            1.25,
+            -0.0,
+            1e+20
+          ],
+          "description": "\u03a9 \u6771\u4eac"
+        },
+        "payload": {
+          "tool": {
+            "description": " nested ",
+            "inputSchema": {}
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": null,
+        "schema": []
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            1.25,
+            -0.0,
+            1e+20
+          ],
+          "description": "\u03a9 \u6771\u4eac"
+        },
+        "payload": {
+          "toolCalls": [
+            {
+              "name": "other",
+              "schema": "ignored"
+            },
+            {
+              "args": {},
+              "name": "echo",
+              "schema": []
+            }
+          ]
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": {
+        "description": "definition",
+        "schema": null
+      },
+      "operation": "tool_metadata",
+      "params": {
+        "config": {
+          "args": [
+            1.25,
+            -0.0,
+            1e+20
+          ],
+          "description": "\u03a9 \u6771\u4eac"
+        },
+        "payload": {
+          "toolDefinition": {
+            "toolDescription": " definition "
+          }
+        },
+        "requested_tool_name": "mcp_demo_echo",
+        "runtime_tool_name": "echo"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.mcp.json",
+        "preferred": null
+      }
+    },
+    {
+      "expected": 2,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.mcp.json",
+        "preferred": "cli"
+      }
+    },
+    {
+      "expected": 1,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.mcp.json",
+        "preferred": "ide"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.mcp.json",
+        "preferred": "unknown"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.vscode/mcp.json",
+        "preferred": null
+      }
+    },
+    {
+      "expected": 1,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.vscode/mcp.json",
+        "preferred": "cli"
+      }
+    },
+    {
+      "expected": 2,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.vscode/mcp.json",
+        "preferred": "ide"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "workspace/.vscode/mcp.json",
+        "preferred": "unknown"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "home/.copilot/mcp-config.json",
+        "preferred": null
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "home/.copilot/mcp-config.json",
+        "preferred": "cli"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "home/.copilot/mcp-config.json",
+        "preferred": "ide"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "home/.copilot/mcp-config.json",
+        "preferred": "unknown"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "mcp.json",
+        "preferred": null
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "mcp.json",
+        "preferred": "cli"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "mcp.json",
+        "preferred": "ide"
+      }
+    },
+    {
+      "expected": 0,
+      "operation": "match_priority",
+      "params": {
+        "config_path": "mcp.json",
+        "preferred": "unknown"
+      }
+    },
+    {
+      "expected": "demo_server",
+      "operation": "tool_token",
+      "params": {
+        "value": " Demo-Server "
+      }
+    },
+    {
+      "expected": "cho",
+      "operation": "tool_token",
+      "params": {
+        "value": "\u00e9cho"
+      }
+    },
+    {
+      "expected": "mcp_server",
+      "operation": "tool_token",
+      "params": {
+        "value": "MCP__server"
+      }
+    },
+    {
+      "expected": "",
+      "operation": "tool_token",
+      "params": {
+        "value": ""
+      }
+    },
+    {
+      "expected": "",
+      "operation": "tool_token",
+      "params": {
+        "value": "\u6771\u4eac"
+      }
+    },
+    {
+      "expected": "server_2",
+      "operation": "tool_token",
+      "params": {
+        "value": "SERVER.2"
+      }
+    },
+    {
+      "expected": "demo",
+      "operation": "tool_token",
+      "params": {
+        "value": "\u001c Demo \u001f"
+      }
+    },
+    {
+      "expected": "",
+      "operation": "tool_token",
+      "params": {
+        "value": "\u039f\u03a3"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": null
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": 12
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": ""
+      }
+    },
+    {
+      "expected": "https://example.com/mcp?q=a%2Fb",
+      "operation": "remote_url",
+      "params": {
+        "value": "https://example.com/mcp?q=a%2Fb"
+      }
+    },
+    {
+      "expected": "https://example.com/mcp?x=~",
+      "operation": "remote_url",
+      "params": {
+        "value": "https://EXAMPLE.COM.:443/a/../mcp?x=%7e"
+      }
+    },
+    {
+      "expected": "https://example.com/",
+      "operation": "remote_url",
+      "params": {
+        "value": "https://example.com/"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "https://localhost/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "https://127.0.0.1/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "http://example.com/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "https://user:pass@example.com/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "https://example.com:444/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "https://example.com/%00"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_url",
+      "params": {
+        "value": "https://example.com/mcp#fragment"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.vscode/mcp.json",
+          "server_config": {
+            "args": [
+              "workspace/.vscode/mcp.json"
+            ],
+            "command": "node"
+          },
+          "server_name": "demo",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": null,
+        "tool_name": "mcp_demo_echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.mcp.json",
+          "server_config": {
+            "args": [
+              "workspace/.mcp.json"
+            ],
+            "command": "node"
+          },
+          "server_name": "demo",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "cli",
+        "tool_name": "mcp_demo_echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.vscode/mcp.json",
+          "server_config": {
+            "args": [
+              "workspace/.vscode/mcp.json"
+            ],
+            "command": "node"
+          },
+          "server_name": "demo",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "ide",
+        "tool_name": "mcp_demo_echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.vscode/mcp.json",
+          "server_config": {
+            "url": "https://example.com/mcp"
+          },
+          "server_name": "demo-long",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": null,
+        "tool_name": "mcp_demo_long_echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.mcp.json",
+          "server_config": {
+            "url": "https://example.com/mcp"
+          },
+          "server_name": "demo-long",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "cli",
+        "tool_name": "mcp_demo_long_echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.vscode/mcp.json",
+          "server_config": {
+            "url": "https://example.com/mcp"
+          },
+          "server_name": "demo-long",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "ide",
+        "tool_name": "mcp_demo_long_echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.vscode/mcp.json",
+          "server_config": {
+            "args": [
+              "workspace/.vscode/mcp.json"
+            ],
+            "command": "node"
+          },
+          "server_name": "demo",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": null,
+        "tool_name": "demo/echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.mcp.json",
+          "server_config": {
+            "args": [
+              "workspace/.mcp.json"
+            ],
+            "command": "node"
+          },
+          "server_name": "demo",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "cli",
+        "tool_name": "demo/echo"
+      }
+    },
+    {
+      "expected": {
+        "server": {
+          "config_path": "<root>/workspace/.vscode/mcp.json",
+          "server_config": {
+            "args": [
+              "workspace/.vscode/mcp.json"
+            ],
+            "command": "node"
+          },
+          "server_name": "demo",
+          "source_scope": "project"
+        },
+        "tool_name": "echo"
+      },
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "ide",
+        "tool_name": "demo/echo"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": null,
+        "tool_name": "missing/echo"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "cli",
+        "tool_name": "missing/echo"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "ide",
+        "tool_name": "missing/echo"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": null,
+        "tool_name": "ordinary"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "cli",
+        "tool_name": "ordinary"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "ide",
+        "tool_name": "ordinary"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": null,
+        "tool_name": "mcp_"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "cli",
+        "tool_name": "mcp_"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "selection_fixture",
+      "params": {
+        "preferred": "ide",
+        "tool_name": "mcp_"
+      }
+    }
+  ],
+  "schema": "guard-cli-runtime-support-parity.v1",
+  "source": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",
+  "source_hashes": {
+    "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py": "8336a2fff0dfde8c6666251bf7754d6e4ea3799272d1ffdcc2ad41073f95a944",
+    "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py": "545d2a53a975c58a54268403e454bb5905ed95e8d626c2d6eeb57a0095b03440"
+  },
+  "source_identifiers": {
+    "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py": [
+      "GuardActionEnvelope",
+      "GuardArtifact",
+      "GuardConfig",
+      "GuardStore",
+      "HarnessContext",
+      "HarnessDetection",
+      "Mapping",
+      "McpServerIdentity",
+      "OSError",
+      "Path",
+      "RemoteGuardProxy",
+      "RuntimeError",
+      "StdioGuardProxy",
+      "TYPE_CHECKING",
+      "TypeError",
+      "ValueError",
+      "_CODEX_PROMPT_SECRET_KEY_MARKERS",
+      "_COPILOT_TOOL_METADATA_MISSING",
+      "_CopilotMcpRuntimeServer",
+      "_CopilotMcpRuntimeTool",
+      "__all__",
+      "_action_envelope_json",
+      "_canonical_harness_name",
+      "_coalesce_string",
+      "_copilot_hook_stage",
+      "_copilot_mcp_tool_token",
+      "_copilot_runtime_config_tool_definition",
+      "_copilot_runtime_match_priority",
+      "_copilot_runtime_server_command",
+      "_copilot_runtime_server_config_digest",
+      "_copilot_runtime_server_entries",
+      "_copilot_runtime_server_environment",
+      "_copilot_runtime_server_identity",
+      "_copilot_runtime_server_transport",
+      "_copilot_runtime_tool_call",
+      "_copilot_runtime_tool_metadata",
+      "_expand_prompt_scan_path",
+      "_is_copilot_permission_request",
+      "_legacy_claude_alias_runtime_artifact",
+      "_length",
+      "_managed_install_for",
+      "_managed_manifest_server",
+      "_mcp_server_entries_from_path",
+      "_mcp_servers_payload",
+      "_now",
+      "_perm",
+      "_priority",
+      "_prompt_scan_path_exists",
+      "_queue_claude_native_approval_gate_fallback",
+      "_redact_codex_prompt_secret_assignments",
+      "_resolve_copilot_mcp_runtime_server",
+      "_resolve_copilot_mcp_runtime_tool",
+      "_resolve_copilot_workspace_root",
+      "_resolve_prompt_scan_path",
+      "_run_hermes_mcp_proxy",
+      "_runtime_capabilities_summary",
+      "_runtime_detection",
+      "_runtime_policy_path",
+      "_runtime_request_summary",
+      "_runtime_requested_path",
+      "_server_command",
+      "_server_env",
+      "_server_headers",
+      "_synced_policy_payload",
+      "_truncate_codex_display_text",
+      "_validated_pi_runtime_policy_override",
+      "action_envelope",
+      "allowed_paths",
+      "any",
+      "approval_center_url",
+      "argparse",
+      "args",
+      "args_value",
+      "arguments",
+      "artifact",
+      "artifact_digest",
+      "artifact_hash",
+      "base_url",
+      "bool",
+      "build_mcp_server_identity",
+      "build_runtime_launch_identity",
+      "build_tool_call_artifact",
+      "build_tool_call_hash",
+      "candidate",
+      "candidate_name",
+      "candidates",
+      "cast",
+      "command",
+      "command_parts",
+      "command_value",
+      "composio_requires_action_review",
+      "config",
+      "config_path",
+      "config_sha256",
+      "config_tool",
+      "configured_env",
+      "context",
+      "current_stdio_config",
+      "cwd",
+      "dataclass",
+      "definition",
+      "description",
+      "dict",
+      "encoded",
+      "entries",
+      "entry",
+      "env",
+      "env_config",
+      "env_keys",
+      "equals_index",
+      "exact_path",
+      "exc",
+      "expanded",
+      "expect_response",
+      "get_adapter",
+      "harness",
+      "has_remote_url",
+      "hashlib",
+      "headers",
+      "home_dir",
+      "index",
+      "int",
+      "is_cli_workspace_config",
+      "is_ide_workspace_config",
+      "isinstance",
+      "item",
+      "json",
+      "key",
+      "key_start",
+      "key_upper",
+      "launch_args",
+      "launch_cwd",
+      "launch_env",
+      "launch_identity",
+      "legacy_prefix",
+      "len",
+      "limit",
+      "line",
+      "list",
+      "load_guard_config",
+      "local_config",
+      "managed_install",
+      "manifest",
+      "marker",
+      "matches",
+      "max",
+      "mcp_servers",
+      "message",
+      "normalized",
+      "normalized_path",
+      "normalized_remote_mcp_url",
+      "normalized_remote_url",
+      "now",
+      "object",
+      "os",
+      "output",
+      "overlay_synced_guard_policy",
+      "override_path",
+      "package_manager",
+      "path",
+      "payload",
+      "preferred_workspace_config",
+      "print",
+      "proxy",
+      "queue_blocked_approvals",
+      "queued",
+      "raw_config_path",
+      "raw_line",
+      "raw_transport",
+      "re",
+      "redaction_level",
+      "remote_url",
+      "replace",
+      "requested_harness",
+      "requested_path",
+      "requested_tool_name",
+      "resolution",
+      "response",
+      "runtime_server",
+      "runtime_tool_name",
+      "schedule_guard_daemon_ensure",
+      "schema",
+      "secrets",
+      "server",
+      "server_config",
+      "server_fingerprint",
+      "server_identity",
+      "server_name",
+      "server_token",
+      "servers",
+      "sorted",
+      "source_scope",
+      "store",
+      "str",
+      "stripped",
+      "suffix",
+      "summary",
+      "suppress",
+      "sys",
+      "token",
+      "tool_calls",
+      "tool_description",
+      "tool_name",
+      "tool_schema",
+      "tools",
+      "transport",
+      "tuple",
+      "value",
+      "value_end",
+      "value_start",
+      "workspace"
+    ],
+    "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py": [
+      "AttributeError",
+      "Draft202012Validator",
+      "FileNotFoundError",
+      "Final",
+      "IPv6Address",
+      "Mapping",
+      "ModuleNotFoundError",
+      "OSError",
+      "Path",
+      "ValidationError",
+      "ValueError",
+      "_ALLOWED_ICON_NAMES",
+      "_ALLOWED_LAUNCHERS",
+      "_DIRECT_COMMAND",
+      "_DIRECT_COMMAND_RESERVED",
+      "_DIRECT_COMMAND_VERSIONED_BASES",
+      "_HEX_DIGITS",
+      "_REMOTE_MCP_URL_MAX_LENGTH",
+      "_REMOTE_PATH_CHARS",
+      "_REMOTE_QUERY_CHARS",
+      "_REMOTE_TOOL_STATES",
+      "_SCHEMA_VERSION",
+      "_SUB_DELIMITERS",
+      "_TOOL_STATES",
+      "_UNRESERVED_PATH_CHARS",
+      "__file__",
+      "_finalize_payloads",
+      "_frozen_runtime",
+      "_load_from_directory",
+      "_load_packaged_payloads",
+      "_normalized_remote_component",
+      "_normalized_remote_path",
+      "_normalized_remote_query",
+      "_normalized_tool_name",
+      "_remove_remote_dot_segments",
+      "_reserved_direct_mcp_command",
+      "_schema_bytes",
+      "_valid_dns_hostname",
+      "_validator",
+      "address",
+      "all",
+      "allowed_chars",
+      "any",
+      "base",
+      "bool",
+      "bytes",
+      "candidate",
+      "cast",
+      "catalog_id_for_mcp_id",
+      "ch",
+      "character",
+      "chr",
+      "command",
+      "commands",
+      "compact",
+      "contributions_dir",
+      "decoded",
+      "dict",
+      "direct_mcp_command_name",
+      "directory",
+      "empty_default",
+      "endpoint",
+      "entry",
+      "escape",
+      "exc",
+      "fallback",
+      "filename",
+      "files",
+      "frozen",
+      "frozen_package_data",
+      "frozenset",
+      "getattr",
+      "host",
+      "icon",
+      "ids",
+      "index",
+      "int",
+      "ip_address",
+      "isinstance",
+      "item",
+      "json",
+      "key",
+      "label",
+      "labels",
+      "launch",
+      "launch_kind",
+      "len",
+      "list",
+      "load_mcp_contribution_payloads",
+      "lru_cache",
+      "mcp_id",
+      "mcp_tool_state",
+      "name",
+      "names",
+      "netloc",
+      "normalized",
+      "normalized_names",
+      "normalized_remote_mcp_url",
+      "normalized_remote_server_name",
+      "object",
+      "ord",
+      "output",
+      "package",
+      "packaged",
+      "packages",
+      "parsed",
+      "part",
+      "path",
+      "payload",
+      "payloads",
+      "port",
+      "previous",
+      "previous_name",
+      "previous_url",
+      "query",
+      "raw_host",
+      "raw_name",
+      "re",
+      "remote_endpoint",
+      "remote_mcp_endpoint_identity",
+      "remote_names",
+      "remote_url",
+      "remote_urls",
+      "repo_schema",
+      "resolved",
+      "resources",
+      "root",
+      "schema",
+      "segment",
+      "segments",
+      "server_name",
+      "server_names",
+      "set",
+      "sorted",
+      "state",
+      "str",
+      "suffix",
+      "sys",
+      "tool_name",
+      "tools",
+      "tuple",
+      "urlsplit",
+      "urlunsplit",
+      "validate_mcp_contribution",
+      "validate_mcp_contribution_file",
+      "value",
+      "wanted"
+    ]
+  },
+  "source_ref": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+  "source_sha256": "8336a2fff0dfde8c6666251bf7754d6e4ea3799272d1ffdcc2ad41073f95a944"
+}

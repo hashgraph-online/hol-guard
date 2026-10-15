@@ -29,14 +29,6 @@ def load_mcp_catalogs(connection: sqlite3.Connection) -> dict[str, tuple[str, di
     return catalogs
 
 
-def read_mcp_catalog(connection: sqlite3.Connection, cli_id: str, identity_hash: str) -> dict[str, object] | None:
-    row = connection.execute(
-        "select catalog_json from local_mcp_catalog where cli_id = ? and identity_hash = ?",
-        (cli_id, identity_hash),
-    ).fetchone()
-    return _decode_snapshot(row[0]) if row is not None else None
-
-
 def read_mcp_skill_page(
     connection: sqlite3.Connection,
     cli_id: str,
@@ -86,21 +78,6 @@ def read_mcp_skill_page(
         "matched_count": len(selected),
         "activation_supported": False,
     }
-
-
-def catalog_tool_authority_matches(catalog: object, name: str, live_authority_hash: object) -> bool:
-    if not isinstance(catalog, dict) or not isinstance(live_authority_hash, str):
-        return False
-    hashes = catalog.get("authority_hashes")
-    if isinstance(hashes, dict):
-        return hashes.get(name) == live_authority_hash
-    tools = catalog.get("tools")
-    if not isinstance(tools, list):
-        return False
-    cached = next((tool for tool in tools if isinstance(tool, dict) and tool.get("name") == name), None)
-    if cached is None:
-        return False
-    return tool_definition_authority_hash(cached) == live_authority_hash
 
 
 def read_mcp_tool_authority(

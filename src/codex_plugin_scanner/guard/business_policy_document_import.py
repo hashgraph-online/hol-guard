@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 
 
 def has_business_rules(document: GuardPolicyDocument) -> bool:
-    return any("business" in rule.match.to_mapping() for rule in document.rules)
+    # `business` is not a declared match field, so it only appears as a match
+    # extension; checking the keys locally avoids one native call per rule.
+    return any(key == "business" for rule in document.rules for key, _ in rule.match.extensions)
 
 
 def compile_document_for_import(document: GuardPolicyDocument):

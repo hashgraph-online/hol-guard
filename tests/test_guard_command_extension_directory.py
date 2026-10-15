@@ -24,6 +24,10 @@ def _load_renderer() -> ModuleType:
 
 @requires_fresh_extension_directory
 def test_extension_directory_matches_canonical_registry() -> None:
+    """Check the committed snapshot when projections are fresh.
+
+    Pending source rendering is covered unconditionally in test_native_source_program.
+    """
     renderer = _load_renderer()
     current = DIRECTORY_PATH.read_text(encoding="utf-8")
 
@@ -36,6 +40,12 @@ def test_future_extension_ids_use_a_non_breaking_directory_fallback() -> None:
     renderer = _load_renderer()
 
     assert renderer._category("command.future-capability") == "Other extensions"
+
+
+def test_directory_cells_escape_html_and_table_syntax_outside_code_spans() -> None:
+    renderer = _load_renderer()
+
+    assert renderer._escape_cell("fetch <URL> | `run <URL>`\n now") == "fetch &lt;URL> \\| `run <URL>` now"
 
 
 def test_readme_and_contribution_guide_expose_complete_entry_path() -> None:

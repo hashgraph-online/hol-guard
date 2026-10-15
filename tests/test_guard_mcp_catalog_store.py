@@ -10,8 +10,25 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 _FIRST = "2026-09-27T12:00:00Z"
 _SECOND = "2026-09-27T12:01:00Z"
+
+
+def _tool_authority(store: GuardStore, identity: UnlistedCliIdentity, tool_name: str) -> dict[str, object] | None:
+    from codex_plugin_scanner.guard.store_mcp_catalog import read_mcp_tool_authority
+
+    with store._connect() as connection:
+        return read_mcp_tool_authority(connection, identity.cli_id, identity.identity_hash, tool_name)
+
+
+def _grant_and_authority(store: GuardStore, identity: UnlistedCliIdentity) -> tuple[object, ...]:
+    return (
+        store.read_local_cli_grant(identity.cli_id),
+        store.read_local_cli_command_states(identity.cli_id),
+        _tool_authority(store, identity, "read"),
+    )
 
 
 def test_skill_metadata_is_origin_bound_and_partial_refresh_keeps_prior(tmp_path: Path):
@@ -383,30 +400,6 @@ def test_command_failure_rolls_back_catalog_evidence(tmp_path: Path) -> None:
     assert [command["command_id"] for command in item["commands"]] == ["read"]
 
 
-def test_authorization_reads_only_exact_cached_digest_and_fences_its_revision(tmp_path: Path, monkeypatch):
-    import sqlite3
-
-    from codex_plugin_scanner.guard import store_mcp_catalog
-
-    store, identity = _store(tmp_path)
-    _publish(store, identity, "read", "delete")
-    store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    digest = store_mcp_catalog.tool_definition_authority_hash(_catalog("read").tools[0])
-
-    def forbid_catalog_decode(_raw):
-        raise AssertionError("Authorization must not decode a whole discovery catalog")
-
-    monkeypatch.setattr(store_mcp_catalog, "_decode_snapshot", forbid_catalog_decode)
-    grant = store.read_local_mcp_grant(identity.identity_hash, tool_name="read")
-    assert grant["catalog"] == {"authority_hashes": {"read": digest}}
-    assert store_mcp_catalog.catalog_tool_authority_matches(grant["catalog"], "read", digest)
-    assert not store_mcp_catalog.catalog_tool_authority_matches(grant["catalog"], "delete", digest)
-    with sqlite3.connect(store.path) as connection:
-        connection.execute("update local_mcp_tool_authority set catalog_revision = 99")
-    grant = store.read_local_mcp_grant(identity.identity_hash, tool_name="read")
-    assert grant["catalog"] == {"authority_hashes": {}}
-
-
 def test_v10_migration_rebuilds_tool_hashes_without_changing_grants(tmp_path: Path):
     import sqlite3
 
@@ -417,9 +410,9 @@ def test_v10_migration_rebuilds_tool_hashes_without_changing_grants(tmp_path: Pa
     store.upsert_local_cli_grant(
         identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST, command_states={"read": "block"}
     )
-    before = store.read_local_mcp_grant(identity.identity_hash, tool_name="read")
+    before = _grant_and_authority(store, identity)
     with sqlite3.connect(store.path) as connection:
         connection.execute("drop table local_mcp_tool_authority")
         connection.execute("update local_cli_schema_migration set version = 10, checksum = ?", (_V10_CHECKSUM,))
         ensure_local_cli_schema(connection)
-    assert store.read_local_mcp_grant(identity.identity_hash, tool_name="read") == before
+    assert _grant_and_authority(store, identity) == before

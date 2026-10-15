@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 from .action_lattice import guard_action_severity
 from .project_identity import (
@@ -14,7 +16,7 @@ from .project_identity import (
     resolve_portable_project_identity,
 )
 from .store_base import PolicyDecisionLookupResult
-from .store_policy import _most_restrictive_policy_lookup
+from .store_policy import _DEGRADED_AUTHORITY_REVISION, _most_restrictive_policy_lookup, memory_lookup_candidates
 
 _PROJECT_IDENTITY_CACHE_MAX_ITEMS = 128
 _PROJECT_IDENTITY_CACHE: dict[tuple[str, int], str] = {}
@@ -43,6 +45,10 @@ def _cached_portable_project_identity(workspace: str) -> str | None:
         _PROJECT_IDENTITY_CACHE.pop(oldest_key, None)
     _PROJECT_IDENTITY_CACHE[cache_key] = identity
     return identity
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def _portable_lookup_without_permission_elevation(
@@ -105,6 +111,152 @@ class StorePortableProjectMemoryMixin:
             "metadata": enrich_project_identity_metadata(metadata),
         }
 
+    def peek_saved_decision_groups(
+        self,
+        harness: str,
+        probes: Sequence[tuple[str, str | None]],
+        *,
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        memory_command: str | None,
+        memory_artifact_type: str | None,
+        memory_artifact_name: str | None,
+        current_action: str,
+        approval_context_inputs: Mapping[str, object],
+    ) -> dict[str, Any] | None:
+        """Peek saved decisions for several ``(artifact_id, artifact_hash)`` probes in one resident call.
+
+        Each probe composes its direct, exact-command and memory ids most
+        restrictive (with the portable Git workspace); across probes a strictly
+        more severe decision wins. Nothing is consumed. The first probe names
+        the current action: the resident also checks a saved allow's context
+        token against its hash, explains a miss, and composes the reuse verdict
+        for ``current_action``. Returns ``decision``, ``ignored_local_integrity``,
+        ``reuse`` (the verdict payload), ``saved_present`` and
+        ``saved_artifact_hash``. ``None`` means the home serves no saved
+        authority, so there is no saved decision to compose.
+        """
+        evidence = self.policy_lookup_evidence()
+        if evidence.degraded_trust_status is not None:
+            return None
+        groups: list[dict[str, object]] = []
+        for artifact_id, artifact_hash in probes:
+            exact_ids, memory_id = memory_lookup_candidates(
+                harness,
+                artifact_id,
+                memory_command=memory_command,
+                memory_artifact_type=memory_artifact_type,
+                memory_artifact_name=memory_artifact_name,
+                guard_home=Path(self.guard_home),
+            )
+            groups.append(
+                {
+                    "artifact_hash": artifact_hash,
+                    "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
+                }
+            )
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=harness,
+            artifact_id=probes[0][0],
+            artifact_hash=None,
+            workspace=workspace,
+            publisher=publisher,
+            runtime_exact_match_context=runtime_exact_match_context,
+            consume_one_shot=False,
+        )
+        request["probe_groups"] = {
+            "portable_workspace": self._portable_project_workspace(workspace),
+            "groups": groups,
+            "reuse": {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)},
+        }
+        return self.send_policy_decision_lookup(request)
+
+    def resolve_runtime_saved_decision(
+        self,
+        current: Mapping[str, object],
+        legacy: Mapping[str, object],
+        alias: Mapping[str, object] | None,
+    ) -> tuple[PolicyDecisionLookupResult, dict[str, Any] | None]:
+        """Resolve a runtime hook evaluation's saved decision in one resident call.
+
+        ``current`` and ``legacy`` probe the request hash and the legacy content
+        hash with their exact-command and memory candidates; ``alias`` probes
+        the Claude alias of a legacy ``claude-code:`` artifact when neither
+        matched. Nothing is consumed. Returns the lookup carrying the trust and
+        integrity evidence, and the decision this artifact may use.
+        """
+        evidence = self.policy_lookup_evidence()
+        if evidence.degraded_trust_status is not None:
+            degraded: PolicyDecisionLookupResult = {
+                "decision": None,
+                "ignored_local_integrity": None,
+                "trust_status": evidence.degraded_trust_status,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
+            }
+            return degraded, None
+        probes = {"current": current, "legacy": legacy, **({"alias": alias} if alias is not None else {})}
+        runtime = {
+            name: {**probe, "portable_workspace": self._portable_project_workspace(_text(probe.get("workspace")))}
+            for name, probe in probes.items()
+        }
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=str(current["harness"]),
+            artifact_id=_text(current.get("artifact_id")),
+            artifact_hash=_text(current.get("artifact_hash")),
+            workspace=_text(current.get("workspace")),
+            publisher=_text(current.get("publisher")),
+            runtime_exact_match_context=_text(current.get("exact_match_context")),
+            consume_one_shot=False,
+        )
+        request["probe_groups"] = {"groups": [], "runtime": runtime}
+        payload = self.send_policy_decision_lookup(request)
+        return payload["lookup"], payload["decision"]
+
+    def mcp_policy_lookup_input(
+        self,
+        harness: str,
+        artifact_id: str,
+        *,
+        workspace: str | None,
+        memory_command: str | None,
+        memory_artifact_type: str | None,
+        memory_artifact_name: str | None,
+    ) -> dict[str, object]:
+        """Ship the keyring-facing evidence once so the resident can read saved policy itself.
+
+        The resident runs the same non-consuming probes this class composes in
+        ``resolve_policy_decision_lookup`` (direct, exact-command and memory ids,
+        portable Git workspace, most restrictive wins) over one store connection.
+        """
+        evidence = self.policy_lookup_evidence()
+        exact_ids, memory_id = memory_lookup_candidates(
+            harness,
+            artifact_id,
+            memory_command=memory_command,
+            memory_artifact_type=memory_artifact_type,
+            memory_artifact_name=memory_artifact_name,
+            guard_home=Path(self.guard_home),
+        )
+        lookup: dict[str, object] = {
+            "store_path": str(self.path),
+            "guard_home": str(self.guard_home),
+            "now": evidence.now,
+            "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
+            "portable_workspace": self._portable_project_workspace(workspace),
+            "integrity_state": evidence.integrity_state,
+            "integrity_key_b64": evidence.integrity_key_b64,
+            "integrity_key_id": evidence.integrity_key_id,
+            "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
+            "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
+            "policy_bundle_decision_identities": evidence.policy_bundle_decision_identities,
+            "degraded_trust_status": evidence.degraded_trust_status,
+            "diagnostic_empty": not evidence.has_saved_rows,
+        }
+        return lookup
+
     def resolve_policy_decision_lookup(
         self,
         harness: str,
@@ -115,8 +267,9 @@ class StorePortableProjectMemoryMixin:
         now: str | None = None,
         runtime_exact_match_context: str | None = None,
         consume_one_shot: bool = True,
+        local_once_only: bool = False,
     ) -> PolicyDecisionLookupResult:
-        portable_workspace = self._portable_project_workspace(workspace)
+        portable_workspace = None if local_once_only else self._portable_project_workspace(workspace)
         if portable_workspace is None:
             return super().resolve_policy_decision_lookup(
                 harness,
@@ -127,6 +280,7 @@ class StorePortableProjectMemoryMixin:
                 now=now,
                 runtime_exact_match_context=runtime_exact_match_context,
                 consume_one_shot=consume_one_shot,
+                local_once_only=local_once_only,
             )
 
         # Portable Git metadata is classification, not authentication. Always

@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_limits import CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES
 from codex_plugin_scanner.guard.store import GuardStore
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -324,10 +325,11 @@ def test_shared_invalid_catalog_cases_fail_behaviorally(case: str) -> None:
     elif case == "unknownField":
         payload["unexpected"] = True
     elif case == "oversized":
-        payload["unexpected"] = "x" * 1_000_001
+        payload["unexpected"] = "x" * (CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     else:
         payload["sourcePath"] = "/private/workspace"
-    with pytest.raises(ValueError):
+    # The size check runs first, so an oversized body must fail on size, not field shape.
+    with pytest.raises(ValueError, match="payload limit exceeded" if case == "oversized" else None):
         validate_extension_catalog_wire(payload)
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject retired one-shot Rust migration delivery residue."""
+"""Reject retired migration delivery artifacts, Python converters, and shims."""
 
 from __future__ import annotations
 
@@ -14,6 +14,31 @@ RETIRED_PATHS = (
     ".github/rust-required-gzip-b64",
     ".github/rust-required-patch",
     "scripts/ci/apply_daemon_edge_hardening.py",
+    # Historical, single-use Python parity recorders superseded by frozen Rust fixtures.
+    "scripts/ci/record_cli_runtime_support_parity.py",
+    "scripts/ci/record_contained_execution_parity.py",
+    "scripts/ci/record_contained_script_parity.py",
+    "scripts/ci/record_contained_unittest_parity.py",
+    "scripts/ci/record_content_sensitivity_parity.py",
+    "scripts/ci/record_continuation_authority_parity.py",
+    "scripts/ci/record_environment_secret_dump_vectors.py",
+    "scripts/ci/record_hook_approval_context_vectors.py",
+    "scripts/ci/record_hook_copilot_settle_vectors.py",
+    "scripts/ci/record_policy_document_parity.py",
+    "scripts/ci/record_restricted_pytest_parity.py",
+    "scripts/ci/record_shell_helper_vectors.py",
+    "scripts/ci/record_shell_request_authority_parity.py",
+    "scripts/ci/record_skill_directory_portable_parity.py",
+    # Retired Python-only command source converters and their orphaned tests.
+    "scripts/command_source_backlog.py",
+    "scripts/migrate_command_extension_sources.py",
+    "tests/test_command_source_backlog.py",
+    "tests/test_command_source_backlog_expansion_bounds.py",
+    "tests/test_command_source_migration.py",
+    # Unreferenced Python helpers whose corresponding semantics now run in Rust.
+    "src/codex_plugin_scanner/guard/runtime/command_candidate_common.py",
+    "src/codex_plugin_scanner/guard/runtime/command_segment_parsing.py",
+    "src/codex_plugin_scanner/guard/runtime/restricted_credential_patterns.py",
 )
 RETIRED_GITHUB_PREFIXES = ("rust-required-",)
 RETIRED_WORKFLOW_PREFIXES = ("tmp-",)
@@ -104,6 +129,10 @@ def _self_test() -> None:
             encoding="utf-8",
         )
 
+        obsolete_test = root / "tests" / "test_command_source_migration.py"
+        obsolete_test.parent.mkdir(parents=True)
+        obsolete_test.write_text("retired\n", encoding="utf-8")
+
         expected = [
             ".github/rust-required-transfer",
             ".github/workflows/closed-branch.yml",
@@ -111,6 +140,7 @@ def _self_test() -> None:
             ".github/workflows/tmp-apply-rust.yml",
             "scripts/ci/apply_daemon_edge_hardening.py",
             "scripts/ci/apply_future_rust_patch.py",
+            "tests/test_command_source_migration.py",
         ]
         actual = find_residue(root)
         if actual != expected:

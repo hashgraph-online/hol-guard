@@ -5,9 +5,12 @@ import {
   extensionDisplayName,
   extensionStateLabel,
 } from "../extension-control-center-model";
-import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
+import type { CatalogReadModel } from "../extension-catalog-v2";
+import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
+import { fetchExtensionDiscoveryApi } from "../guard-api";
 import { connectorWorkspaceItems, refreshCodexHostInventory, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
+import { ExtensionsDiscover } from "./extensions-discover";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
@@ -42,9 +45,9 @@ function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: str
 }
 
 function CatalogExtensionRow(props: {
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
-  onOpen: (extension: ExtensionCatalogItem) => void;
+  onOpen: (extension: ExtensionCatalogSummary) => void;
 }) {
   const handleOpen = useCallback(() => {
     props.onOpen(props.extension);
@@ -71,26 +74,25 @@ function CatalogExtensionRow(props: {
 
 function ConnectorDiscoveryControl(props: {
   discovering: boolean;
+  showProgress: boolean;
   error: string | null;
   onRetry: () => void;
 }) {
-  if (props.discovering) {
-    return (
-      <p role="status" className="px-1 text-xs text-brand-dark/60">
-        Checking host connections…
-      </p>
-    );
-  }
+  const message = props.discovering
+    ? (props.showProgress ? "Checking host connections…" : "")
+    : (props.error ?? "");
   return (
-    <div className="flex items-center gap-2">
-      {props.error ? (
-        <p role="status" className="max-w-56 truncate text-xs text-brand-dark/60" title={props.error}>
-          {props.error}
-        </p>
-      ) : null}
-      <button type="button" className="guard-extensions-chip" onClick={props.onRetry}>
-        {props.error ? "Check for connectors again" : "Check host connections"}
-      </button>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <p aria-live="polite" aria-atomic="true" className="text-sm text-brand-dark/70">{message}</p>
+      {props.discovering ? null : (
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-brand-blue hover:text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+          onClick={props.onRetry}
+        >
+          {props.error ? "Check for connectors again" : "Check host connections"}
+        </button>
+      )}
     </div>
   );
 }
@@ -108,9 +110,11 @@ function CatalogFilterEmpty(props: { onClear: () => void }) {
 }
 
 export function ExtensionsOverview(props: {
-  catalogExtensions: ExtensionCatalogItem[];
+  catalogExtensions: readonly ExtensionCatalogSummary[];
+  readModel: CatalogReadModel;
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
+  seededItems?: LocalCliItem[];
   hostInventory?: import("../codex-host-inventory").CodexHostInventory;
   localCliError: string | null;
   localCliNotice: string | null;
@@ -122,10 +126,11 @@ export function ExtensionsOverview(props: {
   onPrimaryStatusAction?: () => void;
   onRefresh: () => Promise<void> | void;
   onReloadConnections: () => Promise<unknown> | void;
-  onOpenExtension: (extension: ExtensionCatalogItem) => void;
+  onOpenExtension: (extension: ExtensionCatalogSummary) => void;
   onOpenLocalCli: (cliId: string) => void;
-  onAddCustom: () => void;
+  onAddCustom: (command?: string) => void;
 }) {
+  const [workspaceView, setWorkspaceView] = useState<"manage" | "discover">("manage");
   const [query, setQuery] = useState("");
   const discoveryStarted = useRef(false);
   const reloadConnections = useRef(props.onReloadConnections);
@@ -231,7 +236,9 @@ export function ExtensionsOverview(props: {
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
-  const allCustomItems = connectorWorkspaceItems(props.localCliItems);
+  const onAddCustom = props.onAddCustom;
+  const handleAddCustom = useCallback(() => { onAddCustom(); }, [onAddCustom]);
+  const allCustomItems = connectorWorkspaceItems(props.localCliItems, "", props.seededItems);
   const addedCustomItems = allCustomItems.filter((item) =>
     customItemMatchesFilters(item, filters),
   );
@@ -242,7 +249,38 @@ export function ExtensionsOverview(props: {
         eyebrow="On this device"
         title={PROTECTION_TERMS.pageTitle}
         description="Choose an Extension to review its permissions and effective protection."
+        tabs={[
+          { value: "manage", label: "Manage" },
+          { value: "discover", label: "Discover" },
+        ]}
+        activeTab={workspaceView}
+        onTabChange={setWorkspaceView}
+        actions={
+          <a
+            className="guard-extensions-chip"
+            data-testid="sponsor-extension-action"
+            href="https://hol.org/guard/extensions/advertise?source=guard_local&intent=extension-promotion&placement=extensions_header"
+            target="_blank"
+            rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
+          >
+            Sponsor an extension
+          </a>
+        }
       />
+      {/* Manage stays the default view; Discover is the explicitly online
+          secondary surface and makes no request while unmounted. */}
+      {workspaceView === "discover" ? (
+        <div className="mt-4" data-testid="extensions-discover-panel">
+          <ExtensionsDiscover
+            active={props.active && workspaceView === "discover"}
+            catalogExtensions={visibleCatalog}
+            onOpenExtension={props.onOpenExtension}
+            fetchPlacements={() => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements")}
+          />
+        </div>
+      ) : (
+        <div data-testid="extensions-manage-panel">
       <div className="mt-6">
         <ProtectionStatusHero
           status={props.status}
@@ -274,30 +312,22 @@ export function ExtensionsOverview(props: {
       >
         <PatternSearchConsole
           catalog={visibleCatalog}
+          readModel={props.readModel}
           effective={props.effective}
           active={props.active}
           query={query}
           onQueryChange={setQuery}
           onRefresh={props.onRefresh}
           onOpenExtension={props.onOpenExtension}
-          actionSlot={searching ? <AddCustomExtensionButton onClick={props.onAddCustom} /> : null}
+          actionSlot={searching ? <AddCustomExtensionButton onClick={handleAddCustom} /> : null}
           toolbarSlot={
-            <>
-              <CatalogFilterTrigger
-                open={filterPanelOpen}
-                activeCount={filters.trusts.length + filters.kinds.length + filters.areas.length}
-                panelId={filterPanelId}
-                buttonRef={filterTriggerRef}
-                onToggle={() => setFilterPanelOpen((open) => !open)}
+            <CatalogFilterTrigger
+              open={filterPanelOpen}
+              activeCount={filters.trusts.length + filters.kinds.length + filters.areas.length}
+              panelId={filterPanelId}
+              buttonRef={filterTriggerRef}
+              onToggle={() => setFilterPanelOpen((open) => !open)}
               />
-              {props.active ? (
-                <ConnectorDiscoveryControl
-                  discovering={discovering}
-                  error={[discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null}
-                  onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
-                />
-              ) : null}
-            </>
           }
           subtoolbarSlot={
             <CatalogFilterBar
@@ -318,14 +348,22 @@ export function ExtensionsOverview(props: {
           <CustomExtensionsSection
             items={addedCustomItems}
             onOpen={props.onOpenLocalCli}
-            onAdd={props.onAddCustom}
+            seededItems={addedCustomItems.filter((item) => item.seeded === true)}
+            onSetUp={props.onAddCustom}
+            onAdd={handleAddCustom}
             discovering={discovering}
             filteredOut={customItemsFilteredOut}
             onClearFilters={handleClearFilters}
+            discoveryControl={props.active ? (
+              <ConnectorDiscoveryControl
+                discovering={discovering}
+                showProgress={addedCustomItems.length > 0 || customItemsFilteredOut}
+                error={[discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null}
+                onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
+              />
+            ) : null}
           />
 
-          <LocalSkillsWorkspace />
-          <CodexHostConnectors inventory={props.hostInventory} />
           <section className="mt-10" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -357,7 +395,13 @@ export function ExtensionsOverview(props: {
               <CatalogFilterEmpty onClear={handleClearFilters} />
             )}
           </section>
+
+          {/* Inspect-only sources sit below the catalog: they inform, they do not change protection. */}
+          <CodexHostConnectors inventory={props.hostInventory} />
+          <LocalSkillsWorkspace />
         </>
+      )}
+        </div>
       )}
 
     </div>

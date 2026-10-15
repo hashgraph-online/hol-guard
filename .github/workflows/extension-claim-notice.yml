@@ -5,6 +5,7 @@ on:
     types: [closed]
     paths:
       - "contributions/extensions/**"
+      - "contributions/command-sources/**"
       - "contributions/mcp-servers/**"
       - "contributions/extension-listings/**"
   workflow_dispatch:
@@ -50,7 +51,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Post Extension Studio claim notice
         env:
@@ -65,6 +66,7 @@ jobs:
             scripts/notify_merged_extension_claimants.py
             --repo "$GITHUB_REPOSITORY"
             --pr-number "$PR_NUMBER"
+            --source-root "$GITHUB_WORKSPACE"
           )
           if [[ "$ALLOW_RENAMES" == "true" ]]; then
             args+=(--allow-renames)

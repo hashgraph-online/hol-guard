@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from scripts import build_native_command_program as builder
+from scripts import extension_artifact_bundle as bundle
 from scripts import intake_contribution_pr as intake
 from scripts.ci import build_pytest_shard_plan as planner
 from tests.support.ci_workflow import expand_ci_job_actions
@@ -78,26 +79,17 @@ def test_publication_staging_works_without_a_nonexistent_mcp_resource_directory(
     """Verify publication staging works without a nonexistent MCP resource directory."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/extension-artifact-regen.yml").read_text())
     step = next(
-        item
-        for item in workflow["jobs"]["regen"]["steps"]
-        if item.get("name") == "Regenerate and publish refreshed artifacts"
+        item for item in workflow["jobs"]["regen"]["steps"] if item.get("name") == "Build the immutable snapshot"
     )
-    script = step["run"].split("git add -A", 1)[1].split("close_superseded()", 1)[0]
-    paths = [part for part in script.split() if part != chr(92)]
-    assert paths == [
-        "contracts/extensions",
-        "docs/guard/extensions",
-        "contributions/extensions",
-        "src/codex_plugin_scanner/guard/contracts/data/extensions",
-    ]
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    for name in paths:
-        directory = tmp_path / name
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "generated.json").write_text("{}\n")
-    subprocess.run(["git", "add", "-A", *paths], cwd=tmp_path, check=True)
-    tracked = subprocess.check_output(["git", "ls-files"], cwd=tmp_path, text=True).splitlines()
-    assert len(tracked) == len(paths)
+    assert "scripts/extension_artifact_bundle.py" in step["run"]
+    assert "git add" not in step["run"]
+    source_files = set(bundle.FILES) - {"contracts/extensions/trust-class-map.v1.json"}
+    for name in source_files:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n")
+    assert {path.relative_to(tmp_path).as_posix() for path in bundle.selected_files(tmp_path)} == source_files
+    assert not (tmp_path / "src/codex_plugin_scanner/guard/contracts/data/mcp_servers").exists()
 
 
 @pytest.mark.parametrize("measured", [False, True])
@@ -112,29 +104,6 @@ def test_full_report_evaluation_has_one_process_owner_without_losing_tests(measu
     flattened = [node for shard in shards for node in shard]
     assert sorted(flattened) == sorted(nodes + others)
     assert len(flattened) == len(set(flattened))
-
-
-def test_ci_entry_point_and_extracted_actions_keep_bounded_reviewable_files():
-    """Verify CI entry point and extracted actions keep bounded reviewable files."""
-    path = ROOT / ".github/workflows/ci.yml"
-    assert len(path.read_text().splitlines()) <= 750
-    workflow = yaml.safe_load(path.read_text())
-    expanded = expand_ci_job_actions(workflow)
-    assert set(workflow["jobs"]) == set(expanded["jobs"])
-    assert expanded["jobs"]["ci-python-312"]["name"] == "ci (3.12)"
-    for name, job in workflow["jobs"].items():
-        assert {k: v for k, v in job.items() if k != "steps"} == {
-            k: v for k, v in expanded["jobs"][name].items() if k != "steps"
-        }
-    for action in (ROOT / ".github/actions").glob("ci-job-*/action.yml"):
-        assert len(action.read_text().splitlines()) <= 500
-        document = yaml.safe_load(action.read_text())
-        assert document["runs"]["using"] == "composite"
-        for step in document["runs"]["steps"]:
-            assert "run" not in step or "shell" in step
-    gate = next(s for s in expanded["jobs"]["sonar"]["steps"] if s.get("name") == "SonarQube Quality Gate check")
-    assert gate["run"] == "timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.check_sonar_quality"
-    assert not gate.get("continue-on-error")
 
 
 def test_expansion_preserves_literal_input_values_and_rejects_missing_bindings(tmp_path):

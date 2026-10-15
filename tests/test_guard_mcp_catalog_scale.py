@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .native_policy_snapshot_test_fixtures import _ack, _status
 
 
@@ -100,11 +101,9 @@ def test_ten_thousand_tools_keep_per_connection_choices(tmp_path: Path) -> None:
         commands_for_item = item.get("commands")
         assert isinstance(commands_for_item, list) and len(commands_for_item) == 101
     assert known_count == 10_000
-    for server in identities:
-        grant = store.read_local_mcp_grant(server.identity_hash)
-        assert grant is not None
-        states = grant.get("command_states")
-        assert isinstance(states, dict) and len(states) == 100
+    for index in range(len(identities)):
+        states = store.read_local_cli_command_states(f"local-cli.scale-{index:03}")
+        assert len(states) == 100
         assert states["tool_000"] == "allow"
         assert states["tool_099"] == "block"
 
@@ -138,6 +137,7 @@ def test_ten_thousand_tools_keep_per_connection_choices(tmp_path: Path) -> None:
 def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_losing_grants(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     store._policy_integrity_secret_material = lambda *, create: (b"m" * 32, "fixture")
+    store._provision_resident_verifier()
     seen_at = utc_now()
     connections = []
     for index in range(100):
@@ -181,7 +181,9 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
         )
 
     publisher = NativePolicySnapshotPublisher(
-        store=store, status_provider=_status, client_request=lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
+        store=store,
+        status_provider=_status,
+        client_request=lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home")),
     )
     try:
         publisher._publish_once()
@@ -208,9 +210,7 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
         assert not publisher.is_ready()
         assert publisher.last_error == "native_mcp_permission_capacity_exceeded"
         assert publisher.local_cli_publication_receipt(store.read_local_cli_revision()) is None
-        for _identity, server, tools in connections[:6]:
-            grant = store.read_local_mcp_grant(server.identity_hash)
-            assert grant is not None
-            assert grant["command_states"] == {tool.command_id: "block" for tool in tools}
+        for identity, _server, tools in connections[:6]:
+            assert store.read_local_cli_command_states(identity.cli_id) == {tool.command_id: "block" for tool in tools}
     finally:
         publisher.close()

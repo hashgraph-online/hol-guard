@@ -1,4 +1,5 @@
 import { useMemo, type ChangeEvent } from "react";
+import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
 import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
 import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
 import { isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
@@ -12,6 +13,7 @@ import {
 import {
   buildBulkApproveConsequenceCopy,
   summarizeBulkApproveSelection,
+  type BulkApproveRiskLine,
 } from "./approval-center-utils";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
@@ -145,6 +147,8 @@ export type QueueBulkDrawerProps = {
   step: "review" | "submitting" | "completed";
   selectedGroups: QueueGroup[];
   selectedActionCount: number;
+  /** Selected actions the agent stays blocked on after approval. */
+  retryBlockedActionCount?: number;
   sensitiveFileReadCount: number;
   riskDisclosure: BulkRiskDisclosure;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -162,6 +166,22 @@ export type QueueBulkDrawerProps = {
   onConfirmApprove: () => void;
   onCancel: () => void;
 };
+
+/** Show what a bulk line will approve: the file path, else the command, else the action title. */
+function BulkLineDetail(props: { line: BulkApproveRiskLine }) {
+  const { line } = props;
+  if (line.path !== null) {
+    return <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>;
+  }
+  if (line.command !== null) {
+    return (
+      <span className="mt-0.5 block break-all font-mono text-[11px] text-brand-dark/60" title={line.command}>
+        {line.command}
+      </span>
+    );
+  }
+  return <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>;
+}
 
 export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
   if (!props.open) return null;
@@ -206,23 +226,18 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
       ? "Approving…"
       : `Approve once (${props.selectedActionCount} ${unit})`;
 
-  // Group preview lines by category label so the operator sees the action mix
-  // at a glance: "File reads (3)", "Shell commands (2)" instead of a flat list.
-  // Group the first 8 preview lines by category label so the operator sees the
-  // action mix at a glance: "File reads (3)", "Shell commands (2)" instead of a
-  // flat list. Slice before grouping so the preview count and hidden count stay
-  // mathematically consistent.
-  const PREVIEW_LIMIT = 8;
+  // Group every selected line by category label so the operator sees the action
+  // mix at a glance ("File reads (3)", "Shell commands (2)") and can still read
+  // each command before approving. The list scrolls instead of truncating.
   const shownGroups = useMemo(() => {
     const map = new Map<string, typeof riskLines>();
-    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
+    for (const line of riskLines) {
       const bucket = map.get(line.categoryLabel) ?? [];
       bucket.push(line);
       map.set(line.categoryLabel, bucket);
     }
     return Array.from(map.entries());
   }, [riskLines]);
-  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
 
   const actionFooter = (
@@ -338,7 +353,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
             {props.selectedActionCount} {unit}
           </span>
         </div>
-        <div className="mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3">
+        <div className="mt-2.5 max-h-72 space-y-3 overflow-y-auto rounded-xl bg-slate-50/80 px-4 py-3">
           {shownGroups.map(([categoryLabel, lines]) => (
             <div key={categoryLabel}>
               <p className="text-[11px] font-semibold text-brand-dark/70">
@@ -348,25 +363,15 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
                 </span>
               </p>
               <ul className="mt-1.5 space-y-1.5">
-                {lines.slice(0, 3).map((line) => (
+                {lines.map((line) => (
                   <li key={line.requestId} className="text-xs text-brand-dark">
                     <span className="font-medium">{line.harnessLabel}</span>
-                    {line.path !== null ? (
-                      <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>
-                    ) : (
-                      <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>
-                    )}
+                    <BulkLineDetail line={line} />
                   </li>
                 ))}
-                {lines.length > 3 && (
-                  <li className="text-[11px] text-muted-foreground">+ {lines.length - 3} more</li>
-                )}
               </ul>
             </div>
           ))}
-          {hiddenCount > 0 && (
-            <p className="text-[11px] text-muted-foreground">and {hiddenCount} more selected {unit}</p>
-          )}
         </div>
       </section>
 
@@ -451,7 +456,11 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
               </div>
             )}
             <p className="text-[11px] leading-4 text-muted-foreground">
-              {buildBulkApproveConsequenceCopy(props.selectedActionCount)}
+              {bulkApproveConsequenceCopyForSelection(
+                props.selectedActionCount,
+                props.retryBlockedActionCount ?? 0,
+                buildBulkApproveConsequenceCopy,
+              )}
             </p>
           </div>
         ) : (

@@ -248,6 +248,20 @@ function isVirtualSourcePath(path: string): boolean {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path);
 }
 
+// OMP answers `file.json?q=<filter>` with the filter's output, not the
+// file's bytes, so that output is reviewed inline like any other result.
+function isJsonQueryPath(path: string): boolean {
+  const queryIndex = path.indexOf('?');
+  return queryIndex !== -1 && /\.(?:jsonl?|ndjson)$/i.test(path.slice(0, queryIndex));
+}
+
+// OMP reads each part of `a.ts; b.ts` on its own when the whole string is
+// not a file, so the output is not one file's bytes. It is reviewed inline,
+// where the daemon still judges each part's path.
+function isPathListRead(path: string): boolean {
+  return path.includes(';');
+}
+
 function sourceFileRefForPostToolUse(
   event: Record<string, unknown>,
   toolInput: Record<string, unknown>,
@@ -259,12 +273,17 @@ function sourceFileRefForPostToolUse(
   // but a directory is not a source file the daemon can re-read. Keep the
   // bounded names-only result inline so Rust scans the actual listing.
   const details = event.details;
-  if (
-    details !== null &&
-    typeof details === 'object' &&
-    !Array.isArray(details) &&
-    (details as Record<string, unknown>).isDirectory === true
-  ) return null;
+  const detailsRecord = details !== null && typeof details === 'object' && !Array.isArray(details)
+    ? (details as Record<string, unknown>) : undefined;
+  // Details that are present but not an object cannot say whether the
+  // output is one file, so the result stays inline.
+  if (details !== undefined && details !== null && detailsRecord === undefined) return null;
+  if (detailsRecord?.isDirectory === true) return null;
+  // When the whole path is not a file, OMP also splits it on commas or
+  // spaces (`a.ts:1-5,b.ts`) and reads each part, naming every part in
+  // `displayReadTargets`. That output is not one file's bytes either.
+  const readTargets = detailsRecord?.displayReadTargets;
+  if (Array.isArray(readTargets) && readTargets.length > 1) return null;
   if (!digest.sha256 || digest.traversalTruncated) return null;
   if (digest.chars > GUARD_SOURCE_REF_MAX_OUTPUT_CHARS) return null;
   const path = sourcePathFromToolInput(toolInput);
@@ -272,7 +291,7 @@ function sourceFileRefForPostToolUse(
   // before it can return the original output. Absolute paths are common in
   // Pi Read calls and must retain that provenance rather than fall back to
   // context-free output scanning.
-  if (!path || isVirtualSourcePath(path)) return null;
+  if (!path || isVirtualSourcePath(path) || isJsonQueryPath(path) || isPathListRead(path)) return null;
   return {
     version: 1,
     kind: 'source_file',

@@ -73,3 +73,27 @@ def test_unavailable_inspection_reports_decision_specific_recovery() -> None:
     assert "evaluation failed" in failed_classification["reason"].lower()
     assert failed_classification["recovery"]
     assert "blocked" in failed_classification["recovery"].lower()
+
+
+def test_direct_and_cli_outage_reports_do_not_require_native_parser(monkeypatch, tmp_path):
+    from codex_plugin_scanner.guard import native_rich_command_model
+    from codex_plugin_scanner.guard.runtime import command_inspection
+
+    emitted = []
+    monkeypatch.setattr(native_rich_command_model, "ensure_resident_prerequisite", lambda _: False)
+    monkeypatch.setattr(command_inspection, "review_command_native", lambda *args, **kwargs: None)
+    direct = command_inspection.inspect_command("  git status  ", cwd=tmp_path, home_dir=tmp_path)
+    assert direct["status"] == "native_unavailable"
+    assert direct["command_model"] is None
+    assert direct["classification"]["recovery"]
+
+    class Client:
+        def inspect_command(self, payload):
+            raise GuardDaemonRequestError("not running")
+
+    monkeypatch.setattr(controls, "_client", lambda _: Client())
+    monkeypatch.setattr(dispatch, "_emit", lambda *args: emitted.append(args), raising=False)
+    args = Namespace(command_command="test", command_text="git status", guard_home=str(tmp_path), json=True)
+    assert dispatch._run_guard_command_inspection_command(args) == 2
+    assert emitted[0][1]["status"] == "native_unavailable"
+    assert emitted[0][1]["command_model"] is None

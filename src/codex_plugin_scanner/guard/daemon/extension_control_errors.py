@@ -6,10 +6,9 @@ public error type without creating an import cycle.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 _RECOVERY_ACTIONS = {
     "approval_required": "provide_local_approval",
+    "authority_apply_failed": "refresh_effective_controls",
     "authority_conflict": "refresh_effective_controls",
     "authority_unavailable": "enroll_or_repair_authority",
     "catalog_conflict": "refresh_catalog",
@@ -23,12 +22,13 @@ _RECOVERY_ACTIONS = {
 }
 
 
-@dataclass(frozen=True, slots=True)
 class ExtensionControlApiError(Exception):
     """Stable error envelope shared by inspection, Test Lab, and mutation APIs."""
 
-    status: int
-    code: str
+    def __init__(self, status: int, code: str) -> None:
+        super().__init__(status, code)
+        self.status = status
+        self.code = code
 
     def to_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {"error": self.code}

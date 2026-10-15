@@ -24,6 +24,30 @@ SELECTORS = json.loads((CONTRACTS / "selector-v1-fixtures.json").read_text())
 DOMAINS = json.loads((CONTRACTS / "recipient-domains-v1-fixtures.json").read_text())
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_budget_drafts_round_trip_and_cannot_be_flattened_into_local_rows(enabled: bool) -> None:
+    selector = {
+        "schema": "guard.business-policy-match.v1",
+        "version": 1,
+        "services": ["google_gmail"],
+        "operations": ["mail_send"],
+    }
+    source = yaml.safe_load(_draft(selector, effect="allow"))
+    source["spec"]["rules"][0]["enabled"] = enabled
+    source["spec"]["rules"][0]["match"] = {"artifacts": ["artifact.test"]}
+    source["spec"]["budgets"] = [{
+        "schema": "guard.business-budget.v1", "version": 1, "id": "mail.daily", "scope": "account",
+        "match": selector, "windowMs": 86400000, "maximumActions": 0,
+        "maximumRecipients": 10, "maximumRecords": 10, "maximumBytes": 10000,
+    }]
+    document = parse_policy_document_yaml(yaml.safe_dump(source))
+    reparsed = parse_policy_document_yaml(format_policy_document_yaml(document))
+    assert reparsed.to_mapping()["spec"]["budgets"] == source["spec"]["budgets"]
+    assert canonical_policy_document_bytes(reparsed) == canonical_policy_document_bytes(document)
+    with pytest.raises(PolicyCompilationError, match="unsupported_policy_budgets"):
+        compile_policy_document(reparsed)
+
+
 def _draft(selector: object, *, effect: str = "block", extra: dict[str, object] | None = None) -> str:
     return yaml.safe_dump(
         {

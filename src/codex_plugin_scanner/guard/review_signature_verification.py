@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Iterator
+from contextlib import contextmanager
 from copy import deepcopy
 
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
@@ -10,6 +12,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION, PolicyBundleNativeUnavailableError
 from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     merge_policy_bundle_trusted_keys,
@@ -26,6 +29,16 @@ _REMOTE_APPROVAL_KEY_PURPOSE = "remote_approval"
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
+
+
+@contextmanager
+def _native_outage_is_not_a_key_verdict() -> Iterator[None]:
+    """Report a resident outage as itself, never as an expired or unknown key."""
+
+    try:
+        yield
+    except PolicyBundleNativeUnavailableError as error:
+        raise GuardReviewContractError(NATIVE_UNAVAILABLE_REJECTION) from error
 
 
 def _non_empty_string(value: object) -> str | None:
@@ -55,11 +68,12 @@ def _verification_keys_from_payload(value: object) -> tuple[PolicyBundleVerifica
 
 
 def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationKey, ...]:
-    return merge_policy_bundle_trusted_keys(
-        policy_bundle_keys_from_supply_chain_keyring(store.get_sync_payload("supply_chain_bundle_keyring")),
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
-    )
+    with _native_outage_is_not_a_key_verdict():
+        return merge_policy_bundle_trusted_keys(
+            policy_bundle_keys_from_supply_chain_keyring(store.get_sync_payload("supply_chain_bundle_keyring")),
+            safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
+            safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
+        )
 
 
 def validated_review_verification_keys_from_sync(
@@ -72,7 +86,8 @@ def validated_review_verification_keys_from_sync(
 
     if not isinstance(value, list):
         raise GuardReviewContractError("review_verification_keys_invalid")
-    keys = safe_load_policy_bundle_verification_keys(value)
+    with _native_outage_is_not_a_key_verdict():
+        keys = safe_load_policy_bundle_verification_keys(value)
     if not keys or len(keys) != len(value):
         raise GuardReviewContractError("review_verification_keys_invalid")
     anchored_fingerprints = {key.fingerprint_sha256 for key in _anchored_review_verification_keys(store)}
@@ -83,7 +98,9 @@ def validated_review_verification_keys_from_sync(
             raise GuardReviewContractError("signing_key_workspace_mismatch")
         if key.fingerprint_sha256 not in anchored_fingerprints:
             raise GuardReviewContractError("unknown_signing_key")
-        if key.state == "revoked" or not signing_key_is_current(key):
+        with _native_outage_is_not_a_key_verdict():
+            current = signing_key_is_current(key)
+        if key.state == "revoked" or not current:
             raise GuardReviewContractError("expired_signing_key")
     return keys
 
@@ -112,7 +129,9 @@ def _resolve_anchored_signing_key(
         signing_key.workspace_id != expected_workspace_id or advertised_key.workspace_id != expected_workspace_id
     ):
         raise GuardReviewContractError("signing_key_workspace_mismatch")
-    if not signing_key_is_current(signing_key):
+    with _native_outage_is_not_a_key_verdict():
+        current = signing_key_is_current(signing_key)
+    if not current:
         raise GuardReviewContractError("expired_signing_key")
     return signing_key
 

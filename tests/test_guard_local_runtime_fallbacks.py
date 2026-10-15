@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.local_runtime_fallbacks import best_effort_access_token
 from codex_plugin_scanner.guard.store import GuardStore
@@ -26,7 +27,7 @@ def test_hermes_optional_token_logs_unexpected_resolver_failure_and_keeps_launch
 
     monkeypatch.setattr(guard_runner, "_resolve_guard_sync_auth_context", _fail)
     with caplog.at_level(logging.INFO):
-        assert guard_runner._resolve_hermes_guard_access_token(store) is None
+        assert guard_run_launch._resolve_hermes_guard_access_token(store) is None
     assert "_UnexpectedResolverError" in caplog.text
     assert "secret backend unavailable" not in caplog.text
 

@@ -4,6 +4,10 @@
 #[path = "policy_enforcement_business_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "policy_enforcement_business_golden_tests.rs"]
+mod golden_tests;
+
 use super::{ActionFloor, AdmittedPolicySnapshot};
 use guard_contracts::{BusinessActionV1, PreToolActionTypeV1, PreToolResultV1};
 use guard_policy_snapshot::business_policy::BusinessPolicyBindingV1;
@@ -183,17 +187,119 @@ fn requires_business_context(
     };
     // Unresolved extraction/parsing cannot prove execution stays outside
     // business operations. No inference covers renamed binaries or HTTP.
-    Ok(parsed
-        .segments
-        .iter()
-        .filter_map(|segment| segment.executable.as_deref())
-        .any(|program| {
-            let basename = program.rsplit(['/', '\\']).next().unwrap_or(program);
-            matches!(
-                basename.to_ascii_lowercase().as_str(),
-                "gws" | "gws.exe" | "gog" | "gog.exe"
-            )
-        }))
+    Ok(parsed.segments.iter().any(|segment| {
+        let Some(program) = segment.executable.as_deref() else {
+            return false;
+        };
+        if is_business_cli(program) {
+            return true;
+        }
+        is_package_launcher(program) && launcher_runs_business_cli(program, &segment.arguments)
+    }))
+}
+
+/// Package launchers run the CLI as an argument or inside a shell string
+/// (`npx -c 'gws …'`, `pnpm exec sh -c 'gog …'`). Every word of every
+/// argument counts, so launcher option parsing cannot hide the CLI. Only a
+/// bare package name given to an install-style subcommand is not a call.
+fn launcher_runs_business_cli(program: &str, arguments: &[String]) -> bool {
+    let installs = installs_packages(program, arguments);
+    arguments.iter().any(|argument| {
+        let shell_string =
+            argument.contains(|c: char| c.is_whitespace() || SHELL_SEPARATORS.contains(&c));
+        if installs && !shell_string {
+            return false;
+        }
+        words_name_business_cli(argument)
+    })
+}
+
+fn words_name_business_cli(text: &str) -> bool {
+    text.split(|c: char| c.is_whitespace() || SHELL_SEPARATORS.contains(&c) || c == '=')
+        .filter(|word| !word.is_empty())
+        .any(|word| {
+            let spec = word.rsplit(['/', '\\']).next().unwrap_or(word);
+            is_business_cli(spec.split('@').next().unwrap_or(spec))
+        })
+}
+
+/// Whether the payload positively names a business operation, including a business
+/// CLI inside a shell string the parser cannot model (`sh -c 'gws …'`).
+fn names_business_operation(payload: &Value) -> bool {
+    guard_command::pretool::generic::extract_untrusted_command_context(payload).is_ok_and(
+        |context| {
+            context.business_action_present
+                || context
+                    .command
+                    .as_deref()
+                    .is_some_and(words_name_business_cli)
+        },
+    )
+}
+
+const SHELL_SEPARATORS: &[char] = &[';', '&', '|', '`', '$', '(', ')', '<', '>', '\'', '"'];
+
+fn installs_packages(program: &str, arguments: &[String]) -> bool {
+    let name = executable_basename(program);
+    let name = name
+        .strip_suffix(".cmd")
+        .or_else(|| name.strip_suffix(".exe"))
+        .unwrap_or(&name);
+    if !matches!(name, "npm" | "pnpm" | "yarn" | "bun") {
+        return false;
+    }
+    // An option ahead of the subcommand may take the install word as its value
+    // (`npm --prefix install exec gws`), so only a leading subcommand counts.
+    let Some(subcommand) = arguments.first() else {
+        return false;
+    };
+    matches!(
+        subcommand.as_str(),
+        "install"
+            | "i"
+            | "add"
+            | "ci"
+            | "uninstall"
+            | "remove"
+            | "rm"
+            | "update"
+            | "up"
+            | "upgrade"
+            | "outdated"
+            | "view"
+            | "info"
+            | "why"
+            | "list"
+            | "ls"
+            | "audit"
+    )
+}
+
+fn executable_basename(program: &str) -> String {
+    program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase()
+}
+
+fn is_business_cli(program: &str) -> bool {
+    matches!(
+        executable_basename(program).as_str(),
+        "gws" | "gws.exe" | "gws.cmd" | "gog" | "gog.exe" | "gog.cmd"
+    )
+}
+
+fn is_package_launcher(program: &str) -> bool {
+    let name = executable_basename(program);
+    let name = name
+        .strip_suffix(".cmd")
+        .or_else(|| name.strip_suffix(".exe"))
+        .unwrap_or(&name);
+    matches!(
+        name,
+        "npx" | "pnpx" | "bunx" | "npm" | "pnpm" | "yarn" | "bun" | "uvx" | "pipx"
+    )
 }
 
 pub(super) fn guard_untrusted_business_context(
@@ -210,7 +316,14 @@ pub(super) fn guard_untrusted_business_context(
     let intrinsic = ActionFloor::parse(&result.minimum_action)
         .ok_or_else(|| "native_policy_action_invalid".to_owned())?;
     let floor = policy.floor(intrinsic, None);
-    if floor.action > intrinsic {
+    // A failed extension evaluation blocks without naming a finding. Commands the
+    // parser cannot model, such as `sh -c 'gws …'`, land there; when the payload
+    // names a business operation, the missing business facts are the actionable
+    // reason. Unrelated opaque commands keep the extension diagnostic.
+    let unattributed_business_block = result.reason_code
+        == "native_command_extension_evaluation_failed"
+        && names_business_operation(payload);
+    if floor.action > intrinsic || unattributed_business_block {
         result.reason_code = "native_business_context_unavailable".into();
         result.reason = "HOL Guard requires authenticated account, audience and content facts for this business operation.".into();
     }

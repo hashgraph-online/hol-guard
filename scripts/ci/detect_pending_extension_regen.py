@@ -63,9 +63,13 @@ class ContributionDiffError(RuntimeError):
     """The PR base cannot safely establish whether contributions changed."""
 
 
-def contribution_ids() -> set[str]:
+def contribution_ids(*, include_legacy: bool = True) -> set[str]:
     """Collect canonical extension identities from each contribution format."""
-    ids = {str(json.loads(path.read_text())["id"]) for path in (ROOT / "contributions/extensions").glob("*.json")}
+    ids = (
+        {str(json.loads(path.read_text())["id"]) for path in (ROOT / "contributions/extensions").glob("*.json")}
+        if include_legacy
+        else set()
+    )
     ids.update(
         str(json.loads(path.read_text())["extension"]["extension_id"])
         for path in (ROOT / "contributions/command-sources").glob("command.*.json")

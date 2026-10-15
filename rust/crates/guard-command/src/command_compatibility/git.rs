@@ -1,5 +1,16 @@
 use super::{CommandSegmentV1, CompatibilityObservations};
 
+#[path = "git_allow_scope.rs"]
+mod git_allow_scope;
+#[path = "git_fetch.rs"]
+mod git_fetch;
+#[path = "git_hooks_path.rs"]
+mod git_hooks_path;
+pub(crate) use git_allow_scope::{
+    repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
+};
+use git_hooks_path::hooks_path_names_no_hooks;
+
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
@@ -81,6 +92,48 @@ fn bounded_inspection(arguments: &[String]) -> bool {
             .all(|part| !matches!(part, "" | "." | ".."))
 }
 
+/// A staged-index diff that prints to stdout like `git diff HEAD`, which the
+/// ordinary diff proof already admits. The staged content is no more private
+/// than the working tree beside it, so the shared read proof (configuration
+/// probe, textconv and sensitive-pathspec screens) decides it. Forms that
+/// write a file or compare against another revision keep the index owner.
+fn bounded_cached_diff(arguments: &[String]) -> bool {
+    arguments
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .all(|argument| {
+            let option = argument.as_str();
+            matches!(
+                option,
+                "--cached"
+                    | "--staged"
+                    | "HEAD"
+                    | "--check"
+                    | "--stat"
+                    | "--numstat"
+                    | "--shortstat"
+                    | "--summary"
+                    | "--name-only"
+                    | "--name-status"
+                    | "--patch"
+                    | "-p"
+                    | "--quiet"
+                    | "--exit-code"
+                    | "--no-color"
+                    | "--color=never"
+                    | "--no-ext-diff"
+                    | "--no-textconv"
+            ) || option
+                .strip_prefix("-U")
+                .or_else(|| option.strip_prefix("--unified="))
+                .is_some_and(|lines| {
+                    !lines.is_empty()
+                        && lines.len() <= 6
+                        && lines.bytes().all(|b| b.is_ascii_digit())
+                })
+        })
+}
+
 fn read_only_plumbing(arguments: &[String]) -> bool {
     let Some((command, rest)) = arguments.split_first() else {
         return false;
@@ -90,6 +143,7 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
     // drivers, touch the network, or write are excluded.
     match command.as_str() {
         "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
+        "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
@@ -100,6 +154,7 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
                 .collect();
             operands.len() == 1 && !operands[0].starts_with('-')
         }
+        "config" if crate::pretool::git_config_reads::read_form(rest).is_some() => true,
         "config" => {
             let mut reads = false;
             for argument in rest {
@@ -125,8 +180,55 @@ pub(super) fn inspection_arguments<'a>(
     arguments: &'a [String],
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
+    let remaining = routed(arguments, context, true)?;
+    matches!(
+        remaining.first().map(String::as_str),
+        Some(
+            "status"
+                | "diff"
+                | "log"
+                | "show"
+                | "branch"
+                | "hash-object"
+                | "rev-parse"
+                | "merge-base"
+                | "ls-files"
+                | "remote"
+                | "worktree"
+                | "config"
+                | "grep"
+                | "ls-tree"
+                | "cat-file"
+                | "show-ref"
+                | "for-each-ref"
+                | "rev-list"
+        )
+    )
+    .then_some(remaining)
+}
+
+pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
+    git_fetch::origin_shaped_arguments(arguments)
+}
+
+pub(super) fn routed_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    routed(arguments, context, false)
+}
+
+/// `inspection` additionally admits read-only routing and hardening options
+/// (`--git-dir=<bare repository>`, a `core.hooksPath` that names no hooks)
+/// that proofs for operations which run hooks must keep refusing.
+fn routed<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+    inspection: bool,
+) -> Option<&'a [String]> {
     let mut index = 0;
     let mut saw_change_directory = false;
+    let mut saw_git_dir = false;
     while let Some(argument) = arguments.get(index) {
         if matches!(
             argument.as_str(),
@@ -140,6 +242,7 @@ pub(super) fn inspection_arguments<'a>(
             let boolean = value.to_ascii_lowercase();
             let safe = match key.to_ascii_lowercase().as_str() {
                 "core.fsmonitor" => matches!(boolean.as_str(), "false" | "0" | "no" | "off"),
+                "core.hookspath" => inspection && hooks_path_names_no_hooks(value),
                 "core.quotepath" => matches!(
                     boolean.as_str(),
                     "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off"
@@ -152,7 +255,30 @@ pub(super) fn inspection_arguments<'a>(
             index += 2;
             continue;
         }
+        let git_dir = match argument.as_str() {
+            "--git-dir" if inspection => {
+                index += 1;
+                Some(arguments.get(index)?.as_str())
+            }
+            _ => argument.strip_prefix("--git-dir=").filter(|_| inspection),
+        };
+        if let Some(git_dir) = git_dir {
+            // A repository named by `--git-dir` is a read route like `-C`.
+            if saw_change_directory
+                || saw_git_dir
+                || !crate::pretool::safe_directory_target(git_dir)
+                || !crate::pretool::git_dir_route_within_scope(git_dir, context)
+            {
+                return None;
+            }
+            saw_git_dir = true;
+            index += 1;
+            continue;
+        }
         let target = if argument == "-C" {
+            if saw_git_dir {
+                return None;
+            }
             index += 1;
             arguments.get(index)?.as_str()
         } else {
@@ -166,22 +292,37 @@ pub(super) fn inspection_arguments<'a>(
         {
             return None;
         }
+        // Like `cd`, an absolute Windows target must be its exact canonical spelling.
+        #[cfg(windows)]
+        if std::path::Path::new(target).is_absolute()
+            && !crate::pretool::directory_targets::exact_existing_drive_target(target)
+        {
+            return None;
+        }
         saw_change_directory = true;
         index += 1;
     }
-    let remaining = arguments.get(index..)?;
-    matches!(
-        remaining.first().map(String::as_str),
-        Some("status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote")
-    )
-    .then_some(remaining)
+    arguments.get(index..)
 }
 
+#[cfg(test)]
 pub(super) fn observe_with_context(
     segment: &CommandSegmentV1,
     index: usize,
     result: &mut CompatibilityObservations,
     context: crate::pretool::PathContext<'_>,
+) {
+    observe_with_contexts(segment, index, result, context, context);
+}
+
+/// `proof_context` is where native proofs ran this segment: the directory a
+/// verified leading `cd` entered, or `context` itself.
+pub(super) fn observe_with_contexts(
+    segment: &CommandSegmentV1,
+    index: usize,
+    result: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+    proof_context: crate::pretool::PathContext<'_>,
 ) {
     let arguments = &segment.arguments;
     if arguments
@@ -199,7 +340,17 @@ pub(super) fn observe_with_context(
         return;
     };
     let command = arguments[command_index].as_str();
-    let inspection = inspection_arguments(arguments, context);
+    let inspection = inspection_arguments(arguments, context)
+        .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
+        .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment));
+    // A remote operation behind proven `-C` routes names its subcommand
+    // exactly, like the bare form; its own floors then apply.
+    let routed_remote = command_index != 0
+        && matches!(command, "push" | "fetch" | "pull")
+        && routed_arguments(arguments, context)
+            .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
+            .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment))
+            .is_some_and(|remaining| remaining.first().map(String::as_str) == Some(command));
     let plumbing = (command_index == 0 && read_only_plumbing(arguments))
         || inspection.is_some_and(read_only_plumbing);
     if plumbing {
@@ -207,7 +358,40 @@ pub(super) fn observe_with_context(
         // extension can still block it.
         result.permission("command.git.permission.ls-files", index, false);
     }
+    // A proven pure listing is read-only inspection, not branch mutation.
+    let branch_listing = command == "branch"
+        && inspection.is_some_and(|remaining| {
+            crate::pretool::git_branch_listing::is_listing(&remaining[1..])
+        });
+    // Printing object ids of named files writes nothing to the repository.
+    let hash_read = command == "hash-object"
+        && inspection.is_some_and(|remaining| {
+            crate::pretool::git_hash_object::read_operands(&remaining[1..]).is_some()
+        });
+    // `init` is a built-in, so no alias can replace it. Creating a repository
+    // in the current directory or one absolute target with only a quiet flag
+    // or an initial branch name touches none of the porcelain owners above;
+    // the native proof still decides the target. Templates, separate git
+    // directories and other options keep every owner uncertain.
+    let plain_init = command_index == 0
+        && command == "init"
+        && (crate::pretool::init_arguments(&arguments[1..]).is_some()
+            || crate::pretool::git_init_target::target(&arguments[1..])
+                .is_some_and(crate::pretool::git_init_target::absolute_target));
+    // A plain configuration write sets a key Git never runs; its own proof
+    // still decides the repository.
+    let plain_config_write = command == "config"
+        && crate::pretool::directory_targets::drive_targets_quoted(segment)
+        && crate::pretool::directory_targets::home_targets_unquoted(segment)
+        && routed_arguments(arguments, context).is_some_and(|remaining| {
+            remaining.first().map(String::as_str) == Some("config")
+                && crate::pretool::git_config_reads::writes::plain_write(&remaining[1..]).is_some()
+        });
     if plumbing
+        || plain_config_write
+        || branch_listing
+        || hash_read
+        || plain_init
         || (command_index == 0 && bounded_inspection(arguments))
         || inspection.is_some_and(bounded_inspection)
     {
@@ -216,7 +400,11 @@ pub(super) fn observe_with_context(
     if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == command) {
         // Attribution is deliberately stronger than legacy Python's inert
         // matcher=None porcelain entries: disabling a permission must work.
-        result.rule(rule, index, command_index != 0 && inspection.is_none());
+        result.rule(
+            rule,
+            index,
+            command_index != 0 && inspection.is_none() && !routed_remote,
+        );
     } else if !matches!(
         command,
         "switch"
@@ -243,83 +431,33 @@ pub(super) fn observe_with_context(
         }
     }
     if command == "fetch" {
-        // Proving a named origin requires repository/configuration bindings
-        // unavailable in CanonicalCommandV1. Never claim the Python exemption.
-        result.rule("command.git.unverified-fetch", index, true);
+        // Repository/configuration bindings are unavailable in
+        // CanonicalCommandV1, so Guard still never proves the fetch benign.
+        // A plain named-origin refresh is a definite review rule, though, so an
+        // explicit Allow of its permission can settle it. Every wrapped,
+        // option-prefixed, URL, or otherwise non-exact form stays uncertain.
+        // The hook's native proof already checked the repository's origin,
+        // transport, credential helpers and hooks for exactly this segment.
+        // A trailing `2>&1` only merges the fetch's progress into stdout.
+        let stripped = crate::pretool::without_stderr_merge(segment);
+        let refresh = stripped.as_ref().unwrap_or(segment);
+        let plain = git_fetch::plain_origin_refresh(refresh, command_index)
+            || (routed_remote && git_fetch::routed_origin_refresh(refresh, command_index));
+        if !(plain && crate::pretool::verified_origin_operation(refresh, proof_context)) {
+            result.rule("command.git.unverified-fetch", index, !plain);
+        }
     }
     if command == "diff"
         && arguments[command_index + 1..]
             .iter()
             .take_while(|argument| argument.as_str() != "--")
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+        && !inspection.is_some_and(|remaining| bounded_cached_diff(&remaining[1..]))
     {
         result.rule("command.git.index-inspection", index, true);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn observations(command: &str) -> CompatibilityObservations {
-        let model = crate::parse_command(
-            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
-        )
-        .unwrap();
-        let mut result = CompatibilityObservations::default();
-        observe_with_context(
-            &model.segments[0],
-            0,
-            &mut result,
-            crate::pretool::PathContext::default(),
-        );
-        result
-    }
-
-    #[test]
-    fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
-        for command in [
-            "git rev-parse --show-toplevel",
-            "git rev-parse --git-dir",
-            "git rev-parse --abbrev-ref HEAD",
-            "git merge-base HEAD origin/main",
-            "git show-ref --verify refs/heads/main",
-            "git for-each-ref '--format=%(refname)' refs/heads",
-            "git rev-list --count HEAD",
-            "git ls-tree -r HEAD",
-            "git symbolic-ref --short HEAD",
-            "git config --get remote.origin.url",
-            "git config --global --get user.email",
-            "git config --list --show-origin",
-            "git apply --check workspace/patches/change.patch",
-        ] {
-            assert!(observations(command).rule_matches.is_empty(), "{command}");
-        }
-    }
-
-    #[test]
-    fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
-        for command in [
-            "git -C workspace status",
-            "git -c alias.apply=payload apply --check change.patch",
-            "git -c core.pager=payload rev-parse HEAD",
-            "git config user.name payload",
-            "git config --unset user.name",
-            "git config --file /home/user/.aws/credentials --list",
-            "git config --get --file other.cfg key",
-            "git symbolic-ref HEAD refs/heads/other",
-            "git cat-file --textconv HEAD:file",
-            "git apply change.patch",
-            "git apply --check --unsafe-paths change.patch",
-            "git apply --check ../change.patch",
-            "git apply --check -",
-        ] {
-            let result = observations(command);
-            assert!(!result.rule_matches.is_empty(), "{command}");
-            assert!(
-                result.rule_matches.iter().all(|item| item.uncertainty),
-                "{command}"
-            );
-        }
-    }
-}
+#[path = "git_tests.rs"]
+mod tests;

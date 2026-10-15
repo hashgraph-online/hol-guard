@@ -10,6 +10,12 @@ import type {
 } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
 import { resolveQueueCategory } from "./queue-state";
+import {
+  bulkLineCommand,
+  oneTimeRetryWindowMinutes,
+  retryBlockedApprovalCopy,
+  retryCannotReuseApproval,
+} from "./approval-retry-guidance";
 import { whyPaused } from "./evidence/plain-english";
 import { guardActionPresentation, isGuardAction } from "./guard-action";
 import {
@@ -142,7 +148,8 @@ export function buildRetryAfterApprovalCopy(
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
-    return `Approved once. Return to ${harness} and retry within 15 minutes.`;
+    if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
+    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -368,6 +375,9 @@ export function buildResumeInstruction(item: GuardApprovalRequest): string {
 }
 
 export function requestResolutionBlockReason(item: GuardApprovalRequest): string | null {
+  if (item.native_business_review_display_only) {
+    return "This saved business request is read-only. Review decisions and execution are not connected yet.";
+  }
   if (item.decision_contract_error !== undefined) {
     return "HOL Guard found inconsistent stored decision data. This request cannot be approved; rerun the action to create a fresh, consistent review request.";
   }
@@ -527,6 +537,7 @@ function serializeMcpInput(payload: Record<string, unknown>, maxLength: number |
 }
 
 export function harnessDisplayName(harness: string): string {
+  if (harness === "native-business") return "Native business workflow";
   if (typeof harness !== "string") {
     return "Unknown app";
   }
@@ -731,6 +742,7 @@ export type BulkApproveRiskLine = {
   requestId: string;
   title: string;
   path: string | null;
+  command: string | null;
   harnessLabel: string;
   duplicateCount: number;
   summary: string;
@@ -746,6 +758,7 @@ export function summarizeBulkApproveSelection(
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
+      command: bulkLineCommand(group.primary),
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),

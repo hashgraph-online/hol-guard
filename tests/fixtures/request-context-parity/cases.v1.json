@@ -1,0 +1,4941 @@
+{
+ "cases": [
+  {
+   "command": "ls -la",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": false,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "ls",
+       "-la"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "plain command",
+   "workspace": "ws"
+  },
+  {
+   "command": "",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": false,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "empty command",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd child",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner; ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd then semicolon",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner && cd .. && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "cd",
+       ".."
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       },
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws",
+        "resolved_path": "$ROOT/ws"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 2,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd dotdot stays inside",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd .. && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_workspace_escape",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_workspace_escape",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       ".."
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_workspace_escape",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd dotdot escapes workspace",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd {ROOT}/outside && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_workspace_escape",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_workspace_escape",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "$ROOT/outside"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_workspace_escape",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd absolute outside",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd link_in && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "link_in"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/link_in",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd symlink inside",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd link_out && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_symlink_escape",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_symlink_escape",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "link_out"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_symlink_escape",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd symlink escape",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd nope && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_missing_directory",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_missing_directory",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "nope"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_missing_directory",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd missing",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd ../file.txt && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_not_directory",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_not_directory",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "../file.txt"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_not_directory",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd file",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd $HOME && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "$HOME"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd variable",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd no operand",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd - && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "-"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd dash",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd ~ && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "~"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": "home/user",
+   "name": "cd tilde with home",
+   "workspace": "."
+  },
+  {
+   "command": "cd inner || ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_control_flow",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "||"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "||"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd or",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner | cat",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "|"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "|"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "cat"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd pipe",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner & ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd background",
+   "workspace": "ws"
+  },
+  {
+   "command": "pushd inner && ls && popd && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_control_flow",
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "pushd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "pushd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_pushd",
+      "directory_operation": null,
+      "directory_stack": [
+       "$ROOT/ws"
+      ],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_pushd",
+      "directory_operation": "popd",
+      "directory_stack": [
+       "$ROOT/ws"
+      ],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 2,
+      "tokens": [
+       "popd"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_pushd",
+      "directory_operation": null,
+      "directory_stack": [
+       "$ROOT/ws"
+      ],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 3,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "pushd popd",
+   "workspace": "ws"
+  },
+  {
+   "command": "popd && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_ambiguous_stack",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "popd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_ambiguous_stack",
+      "segment_index": 0,
+      "tokens": [
+       "popd"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_ambiguous_stack",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "popd empty",
+   "workspace": "ws"
+  },
+  {
+   "command": "(cd inner; ls); ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner",
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [
+       "("
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [
+       ")",
+       ";"
+      ],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       ")",
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 2,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "subshell restores",
+   "workspace": "ws"
+  },
+  {
+   "command": "{ cd inner; ls; }; ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [
+       "{"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [
+       ";",
+       "}",
+       ";"
+      ],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       ";",
+       "}",
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 2,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "brace group keeps",
+   "workspace": "ws"
+  },
+  {
+   "command": "(cd inner; ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_syntax",
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [
+       "("
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": "shell_cwd_unresolved_syntax",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "unbalanced paren",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd 'inner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_syntax",
+    "segments": [],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "unterminated quote",
+   "workspace": "ws"
+  },
+  {
+   "command": "echo 'abc",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": false,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "unterminated quote no cd",
+   "workspace": "ws"
+  },
+  {
+   "command": "builtin cd inner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "builtin",
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "builtin cd",
+   "workspace": "ws"
+  },
+  {
+   "command": "command cd inner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "command",
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "command cd",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner\nls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "\n"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "\n"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "newline separated",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd \\\ninner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "line continuation",
+   "workspace": "ws"
+  },
+  {
+   "command": "if true; then cd inner; fi; ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_control_flow",
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "if",
+       "true"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 1,
+      "tokens": [
+       "then",
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [
+       ";"
+      ],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 2,
+      "tokens": [
+       "fi"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       ";"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_control_flow",
+      "segment_index": 3,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "control flow if",
+   "workspace": "ws"
+  },
+  {
+   "command": "ls",
+   "cwd": "nope",
+   "expected": {
+    "complete": false,
+    "directory_change_present": false,
+    "effective_cwds": [],
+    "initial_cwd": null,
+    "reason_code": "shell_cwd_missing_directory",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_missing_directory",
+      "segment_index": 0,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cwd missing",
+   "workspace": "ws"
+  },
+  {
+   "command": "ls",
+   "cwd": "outside",
+   "expected": {
+    "complete": false,
+    "directory_change_present": false,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/outside",
+    "reason_code": "shell_cwd_workspace_escape",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_workspace_escape",
+      "segment_index": 0,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cwd outside workspace",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "workspace default cwd",
+   "workspace": null
+  },
+  {
+   "command": "cd 'in ner' && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/in ner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "in ner"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/in ner",
+        "resolved_path": "$ROOT/ws/in ner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/in ner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/in ner"
+    }
+   ],
+   "home_dir": null,
+   "name": "quoted operand with space",
+   "workspace": "ws"
+  },
+  {
+   "command": "cat <<EOF\ncd inner\nEOF\nls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "\n"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cat",
+       "<<EOF"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "\n"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "heredoc",
+   "workspace": "ws"
+  },
+  {
+   "command": "echo hi > out.txt",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": false,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "echo",
+       "hi",
+       ">",
+       "out.txt"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "redirect only",
+   "workspace": "ws"
+  },
+  {
+   "command": "FOO=1 ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": false,
+    "effective_cwds": [
+     "$ROOT/ws"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "FOO=1",
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "env prefix",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd -P inner && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "-P",
+       "inner"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd with options",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd '' && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       ""
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd empty string",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner 2>&1 && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner",
+       "2>&1"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd fd duplication",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner >out.log && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner",
+       ">out.log"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd stdout redirect to file",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner >>out.log && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner",
+       ">>out.log"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd append redirect",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner <in.txt && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": true,
+    "directory_change_present": true,
+    "effective_cwds": [
+     "$ROOT/ws/inner"
+    ],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": null,
+    "segments": [
+     {
+      "complete": true,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": null,
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner",
+       "<in.txt"
+      ]
+     },
+     {
+      "complete": true,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [
+       {
+        "identity": {
+         "mode": 16384
+        },
+        "lexical_path": "$ROOT/ws/inner",
+        "resolved_path": "$ROOT/ws/inner"
+       }
+      ],
+      "cwd_source": "shell_cd",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws/inner",
+      "reason_code": null,
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd stdin redirect",
+   "workspace": "ws"
+  },
+  {
+   "command": "cd inner >'a\nb' && ls",
+   "cwd": "ws",
+   "expected": {
+    "complete": false,
+    "directory_change_present": true,
+    "effective_cwds": [],
+    "initial_cwd": "$ROOT/ws",
+    "reason_code": "shell_cwd_unresolved_expression",
+    "segments": [
+     {
+      "complete": false,
+      "control_after": [
+       "&&"
+      ],
+      "control_before": [],
+      "cwd_identity": {
+       "mode": 16384
+      },
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": "cd",
+      "directory_stack": [],
+      "effective_cwd": "$ROOT/ws",
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 0,
+      "tokens": [
+       "cd",
+       "inner",
+       ">a\nb"
+      ]
+     },
+     {
+      "complete": false,
+      "control_after": [],
+      "control_before": [
+       "&&"
+      ],
+      "cwd_identity": null,
+      "cwd_path_proofs": [],
+      "cwd_source": "workspace",
+      "directory_operation": null,
+      "directory_stack": [],
+      "effective_cwd": null,
+      "reason_code": "shell_cwd_unresolved_expression",
+      "segment_index": 1,
+      "tokens": [
+       "ls"
+      ]
+     }
+    ],
+    "workspace_identity": {
+     "mode": 16384
+    },
+    "workspace_root": "$ROOT/ws"
+   },
+   "fs": [
+    {
+     "kind": "dir",
+     "path": "a"
+    },
+    {
+     "kind": "dir",
+     "path": "a/b"
+    },
+    {
+     "kind": "dir",
+     "path": "c"
+    },
+    {
+     "kind": "file",
+     "path": "file.txt"
+    },
+    {
+     "kind": "dir",
+     "path": "home"
+    },
+    {
+     "kind": "dir",
+     "path": "home/user"
+    },
+    {
+     "kind": "dir",
+     "path": "outside"
+    },
+    {
+     "kind": "dir",
+     "path": "ws"
+    },
+    {
+     "kind": "dir",
+     "path": "ws/inner"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_out",
+     "target": "../outside"
+    },
+    {
+     "kind": "symlink",
+     "path": "ws/link_in",
+     "target": "inner"
+    }
+   ],
+   "home_dir": null,
+   "name": "cd redirect with newline token",
+   "workspace": "ws"
+  }
+ ],
+ "note": "Recorded from the Python model_shell_execution_context before it became a native adapter. Paths are relative to $ROOT; identities are reduced to st_mode type bits because device, inode and times are not portable.",
+ "schema": "guard-request-context-parity-cases.v1"
+}

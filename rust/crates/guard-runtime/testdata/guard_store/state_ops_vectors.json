@@ -1,0 +1,1033 @@
+{
+ "now": "2026-10-10T12:00:00.000000+00:00",
+ "order_by": {
+  "artifact_diffs": "diff_id",
+  "sync_state": "state_key"
+ },
+ "row_filter": {
+  "sync_state": "state_key like 'oauth_local_credentials%' or state_key like 'OAUTH_LOCAL_CREDENTIALS%' or state_key like 'oauth-local-credentials%' or state_key like 'managed_policy_bundle_keyring_%' or state_key = 'policy_bundle_keyring'"
+ },
+ "scenarios": [
+  {
+   "name": "latest_diff",
+   "seed": {
+    "artifact_diffs": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "empty",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a:1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "artifact_diffs": [
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "[\"version\", \"hash\"]",
+        "current_hash": "h1",
+        "diff_id": 1,
+        "harness": "codex",
+        "previous_hash": null,
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "{\"a\": 1}",
+        "current_hash": "h2",
+        "diff_id": 2,
+        "harness": "codex",
+        "previous_hash": "h1",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:2",
+        "changed_fields_json": "[]",
+        "current_hash": "y",
+        "diff_id": 3,
+        "harness": "codex",
+        "previous_hash": "x",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "[\"other\"]",
+        "current_hash": "q",
+        "diff_id": 4,
+        "harness": "claude-code",
+        "previous_hash": "p",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into artifact_diffs (artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "a:1",
+        "codex",
+        "[\"version\", \"hash\"]",
+        null,
+        "h1",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into artifact_diffs (artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "a:1",
+        "codex",
+        "{\"a\": 1}",
+        "h1",
+        "h2",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into artifact_diffs (artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "a:2",
+        "codex",
+        "[]",
+        "x",
+        "y",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into artifact_diffs (artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "a:1",
+        "claude-code",
+        "[\"other\"]",
+        "p",
+        "q",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "newest wins",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": {
+      "artifact_id": "a:1",
+      "changed_fields": {
+       "a": 1
+      },
+      "current_hash": "h2",
+      "harness": "codex",
+      "previous_hash": "h1",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_id": "a:1",
+      "changed_fields": {
+       "a": 1
+      },
+      "current_hash": "h2",
+      "harness": "codex",
+      "previous_hash": "h1",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "wire_args": {
+      "artifact_id": "a:1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "other harness",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": {
+      "artifact_id": "a:1",
+      "changed_fields": [
+       "other"
+      ],
+      "current_hash": "q",
+      "harness": "claude-code",
+      "previous_hash": "p",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_id": "a:1",
+      "changed_fields": [
+       "other"
+      ],
+      "current_hash": "q",
+      "harness": "claude-code",
+      "previous_hash": "p",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "wire_args": {
+      "artifact_id": "a:1",
+      "harness": "claude-code"
+     }
+    },
+    {
+     "error": null,
+     "label": "other artifact",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": {
+      "artifact_id": "a:2",
+      "changed_fields": [],
+      "current_hash": "y",
+      "harness": "codex",
+      "previous_hash": "x",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_id": "a:2",
+      "changed_fields": [],
+      "current_hash": "y",
+      "harness": "codex",
+      "previous_hash": "x",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "wire_args": {
+      "artifact_id": "a:2",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "unknown",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a:9",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "later row",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "artifact_diffs": [
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "[\"version\", \"hash\"]",
+        "current_hash": "h1",
+        "diff_id": 1,
+        "harness": "codex",
+        "previous_hash": null,
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "{\"a\": 1}",
+        "current_hash": "h2",
+        "diff_id": 2,
+        "harness": "codex",
+        "previous_hash": "h1",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:2",
+        "changed_fields_json": "[]",
+        "current_hash": "y",
+        "diff_id": 3,
+        "harness": "codex",
+        "previous_hash": "x",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "[\"other\"]",
+        "current_hash": "q",
+        "diff_id": 4,
+        "harness": "claude-code",
+        "previous_hash": "p",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "{\"big\": 12345678901234567890, \"f\": 1.5, \"s\": \"\u00e9\"}",
+        "current_hash": "h3",
+        "diff_id": 5,
+        "harness": "codex",
+        "previous_hash": "h2",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into artifact_diffs (artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "a:1",
+        "codex",
+        "{\"big\": 12345678901234567890, \"f\": 1.5, \"s\": \"\u00e9\"}",
+        "h2",
+        "h3",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "numbers and unicode",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": {
+      "artifact_id": "a:1",
+      "changed_fields": {
+       "big": 12345678901234567890,
+       "f": 1.5,
+       "s": "\u00e9"
+      },
+      "current_hash": "h3",
+      "harness": "codex",
+      "previous_hash": "h2",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_id": "a:1",
+      "changed_fields": {
+       "big": 12345678901234567890,
+       "f": 1.5,
+       "s": "\u00e9"
+      },
+      "current_hash": "h3",
+      "harness": "codex",
+      "previous_hash": "h2",
+      "recorded_at": "2026-10-10T10:00:00+00:00"
+     },
+     "wire_args": {
+      "artifact_id": "a:1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "corrupt",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "artifact_diffs": [
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "[\"version\", \"hash\"]",
+        "current_hash": "h1",
+        "diff_id": 1,
+        "harness": "codex",
+        "previous_hash": null,
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "{\"a\": 1}",
+        "current_hash": "h2",
+        "diff_id": 2,
+        "harness": "codex",
+        "previous_hash": "h1",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:2",
+        "changed_fields_json": "[]",
+        "current_hash": "y",
+        "diff_id": 3,
+        "harness": "codex",
+        "previous_hash": "x",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "[\"other\"]",
+        "current_hash": "q",
+        "diff_id": 4,
+        "harness": "claude-code",
+        "previous_hash": "p",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:1",
+        "changed_fields_json": "{\"big\": 12345678901234567890, \"f\": 1.5, \"s\": \"\u00e9\"}",
+        "current_hash": "h3",
+        "diff_id": 5,
+        "harness": "codex",
+        "previous_hash": "h2",
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "artifact_id": "a:3",
+        "changed_fields_json": "{not json",
+        "current_hash": "z",
+        "diff_id": 6,
+        "harness": "codex",
+        "previous_hash": null,
+        "recorded_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into artifact_diffs (artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "a:3",
+        "codex",
+        "{not json",
+        null,
+        "z",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+      "message_exact": false,
+      "type": "ValueError"
+     },
+     "label": "invalid changed_fields",
+     "method": "get_latest_diff",
+     "native_method": "artifact_latest_diff",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a:3",
+      "harness": "codex"
+     }
+    }
+   ]
+  },
+  {
+   "name": "oauth_sources",
+   "seed": {
+    "artifact_diffs": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "empty",
+     "method": "list_oauth_sources",
+     "native_method": "oauth_sources_list",
+     "native_payload": [],
+     "post_changed": {},
+     "result": [],
+     "wire_args": {}
+    },
+    {
+     "error": null,
+     "label": "default",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"issuer\": \"https://hol.org\", \"workspace_id\": \"ws-1\", \"extra\": 1}",
+        "state_key": "oauth_local_credentials",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentials",
+        "{\"issuer\": \"https://hol.org\", \"workspace_id\": \"ws-1\", \"extra\": 1}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "default only",
+     "method": "list_oauth_sources",
+     "native_method": "oauth_sources_list",
+     "native_payload": [
+      {
+       "issuer": "https://hol.org",
+       "source": "default",
+       "workspace_id": "ws-1"
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "issuer": "https://hol.org",
+       "source": "default",
+       "workspace_id": "ws-1"
+      }
+     ],
+     "wire_args": {}
+    },
+    {
+     "error": null,
+     "label": "more",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"issuer\": \"https://hol.org\", \"workspace_id\": \"ws-1\", \"extra\": 1}",
+        "state_key": "oauth_local_credentials",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"i\"}",
+        "state_key": "oauth_local_credentials:",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "state_key": "oauth_local_credentials:list",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": 7, \"workspace_id\": null}",
+        "state_key": "oauth_local_credentials:team-b",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"https://work.example\", \"workspace_id\": \"ws-2\"}",
+        "state_key": "oauth_local_credentials:work",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentials:work",
+        "{\"issuer\": \"https://work.example\", \"workspace_id\": \"ws-2\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentials:team-b",
+        "{\"issuer\": 7, \"workspace_id\": null}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentials:list",
+        "[1, 2]",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentials:",
+        "{\"issuer\": \"i\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "named sources",
+     "method": "list_oauth_sources",
+     "native_method": "oauth_sources_list",
+     "native_payload": [
+      {
+       "issuer": "https://hol.org",
+       "source": "default",
+       "workspace_id": "ws-1"
+      },
+      {
+       "issuer": "https://work.example",
+       "source": "work",
+       "workspace_id": "ws-2"
+      },
+      {
+       "issuer": null,
+       "source": "team-b",
+       "workspace_id": null
+      },
+      {
+       "issuer": "i",
+       "source": "",
+       "workspace_id": null
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "issuer": "https://hol.org",
+       "source": "default",
+       "workspace_id": "ws-1"
+      },
+      {
+       "issuer": "https://work.example",
+       "source": "work",
+       "workspace_id": "ws-2"
+      },
+      {
+       "issuer": null,
+       "source": "team-b",
+       "workspace_id": null
+      },
+      {
+       "issuer": "i",
+       "source": "",
+       "workspace_id": null
+      }
+     ],
+     "wire_args": {}
+    },
+    {
+     "error": null,
+     "label": "like quirks",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"issuer\": \"upper\"}",
+        "state_key": "OAUTH_LOCAL_CREDENTIALS:upper",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"dash\"}",
+        "state_key": "oauth-local-credentials:dash",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"https://hol.org\", \"workspace_id\": \"ws-1\", \"extra\": 1}",
+        "state_key": "oauth_local_credentials",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"i\"}",
+        "state_key": "oauth_local_credentials:",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "state_key": "oauth_local_credentials:list",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": 7, \"workspace_id\": null}",
+        "state_key": "oauth_local_credentials:team-b",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"https://work.example\", \"workspace_id\": \"ws-2\"}",
+        "state_key": "oauth_local_credentials:work",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"nosep\"}",
+        "state_key": "oauth_local_credentialsx",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "OAUTH_LOCAL_CREDENTIALS:upper",
+        "{\"issuer\": \"upper\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth-local-credentials:dash",
+        "{\"issuer\": \"dash\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ],
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentialsx",
+        "{\"issuer\": \"nosep\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "like matches startswith skips",
+     "method": "list_oauth_sources",
+     "native_method": "oauth_sources_list",
+     "native_payload": [
+      {
+       "issuer": "https://hol.org",
+       "source": "default",
+       "workspace_id": "ws-1"
+      },
+      {
+       "issuer": "https://work.example",
+       "source": "work",
+       "workspace_id": "ws-2"
+      },
+      {
+       "issuer": null,
+       "source": "team-b",
+       "workspace_id": null
+      },
+      {
+       "issuer": "i",
+       "source": "",
+       "workspace_id": null
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "issuer": "https://hol.org",
+       "source": "default",
+       "workspace_id": "ws-1"
+      },
+      {
+       "issuer": "https://work.example",
+       "source": "work",
+       "workspace_id": "ws-2"
+      },
+      {
+       "issuer": null,
+       "source": "team-b",
+       "workspace_id": null
+      },
+      {
+       "issuer": "i",
+       "source": "",
+       "workspace_id": null
+      }
+     ],
+     "wire_args": {}
+    },
+    {
+     "error": null,
+     "label": "corrupt",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"issuer\": \"upper\"}",
+        "state_key": "OAUTH_LOCAL_CREDENTIALS:upper",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"dash\"}",
+        "state_key": "oauth-local-credentials:dash",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"https://hol.org\", \"workspace_id\": \"ws-1\", \"extra\": 1}",
+        "state_key": "oauth_local_credentials",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"i\"}",
+        "state_key": "oauth_local_credentials:",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{oops",
+        "state_key": "oauth_local_credentials:bad",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "state_key": "oauth_local_credentials:list",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": 7, \"workspace_id\": null}",
+        "state_key": "oauth_local_credentials:team-b",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"https://work.example\", \"workspace_id\": \"ws-2\"}",
+        "state_key": "oauth_local_credentials:work",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"issuer\": \"nosep\"}",
+        "state_key": "oauth_local_credentialsx",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "oauth_local_credentials:bad",
+        "{oops",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+      "message_exact": false,
+      "type": "ValueError"
+     },
+     "label": "invalid payload",
+     "method": "list_oauth_sources",
+     "native_method": "oauth_sources_list",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "keyring_mirror",
+   "seed": {
+    "artifact_diffs": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "unconfigured no marker",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": "managed_keyring_reconcile",
+     "native_payload": false,
+     "post_changed": {},
+     "result": false,
+     "wire_args": {
+      "configured": false,
+      "force_clear": false,
+      "now": "2026-10-10T12:00:00.000000+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "stray anchor",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"keys\": [{\"kid\": \"rogue\"}]}",
+        "state_key": "policy_bundle_keyring",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "policy_bundle_keyring",
+        "{\"keys\": [{\"kid\": \"rogue\"}]}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "unconfigured no marker keeps rows",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": "managed_keyring_reconcile",
+     "native_payload": false,
+     "post_changed": {},
+     "result": false,
+     "wire_args": {
+      "configured": false,
+      "force_clear": false,
+      "now": "2026-10-10T12:00:00.000000+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "forced clear removes rows",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": "managed_keyring_reconcile",
+     "native_payload": true,
+     "post_changed": {
+      "sync_state": []
+     },
+     "result": true,
+     "wire_args": {
+      "configured": false,
+      "force_clear": true,
+      "now": "2026-10-10T12:00:00.000000+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "configured writes three rows",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": "managed_keyring_reconcile",
+     "native_payload": true,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"keys\": [{\"kid\": \"m1\", \"pub\": \"\\u00e9\"}], \"version\": 1}",
+        "state_key": "managed_policy_bundle_keyring_mirror",
+        "updated_at": "2026-10-10T10:00:00.000000+00:00"
+       },
+       {
+        "payload_json": "{\"source\": \"mdm\", \"revision\": 3, \"nested\": {\"z\": 1, \"a\": [1, 2]}}",
+        "state_key": "managed_policy_bundle_keyring_provenance",
+        "updated_at": "2026-10-10T10:00:00.000000+00:00"
+       },
+       {
+        "payload_json": "{\"keys\": [], \"version\": 1}",
+        "state_key": "policy_bundle_keyring",
+        "updated_at": "2026-10-10T10:00:00.000000+00:00"
+       }
+      ]
+     },
+     "result": true,
+     "wire_args": {
+      "configured": true,
+      "force_clear": false,
+      "local_keyring_json": "{\"keys\": [], \"version\": 1}",
+      "managed_keyring_json": "{\"keys\": [{\"kid\": \"m1\", \"pub\": \"\\u00e9\"}], \"version\": 1}",
+      "now": "2026-10-10T10:00:00.000000+00:00",
+      "provenance_json": "{\"source\": \"mdm\", \"revision\": 3, \"nested\": {\"z\": 1, \"a\": [1, 2]}}"
+     }
+    },
+    {
+     "error": null,
+     "label": "configured updates in place",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": "managed_keyring_reconcile",
+     "native_payload": true,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"keys\": [{\"kid\": \"m1\", \"pub\": \"\\u00e9\"}], \"version\": 2}",
+        "state_key": "managed_policy_bundle_keyring_mirror",
+        "updated_at": "2026-10-10T10:05:00.000000+00:00"
+       },
+       {
+        "payload_json": "{\"source\": \"mdm\", \"revision\": 3, \"nested\": {\"z\": 1, \"a\": [1, 2]}}",
+        "state_key": "managed_policy_bundle_keyring_provenance",
+        "updated_at": "2026-10-10T10:05:00.000000+00:00"
+       },
+       {
+        "payload_json": "{\"keys\": [], \"version\": 1}",
+        "state_key": "policy_bundle_keyring",
+        "updated_at": "2026-10-10T10:05:00.000000+00:00"
+       }
+      ]
+     },
+     "result": true,
+     "wire_args": {
+      "configured": true,
+      "force_clear": false,
+      "local_keyring_json": "{\"keys\": [], \"version\": 1}",
+      "managed_keyring_json": "{\"keys\": [{\"kid\": \"m1\", \"pub\": \"\\u00e9\"}], \"version\": 2}",
+      "now": "2026-10-10T10:05:00.000000+00:00",
+      "provenance_json": "{\"source\": \"mdm\", \"revision\": 3, \"nested\": {\"z\": 1, \"a\": [1, 2]}}"
+     }
+    },
+    {
+     "error": {
+      "message": "managed_policy_bundle_keyring_reconcile_incomplete",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "incomplete",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": null,
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "Out of range float values are not JSON compliant: nan",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "nan rejected",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": null,
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "unconfigured with marker clears",
+     "method": "reconcile_managed_policy_bundle_keyring_state",
+     "native_method": "managed_keyring_reconcile",
+     "native_payload": true,
+     "post_changed": {
+      "sync_state": []
+     },
+     "result": true,
+     "wire_args": {
+      "configured": false,
+      "force_clear": false,
+      "now": "2026-10-10T12:00:00.000000+00:00"
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-state-ops-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE artifact_diffs (\n              diff_id integer primary key autoincrement,\n              artifact_id text not null,\n              harness text not null,\n              changed_fields_json text not null,\n              previous_hash text,\n              current_hash text not null,\n              recorded_at text not null\n            )",
+  "CREATE TABLE sync_state (\n              state_key text primary key,\n              payload_json text not null,\n              updated_at text not null\n            )"
+ ],
+ "source": "guard"
+}

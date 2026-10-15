@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.cli import extension_controls_commands as cli
+from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
 from codex_plugin_scanner.guard.native_command_control_authority import (
     AUTHORITY_FILE_NAME,
     AUTHORITY_MAX_BYTES,
@@ -249,11 +250,11 @@ def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
     from datetime import datetime, timedelta, timezone
     from urllib.parse import parse_qs, urlparse
 
-    from codex_plugin_scanner.guard import approval_gate
+    from codex_plugin_scanner.guard import approval_gate, native_approval_gate
     from codex_plugin_scanner.guard.cli import approval_gate_prompt
     from codex_plugin_scanner.guard.totp import totp_code_at_counter
 
-    monkeypatch.setattr(approval_gate, "_current_totp_session_binding", lambda: "issue-3089-local-session")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["issue-3089-local-session"])
     now = datetime.now(timezone.utc)
     enrollment_time = now - timedelta(seconds=90)
     enrollment = approval_gate.begin_totp_enrollment(
@@ -305,3 +306,49 @@ def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
         else:
             assert "authenticator code is wrong" in error
         assert marker.read_bytes() == before
+
+
+class _RecoveringDaemon:
+    def __init__(self, error: GuardDaemonRequestError | None = None) -> None:
+        self.error = error
+        self.calls: list[str] = []
+
+    def recover_extension_control_authority(self, payload: dict[str, object]) -> dict[str, object]:
+        assert payload == {}
+        self.calls.append("recover")
+        if self.error is not None:
+            raise self.error
+        return {}
+
+    def refresh_extension_controls(self) -> dict[str, object]:
+        self.calls.append("refresh")
+        return {}
+
+
+def test_recovery_installs_reset_authority_through_daemon_recovery_route(
+    stale_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    daemon = _RecoveringDaemon()
+    monkeypatch.setattr(cli, "_client", lambda _home: daemon)
+    result, output = _run(stale_home, "recover-authority")
+    assert result == 0
+    assert '"health":"protected"' in output
+    assert daemon.calls == ["recover"]
+
+
+def test_recovery_refreshes_daemon_that_is_already_protected(stale_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    daemon = _RecoveringDaemon(GuardDaemonRequestError("not recoverable", status=409, code="authority_not_recoverable"))
+    monkeypatch.setattr(cli, "_client", lambda _home: daemon)
+    assert _run(stale_home, "recover-authority")[0] == 0
+    assert daemon.calls == ["recover", "refresh"]
+
+
+def test_recovery_reports_failure_when_running_daemon_keeps_blocking(
+    stale_home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    daemon = _RecoveringDaemon(GuardDaemonRequestError("recovery failed", status=503, code="authority_recovery_failed"))
+    monkeypatch.setattr(cli, "_client", lambda _home: daemon)
+    result, output = _run(stale_home, "recover-authority")
+    assert result == 2
+    assert output == ""
+    assert "recovery failed" in capsys.readouterr().err

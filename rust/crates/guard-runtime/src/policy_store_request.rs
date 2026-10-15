@@ -84,14 +84,44 @@ impl PolicySnapshotStore {
         Ok(Arc::clone(current))
     }
 
+    /// Rejects a request that names a Guard home other than the one this
+    /// resident serves. Operations open stores, secrets and integrity state
+    /// under the named home, so a caller-supplied path is never authority.
+    pub(crate) fn require_guard_home(&self, guard_home: &str) -> Result<(), String> {
+        if canonical_scope_text(guard_home) == self.expected_guard_home {
+            Ok(())
+        } else {
+            Err("native_guard_home_mismatch".to_owned())
+        }
+    }
+
+    /// Rejects a store path other than `guard.db` directly under the pinned
+    /// Guard home, so a matching `guard_home` cannot smuggle a foreign store.
+    pub(crate) fn require_store_path(&self, store_path: &str) -> Result<(), String> {
+        let path = Path::new(store_path);
+        let parent_matches = path.parent().is_some_and(|parent| {
+            canonical_scope_text(&parent.to_string_lossy()) == self.expected_guard_home
+        });
+        if parent_matches && path.file_name().is_some_and(|name| name == "guard.db") {
+            Ok(())
+        } else {
+            Err("native_guard_home_mismatch".to_owned())
+        }
+    }
+
     pub(crate) fn current_snapshot(&self) -> Result<PolicySnapshotV3, String> {
+        self.current_admitted_snapshot()
+            .map(|snapshot| snapshot.snapshot().clone())
+    }
+
+    pub(crate) fn current_admitted_snapshot(&self) -> Result<Arc<AdmittedPolicySnapshot>, String> {
         let now = now_ms()?;
         if self.authority_changed.load(Ordering::SeqCst)
             || !policy_store_authority::authority_unchanged_fenced(self)
         {
             return Err("native_policy_snapshot_context_mismatch".to_owned());
         }
-        let state = self
+        let mut state = self
             .state
             .lock()
             .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
@@ -100,17 +130,32 @@ impl PolicySnapshotStore {
         }
         let snapshot = state
             .snapshot
-            .as_ref()
+            .clone()
             .ok_or_else(|| "native_policy_snapshot_missing".to_owned())?;
-        validate_v3(
-            snapshot,
-            state.generation_floor.max(1),
-            &self.expected_runtime_identity,
-            &self.expected_rule_digest,
-            &self.verifier_key,
-            now,
-        )
-        .map_err(snapshot_error)?;
-        Ok(snapshot.snapshot().clone())
+        let floor = state.generation_floor.max(1);
+        let verified = state
+            .verified
+            .as_ref()
+            .is_some_and(|(seen, seen_floor)| Arc::ptr_eq(seen, &snapshot) && *seen_floor == floor);
+        if verified {
+            if snapshot.expires_at_ms <= now {
+                return Err(snapshot_error(
+                    guard_policy_snapshot::SnapshotError::Expired,
+                ));
+            }
+        } else {
+            state.verified = None;
+            validate_v3(
+                &snapshot,
+                floor,
+                &self.expected_runtime_identity,
+                &self.expected_rule_digest,
+                &self.verifier_key,
+                now,
+            )
+            .map_err(snapshot_error)?;
+            state.verified = Some((Arc::clone(&snapshot), floor));
+        }
+        Ok(snapshot)
     }
 }

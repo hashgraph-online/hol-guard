@@ -12,8 +12,10 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 if __package__:
-    from ..codex_binding_capture import record_bridge_ingress
-    from ..codex_hook_bridge_runtime import BridgeConfig
+    from ..approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    from ..codex_hook_bridge_runtime import (
+        BridgeConfig,
+    )
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..codex_hook_launch_runtime import (
@@ -21,27 +23,39 @@ if __package__:
         isolated_hook_environment,
         run_isolated_hook_process,
     )
-    from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
     from ..daemon.hook_request_parsing import runtime_hook_event_name
+    from ..hook_execution_environment import stamp_hook_input_text
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from ..native_codex_binding_capture import record_bridge_ingress
+    from .codex_contained_tests import route_codex_containment
+    from .codex_daemon_bridge_failure_reason import AUTHENTICATION_FAILED_REASON, daemon_failure_reason
     from .codex_daemon_hook_bridge_flow import bridge_review_response
     from .codex_daemon_hook_resume import apply_browser_approval_wait
+    from .codex_hook_response import codex_hook_response as _codex_hook_response
 else:  # pragma: no cover - exercised by subprocess integration tests
     _package_root = str(Path(__file__).resolve().parents[3])
     if _package_root not in sys.path:
         sys.path.insert(0, _package_root)
+    from codex_plugin_scanner.guard.adapters.codex_contained_tests import route_codex_containment
+    from codex_plugin_scanner.guard.adapters.codex_daemon_bridge_failure_reason import (
+        AUTHENTICATION_FAILED_REASON,
+        daemon_failure_reason,
+    )
     from codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge_flow import (
         bridge_review_response,
     )
     from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
         apply_browser_approval_wait,
     )
-    from codex_plugin_scanner.guard.codex_binding_capture import record_bridge_ingress
+    from codex_plugin_scanner.guard.adapters.codex_hook_response import (
+        codex_hook_response as _codex_hook_response,
+    )
+    from codex_plugin_scanner.guard.approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         BridgeConfig,
     )
@@ -56,30 +70,26 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         isolated_hook_environment,
         run_isolated_hook_process,
     )
-    from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
         hook_event_is_permission_request,
     )
     from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
+    from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from codex_plugin_scanner.guard.native_codex_binding_capture import record_bridge_ingress
 
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _BRIDGE_FAILURE_SCHEMA = "hol-guard.codex-bridge-failure.v1"
-_FAIL_CLOSED_REASON = (
-    "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry."
-)
+_FAIL_CLOSED_REASON = AUTHENTICATION_FAILED_REASON
 _LAUNCH_INTEGRITY_REASON = (
     "HOL Guard could not authenticate its managed Codex hook launcher. "
     "Run `hol-guard install codex` from a terminal, then retry."
-)
-_OVERLOAD_REASON = (
-    "HOL Guard is temporarily saturated and kept this action blocked. No approval was requested; retry the action."
 )
 _TRANSITION_PROBE_OUTPUT_LIMIT = 64 * 1024
 
@@ -264,47 +274,6 @@ def _unavailable_response(
     }
 
 
-def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> dict[str, object]:
-    """Keep daemon metadata out of Codex's strict hook response schemas."""
-
-    universal_keys = {"continue", "stopReason", "suppressOutput", "systemMessage"}
-    event_keys = {
-        "PostToolUse": {"decision", "reason"},
-    }.get(event_name, set())
-    allowed_keys = universal_keys | event_keys | {"hookSpecificOutput"}
-    filtered = {key: value for key, value in response.items() if key in allowed_keys}
-    hook_output = filtered.get("hookSpecificOutput")
-    if event_name == "PostToolUse":
-        if not isinstance(hook_output, Mapping):
-            filtered.pop("hookSpecificOutput", None)
-        else:
-            post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
-            filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
-        return filtered
-    if event_name == "PreToolUse" and "hookSpecificOutput" in filtered:
-        cleaned: dict[str, object] = {"hookEventName": event_name}
-        if isinstance(hook_output, Mapping):
-            decision = hook_output.get("permissionDecision")
-            normalized = decision.strip().lower() if isinstance(decision, str) else ""
-            if response.get("policy_action") == "deny":
-                normalized = "deny"
-            reason = hook_output.get("permissionDecisionReason")
-            if normalized in {"deny", "ask"}:
-                cleaned["permissionDecision"] = normalized
-                if isinstance(reason, str) and reason:
-                    cleaned["permissionDecisionReason"] = reason
-            elif normalized == "allow":
-                if (
-                    response.get("policy_action") == "warn"
-                    and isinstance(reason, str)
-                    and reason.strip()
-                    and not filtered.get("systemMessage")
-                ):
-                    filtered["systemMessage"] = reason
-        filtered["hookSpecificOutput"] = cleaned
-    return filtered
-
-
 def _bound_hook_input(
     hook_timeouts: Mapping[str, int],
     *,
@@ -321,6 +290,9 @@ def _bound_hook_input(
         if event_name == "PreToolUse"
         else raw_data
     )
+    # Native Git-helper checks need the environment Codex will run the command
+    # in; without it every Git read is treated as unverifiable.
+    data = stamp_hook_input_text(data)
     if capture_guard_home is not None:
         with suppress(Exception):
             record_bridge_ingress(
@@ -397,21 +369,13 @@ def main(
             manifest_path=manifest_path,
             config_json=config_json,
             failure_causes=failure_causes,
+            event_name=event_name,
         )
         if response is None:
+            # Name the cause of every denial; an allowed continuation stays quiet.
+            if launch_integrity_failed or event_name == "PreToolUse" or hook_event_is_permission_request(event_name):
+                _write_failure_causes(failure_causes)
             if launch_integrity_failed:
-                # Diagnostic delivery must not interrupt the denial response.
-                with suppress(OSError, ValueError, TypeError):
-                    sys.stderr.write(
-                        json.dumps(
-                            {
-                                "schema": _BRIDGE_FAILURE_SCHEMA,
-                                "causes": failure_causes,
-                            },
-                            separators=(",", ":"),
-                        )
-                        + "\n"
-                    )
                 if any(
                     isinstance(cause, dict) and cause.get("reason_code") == "codex_hook_validation_deadline_expired"
                     for cause in failure_causes
@@ -425,7 +389,7 @@ def main(
                 else:
                     response = _launcher_integrity_response(event_name, data)
             else:
-                failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
+                failure_reason = daemon_failure_reason(failure_causes, daemon_overloaded=daemon_overloaded)
                 response = _unavailable_response(event_name, failure_reason, data)
         _write_transition_observation(data, response)
         sys.stdout.write(
@@ -435,15 +399,38 @@ def main(
                 hook_input=data,
                 state_path=state_path,
                 deadline=deadline,
+                query=query,
             )
         )
     return 0
+
+
+def _write_failure_causes(failure_causes: list[object]) -> None:
+    """Report the fixed reason codes behind a denial without exposing details."""
+
+    # Diagnostic delivery must not interrupt the denial response.
+    with suppress(OSError, ValueError, TypeError):
+        sys.stderr.write(
+            json.dumps({"schema": _BRIDGE_FAILURE_SCHEMA, "causes": failure_causes}, separators=(",", ":")) + "\n"
+        )
 
 
 def _launcher_integrity_response(event_name: str, data: str) -> dict[str, object]:
     """Deny tool actions through a bad launcher and identify a terminal repair."""
 
     return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
+
+
+def _installed_hook_home(query: str) -> Path | None:
+    """Return the single absolute home the installed Codex hook was bound to."""
+
+    values = parse_qs(query, keep_blank_values=True).get("home", [])
+    if len(values) != 1 or "\x00" in values[0]:
+        return None
+    home = Path(values[0])
+    if not home.is_absolute():
+        return None
+    return home
 
 
 def _bridge_output(
@@ -453,7 +440,17 @@ def _bridge_output(
     hook_input: str,
     state_path: str | Path,
     deadline: float,
+    query: str = "",
 ) -> str:
+    if event_name == "PreToolUse":
+        state = Path(state_path)
+        response = route_codex_containment(
+            response,
+            hook_input=hook_input,
+            guard_home=state.parent if state.is_absolute() and state.name == "daemon-state.json" else None,
+            home_dir=_installed_hook_home(query),
+            deadline=deadline,
+        )
     payload = apply_browser_approval_wait(
         response,
         event_name=event_name,

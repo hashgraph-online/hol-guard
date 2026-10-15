@@ -180,24 +180,6 @@ def build_pre_hook_evidence(
     return CommandActivityEvidence(activity=activity, matches=matches)
 
 
-def build_correlated_post_evidence(
-    previous: CommandActivityEvidence,
-    *,
-    request_correlation: CorrelationHandle,
-    succeeded: bool,
-    persistence_latency_bucket: ActivityLatencyBucket = ActivityLatencyBucket.NOT_MEASURED,
-) -> CommandActivityEvidence:
-    """Promote an evidence value while preserving its immutable rule matches."""
-
-    activity = build_correlated_post_activity(
-        previous.activity,
-        request_correlation=request_correlation,
-        succeeded=succeeded,
-        persistence_latency_bucket=persistence_latency_bucket,
-    )
-    return CommandActivityEvidence(activity=activity, matches=previous.matches)
-
-
 def build_correlated_post_activity(
     previous: CommandActivity,
     *,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.memory_decision_event import MEMORY_DECISION_EVENT_CONTRACT_VERSION
-from codex_plugin_scanner.guard.memory_decision_outbox import enqueue_memory_decision_event
+from codex_plugin_scanner.guard.memory_decision_outbox import _ensure_source_receipt_id, enqueue_memory_decision_event
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -249,3 +249,39 @@ class TestMemoryDecisionOutboxEnqueue:
         assert isinstance(payload, dict)
         source_receipt_id = payload["payload"]["source_receipt_id"]
         assert store.get_receipt(source_receipt_id) is not None
+
+
+
+class _ReceiptOnlyStore:
+    def __init__(self) -> None:
+        self.receipts: list[object] = []
+
+    def add_receipt(self, receipt: object) -> None:
+        self.receipts.append(receipt)
+
+
+def test_tool_call_receipt_names_the_tool_and_records_the_human_decision() -> None:
+    store = _ReceiptOnlyStore()
+    request = _approval_request(
+        request_id="req-learn",
+        review_command="hol-guard approvals approve req-learn",
+        raw_command=None,
+        artifact_id="omp:native-pretool:learn",
+        artifact_name="learn",
+        artifact_type="tool_call",
+        harness="omp",
+    )
+    receipt_id = _ensure_source_receipt_id(store, request, decision_action="approved", scope="artifact")
+    assert receipt_id is not None
+    [receipt] = store.receipts
+    assert receipt.raw_command_text is None
+    assert receipt.artifact_name == "learn"
+    assert receipt.user_override == "approval-approved"
+
+
+def test_shell_receipt_keeps_the_reviewed_command() -> None:
+    store = _ReceiptOnlyStore()
+    _ensure_source_receipt_id(store, _approval_request(), decision_action="blocked", scope="harness")
+    [receipt] = store.receipts
+    assert receipt.raw_command_text == "npm install lodash"
+    assert receipt.user_override == "approval-blocked"

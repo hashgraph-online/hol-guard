@@ -19,23 +19,29 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_scope_support import package_request_runtime_workspace_scope
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact, package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, RuntimeMcpGuardProxy
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    extract_package_intent_request,
-)
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
 from codex_plugin_scanner.guard.store import GuardStore
 
-pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
+pytestmark = [
+    pytest.mark.usefixtures("approval_questionnaire_mode"),
+    pytest.mark.usefixtures("bundle_first_cloud"),
+    pytest.mark.usefixtures("package_intent_native"),
+]
 
 
-def test_package_decision_v2_ignores_malformed_reason_items() -> None:
+@pytest.fixture(autouse=True)
+def _native_package_proxy_home(tmp_path: Path, native_mcp_probe) -> None:
+    native_mcp_probe(tmp_path / "guard-home")
+
+
+def test_package_decision_v2_ignores_malformed_reason_items(tmp_path: Path) -> None:
     evaluation = SimpleNamespace(
         reasons=("malformed", {"code": "cloud_timeout", "message": "Cloud timed out."}),
         user_copy=SimpleNamespace(
@@ -45,7 +51,9 @@ def test_package_decision_v2_ignores_malformed_reason_items() -> None:
         ),
     )
 
-    decision = RuntimeMcpGuardProxy._package_decision_v2(evaluation, "require-reapproval")
+    decision = RuntimeMcpGuardProxy._package_decision_v2(
+        evaluation, "require-reapproval", guard_home=tmp_path / "guard-home"
+    )
 
     assert [signal["signal_id"] for signal in decision["signals"]] == ["supply-chain.cloud_timeout"]
 
@@ -1191,3 +1199,68 @@ def test_phase14_runtime_mcp_proxy_normalizes_stored_review_for_package_approval
     assert result["responses"][2]["error"]["code"] == -32001
     assert "approve request" in json.dumps(result["responses"][2]).lower()
     assert len(store.list_approval_requests(limit=5)) == 1
+
+
+def test_runtime_mcp_unbound_archive_blocks_when_resident_compose_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_package_evaluation_compose as compose_module
+
+    _allow_mcp_tool_calls(monkeypatch)
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="allow"), "2026-05-19T00:00:00Z")
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "cursor-mcp-forwarded.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(runtime_mcp_module, "_bound_external_archive_mcp_request", lambda *_a, **_k: None)
+    real_patch = compose_module.compose_package_evaluation_patch
+
+    def flaky_patch(kind: str, evaluation: object, **facts: object) -> dict[str, object]:
+        if kind == "external_archive_override":
+            raise compose_module.NativePackageEvaluationComposeError("resident unavailable")
+        return real_patch(kind, evaluation, **facts)
+
+    monkeypatch.setattr(compose_module, "compose_package_evaluation_patch", flaky_patch)
+    cleaned: list[object] = []
+    monkeypatch.setattr(runtime_mcp_module, "_cleanup_external_archive_downloads", cleaned.append)
+    proxy = RuntimeMcpGuardProxy(
+        harness="cursor",
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+            {"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": {}},
+        ]
+    )
+
+    assert marker_path.exists() is False
+    blocked = result["responses"][2]
+    assert blocked["id"] == 3
+    assert blocked["error"]["code"] == -32001
+    assert blocked["error"]["data"]["guardPolicyAction"] == "block"
+    evaluation = blocked["error"]["data"]["supplyChainEvaluation"]
+    assert evaluation["policy_action"] == "block"
+    assert evaluation["reasons"][0]["code"] == "native_package_evaluation_unavailable"
+    assert result["responses"][3]["id"] == 4  # the session survived the failure
+    assert cleaned, "retained archive blobs must be cleaned up on the failure path"

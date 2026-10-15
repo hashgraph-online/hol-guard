@@ -9,7 +9,6 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 
-#[cfg(not(windows))]
 pub(crate) fn executable_missing(path: &Path) -> bool {
     path.metadata()
         .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
@@ -21,6 +20,19 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
         .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
 }
 
+/// Start marker of a process that has not exited. On Windows an exited process
+/// keeps answering `process_start_marker` while any handle to it is open.
+#[cfg(windows)]
+pub(crate) fn running_process_start_marker(process_id: u32) -> Result<String, String> {
+    guard_runtime_windows_process::running_process_start_marker(process_id)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn running_process_start_marker(process_id: u32) -> Result<String, String> {
+    process_start_marker(process_id)
+}
+
 /// Return the parent captured while a legacy supervisor is starting.
 ///
 /// The current launcher passes an explicit owner identity. This fallback keeps
@@ -28,7 +40,12 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
 /// launcher that created them, instead of making the supervisor its own
 /// lifetime owner after that launcher exits.
 pub(crate) fn parent_process_id() -> Option<u32> {
-    let pid = Pid::from_u32(std::process::id());
+    process_parent_id(std::process::id())
+}
+
+/// Return the current parent of any process, if it is still running.
+fn process_parent_id(process_id: u32) -> Option<u32> {
+    let pid = Pid::from_u32(process_id);
     let mut system = System::new();
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
@@ -130,6 +147,23 @@ pub(crate) fn validate_package_process_identity(
     validate_process_start_marker(process_id, expected_start_marker)
 }
 
+/// The process runs this very executable path and started as recorded. Unlike
+/// `validate_package_process_identity` this never hashes a runtime, so a
+/// short-lived caller can afford it; a onefile copy elsewhere fails it.
+pub(crate) fn validate_same_executable_process_identity(
+    process_id: u32,
+    expected_start_marker: &str,
+) -> Result<(), String> {
+    let process_path = process_executable_path(process_id)?;
+    let expected_path = std::env::current_exe()
+        .and_then(fs::canonicalize)
+        .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
+    if process_path != expected_path {
+        return Err("native_resident_process_identity_mismatch".to_owned());
+    }
+    validate_process_start_marker(process_id, expected_start_marker)
+}
+
 pub(crate) fn validate_runtime_process_identity(
     process_id: u32,
     expected_start_marker: &str,
@@ -142,7 +176,7 @@ pub(crate) fn validate_runtime_process_identity(
     validate_process_start_marker(process_id, expected_start_marker)
 }
 
-fn validate_process_start_marker(
+pub(crate) fn validate_process_start_marker(
     process_id: u32,
     expected_start_marker: &str,
 ) -> Result<(), String> {

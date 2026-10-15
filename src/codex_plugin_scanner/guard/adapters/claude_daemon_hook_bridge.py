@@ -19,11 +19,11 @@ from ..codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from ..hook_execution_environment import stamp_hook_input_text
-from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .claude_daemon_hook_transport import authenticated_claude_hook_response
 from .claude_daemon_state import daemon_port_from_state, state_path_for_query
 from .claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY as PERMISSION_PASSTHROUGH_KEY
 from .codex_daemon_hook_auth import _DaemonResponseError
+from .hook_input_reader import read_stdin_text
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = "HOL Guard could not complete native review ({reason}) and denied this action."
@@ -36,8 +36,18 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
     "approval question to protect you."
 )
 _HARNESS_TIMEOUT_BUDGET_SECONDS = 10
-_DAEMON_IO_TIMEOUT_SECONDS = 2
+# The identity challenge and hook POST share this budget. On loaded Windows hosts
+# the challenge round trip alone took about two seconds, leaving the daemon too
+# little time to review. A timeout at this cap leaves less than the recovery
+# minimum before the fallback reserve, so recovery is skipped and the local
+# fallback still reviews.
+_DAEMON_IO_TIMEOUT_SECONDS = 5.5
 _RECOVERY_TIMEOUT_SECONDS = 3
+# Do not start a recovery process that the fallback reserve would kill.
+_MINIMUM_RECOVERY_SECONDS = 1.5
+# Recovery and its retry stop this long before the hook deadline, so a daemon that
+# times out and then fails to recover still leaves the local fallback time to review.
+_FALLBACK_RESERVE_SECONDS = 2
 _FALLBACK_TIMEOUT_SECONDS = 8
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
 _MAX_HOOK_INPUT_BYTES = 1_000_000
@@ -67,10 +77,9 @@ def main(
 ) -> int:
     """Proxy Claude hook stdin to the Guard daemon, falling back to the Python hook."""
 
-    _ = CLAUDE_GUARD_DAEMON_HOOK_MARKER
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
-    body = sys.stdin.read(_MAX_HOOK_INPUT_BYTES + 1)
-    if len(body.encode("utf-8", errors="replace")) > _MAX_HOOK_INPUT_BYTES:
+    body, oversized = read_stdin_text(_MAX_HOOK_INPUT_BYTES)
+    if oversized:
         event = _event_name(body)
         if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
             event = "PreToolUse"
@@ -448,16 +457,22 @@ def _recover_retry_or_fallback(
     deadline: float | None = None,
     failure_kind: str = "transport-failure",
 ) -> str:
-    if recovery_command and _run_recovery_command(
-        recovery_command,
-        deadline=deadline,
-        failure_kind=failure_kind,
+    recovery_deadline = None if deadline is None else deadline - _FALLBACK_RESERVE_SECONDS
+    recovery_window = _remaining_seconds(recovery_deadline, cap=_RECOVERY_TIMEOUT_SECONDS)
+    if (
+        recovery_command
+        and recovery_window >= _MINIMUM_RECOVERY_SECONDS
+        and _run_recovery_command(
+            recovery_command,
+            deadline=recovery_deadline,
+            failure_kind=failure_kind,
+        )
     ):
         try:
             endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
             _assert_loopback_http_url(endpoint)
             return _valid_hook_json_or_degraded(
-                _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
+                _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=recovery_deadline),
                 reason=f"{reason}; recovered daemon returned malformed hook JSON",
                 data=data,
             )
@@ -511,6 +526,11 @@ def _recovery_command(state_path: str | Path, query: str) -> tuple[str, ...]:
     query_values = parse_qs(query)
     home_values = query_values.get("home")
     home_dir = Path(home_values[0]) if home_values and home_values[0] else Path.home()
+    from ..frozen_runtime_commands import frozen_daemon_recovery_command, is_frozen_guard_runtime
+
+    if is_frozen_guard_runtime():
+        # A frozen desktop core cannot run the Python ``-I -c`` bootstrap below.
+        return frozen_daemon_recovery_command(Path(state_path).parent, home_dir)
     package_root = Path(__file__).resolve().parents[3]
     return isolated_daemon_start_command(
         sys.executable,

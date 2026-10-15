@@ -3,7 +3,7 @@
   "action_id": "native-review-fixture",
   "harness": "omp",
   "event_name": "PreToolUse",
-  "action_type": "config_change",
+  "action_type": "shell_command",
   "workspace": null,
   "workspace_hash": null,
   "tool_name": "eval",

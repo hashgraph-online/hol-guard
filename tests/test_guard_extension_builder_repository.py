@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.extension_builder.render_native import command_s
 from codex_plugin_scanner.guard.extension_builder.repository_edits import (
     PYPROJECT_PATH,
     STAGING_PATH,
-    TRUST_PATH,
+    trust_binding_path,
 )
 from codex_plugin_scanner.guard.extension_builder.repository_plan import ownership_root, plan_repository
 from codex_plugin_scanner.guard.extension_builder.repository_write import LOCK_NAME, apply_kit
@@ -56,14 +56,20 @@ def test_plan_only_is_read_only_and_content_bound(tmp_path: Path, kind: str) -> 
 def test_apply_registers_external_packages_and_is_idempotent(tmp_path: Path, kind: str) -> None:
     kit = make_kit(tmp_path, kind, reviewed=True)
     repository = repository_fixture(tmp_path)
+    original_project = (repository / PYPROJECT_PATH).read_bytes()
     inspected = apply_kit(kit, repository)
     result = apply_kit(kit, repository, write=True, expected_plan=inspected["planDigest"])
     assert result["written"] is True
     assert (repository / contribution_path(kit.discovery.metadata)).is_file()
-    trust = json.loads((repository / TRUST_PATH).read_text(encoding="utf-8"))
-    assert kit.discovery.metadata.catalog_id in trust["classes"]["external"]
-    assert kit.discovery.metadata.catalog_id not in trust["classes"]["first-party"]
-    assert contribution_path(kit.discovery.metadata) in (repository / PYPROJECT_PATH).read_text(encoding="utf-8")
+    trust = json.loads((repository / trust_binding_path(kit.discovery.metadata)).read_text(encoding="utf-8"))
+    assert trust["extension"] == kit.discovery.metadata.catalog_id
+    assert trust["trustClass"] == "external"
+    assert all(item["path"] != "contracts/extensions/trust-class-map.v1.json" for item in result["files"])
+    if kind == "mcp":
+        # The authored directory mapping packages new MCP records automatically.
+        assert (repository / PYPROJECT_PATH).read_bytes() == original_project
+    else:
+        assert contribution_path(kit.discovery.metadata) in (repository / PYPROJECT_PATH).read_text(encoding="utf-8")
     staging = runpy.run_path(str(repository / STAGING_PATH))
     assert contribution_path(kit.discovery.metadata) in staging["_artifacts"](repository)
     before = file_snapshot(repository)
@@ -71,6 +77,23 @@ def test_apply_registers_external_packages_and_is_idempotent(tmp_path: Path, kin
     assert all(item["action"] == "unchanged" for item in repeated["files"])
     assert file_snapshot(repository) == before
     assert not (repository / LOCK_NAME).exists()
+
+
+def test_mcp_directory_wheel_mapping_cannot_redirect_the_contribution(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, "mcp", reviewed=True)
+    repository = repository_fixture(tmp_path)
+    project = repository / PYPROJECT_PATH
+    project.write_text(
+        project.read_text(encoding="utf-8").replace(
+            '"contributions/mcp-servers" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions"',
+            '"contributions/mcp-servers" = "unrelated/destination"',
+        ),
+        encoding="utf-8",
+    )
+    before = file_snapshot(repository)
+    with pytest.raises(BuilderError, match="directory inclusion"):
+        apply_kit(kit, repository, write=True)
+    assert file_snapshot(repository) == before
 
 
 @pytest.mark.parametrize("write", [False, True])
@@ -135,10 +158,8 @@ def test_removed_shared_registration_is_not_silently_restored(tmp_path: Path) ->
     kit = make_kit(tmp_path)
     repository = repository_fixture(tmp_path)
     apply_kit(kit, repository, write=True)
-    path = repository / TRUST_PATH
-    trust = json.loads(path.read_text(encoding="utf-8"))
-    trust["classes"]["external"].remove(kit.discovery.metadata.catalog_id)
-    path.write_text(canonical_json(trust), encoding="utf-8")
+    path = repository / trust_binding_path(kit.discovery.metadata)
+    path.unlink()
     before = file_snapshot(repository)
     with pytest.raises(BuilderError, match="removed"):
         apply_kit(kit, repository, write=True)

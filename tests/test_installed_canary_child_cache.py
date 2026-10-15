@@ -77,7 +77,7 @@ def test_real_canary_child_calls_forward_cache_prefix(tmp_path, monkeypatch, cal
     monkeypatch.setattr(canary.subprocess, "run", intercept_child)
     if call_site == "corpus":
         suffix = ".exe" if sys.platform == "win32" else ""
-        for binary in ["hol-guard-runtime", "guard-command-source"]:
+        for binary in ["hol-guard-runtime"]:
             (tmp_path / f"{binary}{suffix}").touch()
         monkeypatch.setattr(canary, "_validate_corpus_bindings", lambda root: {})
         monkeypatch.setattr(canary, "distribution", lambda name: SimpleNamespace(locate_file=lambda path: tmp_path))

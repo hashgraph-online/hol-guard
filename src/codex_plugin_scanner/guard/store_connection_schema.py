@@ -24,6 +24,7 @@ from .sqlite_profile import (
 )
 from .sqlite_quarantine_forensics import (
     quarantine_file_stats,
+    sqlite_header_diagnosis,
     update_quarantine_forensics_outcome,
     write_quarantine_forensics,
 )
@@ -47,6 +48,7 @@ from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_receipt_rollup_schema import request_receipt_rollup_rebuild
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
@@ -404,6 +406,7 @@ class StoreConnectionSchemaMixin:
                     error=error,
                     probe=probe_detail,
                     files=quarantine_file_stats(self.path),
+                    header=sqlite_header_diagnosis(self.path),
                 )
             except Exception as forensics_error:
                 _store_logger.warning(
@@ -1248,6 +1251,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
             self._ensure_approval_column(connection, "continuation_snapshot_json", "text")
+            self._ensure_approval_column(connection, "extension_allow_hint_json", "text")
             ensure_watch_only_approval_schema(connection, schema=self)
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
@@ -1266,8 +1270,7 @@ class StoreConnectionSchemaMixin:
             for idx_stmt in receipt_rollup_index_statements():
                 connection.execute(idx_stmt)
             if not self._schema_version_applied(connection, version=6):
-                if receipt_rollups_need_backfill(connection):
-                    backfill_receipt_rollups(connection)
+                request_receipt_rollup_rebuild(connection, _now())
                 self._record_schema_version(connection, version=6)
             if not self._schema_version_applied(
                 connection,
@@ -1275,9 +1278,10 @@ class StoreConnectionSchemaMixin:
             ):
                 # P45 changes ``warn`` from the reviewed bucket to allowed.
                 # Existing v6 rollups can have the right total while retaining
-                # the old bucket semantics, so this migration must rebuild them
-                # unconditionally before incremental deltas are applied.
-                backfill_receipt_rollups(connection)
+                # the old bucket semantics, so this migration requests a rebuild;
+                # the resident runs it before the next incremental delta or
+                # total read, keeping the archived-receipt totals it preserves.
+                request_receipt_rollup_rebuild(connection, _now())
                 self._record_schema_version(
                     connection,
                     version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
@@ -1370,6 +1374,7 @@ class StoreConnectionSchemaMixin:
                         "last_seen_guard_version",
                         "watch_only_observation",
                         "continuation_snapshot_json",
+                        "extension_allow_hint_json",
                     }
                     return (
                         row is not None
@@ -1522,14 +1527,6 @@ class StoreConnectionSchemaMixin:
         if column_name in existing:
             return
         connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
-
-    @staticmethod
-    def _ensure_evidence_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
-        rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table guard_evidence add column {column_name} {column_type}")
 
     @staticmethod
     def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:

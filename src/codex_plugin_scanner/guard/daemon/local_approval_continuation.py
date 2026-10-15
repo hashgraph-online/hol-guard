@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
-from ..codex_resume import defer_request_resume_to_live_hook, retry_request_resume
+from ..codex_resume import ResumeUnavailableError, defer_request_resume_to_live_hook, retry_request_resume
 from ..codex_resume_response import project_codex_resume_response
 from ..continuation_runtime import continue_request_after_application
 from ..store import GuardStore
@@ -70,12 +70,15 @@ def _codex_continuation(
     now: Callable[[], str],
 ) -> dict[str, object] | None:
     timestamp = now()
-    codex_resume = defer_request_resume_to_live_hook(
-        store,
-        request_id=request_id,
-        action=action,
-        now=timestamp,
-    )
+    try:
+        codex_resume = defer_request_resume_to_live_hook(
+            store,
+            request_id=request_id,
+            action=action,
+            now=timestamp,
+        )
+    except ResumeUnavailableError:
+        return {"status": "failed", "reason": "resume_unavailable"}
     if codex_resume is not None:
         return codex_resume
     operation = store.get_guard_operation_for_approval_request(request_id)
@@ -92,11 +95,14 @@ def _codex_continuation(
         if isinstance(retry_payload, dict):
             return retry_payload
         return None
-    return retry_request_resume(
-        store,
-        request_id=request_id,
-        now=timestamp,
-    )
+    try:
+        return retry_request_resume(
+            store,
+            request_id=request_id,
+            now=timestamp,
+        )
+    except ResumeUnavailableError:
+        return {"status": "failed", "reason": "resume_unavailable"}
 
 
 def _optional_string(value: object) -> str | None:

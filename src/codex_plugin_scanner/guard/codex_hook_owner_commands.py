@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Sequence
-from pathlib import Path
 
 from typing_extensions import override
+
+from .codex_hook_command_line import hook_token_name
 
 
 def has_codex_harness_tokens(tokens: Sequence[str | None]) -> bool:
@@ -493,12 +494,12 @@ def _inline_python_codex_hook(script: str, trailing_arguments: Sequence[str]) ->
     return False
 
 
-def python_codex_hook_command(tokens: Sequence[str]) -> bool:
+def python_codex_hook_command(tokens: Sequence[str], *, windows: bool | None = None) -> bool:
     payload = _python_hook_payload(tokens[1:])
     if payload[:1] == ["--"]:
-        return len(payload) > 1 and Path(payload[1]).name == "codex_daemon_hook_bridge.py"
+        return len(payload) > 1 and hook_token_name(payload[1], windows=windows) == "codex_daemon_hook_bridge.py"
     if payload[:2] == ["-m", "codex_plugin_scanner.cli"] and _codex_hook_arguments(payload[2:]):
         return True
-    if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
+    if payload and hook_token_name(payload[0], windows=windows) == "codex_daemon_hook_bridge.py":
         return True
     return payload[:1] == ["-c"] and len(payload) > 1 and _inline_python_codex_hook(payload[1], payload[2:])

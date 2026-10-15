@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from scripts.native_slo_session import AdapterSession
 
 _MAX_CONCURRENCY = 64
-_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
+_BASELINE_WARMUP_CONCURRENCY = 16
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
 
 
@@ -128,30 +128,29 @@ def _reconcile_wave_routes(
     return [replace(item, route="native_resident") if not item.overloaded else item for item in observations]
 
 
-def _stabilize_ready_hook_workers(session: AdapterSession) -> int:
-    """Bring every configured steady-state hook worker to ready before RSS sampling."""
+def _hook_capacity_view(session: AdapterSession) -> dict[str, int]:
+    """Report the in-process hook scheduler's aggregate capacity as target/workers/ready/busy."""
 
-    runner = session.daemon._server.hook_process_runner
-    runner.notify_queued_work()
-    runner.enable_full_capacity(delay_seconds=0.0, active_deferral_seconds=0.0)
-    target = runner.stats()["target"]
+    stats = session.daemon._server.runtime_hook_scheduler.stats()
+    limit = stats["active_limit"]
+    active = stats["active"]
+    return {"target": limit, "workers": limit, "ready": max(0, limit - active), "busy": active}
+
+
+def _baseline_capacity(session: AdapterSession, expected: int) -> dict[str, int]:
+    """Express scheduler idleness as the bounded warmup capacity the RSS baseline compares."""
+
+    busy = _hook_capacity_view(session)["busy"]
+    return {"target": expected, "workers": expected, "ready": max(0, expected - busy), "busy": busy}
+
+
+def _stabilize_ready_hook_workers(session: AdapterSession) -> int:
+    """Require an idle scheduler and return the concurrent request count used to warm it."""
+
+    capacity = _hook_capacity_view(session)
+    target = min(capacity["target"], _BASELINE_WARMUP_CONCURRENCY)
     _require(
-        isinstance(target, int) and not isinstance(target, bool) and 1 <= target <= _MAX_CONCURRENCY,
-        "hook worker stabilization target was invalid",
-    )
-    _require(
-        runner.wait_for_capacity(
-            minimum_workers=target,
-            timeout_seconds=_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS,
-        ),
-        "hook worker stabilization did not reach the configured target",
-    )
-    stabilized = runner.stats()
-    _require(
-        stabilized["target"] == target
-        and stabilized["workers"] == target
-        and stabilized["ready"] == target
-        and stabilized["busy"] == 0,
-        "hook worker capacity changed while stabilizing",
+        1 <= target <= _MAX_CONCURRENCY and capacity["busy"] == 0,
+        "hook scheduler was not idle while stabilizing",
     )
     return target

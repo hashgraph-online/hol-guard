@@ -8,20 +8,13 @@ import re
 import shlex
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from pathlib import Path, PurePath
 from typing import Literal, cast
 
 from ..models import GuardArtifact
-from .mcp_protection import _split_package_token
-from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
 from .typescript_launch_evidence import TypeScriptLaunchEvidence, TypeScriptLaunchStatus
-from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
 EvidenceStatus = Literal["available", "missing", "not_regular", "unreadable", "unstable"]
-_EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
-_EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
-_PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
 _HTTP_SOURCE_IN_TOKEN_RE = re.compile(r"https?:", re.IGNORECASE)
 
 
@@ -127,30 +120,37 @@ class PackageIntent:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, object]) -> PackageIntent:
-        """Reconstruct an intent from a ``to_dict`` payload (e.g. the native
-        ``package_intent_parse`` result). Command tokens round-trip through
-        ``redacted_command`` exactly as the native surface serializes them."""
+    def from_dict(
+        cls,
+        payload: Mapping[str, object],
+        *,
+        runtime_private_metadata: Mapping[str, object] | None = None,
+    ) -> PackageIntent:
+        """Hydrate exact private targets and argv without rehashing redacted sources."""
 
         if not isinstance(payload.get("package_manager"), str):
             raise ValueError("package intent payload missing package_manager")
         intent_kind = payload.get("intent_kind")
         if intent_kind not in ("install", "execute", "sync"):
             raise ValueError("package intent payload missing intent_kind")
+        targets = _package_intent_targets_from_dict(payload.get("targets"), runtime_private_metadata)
         redacted_command = payload.get("redacted_command")
-        command_tokens = payload.get("command_tokens")
-        if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
-            command_tokens = shlex.split(redacted_command)
+        if runtime_private_metadata is not None:
+            command_tokens = runtime_private_metadata.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) or any(
+                not isinstance(token, str) for token in command_tokens
+            ):
+                raise ValueError("package intent exact command metadata missing")
+        else:
+            command_tokens = payload.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
+                command_tokens = shlex.split(redacted_command)
         return cls(
             package_manager=str(payload["package_manager"]),
             intent_kind=cast(IntentKind, intent_kind),
             command_tokens=_str_tuple(command_tokens),
             redacted_command=str(redacted_command) if isinstance(redacted_command, str) else "",
-            targets=tuple(
-                evidence
-                for evidence in (_package_intent_target_from_dict(item) for item in _dict_items(payload.get("targets")))
-                if evidence is not None
-            ),
+            targets=targets,
             manifest_paths=_str_tuple(payload.get("manifest_paths")),
             lockfile_paths=_str_tuple(payload.get("lockfile_paths")),
             flags=_str_tuple(payload.get("flags")),
@@ -260,6 +260,46 @@ def _local_execution_evidence_from_dict(value: object) -> LocalPackageExecutionE
     )
 
 
+def _package_intent_targets_from_dict(
+    public_targets: object,
+    runtime_private_metadata: Mapping[str, object] | None,
+) -> tuple[PackageIntentTarget, ...]:
+    targets: list[PackageIntentTarget] = []
+    if runtime_private_metadata is None:
+        for public_target in _dict_items(public_targets):
+            target = _package_intent_target_from_dict(public_target)
+            if target is None:
+                continue
+            expected = target.to_dict()
+            if any(
+                key in public_target and public_target[key] != expected.get(key)
+                for key in ("raw_spec_hash", "source_url_hash")
+            ):
+                raise ValueError("package intent exact target metadata missing")
+            targets.append(target)
+        return tuple(targets)
+
+    private_targets = runtime_private_metadata.get("package_targets")
+    if (
+        not isinstance(public_targets, (list, tuple))
+        or not isinstance(private_targets, (list, tuple))
+        or len(private_targets) != len(public_targets)
+    ):
+        raise ValueError("package intent private target integrity invalid")
+    for private_target, public_target in zip(private_targets, public_targets, strict=True):
+        target = _package_intent_target_from_dict(private_target)
+        if target is None or not isinstance(public_target, Mapping):
+            raise ValueError("package intent private target integrity invalid")
+        public_fields = dict(public_target)
+        extras = public_fields.get("extras")
+        if isinstance(extras, list):
+            public_fields["extras"] = tuple(extras)
+        if target.to_dict() != public_fields:
+            raise ValueError("package intent private target integrity invalid")
+        targets.append(target)
+    return tuple(targets)
+
+
 def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | None:
     if not isinstance(value, Mapping):
         return None
@@ -282,21 +322,6 @@ def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | Non
         extras=_str_tuple(value.get("extras")),
         editable=bool(value.get("editable")),
     )
-
-
-@dataclass(frozen=True, slots=True)
-class ManifestDependencyChange:
-    manifest_path: str
-    package_name: str
-    before: str | None
-    after: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class ManifestParseResult:
-    changes: tuple[ManifestDependencyChange, ...]
-    truncated: bool = False
-    parse_errors: tuple[str, ...] = ()
 
 
 def build_package_request_artifact(
@@ -457,8 +482,15 @@ def _fingerprint_command_shape(intent: PackageIntent) -> str:
     for target in intent.targets:
         if target.source_kind != "git":
             continue
-        for source_spelling in (target.raw_spec, target.source_url):
-            if not source_spelling:
+        public_target = target.to_dict()
+        source_spellings = (
+            target.raw_spec,
+            target.source_url,
+            public_target.get("raw_spec"),
+            public_target.get("source_url"),
+        )
+        for source_spelling in source_spellings:
+            if not isinstance(source_spelling, str) or not source_spelling:
                 continue
             tokens = [token.replace(source_spelling, "<canonical-git-source>") for token in tokens]
     return shlex.join(tokens)
@@ -504,198 +536,6 @@ def redact_package_request_token(value: str) -> str:
     return _sanitize_url(value)
 
 
-def flag_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    flags: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token.startswith("-"):
-            if token == "--location" and index + 1 < len(tokens) and not tokens[index + 1].startswith("-"):
-                flags.append(f"--location={tokens[index + 1]}")
-                index += 2
-                continue
-            if token.startswith(("--global=", "--location=")):
-                flags.append(token)
-            else:
-                flags.append(token.split("=", 1)[0] if token.startswith("--") and "=" in token else token)
-        index += 1
-    return tuple(dict.fromkeys(flags))
-
-
-def existing_relative_paths(workspace: Path | None, candidates: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    return existing_paths_within_workspace(workspace, candidates)
-
-
-def first_positional(tokens: tuple[str, ...], *, skip_value_options: set[str]) -> str | None:
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token in skip_value_options and index + 1 < len(tokens):
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        return token
-    return None
-
-
-def option_value(tokens: tuple[str, ...], option: str) -> str | None:
-    for index, token in enumerate(tokens):
-        if token == option and index + 1 < len(tokens):
-            return tokens[index + 1]
-        if token.startswith(f"{option}="):
-            return token.partition("=")[2]
-    return None
-
-
-def property_value(tokens: tuple[str, ...], property_name: str) -> str | None:
-    prefix = f"-D{property_name}="
-    for token in tokens:
-        if token.startswith(prefix):
-            return token[len(prefix) :]
-    return None
-
-
-def js_target(spec: str) -> PackageIntentTarget:
-    alias = None
-    normalized_spec = spec
-    if "@npm:" in spec and not spec.startswith("@npm:"):
-        alias, _, normalized_spec = spec.partition("@npm:")
-    parsed_source = parse_npm_source_spec(normalized_spec)
-    if parsed_source is not None and _is_unnamed_js_source_spec(normalized_spec):
-        return _js_source_target(spec, normalized_spec, parsed_source, alias=alias)
-    named_source_package, source_url = _split_js_named_source_spec(normalized_spec)
-    if source_url is not None:
-        parsed_source = parse_npm_source_spec(source_url)
-        assert parsed_source is not None
-        return _js_source_target(spec, source_url, parsed_source, package_name=named_source_package, alias=alias)
-    if parsed_source is not None:
-        return _js_source_target(spec, normalized_spec, parsed_source, alias=alias)
-    package_name, requested_specifier = _split_package_token(normalized_spec)
-    parsed_source = parse_npm_source_spec(requested_specifier)
-    if requested_specifier is not None and parsed_source is not None:
-        return _js_source_target(spec, requested_specifier, parsed_source, package_name=package_name, alias=alias)
-    return PackageIntentTarget("npm", package_name, spec, requested_specifier, alias=alias)
-
-
-def _js_source_target(
-    raw_spec: str,
-    source_url: str,
-    source: NpmSourceSpec,
-    *,
-    package_name: str | None = None,
-    alias: str | None,
-) -> PackageIntentTarget:
-    return PackageIntentTarget(
-        "npm",
-        package_name or _source_url_package_name(source_url),
-        raw_spec,
-        None,
-        source_url=source_url,
-        source_kind=source.source_kind,
-        source_repository=source.canonical_repository,
-        source_revision_kind=source.revision_kind,
-        source_identity=source.identity,
-        source_invalid_reason=source.reason,
-        alias=alias,
-    )
-
-
-def python_target(
-    spec: str,
-    *,
-    editable: bool = False,
-    dependency_group: str | None = None,
-    extras: tuple[str, ...] = (),
-) -> PackageIntentTarget:
-    if " @ " in spec:
-        package_name, _, source = spec.partition(" @ ")
-        return PackageIntentTarget("pypi", package_name.strip(), spec, None, source_url=source.strip())
-    if "://" in spec or spec.startswith("git+"):
-        match = _EGG_FRAGMENT_RE.search(spec)
-        sanitized_source = _sanitize_url(spec)
-        package_name = match.group(1) if match else PurePath(sanitized_source).name.removesuffix(".git")
-        return PackageIntentTarget(
-            "pypi",
-            package_name or None,
-            spec,
-            None,
-            source_url=spec,
-            editable=editable,
-        )
-    if "@" in spec and not spec.startswith(("./", "../", "/")):
-        package_name, requested_specifier = spec.rsplit("@", 1)
-        normalized_name, detected_extras = split_python_extras(package_name)
-        return PackageIntentTarget(
-            "pypi",
-            normalized_name or None,
-            spec,
-            requested_specifier or None,
-            dependency_group=dependency_group,
-            extras=extras or detected_extras,
-            editable=editable,
-        )
-    normalized_name, requested_specifier = split_python_specifier(spec)
-    package_name, detected_extras = split_python_extras(normalized_name)
-    if package_name.startswith(("./", "../", "/")):
-        package_name = Path(package_name).name or package_name
-    return PackageIntentTarget(
-        "pypi",
-        package_name or None,
-        spec,
-        requested_specifier,
-        dependency_group=dependency_group,
-        extras=extras or detected_extras,
-        editable=editable,
-    )
-
-
-def version_target(ecosystem: str, spec: str, *, source_url: str | None = None) -> PackageIntentTarget:
-    package_name, requested_specifier = _split_package_token(spec)
-    return PackageIntentTarget(ecosystem, package_name, spec, requested_specifier, source_url=source_url)
-
-
-def coordinate_target(ecosystem: str, spec: str) -> PackageIntentTarget:
-    parts = spec.split(":")
-    if len(parts) < 3:
-        return PackageIntentTarget(ecosystem, spec or None, spec, None)
-    return PackageIntentTarget(ecosystem, ":".join(parts[:2]), spec, parts[-1] or None)
-
-
-def composer_target(spec: str) -> PackageIntentTarget:
-    package_name, requested_specifier = spec.split(":", 1) if ":" in spec else (spec, None)
-    return PackageIntentTarget("packagist", package_name, spec, requested_specifier)
-
-
-def homebrew_target(spec: str, *, cask: bool = False) -> PackageIntentTarget:
-    ecosystem = "homebrew-cask" if cask else "homebrew"
-    return PackageIntentTarget(ecosystem, spec or None, spec, None)
-
-
-def homebrew_tap_target(spec: str, *, source_url: str | None = None) -> PackageIntentTarget:
-    return PackageIntentTarget("homebrew-tap", spec or None, spec, None, source_url=source_url)
-
-
-def split_python_specifier(spec: str) -> tuple[str, str | None]:
-    matched = _PYTHON_VERSION_RE.match(spec.strip())
-    if matched is None:
-        return spec, None
-    name = matched.group("name") or spec
-    operator = matched.group("op")
-    version = (matched.group("version") or "").strip()
-    if operator and version:
-        return name, version if operator in {"==", "==="} else f"{operator}{version}"
-    return name, None
-
-
-def split_python_extras(name: str) -> tuple[str, tuple[str, ...]]:
-    matched = _EXTRAS_RE.match(name)
-    if matched is None:
-        return name, ()
-    return matched.group("name"), tuple(item for item in matched.group("extras").split(",") if item)
-
-
 def _sanitize_url(value: str) -> str:
     http_source = _HTTP_SOURCE_IN_TOKEN_RE.search(value)
     if http_source is not None:
@@ -716,42 +556,3 @@ def _sanitize_url(value: str) -> str:
         suffix = f"/{tail[0]}" if tail else ""
         return f"{scheme}://{authority}{suffix}".split("?", 1)[0].split("#", 1)[0]
     return value.split("?", 1)[0].split("#", 1)[0]
-
-
-def _split_js_named_source_spec(spec: str) -> tuple[str | None, str | None]:
-    for index, character in enumerate(spec):
-        if character != "@" or index == 0:
-            continue
-        package_name = spec[:index].strip()
-        source_candidate = spec[index + 1 :].strip()
-        if package_name and parse_npm_source_spec(source_candidate) is not None:
-            return package_name, source_candidate
-    return None, None
-
-
-def _is_unnamed_js_source_spec(value: str) -> bool:
-    lowered = value.lower()
-    return (
-        re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value) is not None
-        or lowered.startswith(("git@", "git+", "github:", "gitlab:", "bitbucket:", "file:"))
-        or "@" not in value
-    )
-
-
-def _source_url_package_name(source_url: str) -> str | None:
-    parsed_source = parse_npm_source_spec(source_url)
-    if parsed_source is not None and parsed_source.canonical_repository is not None:
-        return parsed_source.canonical_repository.rsplit("/", 1)[-1] or None
-    normalized = source_url.strip()
-    candidate = (
-        normalized.partition(":")[2]
-        if normalized.startswith(("github:", "gitlab:", "bitbucket:", "file:"))
-        else normalized
-    )
-    sanitized = _sanitize_url(candidate)
-    package_name = PurePath(sanitized).name
-    if package_name.endswith(".tar.gz"):
-        return package_name[: -len(".tar.gz")] or normalized
-    if package_name.endswith((".git", ".tar", ".tgz")):
-        return package_name.rsplit(".", 1)[0] or normalized
-    return package_name or normalized

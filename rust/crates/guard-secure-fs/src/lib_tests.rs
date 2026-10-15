@@ -94,15 +94,50 @@ fn descriptor_open_does_not_wait_for_fifo_writer() {
 
 #[cfg(windows)]
 #[test]
-fn bounded_read_fails_closed_on_windows_without_descriptor_path_walk() {
+fn bounded_read_walks_windows_handles_to_the_regular_file() {
     let dir = fixture_root("read");
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("sample.rs");
     fs::write(&path, b"fn main() {}\n").unwrap();
+    let canonical = fs::canonicalize(&path).unwrap();
+    let read = read_bounded(&canonical, MAX_SCAN_BYTES).unwrap();
+    assert_eq!(read.bytes, b"fn main() {}\n");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_handle_walk_denies_renaming_the_open_file() {
+    let dir = fixture_root("rename-barrier");
+    let parent = dir.join("parent");
+    fs::create_dir_all(&parent).unwrap();
+    let path = parent.join("sample.rs");
+    fs::write(&path, b"fn main() {}\n").unwrap();
+    let file = secure_open(&path, &fs::canonicalize(&path).unwrap()).unwrap();
+    assert!(fs::rename(&path, dir.join("moved.rs")).is_err());
+    drop(file);
+    fs::rename(&parent, dir.join("moved")).unwrap();
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[cfg(windows)]
+#[test]
+fn stable_context_read_follows_an_explicit_windows_executable_symlink() {
+    let dir = fixture_root("stable-symlink");
+    fs::create_dir_all(&dir).unwrap();
+    let path = fs::canonicalize(&dir).unwrap().join("npm.cmd");
+    fs::write(&path, b"@echo off\r\n").unwrap();
+    let executable = path.with_file_name("npm-link.cmd");
+    std::os::windows::fs::symlink_file(&path, &executable)
+        .expect("Windows regression runner must support file symlinks");
     assert!(matches!(
-        read_bounded(&path, MAX_SCAN_BYTES),
-        Err(SecureReadError::PathChanged)
+        read_stable(&executable, 256 * 1024, false),
+        Err(SecureReadError::SymlinkInPath)
     ));
+    assert_eq!(
+        read_stable(&executable, 256 * 1024, true).unwrap().bytes,
+        b"@echo off\r\n"
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -132,7 +167,7 @@ fn bounded_read_rejects_oversized_windows_file_before_path_walk() {
     assert!(matches!(result, Err(SecureReadError::TooLarge)));
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn bounded_read_rejects_hard_linked_source() {
     let dir = fixture_root("hard-link");
@@ -341,4 +376,72 @@ fn source_classifier_rejects_sensitive_external_filename_without_substring_false
     );
     assert!(classify_source_path(benign.to_str().unwrap(), &workspace, Some(&home), true).allowed);
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn hidden_empty_marker_files_are_bounded_to_work_trees() {
+    let root = std::env::temp_dir().join(format!("secure-fs-hidden-marker-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let tree = root.join("app");
+    std::fs::create_dir_all(tree.join(".git")).unwrap();
+    std::fs::create_dir_all(root.join("plain")).unwrap();
+    for (path, text) in [
+        (tree.join(".deploy-success"), ""),
+        (tree.join(".state-note"), "pid\n"),
+        (tree.join(".env"), ""),
+        (tree.join(".env.local"), ""),
+        (tree.join(".npmrc"), ""),
+        (tree.join("visible.txt"), ""),
+        (root.join("plain/.marker"), ""),
+    ] {
+        std::fs::write(path, text).unwrap();
+    }
+    assert!(crate::hidden_empty_work_tree_file(
+        &tree.join(".deploy-success")
+    ));
+    for denied in [
+        tree.join(".state-note"),
+        tree.join(".env"),
+        tree.join(".env.local"),
+        tree.join(".npmrc"),
+        tree.join("visible.txt"),
+        tree.join(".git"),
+        tree.join(".missing"),
+        root.join("plain/.marker"),
+    ] {
+        assert!(
+            !crate::hidden_empty_work_tree_file(&denied),
+            "{}",
+            denied.display()
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_dotfiles_are_benign_only_as_the_final_component() {
+    for allowed in [
+        ".gitignore",
+        "src/.gitignore",
+        ".editorconfig",
+        "/home/u/project/.dockerignore",
+        ".github/workflows/.gitignore",
+    ] {
+        assert!(hidden_read_parts_allowed(Path::new(allowed)), "{allowed}");
+    }
+    for denied in [
+        ".gitignore/x",
+        ".editorconfig/.gitignore",
+        ".git/config",
+        ".git/hooks/pre-commit",
+        ".git/info/exclude",
+        ".git/.gitignore",
+        ".git-credentials",
+        ".gitattributes",
+        ".npmrc",
+        ".envrc",
+        ".pre-commit-config.yaml",
+    ] {
+        assert!(!hidden_read_parts_allowed(Path::new(denied)), "{denied}");
+    }
 }

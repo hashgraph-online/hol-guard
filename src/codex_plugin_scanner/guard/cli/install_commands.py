@@ -14,6 +14,7 @@ from ..adapters.cursor import CursorHarnessAdapter
 from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
 from ..codex_install_transaction import codex_install_transaction
 from ..managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
 from ..runtime_transition import assert_transition_mutation_allowed
@@ -378,7 +379,23 @@ def scan_workspace_skills(
             )
             if stored_hash == identity.identity_hash:
                 continue
-            signals = detect_skill_content_risk(content, skill_path=str(skill_path))
+            try:
+                signals = detect_skill_content_risk(content, guard_home=store.guard_home)
+            except NativeRunnerAuthorityError as error:
+                # The install is already applied. Report the skill as unscanned and
+                # leave no snapshot, so the next install scans it again.
+                results.append(
+                    {
+                        "skill_path": str(skill_path.relative_to(workspace_dir)),
+                        "identity_hash": identity.identity_hash,
+                        "status": "unscanned",
+                        "risk_count": None,
+                        "severities": [],
+                        "signal_ids": [],
+                        "scan_error": str(error),
+                    }
+                )
+                continue
             store.save_snapshot(
                 "skill_scan",
                 artifact_id,
@@ -396,6 +413,7 @@ def scan_workspace_skills(
                     {
                         "skill_path": str(skill_path.relative_to(workspace_dir)),
                         "identity_hash": identity.identity_hash,
+                        "status": "scanned",
                         "risk_count": len(signals),
                         "severities": sorted({s.severity for s in signals}),
                         "signal_ids": [s.signal_id for s in signals],

@@ -6,6 +6,12 @@ use zeroize::Zeroizing;
 pub(super) struct VerifiedSender(Zeroizing<String>);
 
 impl VerifiedSender {
+    pub(super) fn worker_copy(&self) -> Self {
+        Self(Zeroizing::new(self.0.as_str().to_owned()))
+    }
+    pub(super) fn same_mailbox(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
     pub(super) fn from_claims(email: Option<String>, verified: Option<bool>) -> Option<Self> {
         let email = Zeroizing::new(email?);
         if verified != Some(true) || !supported_mailbox(&email) {
