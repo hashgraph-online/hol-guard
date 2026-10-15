@@ -251,9 +251,9 @@ fn a_grok_hook_asks_with_the_home_the_daemon_keeps() {
     ] {
         assert_eq!(built(&guard_home, &home), None, "{home}");
     }
-    // A prompt is prepared by the daemon, and a permission request is its own.
+    // Permission and notification hooks are the daemon's own.
     let deadline = Instant::now() + Duration::from_secs(1);
-    for event in ["UserPromptSubmit", "PermissionRequest", "Notification"] {
+    for event in ["PermissionRequest", "Notification"] {
         assert_eq!(
             grok_direct_answer(&homes.guard_home, "", event, PAYLOAD, deadline),
             None,

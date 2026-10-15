@@ -450,8 +450,9 @@ pub(crate) fn bounded_direct_answer(
 }
 
 /// The harness response a live resident answered for a Grok hook, or `None`
-/// to take the daemon path. A prompt keeps the daemon path, which prepares
-/// the prompt before it is reviewed.
+/// to take the daemon path. The bridge asks for a prompt only once the
+/// daemon reports its workspace ready, with the time left stamped, as the
+/// daemon would receive it.
 pub(crate) fn grok_direct_answer(
     guard_home: &Path,
     home: &str,
@@ -459,10 +460,7 @@ pub(crate) fn grok_direct_answer(
     data: &str,
     rpc_deadline: Instant,
 ) -> Option<String> {
-    if event_name == USER_PROMPT_SUBMIT
-        || !direct_event(event_name)
-        || !direct_enabled(BOUNDED_DIRECT_SWITCH)
-    {
+    if !direct_event(event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
         return None;
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);

@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,6 +33,9 @@ def _run_rust_coverage(
         stub.write_text(
             f"#!{bash}\n"
             'command="${0##*/} $*"\n'
+            'printf "%s|%s|%s|%s|%s\\n" "$command" "${CARGO_PROFILE_TEST_OPT_LEVEL:-}" '
+            '"${CARGO_PROFILE_TEST_DEBUG:-}" "${CARGO_PROFILE_TEST_DEBUG_ASSERTIONS:-}" '
+            '"${CARGO_PROFILE_TEST_OVERFLOW_CHECKS:-}" >> "$COMMAND_LOG"\n'
             'if [[ -n "$FAIL_COMMAND" && "$command" == "$FAIL_COMMAND"* ]]; then exit 7; fi\n'
             'if [[ "${0##*/}" == python ]]; then echo 1.88.0; exit 0; fi\n'
             'if [[ "$*" == *"llvm-cov --version" ]]; then\n'
@@ -63,6 +67,7 @@ def _run_rust_coverage(
             "FAIL_COMMAND": fail_command,
             "COVERAGE_MODE": mode,
             "REPORT": str(report),
+            "COMMAND_LOG": str(tmp_path / "commands.log"),
         },
     )
     return result
@@ -100,3 +105,26 @@ def test_failed_tests_cannot_publish_a_previous_coverage_report(tmp_path: Path) 
     result = _run_rust_coverage(tmp_path, "failed-tests")
     assert result.returncode == 7, result.stderr
     assert not (tmp_path / "coverage-reports/rust-lcov.info").exists()
+
+
+def test_coverage_retains_all_checked_tests_and_uses_ci_scheduling(tmp_path: Path) -> None:
+    result = _run_rust_coverage(tmp_path)
+    assert result.returncode == 0, result.stderr
+    lines = (tmp_path / "commands.log").read_text().splitlines()
+    clean = next(index for index, line in enumerate(lines) if "llvm-cov clean --workspace" in line)
+    run = next(index for index, line in enumerate(lines) if "llvm-cov nextest" in line)
+    command, optimization, debug, assertions, overflow = lines[run].split("|")
+    assert clean < run
+    assert "--locked --workspace --all-targets" in command
+    assert "--profile ci --test-threads 4 --retries 0 --no-fail-fast" in command
+    assert "--lcov --output-path" in command
+    assert (optimization, debug, assertions, overflow) == ("1", "line-tables-only", "true", "true")
+    assert "--filter" not in command and "--ignore" not in command
+
+
+def test_dependency_cache_tracks_the_instrumented_build_profile() -> None:
+    action = yaml.safe_load((ROOT / ".github/actions/ci-job-sonar/action.yml").read_text())
+    cache = next(step for step in action["runs"]["steps"] if step.get("name") == "Cache Rust analysis dependencies")
+    assert "hashFiles('scripts/ci/prepare_sonar_rust_coverage.sh')" in cache["with"]["shared-key"]
+    assert cache["with"]["cache-on-failure"] is True
+    assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"

@@ -55,7 +55,9 @@ runs:
     uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
     with:
       workspaces: rust
-      shared-key: sonar
+      # Profile overrides are set inside the coverage recipe, after restore.
+      # Bind its dependency cache to that recipe to avoid perpetual flag misses.
+      shared-key: sonar-${{ hashFiles('scripts/ci/prepare_sonar_rust_coverage.sh') }}
       # A failing quality gate must not leave the next run to rebuild cold.
       cache-on-failure: true
       save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
