@@ -191,7 +191,7 @@ impl PolicySnapshotStore {
 
     /// Admit the current snapshot for a direct hook in `workspace`, or name
     /// why the hook must take the daemon path.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn admit_direct_lane(
         &self,
         workspace: &str,

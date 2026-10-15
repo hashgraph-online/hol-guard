@@ -30,7 +30,9 @@ const READ_CHUNK: usize = 4096;
 /// Why an exchange produced no reply.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Failure {
-    /// The caller's deadline passed.
+    /// The caller's deadline passed. Only the unix exchange raises it; the
+    /// callers match it on every platform.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Timeout,
     /// Any other failure, by the Python exception name for it.
     Error(&'static str),

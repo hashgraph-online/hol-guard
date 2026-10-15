@@ -227,9 +227,19 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             .as_deref()
             .and_then(env_prefix_projection::code_loading_setting)
         {
-            result.reason = format!(
-                "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
-            );
+            result.reason = match command
+                .as_deref()
+                .and_then(env_prefix_projection::node_heap_only_setting)
+            {
+                // A memory size is the usual reason to set it; say how to
+                // raise the heap in a form the sandbox accepts.
+                Some(mib) => format!(
+                    "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. To give Node more memory, pass the option to node itself and run the tool's script from node_modules, for example `node --max-old-space-size={mib} node_modules/typescript/bin/tsc --noEmit`. Guard runs that form in its read-only sandbox."
+                ),
+                None => format!(
+                    "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
+                ),
+            };
         } else if let Some(setting) = command
             .as_deref()
             .and_then(env_prefix_projection::substituted_setting)
@@ -485,6 +495,7 @@ fn evaluate_envelope(
                 && super::workspace_contained::carry_settings(
                     &mut projected,
                     signals.command.as_deref().unwrap_or_default(),
+                    &reviewed.command,
                     context,
                     execution_environment,
                     harness,
@@ -635,12 +646,15 @@ fn evaluate_envelope(
             ),
             // The edit cannot apply, so stopping it costs nothing. Saying why
             // lets the agent fix the path instead of waiting on an approval.
-            super::omp_hashline_writes::HashlineEdit::MissingTarget => generic_result(
-                action,
-                "block",
-                evaluate::MISSING_PATH,
-                "HOL Guard did not run this edit because a file it names does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
-            ),
+            super::omp_hashline_writes::HashlineEdit::MissingTarget(path) => {
+                let mut result = generic_result(action, "block", evaluate::MISSING_PATH, "");
+                result.reason = evaluate::missing_path_reason(
+                    "HOL Guard did not run this edit because a file it names does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
+                    "edit",
+                    Some(&path),
+                );
+                result
+            }
         }
     } else if let Some(omp_result) = omp_result {
         omp_result

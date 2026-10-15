@@ -149,6 +149,17 @@ def run_guard_command(
         from .extension_builder_commands import run_extension_builder_command
 
         return run_extension_builder_command(args, output_stream=output_stream)
+    if args.guard_command == "policy":
+        from .commands_dispatch_policy_dx import FILE_COMMANDS, run_policy_file_command
+
+        if args.policy_command in FILE_COMMANDS:
+            # These read one policy file and need neither a Guard home nor a store, so they run in CI.
+            return _invoke_guard_handler(
+                run_policy_file_command,
+                args,
+                input_text=input_text,
+                output_stream=output_stream,
+            )
     handler = _resolve_guard_handler(_EARLY_HANDLERS, args.guard_command)
     if callable(handler):
         return _invoke_guard_handler(

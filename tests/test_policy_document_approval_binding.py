@@ -37,7 +37,6 @@ def test_cli_issues_document_bound_grant(
     update_settings(home, {"enabled": True, "new_password": password, "confirm_password": password})
     policy_path = tmp_path / "policy.yaml"
     write_private_policy_text(policy_path, _BASIC_POLICY_YAML)
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
     monkeypatch.setattr(
         command, "prompt_for_approval_gate", lambda *args, **kwargs: ApprovalGateInput(password=password)
     )
@@ -52,7 +51,21 @@ def test_cli_issues_document_bound_grant(
 
     monkeypatch.setattr(command, "require_high_risk", capture_grant)
     assert (
-        main(["guard", "policy", "import", str(policy_path), "--merge", "--apply", "--home", str(home), "--json"]) == 0
+        main(
+            [
+                "guard",
+                "policy",
+                "import",
+                str(policy_path),
+                "--merge",
+                "--apply",
+                "--yes",
+                "--home",
+                str(home),
+                "--json",
+            ]
+        )
+        == 0
     )
     payload = json.loads(capsys.readouterr().out)
     assert password not in json.dumps(payload)

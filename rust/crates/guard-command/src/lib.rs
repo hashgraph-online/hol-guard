@@ -172,14 +172,14 @@ mod sfrs_developer_graph;
 mod sfrs_developer_graph_vectors;
 mod sfrs_developer_inspection;
 mod sfrs_developer_routines;
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod sfrs_developer_vectors;
 mod sfrs_dispatcher;
 mod sfrs_dispatcher_request;
 #[cfg(all(test, unix))]
 mod sfrs_dispatcher_vectors;
 mod sfrs_docker_args;
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod sfrs_docker_vectors;
 mod sfrs_encoded_commands;
 mod sfrs_encoded_payloads;
@@ -203,7 +203,7 @@ mod sfrs_gh_pyshim;
 mod sfrs_gh_redirections;
 mod sfrs_gh_service;
 mod sfrs_gh_shell;
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod sfrs_gh_shell_vectors;
 mod sfrs_gh_static_body_safety;
 mod sfrs_git_audit;
@@ -213,7 +213,7 @@ mod sfrs_git_index;
 mod sfrs_git_routines;
 #[cfg(all(test, unix))]
 mod sfrs_github_body_vectors;
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod sfrs_github_vectors;
 #[cfg(all(test, unix))]
 mod sfrs_host_divergence;
@@ -293,7 +293,7 @@ mod sfrs_shlex;
 mod sfrs_source_edit;
 mod sfrs_source_edit_context;
 mod sfrs_static_safety;
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod sfrs_static_vectors;
 mod sfrs_stdin_sources;
 mod sfrs_substitution;

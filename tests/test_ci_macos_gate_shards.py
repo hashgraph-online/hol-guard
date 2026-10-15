@@ -3,18 +3,20 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_macos_gates_require_every_disjoint_shard():
+@pytest.mark.parametrize("node_count", [137, 9797])
+def test_macos_gates_require_every_disjoint_shard(node_count):
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     job = workflow["jobs"]["macos-gates"]
     indices = job["strategy"]["matrix"]["shard-index"]
-    assert indices == list(range(3))
+    assert indices == list(range(24))
     assert job["strategy"]["fail-fast"] is False
-    assert job["timeout-minutes"] == 30
+    assert job["timeout-minutes"] == 5
     assert "macos-gates" in workflow["jobs"]["required"]["needs"]
     action = next(step for step in job["steps"] if step.get("uses", "").endswith("ci-job-macos-skill-identity"))
     assert action["with"]["shard-index"] == "${{ matrix.shard-index }}"
@@ -35,9 +37,10 @@ def test_macos_gates_require_every_disjoint_shard():
     assert "test -s gate-shard.txt" in command
     assert "--max-worker-restart 0" in command
     assert "-n 2" in command
+    assert "--durations=10" in command
     partition = next(line for line in command.splitlines() if "| awk " in line)
     expression = partition.split("'", 2)[1]
-    nodes = [f"tests/test_gate.py::case_{index:04}" for index in range(137)]
+    nodes = [f"tests/test_gate.py::case_{index:05}" for index in range(node_count)]
     selected = []
     for index in indices:
         result = subprocess.run(

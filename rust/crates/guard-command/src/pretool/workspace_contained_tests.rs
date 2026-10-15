@@ -360,7 +360,7 @@ fn git_commands_that_write_sandbox_denied_metadata_stay_out_of_the_sandbox() {
 
 /// Whether this host runs the workspace sandbox at all.
 pub(super) fn host() -> bool {
-    cfg!(target_os = "macos") || crate::restricted_pytest::linux_workspace_sandbox_available()
+    crate::pretool::workspace_contained::sandbox_available()
 }
 
 #[test]
@@ -383,11 +383,12 @@ fn a_linked_worktree_contains_everything_but_git() {
     std::fs::write(tree.join(".git"), format!("gitdir: {}\n", admin.display())).unwrap();
     std::fs::write(tree.join("package.json"), "{}").unwrap();
     for command in ["rm notes.txt", "npm run build", "chmod +x scripts/run.sh"] {
-        assert_eq!(
-            reason("omp", command, &tree, true) == CONTAINED,
-            host(),
-            "{command}"
-        );
+        let got = reason("omp", command, &tree, true);
+        // macOS claims the build with its narrower node build-output profile.
+        let narrower = cfg!(target_os = "macos")
+            && command == "npm run build"
+            && got == "native_node_build_output_containment_required";
+        assert_eq!(got == CONTAINED || narrower, host(), "{command}");
     }
     // Its index and objects live in the shared Git directory, out of reach.
     for command in ["git add -A", "git rm -q src/a.ts", "npm test && git status"] {
@@ -436,6 +437,7 @@ fn private_temp_paths_run_in_the_workspace_sandbox() {
         "OUT_DIR=\"$TMPDIR/report-test\" npm run build",
         "OUT_DIR=\"${TMPDIR}/report-test\" npm run build",
         "OUT_DIR=$TMPDIR/report-test PORT=4173 npm run build",
+        "OUT_DIR=\"${TMPDIR:-/tmp}/report-test\" npm run build",
     ] {
         assert_eq!(
             reason("omp", command, &ws, true) == CONTAINED,

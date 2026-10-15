@@ -96,6 +96,37 @@ pub fn no_script_install_command(command: &str) -> bool {
         && !flags.iter().any(|flag| flag_reenables_scripts(flag))
 }
 
+/// True when some step runs `npm|pnpm|bun|yarn install|i|ci|add`. Only the
+/// held-install advice uses this; it proves nothing about the command.
+fn names_package_install(command: &str) -> bool {
+    parse_command(&CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    })
+    .is_ok_and(|model| {
+        model.segments.iter().any(|segment| {
+            let executable = segment.executable.as_deref().unwrap_or("");
+            matches!(
+                executable.rsplit('/').next(),
+                Some("npm" | "pnpm" | "bun" | "yarn")
+            ) && segment
+                .arguments
+                .first()
+                .is_some_and(|verb| matches!(verb.as_str(), "install" | "i" | "ci" | "add"))
+        })
+    })
+}
+
+/// Whether the command in a PreTool payload has an install step.
+pub fn held_command_installs(payload: &serde_json::Value) -> bool {
+    super::generic::extract_untrusted_command_context(payload)
+        .ok()
+        .and_then(|context| context.command)
+        .is_some_and(|command| names_package_install(&command))
+}
+
 fn plain(segment: &CommandSegmentV1) -> bool {
     segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
@@ -126,7 +157,28 @@ fn output_filter(segment: &CommandSegmentV1) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::no_script_install_command;
+    use super::{names_package_install, no_script_install_command};
+
+    #[test]
+    fn install_advice_follows_an_install_step() {
+        for command in [
+            "bun install --frozen-lockfile",
+            "cd app && npm ci",
+            "pnpm add left-pad",
+            "yarn install && yarn build",
+        ] {
+            assert!(names_package_install(command), "{command}");
+        }
+        for command in [
+            "bun scripts/report.ts --json",
+            "REPORT_DIR=\"${TMPDIR:-/tmp}/x\" bun scripts/report.ts",
+            "npm run build",
+            "bun run install-hooks",
+            "npx tsc --noEmit",
+        ] {
+            assert!(!names_package_install(command), "{command}");
+        }
+    }
 
     #[test]
     fn proves_only_the_plain_no_scripts_install_forms() {

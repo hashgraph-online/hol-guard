@@ -44,7 +44,7 @@ fn platform(name: &str) -> fn(&str) -> bool {
 fn daemon_sink(platform: fn(&str) -> bool) -> Host {
     Host {
         platform,
-        native: |_, _| None,
+        native: |_, _, _| None,
     }
 }
 
@@ -235,7 +235,7 @@ fn a_native_sink_runs_the_snapshot_through_the_runtime_itself() {
     };
     let host = Host {
         platform: platform("darwin"),
-        native: |_, _| Some("/opt/guard/guard-runtime".to_owned()),
+        native: |_, _, _| Some("/opt/guard/guard-runtime".to_owned()),
     };
     let routed = route_shell_on(&target, &temp, "pytest -q", host)
         .unwrap()
@@ -255,6 +255,11 @@ fn a_native_sink_runs_the_snapshot_through_the_runtime_itself() {
 
 #[test]
 fn only_plain_workspace_runs_take_the_native_sink() {
+    let root = scratch("shape");
+    let workspace = root.join("work space");
+    fs::create_dir_all(workspace.join("sub")).unwrap();
+    fs::write(workspace.join("file"), "").unwrap();
+    let workspace = workspace.to_str().unwrap();
     let denial = workspace_denial();
     let input = |command: &str| {
         shell_payload(command)["tool_input"]
@@ -262,31 +267,91 @@ fn only_plain_workspace_runs_take_the_native_sink() {
             .unwrap()
             .clone()
     };
-    assert!(native_shape(&denial, &input("pytest -q tests")));
-    assert!(native_shape(
-        &denial,
-        &input("npm test && cargo fmt --check")
+    let shape = |command: &str| native_shape(&denial, &input(command), workspace);
+    assert!(shape("pytest -q tests"));
+    assert!(shape("npm test && cargo fmt --check"));
+    // A `cd` into the workspace runs whole from its root on either sink.
+    assert!(shape("cd sub && pytest"));
+    assert!(shape("\tcd  sub/.  &&  pytest -q"));
+    // Output filters, stderr folding and status reads run whole in the
+    // sandbox, with the shell's own meaning.
+    assert!(shape("pytest | tee log"));
+    assert!(shape("pytest 2>&1"));
+    assert!(shape("pytest; echo $?"));
+    assert!(shape("npm run build 2>&1 | tail -20"));
+    assert!(shape(
+        "cd sub && pytest -q 2>&1 | head -40; echo \"EXIT:$?\""
     ));
+    // A package directory inside the workspace runs whole from its root too.
+    assert!(shape("npm --prefix sub test"));
+    assert!(shape("bun --cwd sub run build 2>&1 | tail -5"));
+    assert!(shape("pnpm --dir=sub/. run lint"));
+    assert!(shape("pnpm -C sub run build"));
+    assert!(shape("npm -C sub test 2>&1 | tail -20"));
+    let inner = format!(
+        "cd {}/sub && pytest",
+        root.join("tmp/../work space").display()
+    );
+    assert!(
+        !shape(&inner),
+        "a space in the target is not one plain word"
+    );
     for command in [
-        "pytest | tee log",
-        "pytest 2>&1",
-        "pytest; echo $?",
         "ls ~/work",
-        "  cd sub && pytest",
         "npm --prefix web test",
+        // Like `cd`, a package directory at the root, out of it, after a
+        // `cd`, or spelled any other way keeps the daemon's sink.
+        "npm --prefix . test",
+        "bun --cwd .. run build",
+        "bun --cwd sub/.. run build",
+        "bun --cwd file run build",
+        "bun --cwd run build",
+        "npm --prefix -w sub test",
+        "cd sub && bun --cwd sub run build",
+        "npm --prefix sub test && bun --cwd ../x run y",
+        "pnpm --directory sub run lint",
+        "npm --prefix 'sub' test",
         "git -C sub status",
+        // Only npm and pnpm take the short flag natively, and only as its
+        // own word.
+        "make -C sub test",
+        "pnpm -Csub run build",
+        "pnpm -C . run build",
+        "pnpm -C sub run build && git -C sub status",
+        "pytest -C sub",
+        // The daemon plans a `cd` to the root, or out of it, again there.
+        "cd . && pytest",
+        "cd sub/.. && pytest",
+        "cd .. && pytest",
+        "cd /tmp && pytest",
+        // Only `&&` after one plain, existing directory.
+        "cd sub; pytest",
+        "cd sub&& pytest",
+        "cd sub &&",
+        "cd sub",
+        "cd 'sub' && pytest",
+        "cd $HOME && pytest",
+        "cd missing && pytest",
+        "cd file && pytest",
+        "\ncd sub && pytest",
+        "cdk deploy",
     ] {
-        assert!(!native_shape(&denial, &input(command)), "{command}");
+        assert!(!shape(command), "{command}");
     }
     let mut moved = input("pytest");
     moved.insert("cwd".to_owned(), json!("/elsewhere"));
-    assert!(!native_shape(&denial, &moved));
+    assert!(!native_shape(&denial, &moved, workspace));
     let mut publish = denial.clone();
     publish["reason"] = json!(crate::contained_workspace_sink::PUBLISH_REASON);
-    assert!(!native_shape(&publish, &input("pytest && git push")));
+    assert!(!native_shape(
+        &publish,
+        &input("pytest && git push"),
+        workspace
+    ));
     let mut other = denial.clone();
     other["reason_code"] = json!("native_test_containment_required");
-    assert!(!native_shape(&other, &input("pytest")));
+    assert!(!native_shape(&other, &input("pytest"), workspace));
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

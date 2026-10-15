@@ -315,6 +315,116 @@ fn proved_listing_output_is_released_without_lowering_scans_or_floors() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn read_only_language_server_output_is_released_like_a_file_read() {
+    struct RemoveOnDrop(std::path::PathBuf);
+    impl Drop for RemoveOnDrop {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/omp-lsp-output-tests")
+        .join(format!("home-{}", std::process::id()));
+    // A reused process id must not inherit an earlier run's fixture.
+    let _ = std::fs::remove_dir_all(&root);
+    let _cleanup = RemoveOnDrop(root.clone());
+    std::fs::create_dir_all(root.join("project/src")).unwrap();
+    std::fs::create_dir_all(root.join(".ssh")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let project = root.join("project");
+    std::fs::write(project.join("src/main.ts"), "export function main() {}\n").unwrap();
+    std::fs::write(root.join("other.ts"), "export const other = 1;\n").unwrap();
+    std::fs::write(root.join(".ssh/id_rsa"), "synthetic fixture\n").unwrap();
+    std::os::unix::fs::symlink(root.join("other.ts"), project.join("src/linked.ts")).unwrap();
+    let main = project.join("src/main.ts");
+    let main = main.to_str().unwrap();
+    let request_for = |input: Value| {
+        let mut request = post_request(json!({
+            "hook_event_name": "PostToolUse", "tool_call_id": "call-lsp-1",
+            "tool_name": "lsp", "tool_input": input,
+            "tool_response": {"content": [{"type": "text", "text": "src/main.ts:1:17"}]}, "is_error": false
+        }));
+        request.harness = "omp".into();
+        request.home_dir = root.to_str().unwrap().into();
+        request.cwd = Some(project.to_str().unwrap().into());
+        request
+    };
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "block".into());
+    for input in [
+        json!({"action": "references", "file": main, "line": 1, "symbol": "main"}),
+        json!({"action": "definition", "file": "src/main.ts", "line": 1, "symbol": "main"}),
+        json!({"action": "hover", "file": main, "line": 1, "symbol": "main", "timeout": 20}),
+        json!({"action": "diagnostics", "file": "src/main.ts"}),
+        json!({"action": "symbols", "file": main, "query": "main"}),
+    ] {
+        let request = request_for(input.clone());
+        assert_eq!(
+            super::super::eval_output::bounded_output_action(&request),
+            Some(PreToolActionTypeV1::FileRead),
+            "{input}"
+        );
+        let result = apply_post_tool_policy(
+            &snapshot(effective.clone()),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            guard_hook_core::review_post_tool(&request),
+        )
+        .unwrap();
+        assert_eq!(result.decision, "allow", "{input}: {}", result.reason_code);
+        assert_eq!(result.model_output_action, "allow_original", "{input}");
+        let denied = apply_post_tool_policy(
+            &snapshot(effective.clone()),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::deny("source_secret_match", "sensitive output"),
+        )
+        .unwrap();
+        assert_eq!(denied.decision, "deny", "{input}");
+    }
+    let other = root.join("other.ts");
+    let secret = root.join(".ssh/id_rsa");
+    for input in [
+        // Actions that edit files or reach the server unchecked.
+        json!({"action": "rename", "file": main, "line": 1, "symbol": "main", "new_name": "start"}),
+        json!({"action": "rename_file", "file": main, "new_name": "src/start.ts"}),
+        json!({"action": "code_actions", "file": main, "line": 1, "apply": true}),
+        json!({"action": "request", "file": main, "payload": "{}"}),
+        json!({"action": "reload"}),
+        // A key outside the read-only shape.
+        json!({"action": "references", "file": main, "line": 1, "apply": true}),
+        json!({"action": "references", "file": main, "command": "rm -rf src"}),
+        // Files that are not ordinary session files.
+        json!({"action": "references", "file": other.to_str().unwrap(), "line": 1}),
+        json!({"action": "references", "file": "src/linked.ts", "line": 1}),
+        json!({"action": "hover", "file": secret.to_str().unwrap(), "line": 1}),
+        json!({"action": "hover", "file": "src/missing.ts", "line": 1}),
+        json!({"action": "symbols", "query": "main"}),
+    ] {
+        let request = request_for(input.clone());
+        assert!(
+            super::super::eval_output::bounded_output_action(&request).is_none(),
+            "{input}"
+        );
+        let result = apply_post_tool_policy(
+            &snapshot(effective.clone()),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            guard_hook_core::review_post_tool(&request),
+        )
+        .unwrap();
+        assert_ne!(
+            result.model_output_action, "allow_original",
+            "{input}: {}",
+            result.reason_code
+        );
+    }
+}
+
 #[test]
 fn shell_eval_output_meets_the_same_floors_as_the_bash_call() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

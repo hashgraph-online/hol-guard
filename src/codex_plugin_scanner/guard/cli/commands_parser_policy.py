@@ -12,6 +12,12 @@ from ..config_constants import VALID_GUARD_ACTIONS, VALID_SECURITY_LEVELS
 from .commands_parser_constants import _guard_risk_action_key
 from .commands_parser_helpers import *
 
+def _add_policy_format_args(parser: argparse.ArgumentParser) -> None:
+    _add_guard_common_args(parser)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--format", dest="output_format", choices=("text", "json"), default="text")
+
+
 def _configure_guard_policy_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -36,10 +42,41 @@ def _configure_guard_policy_parsers(
 
 
 
+    policy_init_parser = policy_subparsers.add_parser(
+        "init", help="Write a starter guard-policy.yaml with two example tests"
+    )
+    policy_init_parser.add_argument("--starter", default=None, help="Starter id (see --list); default safe-defaults")
+    policy_init_parser.add_argument("--output", default=None, help="File to write (default guard-policy.yaml)")
+    policy_init_parser.add_argument("--force", action="store_true", help="Replace the file if it exists")
+    policy_init_parser.add_argument("--list", dest="list_starters", action="store_true", help="List the starters")
+    _add_policy_format_args(policy_init_parser)
+
     policy_validate_parser = policy_subparsers.add_parser("validate", help="Validate a policy document")
     policy_validate_parser.add_argument("file")
-    _add_guard_common_args(policy_validate_parser)
-    policy_validate_parser.add_argument("--json", action="store_true")
+    _add_policy_format_args(policy_validate_parser)
+
+    policy_test_parser = policy_subparsers.add_parser(
+        "test", help="Run the x-hol.tests examples in a policy document"
+    )
+    policy_test_parser.add_argument("file")
+    policy_test_parser.add_argument("--watch", action="store_true", help="Re-run whenever the file changes")
+    policy_test_parser.add_argument("--watch-max-runs", type=int, default=None, help=argparse.SUPPRESS)
+    _add_policy_format_args(policy_test_parser)
+
+    policy_check_parser = policy_subparsers.add_parser(
+        "check", help="Decide one event or command against a policy document"
+    )
+    policy_check_parser.add_argument("file")
+    check_input = policy_check_parser.add_mutually_exclusive_group(required=True)
+    check_input.add_argument("--event", help="Event JSON, or - to read it from stdin")
+    check_input.add_argument("--command", dest="command_text", help="Shell command to decide")
+    _add_policy_format_args(policy_check_parser)
+
+    policy_status_parser = policy_subparsers.add_parser(
+        "status", help="Show the Live policy version, mode, last sync and acknowledgement"
+    )
+    policy_status_parser.add_argument("--offline", action="store_true", help="Skip the Guard Cloud delivery read")
+    _add_policy_format_args(policy_status_parser)
 
     policy_fmt_parser = policy_subparsers.add_parser("fmt", help="Format a policy document canonically")
     policy_fmt_parser.add_argument("file")
@@ -51,8 +88,7 @@ def _configure_guard_policy_parsers(
         "diff", help="Diff a candidate document against active local policy"
     )
     policy_diff_parser.add_argument("file")
-    _add_guard_common_args(policy_diff_parser)
-    policy_diff_parser.add_argument("--json", action="store_true")
+    _add_policy_format_args(policy_diff_parser)
 
     policy_show_parser = policy_subparsers.add_parser(
         "show", help="Show the active local policy as canonical YAML"
@@ -62,10 +98,10 @@ def _configure_guard_policy_parsers(
     policy_show_parser.add_argument("--json", action="store_true")
 
     policy_explain_parser = policy_subparsers.add_parser(
-        "explain", help="Explain the active local policy compilation"
+        "explain", help="Explain the active local policy, or which rule decided a recorded decision"
     )
-    _add_guard_common_args(policy_explain_parser)
-    policy_explain_parser.add_argument("--json", action="store_true")
+    policy_explain_parser.add_argument("decision_id", nargs="?", default=None, help="A decision (receipt) id")
+    _add_policy_format_args(policy_explain_parser)
 
     policy_export_parser = policy_subparsers.add_parser("export", help="Export local policies")
     policy_export_parser.add_argument("--format", choices=("yaml",), default="yaml")
@@ -89,8 +125,8 @@ def _configure_guard_policy_parsers(
     import_execution = policy_import_parser.add_mutually_exclusive_group()
     import_execution.add_argument("--dry-run", dest="dry_run", action="store_true", default=True)
     import_execution.add_argument("--apply", dest="dry_run", action="store_false")
-    _add_guard_common_args(policy_import_parser)
-    policy_import_parser.add_argument("--json", action="store_true")
+    policy_import_parser.add_argument("--yes", action="store_true", help="Apply without the interactive confirmation")
+    _add_policy_format_args(policy_import_parser)
 
     policies_parser = guard_subparsers.add_parser(
         "policies",

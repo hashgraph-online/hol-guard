@@ -278,6 +278,10 @@ fn hook_directories_are_denied_where_their_links_lead() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+// The fixture writes a canonical Windows path (`\\?\D:\...`) unquoted into a git
+// config, where backslash starts an escape sequence and `\?` is invalid, so
+// the config is unreadable and Guard fails closed. The case needs POSIX paths.
+#[cfg(unix)]
 #[test]
 fn global_helper_programs_in_the_workspace_are_denied() {
     let root = scratch("global-helpers");

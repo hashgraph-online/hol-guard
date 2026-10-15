@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .realism_fixtures import write_windows_launcher
+
 GITHUB_REVIEW_CASE = "github-review-work-enabled-permissions"
 GITHUB_DELETE_CASE = "explicit-disabled-github-delete-permission"
 GITHUB_STUB_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE})
@@ -55,10 +57,29 @@ def gh_stub_script(log: Path) -> str:
     )
 
 
+def gh_stub_python(log: Path) -> str:
+    """The same stand-in for Windows, where a shell finds commands only through PATHEXT."""
+    return (
+        "import sys\n"
+        "args = sys.argv[1:]\n"
+        f"with open({str(log)!r}, 'a', encoding='utf-8', newline='\\n') as log:\n"
+        "    log.write(''.join(arg + '\\x1f' for arg in args) + '\\n')\n"
+        "joined = ' '.join(args)\n"
+        "if 'graphql' in joined:\n"
+        "    out = '{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}'\n"
+        "elif '/replies' in joined:\n"
+        "    out = '{\"id\":456,\"body\":\"reply recorded\"}'\n"
+        "else:\n"
+        "    out = '[{\"id\":123,\"user\":{\"login\":\"reviewer\"},\"body\":\"Please rename the helper\"}]'\n"
+        "sys.stdout.buffer.write(out.encode() + b'\\n')\n"
+    )
+
+
 def write_gh_stub(bin_dir: Path, workspace: Path) -> None:
     stub = bin_dir / "gh"
     stub.write_text(gh_stub_script(workspace / GH_LOG), encoding="utf-8", newline="\n")
     stub.chmod(0o700)
+    write_windows_launcher(bin_dir, "gh", gh_stub_python(workspace / GH_LOG))
 
 
 def recorded_gh_calls(workspace: Path) -> list[tuple[str, ...]] | None:

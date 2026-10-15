@@ -443,3 +443,71 @@ fn proven_scopes_still_honor_command_control_lockdown() {
     );
     assert_eq!(result.minimum_action, "block");
 }
+
+/// A linked worktree beside `project` whose `.git` names an admin entry under
+/// the main checkout, as `git worktree add` writes it.
+#[cfg(unix)]
+fn linked_worktree(home: &Path, project: &Path) -> PathBuf {
+    let worktree = home.join("project-feature");
+    let admin = project.join(".git/worktrees/project-feature");
+    std::fs::create_dir_all(&admin).unwrap();
+    std::fs::create_dir_all(&worktree).unwrap();
+    std::fs::write(admin.join("commondir"), "../..\n").unwrap();
+    std::fs::write(
+        admin.join("gitdir"),
+        format!("{}\n", worktree.join(".git").display()),
+    )
+    .unwrap();
+    std::fs::write(
+        worktree.join(".git"),
+        format!("gitdir: {}\n", admin.display()),
+    )
+    .unwrap();
+    write(worktree.join("scripts/check.sh"), "#!/bin/sh\n");
+    worktree
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_glob_walks_a_worktree_link_into_its_main_checkout() {
+    let (home, project) = fixture();
+    let worktree = linked_worktree(&home, &project);
+    write(
+        project.join("dashboard/node_modules/vite/bin/vite"),
+        "#!/bin/sh\n",
+    );
+    std::os::unix::fs::symlink("../vite/bin/vite", {
+        std::fs::create_dir_all(project.join("dashboard/node_modules/.bin")).unwrap();
+        project.join("dashboard/node_modules/.bin/vite")
+    })
+    .unwrap();
+    std::fs::create_dir_all(worktree.join("dashboard")).unwrap();
+    let link = worktree.join("dashboard/node_modules");
+    std::os::unix::fs::symlink(project.join("dashboard/node_modules"), &link).unwrap();
+    let proven = |gitignore| {
+        super::omp_glob_scope_proven(
+            worktree.to_str().unwrap(),
+            home.to_str(),
+            worktree.to_str(),
+            gitignore,
+        )
+    };
+    assert!(proven(false));
+
+    // The target is held to the rules for a walk outside the workspace.
+    write(
+        project.join("dashboard/node_modules/.env"),
+        "TOKEN=fixture\n",
+    );
+    assert!(!proven(false));
+    std::fs::remove_file(project.join("dashboard/node_modules/.env")).unwrap();
+
+    // A link back to the whole main checkout, or anywhere else, still fails.
+    std::fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(&project, &link).unwrap();
+    assert!(!proven(false));
+    std::fs::remove_file(&link).unwrap();
+    std::fs::create_dir_all(home.join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(home.join("elsewhere"), &link).unwrap();
+    assert!(!proven(false));
+}

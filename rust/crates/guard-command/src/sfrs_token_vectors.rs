@@ -1,5 +1,7 @@
 //! Parity of the tokenization helpers against vectors recorded from the
-//! retired Python implementation.
+//! retired Python implementation. The vectors record POSIX behaviour, so
+//! they run off Windows; `NoEnvHost` stays available to Windows tests.
+#![cfg_attr(windows, allow(dead_code, unused_imports))]
 
 use std::io::Read;
 
@@ -58,6 +60,7 @@ fn strings(value: &Value) -> Vec<String> {
         .collect()
 }
 
+#[cfg(not(windows))]
 #[test]
 fn tokenization_helpers_match_recorded_python() {
     let mut failures = Vec::new();
@@ -141,6 +144,7 @@ fn pair(token: &crate::sfrs_quote_tokens::QuotedToken) -> Value {
     serde_json::json!([token.raw, token.plain])
 }
 
+#[cfg(not(windows))]
 #[test]
 fn filters_and_quote_tokens_match_recorded_python() {
     let host = NoEnvHost;
@@ -204,6 +208,7 @@ fn filters_and_quote_tokens_match_recorded_python() {
     );
 }
 
+#[cfg(not(windows))]
 #[test]
 fn local_read_operands_match_recorded_python() {
     let mut failures = Vec::new();

@@ -93,7 +93,10 @@ pub(super) fn trusted_pg_ctl_path(executable: &str, context: super::PathContext<
 
 #[cfg(test)]
 mod tests {
-    use super::{safe_pg_ctl_arguments, trusted_pg_ctl_path};
+    use super::safe_pg_ctl_arguments;
+    #[cfg(unix)]
+    use super::trusted_pg_ctl_path;
+    #[cfg(unix)]
     use crate::pretool::PathContext;
 
     fn safe(command: &str) -> bool {

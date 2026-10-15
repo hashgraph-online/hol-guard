@@ -60,10 +60,10 @@ def test_shipped_native_size_gate_uses_cargo_release_profile() -> None:
 
     size_job = document["jobs"]["native-release-size"]
     assert size_job["timeout-minutes"] >= 40
-    measure = next(
-        step for step in size_job["steps"] if step.get("name") == "Measure the shipped fat-LTO runtime size"
+    build = next(
+        step for step in size_job["steps"] if step.get("name") == "Build the shipped fat-LTO runtime"
     )
-    script = measure["run"]
+    script = build["run"]
     unset_at = script.index("unset CARGO_PROFILE_RELEASE_LTO")
     codegen_at = script.index("unset CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
     build_at = script.index(
@@ -71,17 +71,76 @@ def test_shipped_native_size_gate_uses_cargo_release_profile() -> None:
         "-p hol-guard-runtime --bin hol-guard-runtime"
     )
     assert "--bin guard-command-source" not in script
-    check_at = script.index(
+    measure = next(
+        step for step in size_job["steps"] if step.get("name") == "Measure the shipped fat-LTO runtime size"
+    )
+    assert (
         "python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release "
         "--platform manylinux_2_17_x86_64"
-    )
-    assert unset_at < codegen_at < build_at < check_at
-    assert "CARGO_PROFILE_RELEASE_LTO" not in measure.get("env", {})
+    ) in measure["run"]
+    assert unset_at < codegen_at < build_at
+    assert size_job["steps"].index(build) < size_job["steps"].index(measure)
+    assert "if" not in measure
+    assert "CARGO_PROFILE_RELEASE_LTO" not in build.get("env", {})
 
     required = document["jobs"]["required"]
     assert "native-release-size" in required["needs"]
     aggregate = "\n".join(step.get("run", "") for step in required["steps"])
     assert '"native-release-size"' in aggregate
+
+
+def test_shipped_runtime_cache_is_exact_and_only_main_can_write() -> None:
+    """Reuse only matching shipped builds, and always measure the restored binary."""
+    steps = workflow("ci.yml")["jobs"]["native-release-size"]["steps"]
+    restore = next(step for step in steps if step.get("id") == "shipped-runtime-cache")
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    stage = next(step for step in steps if step.get("name") == "Stage shipped runtime trust bindings")
+    platform = next(step for step in steps if step.get("id") == "shipping-platform")
+    save = next(step for step in steps if step.get("name") == "Save the verified shipped runtime")
+    measure = next(step for step in steps if step.get("name") == "Measure the shipped fat-LTO runtime size")
+    assert steps.index(stage) < steps.index(restore) < steps.index(setup)
+    assert steps.index(platform) < steps.index(restore)
+    assert "${ImageOS:?}-${ImageVersion:?}" in platform["run"]
+    assert "restore-keys" not in restore["with"]
+    for token in (
+        "runner.os", "runner.arch", "steps.shipping-platform.outputs.image",
+        "'rust/**'", "'contributions/**'", "'contracts/**'", "'spec/**'",
+        "'src/codex_plugin_scanner/guard/contracts/**'",
+        "'.github/actions/setup-rust/action.yml'", "'.github/workflows/ci.yml'",
+    ):
+        assert token in restore["with"]["key"]
+    miss = "steps.shipped-runtime-cache.outputs.cache-hit != 'true'"
+    for name in ("Install content-addressed compiler cache", "Build the shipped fat-LTO runtime"):
+        assert next(step for step in steps if step.get("name") == name)["if"] == miss
+    assert setup["if"] == miss
+    assert "if" not in measure
+    assert "continue-on-error" not in measure
+    assert save["if"] == f"{miss} && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert save["with"]["key"] == "${{ steps.shipped-runtime-cache.outputs.cache-primary-key }}"
+    assert save["with"]["path"] == restore["with"]["path"] == "rust/target/release/hol-guard-runtime"
+    assert steps.index(measure) < steps.index(save)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="The shipped size gate executes on Ubuntu with Bash")
+@pytest.mark.parametrize("extra_bytes", [0, 1, None])
+def test_restored_runtime_still_fails_the_size_gate(tmp_path: Path, extra_bytes: int | None) -> None:
+    """A cache hit cannot hide an oversized or missing artifact."""
+    platform = "manylinux_2_17_x86_64"
+    budgets = json.loads((ROOT / "ci/package_size/budgets.json").read_text(encoding="utf-8"))
+    if extra_bytes is not None:
+        with (tmp_path / "hol-guard-runtime").open("wb") as binary:
+            binary.truncate(budgets[platform]["runtime"] + extra_bytes)
+    steps = workflow("ci.yml")["jobs"]["native-release-size"]["steps"]
+    measure = next(step for step in steps if step.get("name") == "Measure the shipped fat-LTO runtime size")
+    # Execute the real workflow command with only its artifact directory redirected.
+    script = measure["run"].replace("rust/target/release", str(tmp_path))
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", script],
+        cwd=ROOT, capture_output=True, text=True, check=False, timeout=5,
+    )
+    assert (result.returncode == 0) is (extra_bytes == 0)
+    if extra_bytes == 1:
+        assert "exceeds budget" in result.stdout
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux workspace profile uses Bash")

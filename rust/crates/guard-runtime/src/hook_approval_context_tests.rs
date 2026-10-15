@@ -2,8 +2,10 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::{generic_hook_components, runtime_hook_components, Effects, LaunchRequest};
+#[cfg(unix)]
 use crate::context_digest::build_context_token;
 use crate::context_digest_json::write_canonical_json;
+#[cfg(unix)]
 use crate::store_vectors_support_tests::gunzip_json;
 
 /// The recorder's stand-in for `build_runtime_launch_identity`: a digest of
@@ -30,6 +32,7 @@ fn fixture_launch(request: &LaunchRequest<'_>) -> Value {
     })
 }
 
+#[cfg(unix)]
 fn vectors() -> Vec<Value> {
     let document = gunzip_json(include_bytes!(
         "../tests/fixtures/hook_approval_context_vectors.json.gz"

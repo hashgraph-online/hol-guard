@@ -118,6 +118,8 @@ fn search_root_that_is_hidden_linked_away_or_sensitive_is_reviewed() {
     std::fs::create_dir_all(&hidden).unwrap();
     std::fs::write(hidden.join("notes.md"), "fixture\n").unwrap();
     std::fs::create_dir_all(layout.home.join(".ssh")).unwrap();
+    // Only unix adds a symlinked case below.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut commands = vec![
         format!("rg -n fixture {}", hidden.display()),
         format!("rg -n fixture {}", layout.home.join(".ssh").display()),
@@ -337,6 +339,8 @@ fn search_of_sibling_outside_a_real_repository_or_with_hidden_flags_is_reviewed(
     let plain = layout.org.join("plain-notes");
     std::fs::create_dir_all(&plain).unwrap();
     std::fs::write(plain.join(".env"), "TOKEN=fixture\n").unwrap();
+    // Only unix adds a symlinked case below.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut commands = vec![
         "rg -n fixture ..".to_owned(),
         "rg -n fixture ../plain-notes".to_owned(),

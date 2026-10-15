@@ -97,14 +97,15 @@ def test_store_read_projections_use_the_connection_home(monkeypatch: pytest.Monk
         return original(kind, args, guard_home=guard_home)
 
     monkeypatch.setattr(native_runner_authority, "native_runner_authority", bound)
-    # The insert projects through the store's home even when the default home is not set up.
+    # The resident projects the insert itself; the reads project through the
+    # store's home even when the default home is not set up.
     store.add_approval_request(request, "2026-01-01T00:00:00+00:00")
     store.add_approval_request(request, "2026-01-01T00:00:01+00:00")
     page = store.list_approval_request_page(include_totals=False)
     detail = store.get_approval_request(request.request_id, derive_scope=False)
     assert page["items"][0]["request_id"] == request.request_id
     assert detail is not None and detail["policy_action"] == "review"
-    assert len(homes) >= 4 and set(homes) == {home}
+    assert len(homes) >= 2 and set(homes) == {home}
 
 
 @pytest.mark.usefixtures("native_prompt_runtime")

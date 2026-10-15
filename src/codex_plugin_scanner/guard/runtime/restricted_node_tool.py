@@ -142,7 +142,13 @@ def prepare_restricted_node_tool(
     if name == "bun" and args[:1] == ("x",):
         # `bun x` is Bun's spelling of `bunx`.
         name, args = "bunx", args[1:]
-    if name in {"bun", "npm", "pnpm"}:
+    if name == "pnpm" and args[:1] == ("exec",):
+        # `pnpm exec` is pnpm's spelling of a local-bin run. A pnpm option before
+        # the tool (`-c` runs a shell, `-r`/`--filter` fan out) is not accepted.
+        if len(args) < 2 or args[1].startswith("-"):
+            raise RestrictedPytestError("node_tool_invalid_command", "Missing local runner.")
+        name, args = args[1], args[2:]
+    elif name in {"bun", "npm", "pnpm"}:
         if len(args) != 2 or args[0] != "run" or args[1] not in {"lint", "typecheck", "build"}:
             raise RestrictedPytestError(
                 "node_tool_invalid_command", "Only direct lint/typecheck scripts are supported."

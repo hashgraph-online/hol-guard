@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const VECTORS: &str = include_str!("../../../../tests/fixtures/portable-project-identity.v1.json");
+#[cfg(unix)]
 const SCHEMA: &str = "guard.portable-project-identity.vectors.v1";
 
 /// The vectors whose Python identity this resolver answers `Unknown`, each
