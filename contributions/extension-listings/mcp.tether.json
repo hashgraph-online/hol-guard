@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.tether",
-  "tagline": "Adds the tether memory server: remember, recall, link and forget. Each tool keeps your existing approval policy until you change it. Off un\u2026",
+  "tagline": "Adds tether memory tools: remember, recall, link, and forget. Existing approval policy applies until changed; off until enabled.",
   "summary": "Adds the tether memory server: remember, recall, link and forget. Each tool keeps your existing approval policy until you change it. Off until you turn it on.",
   "category": "other",
   "limitations": [

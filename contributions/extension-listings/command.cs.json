@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "command.cs",
-  "tagline": "Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a mode\u2026",
+  "tagline": "Reviews cs commands that launch Claude Code in another folder, write pin or archive files, or send session text to a model for a recap.",
   "summary": "Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a model for a recap. Read-only commands (ls, show) are not matched.",
   "category": "other",
   "limitations": [

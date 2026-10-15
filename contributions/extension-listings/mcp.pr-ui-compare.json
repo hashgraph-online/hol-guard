@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.pr-ui-compare",
-  "tagline": "Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or F\u2026",
+  "tagline": "Reviews PR UI Compare tools that run project install/start commands, write artifacts outside the repository, or download Chromium/FFmpeg.",
   "summary": "Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or FFmpeg. Off until you turn it on.",
   "category": "other",
   "limitations": [

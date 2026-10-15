@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.setup-doctor",
-  "tagline": "Read-only audit and usage-summary tools for AI coding agent setups (CLAUDE.md, skills, MCP servers, session logs). Never writes files or se\u2026",
+  "tagline": "Read-only audit and usage-summary tools for AI coding agent setups; never writes files or sends data over the network.",
   "summary": "Read-only audit and usage-summary tools for AI coding agent setups (CLAUDE.md, skills, MCP servers, session logs). Never writes files or sends data over the network. Off until you turn it on.",
   "category": "other",
   "limitations": [

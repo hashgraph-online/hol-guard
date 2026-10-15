@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "command.agi-memory",
-  "tagline": "Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, attach a remo\u2026",
+  "tagline": "Reviews agi-memory commands that rewrite, delete, remotely sync, or bulk-seed the memory vault; reads stay unreviewed.",
   "summary": "Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, attach a remote that will receive the whole store, bulk-seed it from git history, or change the invariants injected into later sessions. Reads such as recall, log, inspect, blocks and sync status stay unreviewed.",
   "category": "other",
   "limitations": [
@@ -27,8 +27,5 @@
     "name": "agi-memory command protection",
     "url": "https://pypi.org/project/agi-memory/"
   },
-  "maintainerGithubIds": [
-    "20184673"
-  ],
   "documentationUrl": "https://pypi.org/project/agi-memory/"
 }
