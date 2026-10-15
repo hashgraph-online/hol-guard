@@ -616,3 +616,15 @@ def test_claude_detect_tolerates_unreadable_markdown_artifacts(tmp_path):
 
     assert "claude-code:project:skill:review" in artifacts
     assert artifacts["claude-code:project:skill:review"].metadata == {}
+
+
+def test_claude_workspace_install_writes_global_settings_only(tmp_path: Path) -> None:
+    # Deliberate design: Guard hooks live in ~/.claude/settings.json; a workspace
+    # only scopes the hook URL. Pin it and ensure the manifest says so.
+    context = _build_context(tmp_path)
+    manifest = ClaudeCodeHarnessAdapter().install(context)
+
+    assert (context.home_dir / ".claude" / "settings.json").is_file()
+    assert not (context.workspace_dir / ".claude").exists()
+    assert manifest["config_path"] == str(context.home_dir / ".claude" / "settings.json")
+    assert any("installed globally" in str(note) for note in manifest["notes"])

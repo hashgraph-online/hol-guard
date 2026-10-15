@@ -13,6 +13,8 @@ mod omp_targets;
 pub(super) use hidden_listing::{home_hidden_directory, repository_hidden_directory};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
+#[path = "workspace_scratch_reads.rs"]
+mod scratch;
 use allowances::{
     agent_home_state, agent_skill_document, codex_notes_document, execution_output_log,
     git_config_document, git_ref_document, guard_safety_doc, project_skill_document,
@@ -237,7 +239,8 @@ pub(super) fn resolved_path_allowed_for_operation(
                     || codex_notes_document(canonical, home_dir)
                     || git_ref_document(canonical, home_dir, cwd)
                     || git_config_document(canonical, cwd)
-                    || worktree_gitfile(canonical)))
+                    || worktree_gitfile(canonical)
+                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

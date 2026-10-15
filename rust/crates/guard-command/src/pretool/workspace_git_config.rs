@@ -72,6 +72,7 @@ pub(crate) fn repository_config(root: &Path) -> Result<Option<String>, ()> {
 
 /// The shared Git directory and admin entry of the verified linked worktree
 /// whose work tree holds `workspace`, or `None` for any other workspace.
+#[cfg(any(unix, test))]
 pub(crate) fn linked_git_dirs(workspace: &Path, home: Option<&Path>) -> Option<(PathBuf, PathBuf)> {
     super::worktree_writes::linked_worktree_dirs(&work_tree(workspace, home)?)
 }

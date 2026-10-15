@@ -9,22 +9,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
-    count_approval_requests,
-)
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_approvals import count_approval_requests
+from tests.native_approval_writes import add_approval_request, native_approval_connection
 
 
-def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, timeout=5, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("pragma journal_mode=wal")
-    conn.execute(approval_schema_statement())
-    for statement in approval_index_statements():
-        conn.execute(statement)
-    return conn
+def _connect(guard_home: Path) -> sqlite3.Connection:
+    return native_approval_connection(guard_home)
 
 
 def _make_request(
@@ -68,8 +59,8 @@ def _make_request(
 
 
 def test_phase14_package_queue_identity_collapses_legacy_and_enriched_envelopes(tmp_path: Path) -> None:
-    db_path = tmp_path / "guard.db"
-    conn = _connect(db_path)
+    guard_home = tmp_path / "guard-home"
+    conn = _connect(guard_home)
     artifact_id = "codex:project:package-request:minimist"
     launch_target = "npm install minimist@1.2.8"
     legacy_request = _make_request(
@@ -106,9 +97,8 @@ def test_phase14_package_queue_identity_collapses_legacy_and_enriched_envelopes(
 
 
 def test_phase14_simultaneous_identical_package_requests_collapse_to_one_row(tmp_path: Path) -> None:
-    db_path = tmp_path / "guard.db"
-    setup_conn = _connect(db_path)
-    setup_conn.close()
+    guard_home = tmp_path / "guard-home"
+    GuardStore(guard_home)
     artifact_id = "codex:project:package-request:minimist"
     request_one = _make_request(
         artifact_id=artifact_id,
@@ -121,14 +111,9 @@ def test_phase14_simultaneous_identical_package_requests_collapse_to_one_row(tmp
     barrier = threading.Barrier(2)
 
     def _insert(request: GuardApprovalRequest, now_value: str) -> str:
-        conn = _connect(db_path)
-        try:
-            barrier.wait(timeout=5)
-            request_id = add_approval_request(conn, request, now_value)
-            conn.commit()
-            return request_id
-        finally:
-            conn.close()
+        store = GuardStore(guard_home)
+        barrier.wait(timeout=5)
+        return store.add_approval_request(request, now_value)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         first_future = executor.submit(_insert, request_one, "2026-05-19T10:00:00Z")
@@ -136,7 +121,7 @@ def test_phase14_simultaneous_identical_package_requests_collapse_to_one_row(tmp
         first_id = first_future.result()
         second_id = second_future.result()
 
-    verify_conn = _connect(db_path)
+    verify_conn = _connect(guard_home)
     try:
         assert first_id == second_id
         assert count_approval_requests(verify_conn, status="pending") == 1
@@ -145,9 +130,8 @@ def test_phase14_simultaneous_identical_package_requests_collapse_to_one_row(tmp
 
 
 def test_phase14_simultaneous_distinct_package_requests_stay_isolated(tmp_path: Path) -> None:
-    db_path = tmp_path / "guard.db"
-    setup_conn = _connect(db_path)
-    setup_conn.close()
+    guard_home = tmp_path / "guard-home"
+    GuardStore(guard_home)
     minimist_request = _make_request(
         artifact_id="codex:project:package-request:minimist",
         launch_target="npm install minimist@1.2.8",
@@ -159,14 +143,9 @@ def test_phase14_simultaneous_distinct_package_requests_stay_isolated(tmp_path: 
     barrier = threading.Barrier(2)
 
     def _insert(request: GuardApprovalRequest, now_value: str) -> str:
-        conn = _connect(db_path)
-        try:
-            barrier.wait(timeout=5)
-            request_id = add_approval_request(conn, request, now_value)
-            conn.commit()
-            return request_id
-        finally:
-            conn.close()
+        store = GuardStore(guard_home)
+        barrier.wait(timeout=5)
+        return store.add_approval_request(request, now_value)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         first_future = executor.submit(_insert, minimist_request, "2026-05-19T10:00:00Z")
@@ -174,7 +153,7 @@ def test_phase14_simultaneous_distinct_package_requests_stay_isolated(tmp_path: 
         first_id = first_future.result()
         second_id = second_future.result()
 
-    verify_conn = _connect(db_path)
+    verify_conn = _connect(guard_home)
     try:
         assert first_id != second_id
         assert count_approval_requests(verify_conn, status="pending") == 2

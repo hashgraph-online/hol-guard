@@ -11,8 +11,20 @@ pub(super) fn safe_stdin_arguments(arguments: &[String]) -> bool {
 }
 
 fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bool) -> bool {
+    arguments_pass(arguments, context, stdin_only, false)
+}
+
+/// One pass over `grep` arguments. With `pattern_from_option`, every
+/// positional is a path, as it is when `-e` or `-f` appears anywhere.
+fn arguments_pass(
+    arguments: &[String],
+    context: ReadContext<'_>,
+    stdin_only: bool,
+    pattern_from_option: bool,
+) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
-    let mut pattern_supplied = false;
+    let mut pattern_supplied = pattern_from_option;
+    let mut pattern_option_seen = false;
     let mut options_enabled = true;
     let mut recursive = false;
     let mut targets = Vec::new();
@@ -45,8 +57,10 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
             if unsafe_search_value(role, argument, context) {
                 return false;
             }
-            if matches!(role, SearchValueRole::Pattern) {
+            // `-f FILE` supplies the patterns as `-e` does.
+            if matches!(role, SearchValueRole::Pattern | SearchValueRole::Path) {
                 pattern_supplied = true;
+                pattern_option_seen = true;
             }
             continue;
         }
@@ -106,6 +120,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                     return false;
                 } else if matches!(role, SearchValueRole::Pattern) {
                     pattern_supplied = true;
+                    pattern_option_seen = true;
                 }
             }
             continue;
@@ -142,6 +157,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
             };
             pending_value = next_value;
             pattern_supplied |= supplied_pattern;
+            pattern_option_seen |= supplied_pattern;
             continue;
         }
         if pattern_supplied {
@@ -159,6 +175,13 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
             pattern_supplied = true;
         }
         positional_started = true;
+    }
+    // GNU and BSD grep take the first positional as the pattern only when no
+    // `-e` or `-f` supplies one, wherever that option appears: in
+    // `grep .env -e KEY`, `.env` is a file. Check again with every
+    // positional as a path.
+    if pattern_option_seen && !pattern_from_option {
+        return arguments_pass(arguments, context, stdin_only, true);
     }
     pending_value.is_none()
         && pending_exclusion.is_none()

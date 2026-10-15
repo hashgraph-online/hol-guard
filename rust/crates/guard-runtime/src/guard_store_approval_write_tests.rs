@@ -17,7 +17,7 @@ const TABLES: [(&str, &str); 2] = [
     ("guard_review_outbox_events", "stream_sequence"),
 ];
 
-fn write(home: &std::path::Path, source: &str, scenario: &Value) -> Value {
+fn write(home: &std::path::Path, source: &str, scenario: &Value, method: &str) -> Value {
     let mut args = Map::new();
     args.insert("request".to_owned(), scenario["request"].clone());
     args.insert("now".to_owned(), scenario["now"].clone());
@@ -26,7 +26,7 @@ fn write(home: &std::path::Path, source: &str, scenario: &Value) -> Value {
         request_id: "vector".to_owned(),
         store_path: home.join("guard.db").to_string_lossy().into_owned(),
         guard_home: home.to_string_lossy().into_owned(),
-        method: "add_native_review_approval_request".to_owned(),
+        method: method.to_owned(),
         source: source.to_owned(),
         busy_timeout_ms: 5000,
         args,
@@ -115,7 +115,12 @@ fn replays_every_recorded_approval_request_write() {
             before,
             "{name}: seed"
         );
-        let reply = write(&home, source, scenario);
+        let reply = write(
+            &home,
+            source,
+            scenario,
+            "add_native_review_approval_request",
+        );
         let after = tables(&Connection::open(&db).unwrap(), name);
         if scenario["native_defers"] == true {
             // The daemon backfills legacy rows before writing; the resident
@@ -137,4 +142,40 @@ fn replays_every_recorded_approval_request_write() {
         let _ = std::fs::remove_dir_all(&home);
     }
     assert!(replayed >= 26, "only {replayed} recorded scenarios");
+}
+
+/// `add_approval_request` backfills legacy rows itself and so reproduces
+/// every Python outcome, the deferred scenarios included.
+#[test]
+fn general_write_replays_every_recorded_outcome() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let source = vectors["source"].as_str().unwrap();
+    let mut backfilled = 0;
+    for scenario in vectors["scenarios"].as_array().unwrap() {
+        let name = scenario["name"].as_str().unwrap();
+        let label = format!("{name}-general");
+        let home = temp_home(&label);
+        let db = home.join("guard.db");
+        seed(&db, &vectors, scenario);
+        let before = expected(&scenario["before"], name);
+        let reply = write(&home, source, scenario, "add_approval_request");
+        let after = tables(&Connection::open(&db).unwrap(), name);
+        if let Some(error) = scenario.get("error").filter(|error| !error.is_null()) {
+            assert_eq!(reply["status"], "error", "{label}: {reply}");
+            assert_eq!(reply["code"], "native_guard_store_value_error", "{label}");
+            assert_eq!(reply["payload"], json!({"message": error}), "{label}");
+            assert_eq!(
+                unchanged(&after),
+                unchanged(&before),
+                "{label}: rolled back"
+            );
+        } else {
+            assert_eq!(reply["status"], "ok", "{label}: {reply}");
+            assert_eq!(reply["payload"], scenario["result"], "{label}");
+            assert_eq!(after, expected(&scenario["after"], name), "{label}: rows");
+        }
+        backfilled += usize::from(scenario["native_defers"] == true);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+    assert!(backfilled >= 2, "only {backfilled} legacy scenarios");
 }

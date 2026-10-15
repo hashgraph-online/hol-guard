@@ -362,6 +362,7 @@
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_mdm.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_document.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_dx.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_records.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_risk_report.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py",
@@ -1672,7 +1673,7 @@
         ],
         "entry_points": [],
         "reason": "Trusted reads and private writes of policy document files back the hol-guard policy import and export commands. Policy compilation (compile_policy_document, CompiledPolicyRow) stays counted because Cloud sync and the policy store use it.",
-        "evidence": "rg -n 'PolicyFileTrustError|read_trusted_policy_text|write_private_policy_text|load_trusted_policy_document' src -g '*.py' lists only cli/commands_dispatch_policy_document.py outside policy_document_io.py; mcp/policy_tools.py, runtime/runner.py and store_policy_document.py import only CompiledPolicyRow, PolicyCompilationError and compile_policy_document."
+        "evidence": "rg -n 'PolicyFileTrustError|read_trusted_policy_text|write_private_policy_text|load_trusted_policy_document' src -g '*.py' lists only cli/commands_dispatch_policy_document.py, cli/commands_dispatch_policy_dx.py and policy_document_diagnostics.py (used by the local policy commands) outside policy_document_io.py; mcp/policy_tools.py, runtime/runner.py and store_policy_document.py import only CompiledPolicyRow, PolicyCompilationError and compile_policy_document."
       },
       {
         "id": "mdm-local-integrity-snapshot",
@@ -2053,17 +2054,6 @@
         "entry_points": [],
         "reason": "Classifying instruction files by role and listing shared workspace AIBOM artifacts for the inventory contract. Inventory is built for reports and Cloud sync, not on a hook call.",
         "evidence": "instruction_role_for_path is called only from inventory_contract_metadata.py and discover_shared_workspace_aibom_artifacts only from inventory_contract.py; both are outside runtime scope. InstructionRole and the role tables are reached only from these two. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference them, and the report validates this reference closure on every run."
-      },
-      {
-        "id": "review-event-sequence-recovery-binding",
-        "category": "async_control_plane",
-        "path": "src/codex_plugin_scanner/guard/store_review_event_outbox_binding.py",
-        "symbols": [
-          "normalized_delivery_binding"
-        ],
-        "entry_points": [],
-        "reason": "Normalizing a stored delivery binding while recovering review-event outbox sequences. Recovery runs in background Cloud delivery.",
-        "evidence": "The only caller of normalized_delivery_binding is store_review_event_sequence_recovery.py, which is outside runtime scope. The retained binding helpers (bind_review_events_for_request, load_review_oauth_binding, review_event_oauth_subject_hash) do not reference it, and the report validates this reference closure on every run."
       }
     ],
     "dynamic_imports": [

@@ -363,6 +363,82 @@ fn a_silent_review_blocks_after_queueing_its_request_and_event() {
 
 #[cfg(unix)]
 #[test]
+fn a_silent_review_links_its_row_only_when_approval_can_unblock_it() {
+    // Unbound: an exact-action Always can still let the retry run, so the
+    // user gets the row's link; without one no approval can, so nothing sends
+    // the user to approve it.
+    for (tag, exact_action_allowable, linked) in [
+        ("always-only", true, true),
+        ("cannot-unblock", false, false),
+    ] {
+        let home = store_home(&format!("review-queue-silent-{tag}"), SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let payload = Map::new();
+        let mut binding = ask_binding();
+        binding.review.blocked_request_mode = Some("safe-alternative".to_owned());
+        let context = Context {
+            harness: "claude-code",
+            payload: &payload,
+            recorded_payload: &payload,
+            workspace: "/work/space",
+            home_dir: "/home/user",
+            guard_home: &guard_home,
+            binding: &binding,
+        };
+        let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
+        let request = vectors["scenarios"][1]["request"].clone();
+        let result = json!({
+            "decision": "review",
+            "minimum_action": "require-reapproval",
+            "reason": "Deletes files.",
+            "reason_code": "native_review",
+        });
+        let response = silent(
+            &context,
+            result.as_object().unwrap(),
+            "default",
+            request,
+            false,
+            exact_action_allowable,
+        )
+        .unwrap();
+        let safe = safe_alternative_reason_with_retry(
+            "Deletes files.",
+            Some("native_review"),
+            Some(true),
+            false,
+            exact_action_allowable,
+        );
+        let reason = if linked {
+            format!(
+                "{safe} Open HOL Guard to approve or keep this blocked: \
+                 http://127.0.0.1:4781/requests/r-new."
+            )
+        } else {
+            safe
+        };
+        let mut blocked = result.as_object().unwrap().clone();
+        blocked.insert("decision".to_owned(), json!("deny"));
+        blocked.insert("minimum_action".to_owned(), json!("block"));
+        blocked.insert("policy_action".to_owned(), json!("block"));
+        blocked.insert("reason".to_owned(), json!(reason));
+        let mut expected = pre_tool("claude-code", &blocked);
+        expected.insert("prompted".to_owned(), json!(false));
+        expected.insert("blocked_request_mode".to_owned(), json!("safe-alternative"));
+        assert_eq!(response, Value::Object(expected), "{tag}");
+        let connection = rusqlite::Connection::open(home.join(STORE_FILE_NAME)).unwrap();
+        let rows: i64 = connection
+            .query_row("select count(*) from approval_requests", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 1, "{tag}");
+        std::fs::remove_dir_all(home).ok();
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
     for (tag, command) in [
         ("ask-python", "python3 script.py"),

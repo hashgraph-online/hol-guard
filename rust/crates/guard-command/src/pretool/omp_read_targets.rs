@@ -255,7 +255,10 @@ fn bounded_selector_path(
     // native proof; never reinterpret it as a selector in that case.
     match std::fs::symlink_metadata(&candidate) {
         Ok(_) => return BoundedSelectorPath::NotSelector,
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+        Err(error)
+            if error.kind() != std::io::ErrorKind::NotFound
+                && !windows_stream_spelling(&candidate) =>
+        {
             return BoundedSelectorPath::NotSelector;
         }
         Err(_) => {}
@@ -289,6 +292,17 @@ fn bounded_selector_path(
         };
     }
     BoundedSelectorPath::Base(base.to_owned())
+}
+
+/// Windows file names cannot hold `:`; one there names an NTFS data stream
+/// (`main.rs:raw:raw` is stream `raw` of type `raw`), and an invalid stream
+/// spelling fails with an error other than `NotFound`. Such a name is no
+/// literal file, so it is judged as the OMP selector it spells.
+fn windows_stream_spelling(candidate: &std::path::Path) -> bool {
+    cfg!(windows)
+        && candidate
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().contains(':'))
 }
 
 /// The file behind OMP's `path:N-M:raw` or `path:raw:N-M`. The window must

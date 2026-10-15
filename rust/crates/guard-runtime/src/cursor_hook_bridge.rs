@@ -238,7 +238,7 @@ fn hook_object(raw: &[u8]) -> Result<(OMap, bool), Unread> {
 }
 
 /// The request the client would send for `raw`, as [`request_for`].
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn prepared_request(client: &Client, raw: &[u8]) -> Option<Request> {
     let (payload, mapped) = hook_object(raw).ok()?;
     request_for(client, &payload, mapped)
@@ -320,7 +320,7 @@ enum Reply {
 
 /// The client's stdout and exit code for the hook, answered by a live
 /// resident, the daemon or the fail-closed answer.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn respond(client: &Client, raw: &[u8]) -> Option<(String, i32)> {
     let Reply::Answered(stdout, code) = reply(client, raw);
     Some((stdout, code))

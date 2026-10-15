@@ -349,6 +349,7 @@ pub(crate) fn apply_pre_tool_policy(
         if floor_cause == FloorCause::Risk("package_script")
             && output.action.action_type == guard_contracts::PreToolActionTypeV1::Package
             && output.action.operation == guard_contracts::PreToolOperationV1::Install
+            && guard_command::pretool::held_command_installs(payload)
         {
             output.reason.push(' ');
             output.reason.push_str(NO_SCRIPT_INSTALL_ALTERNATIVE);

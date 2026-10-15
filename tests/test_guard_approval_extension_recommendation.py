@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import tempfile
 import urllib.request
 from dataclasses import replace
 from pathlib import Path
@@ -14,7 +13,6 @@ from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import 
     with_approval_extension_recommendation,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import EXTENSION_ALLOW_HINT_SCHEMA
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
@@ -30,13 +28,11 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
     get_approval_extension_allow_hint,
     get_approval_request,
     list_approval_requests,
 )
+from tests.native_approval_writes import add_approval_request, native_approval_connection
 
 REGISTRY = BUILT_IN_COMMAND_EXTENSION_REGISTRY
 GIT_ADD = "command.git.permission.add"
@@ -122,13 +118,7 @@ def _request(request_id: str, *, hint: dict[str, object] | None) -> GuardApprova
 
 
 def _connection() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    bind_connection_guard_home(connection, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    connection.execute(approval_schema_statement())
-    for statement in approval_index_statements():
-        connection.execute(statement)
-    return connection
+    return native_approval_connection()
 
 
 def test_store_round_trips_and_refreshes_hint_on_dedupe() -> None:
@@ -149,11 +139,8 @@ def test_store_round_trips_and_refreshes_hint_on_dedupe() -> None:
 
 def test_existing_store_gains_hint_column(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
+    GuardStore(guard_home).add_approval_request(_request("req-old", hint=None), "2026-10-08T10:00:00+00:00")
     legacy = sqlite3.connect(guard_home / "guard.db")
-    legacy.row_factory = sqlite3.Row
-    legacy.execute(approval_schema_statement())
-    add_approval_request(legacy, _request("req-old", hint=None), "2026-10-08T10:00:00+00:00")
     # Recreate a pre-upgrade table: same row, no hint column.
     legacy.execute("alter table approval_requests drop column extension_allow_hint_json")
     legacy.commit()
