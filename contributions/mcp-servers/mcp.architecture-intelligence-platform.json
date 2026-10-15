@@ -3,7 +3,7 @@
   "id": "mcp.architecture-intelligence-platform",
   "version": "1.0.0",
   "name": "Architecture Intelligence Platform MCP",
-  "description": "Read-only evidence-qualified distributed architecture queries for coding agents. Known released AIP query tools stay on Guard's usual handling; unknown future tools require review.",
+  "description": "Read-only evidence-qualified distributed architecture queries for coding agents. Targeted at the AIP v0.7.0 public MCP surface; unknown future tools require review.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -31,6 +31,10 @@
   ],
   "tools": [
     {
+      "name": "get_api_consumer_usage",
+      "state": "inherit"
+    },
+    {
       "name": "get_architecture_drift",
       "state": "inherit"
     },
@@ -53,12 +57,11 @@
   ],
   "referenceUrls": [
     "https://github.com/michaelegner/architecture-intelligence-platform",
-    "https://github.com/michaelegner/architecture-intelligence-platform/blob/v0.6.3/docs/mcp.md",
-    "https://github.com/michaelegner/architecture-intelligence-platform/blob/v0.6.3/examples/pitstop-demo/TRY_IT_HOSTED.md",
-    "https://github.com/michaelegner/architecture-intelligence-platform/releases/tag/v0.6.3"
+    "https://github.com/michaelegner/architecture-intelligence-platform/blob/main/docs/mcp.md",
+    "https://github.com/michaelegner/architecture-intelligence-platform/blob/main/docs/release-validation/v0.7.0-release-notes.md"
   ],
   "saferAlternatives": [
-    "Use the documented released AIP read-only query tools for architecture evidence.",
-    "Review any tool that is not part of AIP's documented released MCP surface."
+    "Use the documented AIP read-only query tools for architecture evidence.",
+    "Review any tool that is not part of AIP's documented read-only MCP surface."
   ]
 }
