@@ -3768,10 +3768,18 @@ class GuardDaemonServer:
             from ..native_approval_scope import ApprovalScopeUnavailableError
 
             try:
-                pending_review_requests = self._server.store.list_approval_requests(
-                    status="pending",
-                    limit=1,
-                )
+                try:
+                    pending_review_requests = self._server.store.list_approval_requests(
+                        status="pending",
+                        limit=1,
+                    )
+                except ApprovalScopeUnavailableError as error:
+                    if not isinstance(error.__cause__, NativeGuardStoreUnavailable):
+                        raise
+                    # The native resident cannot read the queue, so whether a review
+                    # is pending is unknown. Pending rows stay durable in guard.db;
+                    # do not let this pin the daemon alive.
+                    pending_review_requests = []
                 cloud_profile = self._server.store.get_cloud_sync_profile()
                 workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
                 try:

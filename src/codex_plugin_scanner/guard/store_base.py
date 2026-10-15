@@ -70,8 +70,6 @@ from .sqlite_tuning import (
     sqlite_connect_timeout_seconds,
 )
 from .store_approvals import (
-    _json_object,
-    _json_object_list,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,

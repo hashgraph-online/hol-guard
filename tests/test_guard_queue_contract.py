@@ -18,12 +18,13 @@ from codex_plugin_scanner.guard.native_policy_snapshot_windows_key import provis
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
     InvalidApprovalCursorError,
+    _encode_page_cursor,
     get_approval_request,
     list_approval_requests,
     list_pending_approval_summaries,
     resolve_request_with_queue_result,
 )
-from tests.native_approval_writes import add_approval_request, native_approval_connection
+from tests.native_approval_writes import _store_for, add_approval_request, native_approval_connection
 
 
 def _connection() -> sqlite3.Connection:
@@ -435,7 +436,7 @@ def test_pending_summary_rejects_invalid_cursor() -> None:
         list_pending_approval_summaries(connection, limit=2, cursor="not-a-valid-cursor")
 
 
-def test_before_cursor_uses_last_seen_sort_order() -> None:
+def test_cursor_uses_last_seen_sort_order() -> None:
     connection = _connection()
     add_approval_request(connection, _request("req-old", command="cat ~/.npmrc"), "2026-05-08T10:00:00+00:00")
     add_approval_request(connection, _request("req-middle", command="cat ~/.pypirc"), "2026-05-08T10:01:00+00:00")
@@ -446,7 +447,11 @@ def test_before_cursor_uses_last_seen_sort_order() -> None:
     )
     add_approval_request(connection, _request("req-old-again", command="cat ~/.npmrc"), "2026-05-08T10:05:00+00:00")
 
-    rows = list_approval_requests(connection, limit=None, before_cursor="2026-05-08T10:02:00+00:00")
+    store = _store_for(connection)
+    newest = store.get_approval_request("req-new")
+    assert newest is not None
+
+    rows = store.list_approval_requests(limit=None, cursor=_encode_page_cursor(newest))
 
     assert [row["request_id"] for row in rows] == ["req-middle"]
 

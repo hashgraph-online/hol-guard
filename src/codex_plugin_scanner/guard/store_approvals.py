@@ -18,34 +18,13 @@ from .native_approval_queue_identity import (
     queue_identity_item,
 )
 from .store_approval_projection import (
-    APPROVAL_QUEUE_PREVIEW_MAX_LENGTH as APPROVAL_QUEUE_PREVIEW_MAX_LENGTH,
-)
-from .store_approval_projection import (
-    _approval_queue_command_category as _approval_queue_command_category,
-)
-from .store_approval_projection import (
-    _approval_queue_preview as _approval_queue_preview,
-)
-from .store_approval_projection import (
-    _browser_launch_target_for_display as _browser_launch_target_for_display,
-)
-from .store_approval_projection import (
-    _browser_risk_signals_for_display as _browser_risk_signals_for_display,
-)
-from .store_approval_projection import (
     _json_object as _json_object,
-)
-from .store_approval_projection import (
-    _json_object_list as _json_object_list,
 )
 from .store_approval_projection import (
     _optional_json_object as _optional_json_object,
 )
 from .store_approval_projection import (
     _project_listing_rows as _project_listing_rows,
-)
-from .store_approval_projection import (
-    _row_decision_inputs as _row_decision_inputs,
 )
 from .store_approval_projection import (
     _row_to_approval_summary as _row_to_approval_summary,
@@ -58,9 +37,6 @@ from .store_approval_projection import (
 )
 from .store_approval_projection import (
     _rows_to_payloads as _rows_to_payloads,
-)
-from .store_approval_projection import (
-    _safe_json_list as _safe_json_list,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,66 +113,39 @@ def approval_schema_statement() -> str:
         """
 
 
+_APPROVAL_COLUMNS = """
+    request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
+    recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace, launch_target,
+    normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
+    risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
+    launch_summary, risk_headline, action_envelope_json, decision_v2_json,
+    fallback_cli_command, scanner_evidence_json, watch_only_observation,
+    browser_intent_json, continuation_snapshot_json, review_command,
+    approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
+    raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
+"""
+_SUPERSEDED_PREFIX = "superseded_by_fresh_review:"
+
+
 def list_approval_requests(
     connection: sqlite3.Connection,
     *,
     status: str | None = "pending",
     harness: str | None = None,
     limit: int | None = 50,
-    before_cursor: str | None = None,
-    cursor: str | None = None,
-    search: str | None = None,
-    created_after: str | None = None,
-    created_before: str | None = None,
 ) -> list[dict[str, object]]:
-    clauses = []
-    params: list[object] = []
-    if status is not None:
-        clauses.append("status = ?")
-        params.append(status)
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if before_cursor is not None:
-        clauses.append("last_seen_at < ?")
-        params.append(before_cursor)
-    if cursor is not None:
-        marker = _decode_page_cursor(cursor)
-        if marker is None:
-            raise InvalidApprovalCursorError("invalid approval queue cursor")
-        clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
-        params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
-    if created_after is not None:
-        clauses.append("created_at > ?")
-        params.append(created_after)
-    if created_before is not None:
-        clauses.append("created_at < ?")
-        params.append(created_before)
-    if search is not None:
-        search_clause, search_params = _approval_search_clause(search)
-        clauses.append(search_clause)
-        params.extend(search_params)
-    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
-    query = f"""
-        select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-               recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace,
-                launch_target,
-                normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
-                risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-                launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                fallback_cli_command, scanner_evidence_json, watch_only_observation,
-                browser_intent_json, continuation_snapshot_json, extension_allow_hint_json,
-                review_command,
-                approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
-                raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
-        from approval_requests
-        {where_clause}
-        order by last_seen_at desc, request_id desc
-    """
-    if limit is None:
-        rows = connection.execute(query, params).fetchall()
-    else:
-        rows = connection.execute(f"{query}\nlimit ?", (*params, limit)).fetchall()
+    """Queue payloads read inside a caller's transaction; `GuardStore` reads natively."""
+
+    filters = [(column, value) for column, value in (("status", status), ("harness", harness)) if value is not None]
+    where_clause = f"where {' and '.join(f'{column} = ?' for column, _ in filters)}" if filters else ""
+    params: list[object] = [value for _, value in filters]
+    query = (
+        f"select {_APPROVAL_COLUMNS} from approval_requests {where_clause} order by last_seen_at desc, request_id desc"
+    )
+    if limit is not None:
+        query += " limit ?"
+        params.append(limit)
+    rows = connection.execute(query, params).fetchall()
     return _rows_to_payloads(rows, guard_home=connection_guard_home(connection))
 
 
@@ -239,7 +188,7 @@ def get_approval_request(
     if derive_scope:
         payload = _row_to_payload(row, guard_home=guard_home)
     else:
-        payload, contract_error = _row_to_draft(row, guard_home=guard_home)
+        payload, contract_error = _row_to_draft(row, _project_listing_rows([row], guard_home=guard_home)[0])
         if contract_error is not None:
             payload["decision_contract_error"] = contract_error
     reason = row["reason"]

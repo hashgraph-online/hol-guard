@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_advisory_cache as advisory_cache;
 use crate::guard_store_approval_backfill;
+use crate::guard_store_approval_reads as approval_reads;
 use crate::guard_store_approval_write::{add_approval_request, add_native_review_approval_request};
 use crate::guard_store_args::Args;
 use crate::guard_store_claude_review::add_claude_native_review_approval_request;
@@ -137,7 +138,13 @@ pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Opt
         Kind::Snapshot => connection.execute_batch("BEGIN")?,
         Kind::Read => {}
     }
-    let outcome = dispatch(&connection, &request.source, &request.method, &args);
+    let outcome = dispatch(
+        &connection,
+        &request.source,
+        &request.guard_home,
+        &request.method,
+        &args,
+    );
     let payload = match outcome {
         Ok(payload) => payload,
         Err(error) => {
@@ -297,7 +304,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "command_activity_diagnostics"
         | "list_command_shadow_observations"
         | "observed_mcp_tool_actions"
-        | "workflow_capability_plan" => Kind::Snapshot,
+        | "workflow_capability_plan"
+        | "get_approval_request"
+        | "list_approval_requests" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "add_approval_request"
@@ -364,6 +373,7 @@ fn method_kind(method: &str) -> Option<Kind> {
 fn dispatch(
     connection: &Connection,
     source: &str,
+    guard_home: &str,
     method: &str,
     args: &Args,
 ) -> StoreResult<Value> {
@@ -528,6 +538,12 @@ fn dispatch(
         }
         "latest_receipt_rowid" => receipt_reads::latest_rowid(connection, args),
         "get_receipt" => receipt_reads::get_receipt(connection, args),
+        "get_approval_request" => {
+            approval_reads::get_approval_request(connection, guard_home, args)
+        }
+        "list_approval_requests" => {
+            approval_reads::list_approval_requests(connection, guard_home, args)
+        }
         "get_receipt_for_approval_request" => {
             receipt_reads::get_for_approval_request(connection, args)
         }

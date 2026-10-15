@@ -102,10 +102,8 @@ def test_store_read_projections_use_the_connection_home(monkeypatch: pytest.Monk
     store.add_approval_request(request, "2026-01-01T00:00:00+00:00")
     store.add_approval_request(request, "2026-01-01T00:00:01+00:00")
     page = store.list_approval_request_page(include_totals=False)
-    detail = store.get_approval_request(request.request_id, derive_scope=False)
     assert page["items"][0]["request_id"] == request.request_id
-    assert detail is not None and detail["policy_action"] == "review"
-    assert len(homes) >= 2 and set(homes) == {home}
+    assert homes and set(homes) == {home}
 
 
 @pytest.mark.usefixtures("native_prompt_runtime")
@@ -139,9 +137,28 @@ def test_listing_outage_reports_scope_unavailable(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
     # Daemon polls and /requests treat this as the 503 scope outage, not a crash.
     with pytest.raises(ApprovalScopeUnavailableError):
-        store.list_approval_requests(status="pending", limit=1)
-    with pytest.raises(ApprovalScopeUnavailableError):
         store.list_approval_request_page(include_totals=False)
+
+
+@pytest.mark.parametrize("failure", ["store_outage", "scope_refusal"])
+def test_native_queue_read_failures_report_scope_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
+) -> None:
+    from codex_plugin_scanner.guard.native_approval_scope import UNAVAILABLE, ApprovalScopeUnavailableError
+    from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    store = GuardStore(tmp_path / "outage-home")
+
+    def native_store_call(method: str, args: object, **kwargs: object) -> object:
+        del method, args, kwargs
+        if failure == "store_outage":
+            raise NativeGuardStoreUnavailable("native_guard_store_unavailable")
+        raise ValueError(UNAVAILABLE)
+
+    monkeypatch.setattr(store, "_native_store_call", native_store_call)
+    with pytest.raises(ApprovalScopeUnavailableError):
+        store.list_approval_requests(status="pending", limit=1)
     # The approval write path reads the row with derive_scope=False; it must surface the same outage.
     with pytest.raises(ApprovalScopeUnavailableError):
         store.get_approval_request("outage-request", derive_scope=False)

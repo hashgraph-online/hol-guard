@@ -47,7 +47,7 @@ pub(crate) fn evaluate(request: &ApprovalScopeRequestV1) -> Result<Value, String
     Ok(json!({ "items": items }))
 }
 
-fn contract_value(contract: &ScopeContract) -> Value {
+pub(crate) fn contract_value(contract: &ScopeContract) -> Value {
     json!({
         "scope_contract_version": APPROVAL_SCOPE_CONTRACT_VERSION,
         "scope_contract_digest": contract.digest,

@@ -2,9 +2,28 @@
 
 from __future__ import annotations
 
+from .native_approval_scope import UNAVAILABLE as SCOPE_UNAVAILABLE
+from .native_approval_scope import ApprovalScopeUnavailableError
+from .native_guard_store import NativeGuardStoreUnavailable
+from .store_approvals import InvalidApprovalCursorError, _decode_page_cursor
+
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
 from .store_base import *
+from .temporary_mcp_approvals import temporary_mcp_approval_payload
+from .trusted_local_tools import local_tool_approval_payload
+
+
+def _with_approval_hints(payload: dict[str, object]) -> dict[str, object]:
+    """Attach the queue hints the resident leaves to Python, as the scope payload did."""
+
+    temporary_mcp_approval = temporary_mcp_approval_payload(payload)
+    if temporary_mcp_approval is not None:
+        payload["temporary_mcp_approval"] = temporary_mcp_approval
+    local_tool_approval = local_tool_approval_payload(payload)
+    if local_tool_approval is not None:
+        payload["local_tool_approval"] = local_tool_approval
+    return payload
 
 
 class StoreApprovalQueriesMixin:
@@ -17,15 +36,29 @@ class StoreApprovalQueriesMixin:
         cursor: str | None = None,
         search: str | None = None,
     ) -> list[dict[str, object]]:
-        with self._connect() as connection:
-            return load_approval_requests(
-                connection,
-                status=status,
-                harness=harness,
-                limit=limit,
-                cursor=cursor,
-                search=search,
-            )
+        marker = None
+        if cursor is not None:
+            marker = _decode_page_cursor(cursor)
+            if marker is None:
+                raise InvalidApprovalCursorError("invalid approval queue cursor")
+        args: dict[str, object] = {
+            "status": status,
+            "harness": harness,
+            "limit": limit,
+            "cursor": None if marker is None else [marker["last_seen_at"], marker["request_id"]],
+            "search": search,
+        }
+        items: list[dict[str, object]] = []
+        while True:
+            # The resident returns bounded chunks; each continues after the sort
+            # key of the previous chunk's last row.
+            page = self._native_approval_read("list_approval_requests", args)
+            items.extend(page["items"])
+            if page["complete"]:
+                return [_with_approval_hints(item) for item in items]
+            args["after"] = page["after"]
+            if limit is not None and limit >= 0:
+                args["limit"] = limit - len(items)
 
     def list_pending_approval_summaries(
         self,
@@ -72,8 +105,27 @@ class StoreApprovalQueriesMixin:
             )
 
     def get_approval_request(self, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_approval_request(connection, request_id, derive_scope=derive_scope)
+        payload = self._native_approval_read(
+            "get_approval_request", {"request_id": request_id, "derive_scope": derive_scope}
+        )
+        return _with_approval_hints(payload) if payload is not None and derive_scope else payload
+
+    def _native_approval_read(self, method: str, args: dict[str, object]) -> Any:
+        """One native queue read; a resident without an answer reads as scope unavailable."""
+
+        try:
+            # `Path.resolve` of a relative config path starts from this process's directory.
+            cwd: str | None = os.getcwd()
+        except OSError:
+            cwd = None
+        try:
+            return self._native_store_call(method, {**args, "cwd": cwd})
+        except NativeGuardStoreUnavailable as error:
+            raise ApprovalScopeUnavailableError from error
+        except ValueError as error:
+            if str(error) == SCOPE_UNAVAILABLE:
+                raise ApprovalScopeUnavailableError from error
+            raise
 
     def get_approval_extension_allow_hint(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
