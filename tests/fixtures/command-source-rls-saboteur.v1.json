@@ -276,6 +276,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -375,6 +377,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -433,6 +437,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -493,6 +499,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -553,6 +561,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -707,6 +717,8 @@
                       ],
                       "interspersed_flags": [
                         "--aggregate-output",
+                        "--no",
+                        "--no-install",
                         "--silent",
                         "--stream",
                         "--use-stderr",
@@ -807,6 +819,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -867,6 +881,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -929,6 +945,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -991,6 +1009,8 @@
                         "--close-sessions",
                         "--isolate-network",
                         "--json",
+                        "--no",
+                        "--no-install",
                         "--no-isolate-network",
                         "--no-terminate",
                         "--only-related",
@@ -1036,6 +1056,348 @@
                       "subcommands": []
                     },
                     "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "npx",
+                                "npx.cmd",
+                                "npx.exe",
+                                "bunx",
+                                "bunx.cmd",
+                                "bunx.exe",
+                                "pnpx",
+                                "pnpx.cmd",
+                                "pnpx.exe"
+                              ],
+                              "interspersed_flags": [
+                                "--aggregate-output",
+                                "--allow-remote-i-understand-this-locks-tables",
+                                "--close-sessions",
+                                "--isolate-network",
+                                "--json",
+                                "--no",
+                                "--no-install",
+                                "--no-isolate-network",
+                                "--no-terminate",
+                                "--only-related",
+                                "--silent",
+                                "--stream",
+                                "--use-stderr",
+                                "--workspace-root",
+                                "--yes",
+                                "-y"
+                              ],
+                              "interspersed_options_with_values": [
+                                "--admin-url",
+                                "--cache",
+                                "--call",
+                                "--db-url",
+                                "--dir",
+                                "--filter",
+                                "--isolation",
+                                "--jobs",
+                                "--json-file",
+                                "--max-size",
+                                "--package",
+                                "--report",
+                                "--reporter",
+                                "--runner",
+                                "--schemas",
+                                "--test",
+                                "--tests-dir",
+                                "--threshold",
+                                "--timeout",
+                                "--workspace",
+                                "-c",
+                                "-p",
+                                "-w"
+                              ],
+                              "leading_subcommands": [],
+                              "package": "rls-saboteur",
+                              "required_flags": [],
+                              "subcommands": []
+                            },
+                            "op": "versioned-package-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "npm",
+                                "npm.cmd",
+                                "npm.exe",
+                                "pnpm",
+                                "pnpm.cmd",
+                                "pnpm.exe"
+                              ],
+                              "interspersed_flags": [
+                                "--aggregate-output",
+                                "--allow-remote-i-understand-this-locks-tables",
+                                "--close-sessions",
+                                "--isolate-network",
+                                "--json",
+                                "--no",
+                                "--no-install",
+                                "--no-isolate-network",
+                                "--no-terminate",
+                                "--only-related",
+                                "--silent",
+                                "--stream",
+                                "--use-stderr",
+                                "--workspace-root",
+                                "--yes",
+                                "-y"
+                              ],
+                              "interspersed_options_with_values": [
+                                "--admin-url",
+                                "--cache",
+                                "--call",
+                                "--db-url",
+                                "--dir",
+                                "--filter",
+                                "--isolation",
+                                "--jobs",
+                                "--json-file",
+                                "--max-size",
+                                "--package",
+                                "--report",
+                                "--reporter",
+                                "--runner",
+                                "--schemas",
+                                "--test",
+                                "--tests-dir",
+                                "--threshold",
+                                "--timeout",
+                                "--workspace",
+                                "-c",
+                                "-p",
+                                "-w"
+                              ],
+                              "leading_subcommands": [
+                                "exec"
+                              ],
+                              "package": "rls-saboteur",
+                              "required_flags": [],
+                              "subcommands": []
+                            },
+                            "op": "versioned-package-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "pnpm",
+                                "pnpm.cmd",
+                                "pnpm.exe",
+                                "yarn",
+                                "yarn.cmd",
+                                "yarn.exe"
+                              ],
+                              "interspersed_flags": [
+                                "--aggregate-output",
+                                "--allow-remote-i-understand-this-locks-tables",
+                                "--close-sessions",
+                                "--isolate-network",
+                                "--json",
+                                "--no",
+                                "--no-install",
+                                "--no-isolate-network",
+                                "--no-terminate",
+                                "--only-related",
+                                "--silent",
+                                "--stream",
+                                "--use-stderr",
+                                "--workspace-root",
+                                "--yes",
+                                "-y"
+                              ],
+                              "interspersed_options_with_values": [
+                                "--admin-url",
+                                "--cache",
+                                "--call",
+                                "--db-url",
+                                "--dir",
+                                "--filter",
+                                "--isolation",
+                                "--jobs",
+                                "--json-file",
+                                "--max-size",
+                                "--package",
+                                "--report",
+                                "--reporter",
+                                "--runner",
+                                "--schemas",
+                                "--test",
+                                "--tests-dir",
+                                "--threshold",
+                                "--timeout",
+                                "--workspace",
+                                "-c",
+                                "-p",
+                                "-w"
+                              ],
+                              "leading_subcommands": [
+                                "dlx"
+                              ],
+                              "package": "rls-saboteur",
+                              "required_flags": [],
+                              "subcommands": []
+                            },
+                            "op": "versioned-package-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "npm",
+                                "npm.cmd",
+                                "npm.exe",
+                                "bun",
+                                "bun.cmd",
+                                "bun.exe"
+                              ],
+                              "interspersed_flags": [
+                                "--aggregate-output",
+                                "--allow-remote-i-understand-this-locks-tables",
+                                "--close-sessions",
+                                "--isolate-network",
+                                "--json",
+                                "--no",
+                                "--no-install",
+                                "--no-isolate-network",
+                                "--no-terminate",
+                                "--only-related",
+                                "--silent",
+                                "--stream",
+                                "--use-stderr",
+                                "--workspace-root",
+                                "--yes",
+                                "-y"
+                              ],
+                              "interspersed_options_with_values": [
+                                "--admin-url",
+                                "--cache",
+                                "--call",
+                                "--db-url",
+                                "--dir",
+                                "--filter",
+                                "--isolation",
+                                "--jobs",
+                                "--json-file",
+                                "--max-size",
+                                "--package",
+                                "--report",
+                                "--reporter",
+                                "--runner",
+                                "--schemas",
+                                "--test",
+                                "--tests-dir",
+                                "--threshold",
+                                "--timeout",
+                                "--workspace",
+                                "-c",
+                                "-p",
+                                "-w"
+                              ],
+                              "leading_subcommands": [
+                                "x"
+                              ],
+                              "package": "rls-saboteur",
+                              "required_flags": [],
+                              "subcommands": []
+                            },
+                            "op": "versioned-package-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe",
+                            "pnpm",
+                            "pnpm.cmd",
+                            "pnpm.exe",
+                            "yarn",
+                            "yarn.cmd",
+                            "yarn.exe",
+                            "npm",
+                            "npm.cmd",
+                            "npm.exe",
+                            "bun",
+                            "bun.cmd",
+                            "bun.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [
+                            "--help",
+                            "--version",
+                            "-h",
+                            "-v"
+                          ],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--no",
+                            "--no-install",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--admin-url",
+                            "--cache",
+                            "--call",
+                            "--db-url",
+                            "--dir",
+                            "--filter",
+                            "--isolation",
+                            "--jobs",
+                            "--json-file",
+                            "--max-size",
+                            "--package",
+                            "--report",
+                            "--reporter",
+                            "--runner",
+                            "--schemas",
+                            "--test",
+                            "--tests-dir",
+                            "--threshold",
+                            "--timeout",
+                            "--workspace",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "required_flags": [
+                            "--allow-remote-i-understand-this-locks-tables"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
                   }
                 ],
                 "op": "any.v1"
@@ -1179,6 +1541,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1278,6 +1642,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1336,6 +1702,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1396,6 +1764,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1456,6 +1826,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1619,6 +1991,8 @@
                           ],
                           "interspersed_flags": [
                             "--aggregate-output",
+                            "--no",
+                            "--no-install",
                             "--silent",
                             "--stream",
                             "--use-stderr",
@@ -1626,60 +2000,42 @@
                             "--yes",
                             "-y"
                           ],
-                          "interspersed_options_with_values": [
-                            "--cache",
-                            "--call",
-                            "--dir",
-                            "--filter",
-                            "--package",
-                            "--reporter",
-                            "--workspace",
-                            "-c",
-                            "-p",
-                            "-w"
-                          ],
+                          "interspersed_options_with_values": [],
                           "inverse_flag_pairs": [],
                           "leading_options_with_values": [],
                           "options_with_values": [
                             "--admin-url",
+                            "--cache",
+                            "--call",
                             "--db-url",
+                            "--dir",
                             "--filter",
                             "--isolation",
                             "--jobs",
                             "--json-file",
                             "--max-size",
+                            "--package",
                             "--report",
+                            "--reporter",
                             "--runner",
                             "--schemas",
                             "--test",
                             "--tests-dir",
                             "--threshold",
-                            "--timeout"
-                          ],
-                          "paths": [
-                            [
-                              "rls-saboteur"
-                            ],
-                            [
-                              "exec",
-                              "rls-saboteur"
-                            ],
-                            [
-                              "x",
-                              "rls-saboteur"
-                            ],
-                            [
-                              "dlx",
-                              "rls-saboteur"
-                            ]
+                            "--timeout",
+                            "--workspace",
+                            "-c",
+                            "-p",
+                            "-w"
                           ],
                           "required_flags": [
                             "--close-sessions"
                           ],
                           "required_flags_in_all_arguments": false,
-                          "required_option_values": []
+                          "required_option_values": [],
+                          "subcommands": []
                         },
-                        "op": "executable-path-set.v1"
+                        "op": "executable.v1"
                       }
                     ],
                     "op": "any.v1"
@@ -1825,6 +2181,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1924,6 +2282,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -1982,6 +2342,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -2042,6 +2404,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -2102,6 +2466,8 @@
                             "--close-sessions",
                             "--isolate-network",
                             "--json",
+                            "--no",
+                            "--no-install",
                             "--no-isolate-network",
                             "--no-terminate",
                             "--only-related",
@@ -2265,6 +2631,8 @@
                           ],
                           "interspersed_flags": [
                             "--aggregate-output",
+                            "--no",
+                            "--no-install",
                             "--silent",
                             "--stream",
                             "--use-stderr",
@@ -2272,60 +2640,42 @@
                             "--yes",
                             "-y"
                           ],
-                          "interspersed_options_with_values": [
-                            "--cache",
-                            "--call",
-                            "--dir",
-                            "--filter",
-                            "--package",
-                            "--reporter",
-                            "--workspace",
-                            "-c",
-                            "-p",
-                            "-w"
-                          ],
+                          "interspersed_options_with_values": [],
                           "inverse_flag_pairs": [],
                           "leading_options_with_values": [],
                           "options_with_values": [
                             "--admin-url",
+                            "--cache",
+                            "--call",
                             "--db-url",
+                            "--dir",
                             "--filter",
                             "--isolation",
                             "--jobs",
                             "--json-file",
                             "--max-size",
+                            "--package",
                             "--report",
+                            "--reporter",
                             "--runner",
                             "--schemas",
                             "--test",
                             "--tests-dir",
                             "--threshold",
-                            "--timeout"
-                          ],
-                          "paths": [
-                            [
-                              "rls-saboteur"
-                            ],
-                            [
-                              "exec",
-                              "rls-saboteur"
-                            ],
-                            [
-                              "x",
-                              "rls-saboteur"
-                            ],
-                            [
-                              "dlx",
-                              "rls-saboteur"
-                            ]
+                            "--timeout",
+                            "--workspace",
+                            "-c",
+                            "-p",
+                            "-w"
                           ],
                           "required_flags": [
                             "--no-isolate-network"
                           ],
                           "required_flags_in_all_arguments": false,
-                          "required_option_values": []
+                          "required_option_values": [],
+                          "subcommands": []
                         },
-                        "op": "executable-path-set.v1"
+                        "op": "executable.v1"
                       }
                     ],
                     "op": "any.v1"
@@ -2477,6 +2827,7 @@
           "command.cicd.gitlab",
           "command.cloud.aws",
           "command.cloud.azure",
+          "command.cloud.digitalocean",
           "command.cloud.gcp",
           "command.database.mongodb",
           "command.database.mysql",
@@ -4045,6 +4396,358 @@
       ],
       "id": "remote-permission-disabled-blocks-whole-command",
       "rule_id": "command.rls-saboteur.copy-run"
+    },
+    {
+      "command": "npx --no-install rls-saboteur --jobs 2",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.copy-run"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "copy-npx-no-install-disabled-blocks",
+      "rule_id": "command.rls-saboteur.copy-run"
+    },
+    {
+      "command": "npx --no-install rls-saboteur@0.2.0 --jobs 2",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.copy-run"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "copy-npx-no-install-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.copy-run"
+    },
+    {
+      "command": "npx --no-install rls-saboteur --allow-remote-i-understand-this-locks-tables",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.remote-override"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remote-override-npx-no-install-disabled-blocks",
+      "rule_id": "command.rls-saboteur.remote-override"
+    },
+    {
+      "command": "npx --no-install rls-saboteur@0.2.0 --allow-remote-i-understand-this-locks-tables",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.remote-override"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remote-override-npx-no-install-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.remote-override"
+    },
+    {
+      "command": "npx --no-install rls-saboteur --close-sessions",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.close-sessions"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "close-sessions-npx-no-install-disabled-blocks",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npx --no-install rls-saboteur@0.2.0 --close-sessions",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.close-sessions"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "close-sessions-npx-no-install-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npx --no-install rls-saboteur --no-isolate-network",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.no-isolate-network"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "no-isolate-network-npx-no-install-disabled-blocks",
+      "rule_id": "command.rls-saboteur.no-isolate-network"
+    },
+    {
+      "command": "npx --no-install rls-saboteur@0.2.0 --no-isolate-network",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.no-isolate-network"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "no-isolate-network-npx-no-install-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.no-isolate-network"
+    },
+    {
+      "command": "npx --no rls-saboteur --jobs 2",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.copy-run"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "copy-npx-no-disabled-blocks",
+      "rule_id": "command.rls-saboteur.copy-run"
+    },
+    {
+      "command": "npx --no rls-saboteur@0.2.0 --jobs 2",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.copy-run"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "copy-npx-no-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.copy-run"
+    },
+    {
+      "command": "npx --no rls-saboteur --allow-remote-i-understand-this-locks-tables",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.remote-override"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remote-override-npx-no-disabled-blocks",
+      "rule_id": "command.rls-saboteur.remote-override"
+    },
+    {
+      "command": "npx --no rls-saboteur@0.2.0 --allow-remote-i-understand-this-locks-tables",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.remote-override"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remote-override-npx-no-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.remote-override"
+    },
+    {
+      "command": "npx --no rls-saboteur --close-sessions",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.close-sessions"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "close-sessions-npx-no-disabled-blocks",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npx --no rls-saboteur@0.2.0 --close-sessions",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.close-sessions"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "close-sessions-npx-no-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npx --no rls-saboteur --no-isolate-network",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.no-isolate-network"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "no-isolate-network-npx-no-disabled-blocks",
+      "rule_id": "command.rls-saboteur.no-isolate-network"
+    },
+    {
+      "command": "npx --no rls-saboteur@0.2.0 --no-isolate-network",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.no-isolate-network"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "no-isolate-network-npx-no-versioned-disabled-blocks",
+      "rule_id": "command.rls-saboteur.no-isolate-network"
+    },
+    {
+      "command": "npm exec rls-saboteur -- --close-sessions --yes",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.close-sessions"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "close-sessions-npm-exec-unversioned-double-dash-disabled-blocks",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npm exec rls-saboteur -- --no-isolate-network --yes",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.no-isolate-network"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "no-isolate-network-npm-exec-unversioned-double-dash-disabled-blocks",
+      "rule_id": "command.rls-saboteur.no-isolate-network"
+    },
+    {
+      "command": "npm exec rls-saboteur -- --allow-remote-i-understand-this-locks-tables --yes",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.remote-override"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remote-override-npm-exec-unversioned-double-dash-disabled-blocks",
+      "rule_id": "command.rls-saboteur.remote-override"
+    },
+    {
+      "command": "npm exec rls-saboteur@0.2.0 -- --close-sessions --yes",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.close-sessions"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "close-sessions-npm-exec-versioned-double-dash-disabled-blocks",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npm exec rls-saboteur@0.2.0 -- --no-isolate-network --yes",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.no-isolate-network"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "no-isolate-network-npm-exec-versioned-double-dash-disabled-blocks",
+      "rule_id": "command.rls-saboteur.no-isolate-network"
+    },
+    {
+      "command": "npm exec rls-saboteur@0.2.0 -- --allow-remote-i-understand-this-locks-tables --yes",
+      "disabled_permissions": [
+        "command.rls-saboteur.permission.remote-override"
+      ],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remote-override-npm-exec-versioned-double-dash-disabled-blocks",
+      "rule_id": "command.rls-saboteur.remote-override"
+    },
+    {
+      "command": "npm exec rls-saboteur@0.2.0 -- --close-sessions --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "close-sessions-npm-exec-versioned-double-dash-dry-run-is-not-close-sessions",
+      "rule_id": "command.rls-saboteur.close-sessions"
+    },
+    {
+      "command": "npm exec other-tool@1.0.0 -- --close-sessions",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rls-saboteur"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "close-sessions-npm-exec-other-package-double-dash-is-not-close-sessions",
+      "rule_id": "command.rls-saboteur.close-sessions"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
