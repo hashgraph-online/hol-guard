@@ -70,7 +70,7 @@ from .commands_hook_github_workflow import (
     github_workflow_approval_evidence,
     prepare_github_workflow_hook_state,
 )
-from .commands_hook_native_edge_floor import _native_edge_floor_action
+from .commands_hook_native_edge_facts import _native_edge_facts
 from .commands_hook_native_floor import (
     _runtime_package_raw_command,
     native_pre_tool_floor,
@@ -447,10 +447,9 @@ def evaluate_native_artifact_hook(
             "payload_action_present": "policy_action" in payload_map,
             "payload_action": payload_map.get("policy_action"),
             "native_floor": native_floor,
-            "edge_floor": _native_edge_floor_action(
+            "native_edge": _native_edge_facts(
                 native_edge_result,
                 event_name,
-                artifact_default_action=runtime_artifact.metadata.get("guard_default_action"),
                 artifact_type=runtime_artifact.artifact_type,
             ),
             "current_action_override_present": current_action_override is not None,

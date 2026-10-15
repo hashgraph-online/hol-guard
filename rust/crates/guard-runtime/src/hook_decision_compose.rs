@@ -238,13 +238,10 @@ fn truthy(value: &Value) -> bool {
     }
 }
 
-/// The edge verdict as a floor on the composed action. A present but
-/// unrecognized action fails closed to `block`.
-pub(crate) fn edge_floor(
-    edge: Option<&HookNativeEdgeV1>,
-    event: Option<&str>,
-) -> Option<GuardAction> {
-    let edge = edge?;
+/// The edge's own action: `policy_action`, else `minimum_action`, else
+/// `block` for a bare deny. A present but unrecognized action fails closed
+/// to `block`.
+pub(crate) fn edge_action(edge: &HookNativeEdgeV1) -> Option<GuardAction> {
     let raw = if truthy(&edge.policy_action) {
         Some(&edge.policy_action)
     } else if truthy(&edge.minimum_action) {
@@ -252,15 +249,27 @@ pub(crate) fn edge_floor(
     } else {
         None
     };
-    let mut action = match raw {
+    match raw {
         Some(value) => Some(normalize_guard_action(value, GuardAction::Block)),
         None if edge.decision.as_str() == Some("deny") => Some(GuardAction::Block),
         None => None,
-    };
-    let hard = matches!(
+    }
+}
+
+pub(crate) fn is_hard(action: Option<GuardAction>) -> bool {
+    matches!(
         action,
         Some(GuardAction::Block | GuardAction::SandboxRequired)
-    );
+    )
+}
+
+/// The edge verdict as a floor on the composed action.
+pub(crate) fn edge_floor(
+    edge: Option<&HookNativeEdgeV1>,
+    event: Option<&str>,
+) -> Option<GuardAction> {
+    let mut action = edge_action(edge?);
+    let hard = is_hard(action);
     if event == Some("PostToolUse") {
         // PostToolUse cannot undo the finished action; the edge deny masks the
         // emitted output while the policy surface stays reviewable.

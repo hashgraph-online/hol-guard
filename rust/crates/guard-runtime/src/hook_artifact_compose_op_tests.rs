@@ -2,13 +2,13 @@
 
 use flate2::read::GzDecoder;
 use guard_contracts::{
-    GuardAction, HookArtifactComposeQueryV1, PolicyConfigFactsV1,
+    GuardAction, HookArtifactComposeQueryV1, NativeEdgeFactsV1, PolicyConfigFactsV1,
     HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA,
 };
 use serde_json::{json, Value};
 use std::io::Read;
 
-use super::compose;
+use super::{compose, native_edge_floor};
 
 const VECTORS: &str = include_str!("../tests/fixtures/hook_artifact_compose_vectors.json");
 const CONFIG_ACTION_VECTORS: &[u8] =
@@ -177,4 +177,99 @@ fn unknown_actions_never_lower_the_composed_action() {
     ] {
         assert_eq!(reply["payload"][key], "review", "{key}");
     }
+}
+
+fn edge(event: &str, fields: Value) -> NativeEdgeFactsV1 {
+    NativeEdgeFactsV1 {
+        event_name: Some(event.to_owned()),
+        policy_action: fields["policy_action"].clone(),
+        minimum_action: fields["minimum_action"].clone(),
+        decision: fields["decision"].clone(),
+        reason_code: fields["reason_code"].clone(),
+        package_request: fields["package_request"].as_bool().unwrap_or(false),
+    }
+}
+
+#[test]
+fn edge_floors_after_execution_only_through_reapproval() {
+    let deny = json!({"decision": "deny"});
+    assert_eq!(
+        native_edge_floor(&edge("PreToolUse", deny.clone()), None),
+        None
+    );
+    let block = json!({"decision": "deny", "policy_action": "block"});
+    assert_eq!(
+        native_edge_floor(&edge("UserPromptSubmit", block), None),
+        None
+    );
+    assert_eq!(
+        native_edge_floor(&edge("PostToolUse", deny.clone()), None),
+        Some(GuardAction::RequireReapproval)
+    );
+    assert_eq!(
+        native_edge_floor(&edge("PostToolUse", deny), Some("warn")),
+        None
+    );
+    let allow = json!({"policy_action": "allow"});
+    assert_eq!(
+        native_edge_floor(&edge("PostToolUse", allow), None),
+        Some(GuardAction::Allow)
+    );
+    let reapproval = json!({"policy_action": "require-reapproval"});
+    assert_eq!(
+        native_edge_floor(&edge("PostToolUse", reapproval), Some("warn")),
+        Some(GuardAction::RequireReapproval)
+    );
+}
+
+#[test]
+fn a_terminal_pre_tool_edge_cannot_be_relaxed_to_review() {
+    for (action, expected) in [
+        ("block", GuardAction::Block),
+        ("sandbox-required", GuardAction::SandboxRequired),
+    ] {
+        let terminal = json!({"decision": "deny", "policy_action": action});
+        assert_eq!(
+            native_edge_floor(&edge("PreToolUse", terminal), Some("warn")),
+            Some(expected)
+        );
+    }
+    for action in ["review", "allow"] {
+        let soft = json!({"policy_action": action});
+        assert_eq!(native_edge_floor(&edge("PreToolUse", soft), None), None);
+    }
+    // An unrecognized edge action fails closed.
+    let unknown = json!({"policy_action": "teleport"});
+    assert_eq!(
+        native_edge_floor(&edge("PreToolUse", unknown), None),
+        Some(GuardAction::Block)
+    );
+}
+
+#[test]
+fn the_package_evaluator_owns_command_control_failures_but_not_secret_denies() {
+    let failure = |package_request| {
+        edge(
+            "PreToolUse",
+            json!({
+                "policy_action": "block",
+                "reason_code": "native_command_extension_evaluation_failed",
+                "package_request": package_request,
+            }),
+        )
+    };
+    assert_eq!(native_edge_floor(&failure(true), None), None);
+    assert_eq!(
+        native_edge_floor(&failure(false), None),
+        Some(GuardAction::Block)
+    );
+    let secret = edge(
+        "PreToolUse",
+        json!({
+            "policy_action": "block",
+            "reason_code": "native_secret_exfiltration",
+            "package_request": true,
+        }),
+    );
+    assert_eq!(native_edge_floor(&secret, None), Some(GuardAction::Block));
 }
