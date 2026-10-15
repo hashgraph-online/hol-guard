@@ -265,3 +265,53 @@ fn a_credential_setting_is_named_with_a_safe_alternative() {
         );
     }
 }
+
+#[test]
+fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-node-heap-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    for command in [
+        "NODE_OPTIONS=--max-old-space-size=6144 bunx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=6144 npx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result
+                .reason
+                .contains("the NODE_OPTIONS setting can load code")
+                && result.reason.contains(
+                    "`node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit`"
+                ),
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // Anything beyond a bare memory size keeps the plain refusal.
+    for command in [
+        "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
+        "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result.reason.contains("Run the command without it")
+                && !result.reason.contains("more memory"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}

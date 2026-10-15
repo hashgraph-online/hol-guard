@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,14 @@ from tests.native_command_test_support import inspect_command_native_test as ins
 # Windows rejects ASCII newlines in filenames; keep an unusual Unicode separator
 # there while POSIX continues to exercise Git's NUL-delimited newline handling.
 _LINE_BREAK_FILENAME = "line\u2028break.py" if os.name == "nt" else "line\nbreak.py"
+
+
+# The resident's Codex tool-output review models POSIX shell text and paths and
+# refuses Windows outright (``native_codex_tool_output._platform_is_supported``),
+# so pathspec identities and read-only proofs exist only on POSIX hosts.
+_POSIX_TOOL_OUTPUT_REVIEW = pytest.mark.skipif(
+    sys.platform == "win32", reason="Codex tool-output review is POSIX-only; Windows fails closed"
+)
 
 
 def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
@@ -79,6 +88,7 @@ def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return repository
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_diff_pathspec_applies_the_same_policy_as_explicit_files(git_repository: Path) -> None:
     allowed_magic = "git diff -- ':(top,glob)src/**/*.py' | sed -n '1,40p'"
     protected_magic = "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'"
@@ -103,6 +113,7 @@ def test_git_diff_pathspec_applies_the_same_policy_as_explicit_files(git_reposit
     )
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_selection_changes_post_tool_approval_identity(git_repository: Path) -> None:
     command = "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'"
     credential_fixture = "ghp_" + "1" * 36
@@ -135,6 +146,7 @@ def test_git_pathspec_selection_changes_post_tool_approval_identity(git_reposito
 _DIFF_ENV_COMMAND = "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'"
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_identity_binds_index_and_worktree_state(git_repository: Path) -> None:
     first = _codex_git_pathspec_identity_for_command(_DIFF_ENV_COMMAND, cwd=git_repository)
     _write(git_repository / ".env", "TOKEN=changed-fixture\n")
@@ -146,6 +158,7 @@ def test_git_pathspec_identity_binds_index_and_worktree_state(git_repository: Pa
     assert first != second
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_identity_uses_modeled_directory_change(git_repository: Path) -> None:
     contextual = _codex_git_pathspec_identity_for_command(
         "cd src && git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'", cwd=git_repository
@@ -158,6 +171,7 @@ def test_git_pathspec_identity_uses_modeled_directory_change(git_repository: Pat
     assert contextual == direct
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_identity_distinguishes_selections(git_repository: Path) -> None:
     env_files = _codex_git_pathspec_identity_for_command(_DIFF_ENV_COMMAND, cwd=git_repository)
     python_files = _codex_git_pathspec_identity_for_command(
@@ -169,11 +183,13 @@ def test_git_pathspec_identity_distinguishes_selections(git_repository: Path) ->
     assert env_files != python_files
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_diff_default_revision_and_staged_forms_resolve_all_tracked_files(git_repository: Path) -> None:
     for command in ("git diff", "git diff --staged", "git diff HEAD~1"):
         assert _codex_git_pathspec_identity_for_command(command, cwd=git_repository) is not None
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_identity_for_non_repository_differs_from_repository(git_repository: Path, tmp_path: Path) -> None:
     outside = tmp_path / "not-a-repository"
     outside.mkdir()
@@ -237,6 +253,7 @@ def test_git_pathspec_query_does_not_execute_aliases_hooks_or_diff_helpers(git_r
     assert not marker.exists()
 
 
+@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_symlink_selection_is_incomplete(git_repository: Path) -> None:
     target = git_repository / "src" / "app.py"
     symlink = git_repository / "linked.py"
@@ -250,3 +267,17 @@ def test_git_pathspec_symlink_selection_is_incomplete(git_repository: Path) -> N
     regular = _codex_git_pathspec_identity_for_command("git diff -- src/app.py", cwd=git_repository)
 
     assert linked != regular
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows fail-closed contract")
+def test_windows_refuses_git_pathspec_identity_instead_of_guessing(git_repository: Path) -> None:
+    answer = codex_tool_output_native("git_pathspec_identity", command=_DIFF_ENV_COMMAND, cwd=git_repository)
+
+    assert answer.allowed is False
+    assert answer.value is None
+    assert answer.error_code == "native_codex_tool_output_unsupported_platform"
+    # Without the resident's proof even a POSIX-safe source pathspec stays unproven.
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- ':(top,glob)src/**/*.py' | sed -n '1,40p'",
+        cwd=git_repository,
+    )

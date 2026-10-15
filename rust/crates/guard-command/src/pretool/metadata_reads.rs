@@ -17,6 +17,13 @@
 //! ordinary read proof, or the absent chain-local temporary file proof. A
 //! directory operand makes `diff` read the files inside it, so both operands
 //! then need the recursive content-search screen.
+//!
+//! `file` reads the first bytes of each operand and prints a type label, never
+//! the content, so each operand gets the ordinary read proof (a directory is
+//! just labelled `directory`) or the absent-path proof. Options that load magic
+//! or name lists from another path (`-m`, `-f`), compile magic (`-C`), touch
+//! access times (`-p`), open devices (`-s`), run decompressors (`-z`) or take
+//! a value are not admitted.
 use super::{safe_reads, search};
 
 const MAX_OPERANDS: usize = 16;
@@ -178,6 +185,52 @@ fn diff_option(option: &str) -> bool {
         || option[1..]
             .bytes()
             .all(|flag| b"uqrNbwBiastpyEZ".contains(&flag))
+}
+
+pub(super) fn safe_file_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
+    let mut operands = Vec::new();
+    let mut after_options = false;
+    for argument in arguments {
+        let option = argument.as_str();
+        if after_options || !option.starts_with('-') {
+            operands.push(option);
+        } else if option == "--" {
+            after_options = true;
+        } else if let Some(long) = option.strip_prefix("--") {
+            if !matches!(
+                long,
+                "brief"
+                    | "mime"
+                    | "mime-type"
+                    | "mime-encoding"
+                    | "keep-going"
+                    | "dereference"
+                    | "no-dereference"
+                    | "no-pad"
+                    | "no-buffer"
+                    | "raw"
+                    | "print0"
+                    | "extension"
+                    | "apple"
+                    | "version"
+            ) {
+                return false;
+            }
+        } else if option == "-"
+            || !option[1..]
+                .bytes()
+                .all(|flag| b"bhiIkLNnrv0E".contains(&flag))
+        {
+            return false;
+        }
+    }
+    !operands.is_empty()
+        && operands.len() <= MAX_OPERANDS
+        && operands.iter().all(|operand| {
+            *operand != "-"
+                && (safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
+                    || super::listing_reads::absent_listing_operand(operand, context))
+        })
 }
 
 fn zero(depth: &str) -> bool {

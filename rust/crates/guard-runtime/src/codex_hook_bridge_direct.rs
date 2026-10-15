@@ -53,6 +53,17 @@ pub(crate) const CURSOR: DirectHarness = DirectHarness {
     name: "cursor",
     switch: "HOL_GUARD_CURSOR_DIRECT_HOOK",
 };
+/// Oh My Pi and its `omp` install, whose generated extension runs the native
+/// Pi bridge. `HOL_GUARD_PI_DIRECT_HOOK=0` keeps their hooks on the daemon,
+/// which then asks the resident itself unless the same switch is set.
+pub(crate) const PI: DirectHarness = DirectHarness {
+    name: "pi",
+    switch: "HOL_GUARD_PI_DIRECT_HOOK",
+};
+pub(crate) const OMP: DirectHarness = DirectHarness {
+    name: "omp",
+    switch: "HOL_GUARD_PI_DIRECT_HOOK",
+};
 /// The bounded bridge harnesses the resident answers. The resident routes a
 /// ZCode sandbox requirement to contained execution as the daemon does.
 /// Grok runs its own client, which asks through [`grok_direct_answer`].
@@ -282,7 +293,13 @@ fn request_body(
     if let Some(workspace) = workspace {
         request["workspace"] = Value::String(workspace);
     }
-    serde_json::to_vec(&json!({ "operation": "hook_direct", "request": request })).ok()
+    serde_json::to_vec(&json!({
+        "operation": "hook_direct",
+        // Without a budget the resident client falls back to 750 ms.
+        "deadline_budget_ms": budget_ms,
+        "request": request,
+    }))
+    .ok()
 }
 
 /// The harness response of an `answer`, or `None` for a defer or anything
@@ -310,7 +327,8 @@ fn direct_enabled(switch: &str) -> bool {
 /// daemon's constant. Permission and notification hooks, and the `before*`
 /// hooks the daemon denies, go to the daemon without asking the resident;
 /// `direct_answer` asks it about Claude Code's `PermissionRequest` and
-/// `Notification`, and Codex's `PermissionRequest`.
+/// `Notification`, and Codex's `PermissionRequest`; `bounded_direct_answer`
+/// asks it about Copilot's, Devin's and ZCode's `PermissionRequest`.
 fn direct_event(event_name: &str) -> bool {
     if [PRE_TOOL_USE, POST_TOOL_USE, USER_PROMPT_SUBMIT].contains(&event_name) {
         return true;
@@ -320,6 +338,23 @@ fn direct_event(event_name: &str) -> bool {
         || compact.contains("permission")
         || compact.contains("notification")
         || compact.starts_with("before"))
+}
+
+/// Bounded harnesses whose `PermissionRequest` the resident passes through
+/// to the harness's own approval prompt.
+const PASSTHROUGH_PERMISSION_HARNESSES: [&str; 3] = ["copilot", "devin", "zcode"];
+
+/// `direct_event`, plus the `PermissionRequest` of a bounded harness the
+/// resident leaves to the harness's own approval prompt.
+fn bounded_event(harness: &str, event_name: &str) -> bool {
+    direct_event(event_name)
+        || (PASSTHROUGH_PERMISSION_HARNESSES.contains(&harness)
+            && ["permissionrequest", "permissionrequestv2"].contains(
+                &event_name
+                    .replace(['_', '-'], "")
+                    .to_ascii_lowercase()
+                    .as_str(),
+            ))
 }
 
 /// `direct_event`, plus Claude Code's `PermissionRequest` and
@@ -405,7 +440,7 @@ pub(crate) fn bounded_direct_answer(
     data: &str,
     rpc_deadline: Instant,
 ) -> Option<String> {
-    if !direct_event(event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
+    if !bounded_event(harness, event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
         return None;
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
@@ -415,8 +450,9 @@ pub(crate) fn bounded_direct_answer(
 }
 
 /// The harness response a live resident answered for a Grok hook, or `None`
-/// to take the daemon path. A prompt keeps the daemon path, which prepares
-/// the prompt before it is reviewed.
+/// to take the daemon path. The bridge asks for a prompt only once the
+/// daemon reports its workspace ready, with the time left stamped, as the
+/// daemon would receive it.
 pub(crate) fn grok_direct_answer(
     guard_home: &Path,
     home: &str,
@@ -424,10 +460,7 @@ pub(crate) fn grok_direct_answer(
     data: &str,
     rpc_deadline: Instant,
 ) -> Option<String> {
-    if event_name == USER_PROMPT_SUBMIT
-        || !direct_event(event_name)
-        || !direct_enabled(BOUNDED_DIRECT_SWITCH)
-    {
+    if !direct_event(event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
         return None;
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);

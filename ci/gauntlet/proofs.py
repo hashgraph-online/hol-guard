@@ -7,6 +7,7 @@ from typing import Any
 
 from .business_policy import BUSINESS_CLI_CASES
 from .catalog import Scenario
+from .clone_fixtures import LONG_LIVED_CLONE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
 from .input_evidence import input_digest, input_matches, post_input_matches
 from .review_fixtures import GITHUB_REVIEW_CASE, WORKTREE_CASE
@@ -59,6 +60,8 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("protected:.git/config")
     if scenario.id == GITHUB_REVIEW_CASE:
         checks.add("github-stub-calls-exact")
+    if scenario.id == LONG_LIVED_CLONE_CASE:
+        checks.add("long-lived-branch-checked-out")
     if scenario.id == WORKTREE_CASE:
         checks.update(
             {"linked-worktree-settings-exact", "linked-worktree-note-exact", "main-checkout-settings-unchanged"}

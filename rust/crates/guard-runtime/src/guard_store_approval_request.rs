@@ -1,6 +1,6 @@
 //! The approval request a queue write stores: `GuardApprovalRequest` as the
 //! daemon's `to_dict` spells it, and the derived column values of
-//! `store_approval_writes.py` (review links, continuation snapshot, watch-only
+//! the former Python writer (review links, continuation snapshot, watch-only
 //! flag) with the exact JSON text Python's `json.dumps` writes.
 
 use serde::Deserialize;

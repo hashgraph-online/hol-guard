@@ -47,7 +47,16 @@ fn checkout(
     std::path::PathBuf,
     std::path::PathBuf,
 ) {
-    let root = std::env::temp_dir().join(format!(
+    // On macOS the per-user temporary directory is spelled through the `/var`
+    // link and resolves into the `/private/var` system root, so a `-C` target
+    // there is refused for reasons unrelated to the worktree under test. The
+    // canonical `/tmp` root matches Linux, as in `pretool_git_session_ops`.
+    let base = if cfg!(target_os = "macos") {
+        std::fs::canonicalize("/tmp").unwrap()
+    } else {
+        std::env::temp_dir()
+    };
+    let root = base.join(format!(
         "guard-nested-{name}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()

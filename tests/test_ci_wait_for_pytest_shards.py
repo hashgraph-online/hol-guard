@@ -7,15 +7,12 @@ import urllib.request
 from copy import deepcopy
 from http.client import HTTPMessage
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-import yaml
 
 from scripts.ci import wait_for_pytest_shards as barrier
-from tests.support.ci_workflow import expand_ci_job_actions
 
 _RUN_ID = 123456
 # CI exports its real shard count, which can fit in one 100-job page. Pin a
@@ -95,13 +92,10 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
-def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify default wait covers existing producer limits."""
-    root = Path(__file__).resolve().parents[1]
-    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
-    producer_limit = 60 * (jobs["coverage-plan"]["timeout-minutes"] + jobs["coverage"]["timeout-minutes"])
+def test_default_wait_keeps_the_existing_results_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Moving planning does not extend the bounded artifact-wait deadline."""
     default_timeout = inspect.signature(barrier.wait_for_shards).parameters["timeout_seconds"].default
-    assert default_timeout == producer_limit + 60
+    assert default_timeout == 960
     captured: dict[str, float] = {}
 
     def capture_wait(_repository: str, _run_id: int, _attempt: int, **kwargs: float) -> None:
@@ -216,6 +210,19 @@ def test_retries_pagination_race_after_coverage_matrix_exists() -> None:
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
+@pytest.mark.parametrize("placeholder_first", [True, False])
+def test_retries_placeholder_id_reused_by_expanded_shard(placeholder_first: bool) -> None:
+    native = dict(_job(1000), name="native-command-evaluators")
+    placeholder = dict(_job(0), name=barrier._MATRIX_PLACEHOLDER, status="queued", conclusion=None)
+    expanded = _job(0)
+    first, last = (placeholder, expanded) if placeholder_first else (expanded, placeholder)
+    # Include the producer before a cross-page rename, as in the combined plan.
+    middle = [dict(_job(2000 + index), name=f"other-{index}") for index in range(98)]
+    calls, logs = _run([[native, first, *middle, last], [native, *_jobs()]], timeout_seconds=20)
+    assert len(calls) == 4
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
 def test_duplicate_record_cannot_replace_a_missing_shard() -> None:
     jobs = _jobs()[:-1]
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
@@ -289,8 +296,8 @@ def test_pending_shards_need_not_have_execution_timestamps_yet() -> None:
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "timed_out"])
 def test_stops_immediately_when_planning_failed(conclusion: str) -> None:
-    plan = dict(_job(1000), name="coverage-plan", conclusion=conclusion)
-    with pytest.raises(barrier.ShardWaitError, match=f"Python coverage-plan completed with {conclusion}"):
+    plan = dict(_job(1000), name="native-command-evaluators", conclusion=conclusion)
+    with pytest.raises(barrier.ShardWaitError, match=f"Native command evaluators completed with {conclusion}"):
         _run([[plan]])
 
 
@@ -304,7 +311,6 @@ def _prereqs(plan_conclusion: str) -> list[dict[str, object]]:
     """The push-run job graph: plan is only scheduled on pull_request events."""
     return [
         dict(_job(2000), name="plan", conclusion=plan_conclusion),
-        dict(_job(2001), name="coverage-plan"),
         dict(_job(2002), name="native-command-evaluators"),
     ]
 

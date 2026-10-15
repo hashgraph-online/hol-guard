@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.45.0"
+version = "3.46.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -225,6 +225,7 @@ markers = [
   "integration: verifies multiple Guard subsystems together",
   "native_codex_hook_bridge: installs Codex hooks through the native runtime bridge when it is available",
   "native_bounded_hook_bridge: installs bounded CLI hooks through the native runtime bridge when it is available",
+  "native_pi_hook_bridge: generates Pi and Oh My Pi extensions that use the native runtime hook bridge when it is available",
   "parser: verifies parsing or normalization security semantics",
   "policy: verifies policy composition or enforcement semantics",
   "regression: protects a previously observed defect or security finding",

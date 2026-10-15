@@ -138,6 +138,20 @@ fn the_sink_prefix_is_the_isolated_interpreter_and_bootstrap() {
     }
 }
 
+#[test]
+fn a_frozen_fallback_names_the_guard_executable_as_the_sink_prefix() {
+    let frozen = [PYTHON, "hook", "--harness", "codex", "--json"].map(str::to_owned);
+    assert_eq!(sink_prefix(&frozen), Some(&frozen[..1]));
+    for broken in [
+        &frozen[..3],
+        &["hol-guard", "hook", "--harness", "codex"].map(str::to_owned)[..],
+        &[PYTHON, "hook", "--harness", "claude"].map(str::to_owned)[..],
+        &[PYTHON, "--harness", "hook", "codex"].map(str::to_owned)[..],
+    ] {
+        assert_eq!(sink_prefix(broken), None, "{broken:?}");
+    }
+}
+
 /// The request file a routed command names, read back and removed.
 fn take_request(command: &str) -> (Vec<u8>, u32) {
     let (_, rest) = command.split_once(" --request-file ").unwrap();

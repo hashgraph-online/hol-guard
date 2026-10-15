@@ -29,11 +29,27 @@ fn home() -> PathBuf {
     std::fs::canonicalize(home).unwrap()
 }
 
+/// A private Unix-socket directory beside the home, as a local server makes.
+fn socket_directory(home: &Path) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = home.parent().unwrap().join("pgsock");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+    directory.to_str().unwrap().to_owned()
+}
+
 /// The decision both shell harnesses reach, or "mixed" when they differ.
 fn shell(home: &Path, command: &str) -> String {
+    shell_with(home, command, &[])
+}
+
+/// [`shell`] with more variable names stamped in the agent's environment.
+fn shell_with(home: &Path, command: &str, names: &[&str]) -> String {
+    let mut environment_names = vec!["GIT_CONFIG_NOSYSTEM".to_owned()];
+    environment_names.extend(names.iter().map(|name| (*name).to_owned()));
     let environment = guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap(),
-        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
+        environment_names,
         environment_digest: "0".repeat(64),
         home: Some(home.to_str().unwrap().to_owned()),
         git_pager_disabled: false,
@@ -58,6 +74,7 @@ fn shell(home: &Path, command: &str) -> String {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
             Some(&environment),
         )
@@ -73,6 +90,14 @@ fn shell(home: &Path, command: &str) -> String {
 #[test]
 fn outside_reads_chained_with_process_probes_proceed() {
     let home = home();
+    let sockets = socket_directory(&home);
+    for command in [
+        format!("pg_isready -h {sockets} -p 55434"),
+        format!(r#"psql -h {sockets} -p 55434 -U hol -d hol -c "select current_user""#),
+        format!("psql -h {sockets} -U postgres -l"),
+    ] {
+        assert_eq!(shell(&home, &command), "allow", "{command}");
+    }
     for command in [
         "pgrep -l node",
         "pgrep -fl postgres | head -4",
@@ -85,6 +110,7 @@ fn outside_reads_chained_with_process_probes_proceed() {
         "ls /usr/local; find /usr/local -maxdepth 1 -name '*.pid' 2>/dev/null; pgrep -fl postgres | head -4",
         "ls /usr/local; lsof -ti:3000",
         "ls /usr/local; pg_isready -h localhost -q",
+        "ls /usr/local; psql -h localhost -tAc 'select count(*) from items'",
         "ls src; pgrep -l node",
     ] {
         assert_eq!(shell(&home, command), "allow", "{command}");
@@ -105,7 +131,65 @@ fn secret_reads_uploads_and_unproven_probes_keep_review() {
         "ls /usr/local; pg_isready -q",
         "ls /usr/local; pg_isready -h db.example.com",
         "ls /usr/local; pg_isready -d host=db.example.com",
+        "pg_isready -h /tmp,db.example.com",
+        "pg_isready -h /tmp -p 55434",
+        r#"psql -h /tmp -p 55434 -U hol -d hol -c "select current_user""#,
+        r#"psql -h localhost -c "show all""#,
+        r#"psql -h localhost -c "select 1into scratch_copy""#,
+        r#"psql -h localhost -c "drop table x""#,
+        r#"psql -h localhost -c "copy items to program 'id'""#,
+        r#"psql -h db.example.com -c "select 1""#,
+        r#"psql -h localhost -c "select 1; drop table x""#,
+        r#"psql -h localhost -c "select pg_read_file('/etc/passwd')""#,
+        "psql -h localhost -f script.sql",
     ] {
         assert_ne!(shell(&home, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn skipping_startup_files_leaves_libpq_routing_variables_checked() {
+    let home = home();
+    let command = "psql -X -h localhost -c 'select 1'";
+    assert_eq!(shell(&home, command), "allow", "{command}");
+    for name in ["PSQLRC", "PGSYSCONFDIR"] {
+        assert_eq!(shell_with(&home, command, &[name]), "allow", "{name}");
+    }
+    for name in [
+        "PGHOSTADDR",
+        "PGHOST",
+        "PGPORT",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+    ] {
+        assert_ne!(shell_with(&home, command, &[name]), "allow", "{name}");
+    }
+}
+
+#[test]
+fn a_link_others_could_retarget_leaves_the_socket_to_review() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = home();
+    let sockets = socket_directory(&home);
+    let steady = home.join("steady-link");
+    std::os::unix::fs::symlink(&sockets, &steady).unwrap();
+    let open = home.parent().unwrap().join("open");
+    std::fs::create_dir_all(&open).unwrap();
+    std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).unwrap();
+    let swappable = open.join("link");
+    std::os::unix::fs::symlink(&sockets, &swappable).unwrap();
+    let inside = open.join("sub");
+    std::fs::create_dir_all(&inside).unwrap();
+    std::fs::set_permissions(&inside, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let into_open = home.join("into-open");
+    std::os::unix::fs::symlink(&inside, &into_open).unwrap();
+    let probe = |directory: &Path| format!("pg_isready -h {} -p 55434", directory.display());
+    assert_eq!(shell(&home, &probe(&steady)), "allow");
+    for link in [
+        &swappable,
+        &into_open,
+        &into_open.join("..").join("into-open"),
+    ] {
+        assert_ne!(shell(&home, &probe(link)), "allow", "{}", link.display());
     }
 }

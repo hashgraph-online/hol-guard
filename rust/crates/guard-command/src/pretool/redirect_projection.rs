@@ -28,6 +28,10 @@ pub(super) struct RedirectProjection {
     /// Every file written is a scratch file, where a network read's body
     /// may be saved.
     pub(super) scratch_writes: bool,
+    /// [`crate::pretool::git_init_chain::admits`] took the chain, so only
+    /// that proof may allow it: the targets were checked in the working
+    /// directory, and a write after the `cd` lands in the new repository.
+    init_chain: bool,
     /// The literal targets the removed redirects write.
     written: Vec<String>,
 }
@@ -168,10 +172,12 @@ pub(super) fn project(
     });
     let git_chain =
         (chain && bounded_writes && git_chain::admits(&model, &targets)).then(|| targets.clone());
+    let init_chain =
+        chain && bounded_writes && crate::pretool::git_init_chain::admits(&model, &targets);
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write)
+        || (chain && git_chain.is_none() && !leading_write && !init_chain)
     {
         return None;
     }
@@ -191,6 +197,7 @@ pub(super) fn project(
         bounded_writes,
         git_chain,
         scratch_writes,
+        init_chain,
         written: targets,
     })
 }
@@ -211,16 +218,33 @@ fn redirect_disqualifies_containment(reason: &str) -> bool {
     // the proofs of Git's own writes are only valid for the exact command, so
     // the projection must not inherit them.
     // A network read's body is remote content, never a reviewed workspace edit.
+    // The macOS read-only profiles split the raw text into the program's
+    // arguments, so a redirect would reach the program instead of the shell.
+    package_profile(reason)
+        || matches!(
+            reason,
+            "native_git_readonly_containment_required"
+                | "native_pytest_readonly_containment_required"
+                | "native_python_eval_readonly_containment_required"
+                | "native_node_eval_readonly_containment_required"
+                | "native_bun_eval_readonly_containment_required"
+                | "native_workspace_containment_required"
+                | crate::pretool::git_config_reads::writes::REASON
+                | crate::pretool::git_init_target::REASON
+                | crate::pretool::curl_reads::NETWORK_READ_REASON
+        )
+}
+
+/// The macOS package and Node tool profiles. A redirect disqualifies them; the
+/// workspace sandbox may still take the command once its runner gate passes.
+pub(super) fn package_profile(reason: &str) -> bool {
     matches!(
         reason,
-        "native_pytest_readonly_containment_required"
-            | "native_python_eval_readonly_containment_required"
-            | "native_node_eval_readonly_containment_required"
-            | "native_bun_eval_readonly_containment_required"
-            | "native_workspace_containment_required"
-            | crate::pretool::git_config_reads::writes::REASON
-            | crate::pretool::git_init_target::REASON
-            | crate::pretool::curl_reads::NETWORK_READ_REASON
+        "native_package_test_readonly_containment_required"
+            | "native_vitest_readonly_containment_required"
+            | "native_node_tool_readonly_containment_required"
+            | "native_node_test_readonly_containment_required"
+            | "native_node_build_output_containment_required"
     )
 }
 
@@ -242,14 +266,14 @@ pub(super) fn join(
     // tool loads on its own.
     let scratch_body = projection.scratch_writes
         && projected.reason_code == crate::pretool::curl_reads::NETWORK_READ_REASON;
-    if writes_file && !scratch_body && redirect_disqualifies_containment(&projected.reason_code) {
-        projected.minimum_action = "review".into();
-        projected.policy_action = "review".into();
-        projected.decision = "deny".into();
+    let other_proof =
+        projection.init_chain && projected.reason_code != crate::pretool::git_init_chain::REASON;
+    if writes_file
+        && !scratch_body
+        && (other_proof || redirect_disqualifies_containment(&projected.reason_code))
+    {
+        write_review(&mut projected);
         projected.explicitly_benign = false;
-        projected.reason_code = "native_command_redirect_write_review".into();
-        projected.reason =
-            "HOL Guard requires review because this command writes its output to a file.".into();
     }
     projected.action.sensitive_target |= raw.action.sensitive_target;
     projected.action.bounded &= raw.action.bounded;
@@ -268,6 +292,14 @@ pub(super) fn join(
         projected.decision = raw.decision;
         projected.reason_code = raw.reason_code;
         projected.reason = raw.reason;
+        // The raw text can earn a read-only profile on its own, which the
+        // redirect disqualifies too; its workspace sandbox route stays.
+        let profile = &projected.reason_code;
+        if writes_file
+            && (package_profile(profile) || profile.ends_with("_readonly_containment_required"))
+        {
+            write_review(&mut projected);
+        }
     }
     // `echo done > notes.txt` is the same edit an agent's own write tool makes.
     let bounded = bounded_writes
@@ -275,16 +307,20 @@ pub(super) fn join(
         && projected.decision == "allow"
         && !projected.action.sensitive_target;
     if writes_file && !bounded && rank(&projected.minimum_action) < rank("review") {
-        projected.minimum_action = "review".into();
-        projected.policy_action = "review".into();
-        projected.decision = "deny".into();
-        projected.reason_code = "native_command_redirect_write_review".into();
-        projected.reason =
-            "HOL Guard requires review because this command writes its output to a file.".into();
+        write_review(&mut projected);
     }
     projected.explicitly_benign &=
         projected.minimum_action == "allow" && !projected.action.sensitive_target;
     projected
+}
+
+fn write_review(result: &mut PreToolResultV1) {
+    result.minimum_action = "review".into();
+    result.policy_action = "review".into();
+    result.decision = "deny".into();
+    result.reason_code = "native_command_redirect_write_review".into();
+    result.reason =
+        "HOL Guard requires review because this command writes its output to a file.".into();
 }
 
 fn rank(action: &str) -> u8 {

@@ -82,7 +82,7 @@ def _execution(job: dict, run_id: int, attempt: int, head_sha: str) -> tuple[dat
 def _original_executions(base: str, run_id: int, attempt: int, head_sha: str, fetch: Fetch) -> dict:
     """Prove inherited jobs against their real source attempts, not cloned IDs."""
     shard_names = [f"coverage (3.12, {index})" for index in range(barrier.SHARD_COUNT)]
-    required = {*shard_names, "coverage-plan", "native-command-evaluators"}
+    required = {*shard_names, "native-command-evaluators"}
     current: dict[str, dict] = {}
     intervals: dict[str, tuple[datetime, datetime]] = {}
     origins: dict[str, tuple[int, dict]] = {}
@@ -125,9 +125,7 @@ def _original_executions(base: str, run_id: int, attempt: int, head_sha: str, fe
 def _coverage_artifacts(base: str, run_id: int, head_sha: str, origins: dict, fetch: Fetch) -> list[dict]:
     """Bind one immutable coverage artifact to each successful producer."""
     shard_names = [f"coverage (3.12, {index})" for index in range(barrier.SHARD_COUNT)]
-    prerequisite_finished = max(
-        _time(origins[name][1]["completed_at"]) for name in ("coverage-plan", "native-command-evaluators")
-    )
+    prerequisite_finished = _time(origins["native-command-evaluators"][1]["completed_at"])
     artifacts = _pages(f"{base}/artifacts", "artifacts", fetch)
     selected = []
     for index, name in enumerate(shard_names):

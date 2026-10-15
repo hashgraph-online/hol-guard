@@ -193,6 +193,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
         ),
         vec![0, 1]
@@ -673,5 +674,68 @@ fn guard_control_help_and_other_subcommands_keep_review() {
             decision.reason_code, "native_guard_self_protection",
             "{command}"
         );
+    }
+}
+
+#[test]
+fn magic_pathspecs_are_screened_by_the_path_they_name() {
+    for selecting in [":(top).en*", ":(top,glob).en*", ":/!.en?", ":(top).env"] {
+        assert!(sensitive_read_path_argument(selecting), "{selecting}");
+    }
+    for ordinary in [":(top)src/*.ts", ":!readme.md", ":(exclude)src"] {
+        assert!(!sensitive_read_path_argument(ordinary), "{ordinary}");
+    }
+}
+
+#[test]
+fn secret_selecting_globs_are_a_fixed_floor() {
+    let model = |command: &str| {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+        )
+        .unwrap()
+    };
+    for command in [
+        "git diff --no-index .en? README.md",
+        "git log -p -1 -- ':(top).en*'",
+        "dd if=.en{v..v} of=copy",
+        "dd if=.e{n..n}{v..v} of=copy",
+        "dd if={.env,x} of=copy",
+        // An `=` or whitespace inside a pattern can still match `.env`.
+        "git diff --no-index [=.]env README.md",
+        "git diff --no-index {=,.}env README.md",
+        "git log -p -1 -- '[ .]env'",
+        "git log -p -1 -- '{ ,.}env'",
+        "git log -p -1 -- 'my dir/.en?'",
+        // A leading `]`, a backslash or a `[:name:]` keeps the class whole.
+        "git log -p -1 -- '[] .]env'",
+        "git log -p -1 -- '[\\] .]env'",
+        "git log -p -1 -- '[!]a]env'",
+        "git log -p -1 -- '[[:space:].]env'",
+        "git log -p -1 -- '[[=.=]]env'",
+        // A brace value is screened per alternative, whatever else it holds.
+        "dd if={safe:dummy,.env} of=copy",
+        "dd if={x\\\"y,.env} of=copy",
+        // A `/` makes the word a path, whatever its first component holds.
+        "git log -p -1 -- 'x=y/../.en*'",
+        "git diff --no-index a=b/{.env,x} README.md",
+    ] {
+        assert!(fixed_command_floor(&model(command)), "{command}");
+    }
+    for command in [
+        "git log -p -1 -- 'src/*.ts'",
+        "git commit -m 'ignore *.env files'",
+        "gh api graphql -f query='mutation{resolveReviewThread(input:{threadId:\"x\"}){thread{id,isResolved}}}'",
+        "gh api graphql -f query='{viewer{login}}'",
+        "gh pr comment 1 --body 'see *.env and .en{v..v}'",
+        "dd if=out.* of=copy",
+        "gh pr comment 1 --body 'fix the [.]env loader'",
+        "gh api graphql -f query='query { viewer { login } }'",
+        "gh pr comment 1 --body 'use arr[] and fix ]'",
+        "gh api repos/o/r/issues -f 'labels[]=bug'",
+        "dd if=out/*.ts of=copy",
+        "git log -p -1 -- '[[:digit:]].ts'",
+    ] {
+        assert!(!fixed_command_floor(&model(command)), "{command}");
     }
 }

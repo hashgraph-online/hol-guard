@@ -4,10 +4,11 @@
 //! A per-statement `busy_timeout` would let each of those statements wait the
 //! full timeout, so a contended store could outlast the caller's deadline of
 //! `timeout_ms + busy_timeout_ms` plus grace while the resident still sends the
-//! continuation. The budget below caps the summed waits of one call instead.
+//! continuation. The budget below caps the summed waits of one call instead,
+//! measured as elapsed time rather than requested sleeps.
 
 use std::cell::Cell;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
 
@@ -30,9 +31,11 @@ fn wait_within_budget(_attempt: i32) -> bool {
         if remaining.is_zero() {
             return false;
         }
-        let step = remaining.min(BUSY_STEP);
-        std::thread::sleep(step);
-        budget.set(remaining - step);
+        // Charge the time actually slept: a loaded host can oversleep each
+        // step many times over, and the cap is on wall-clock waiting.
+        let started = Instant::now();
+        std::thread::sleep(remaining.min(BUSY_STEP));
+        budget.set(remaining.saturating_sub(started.elapsed()));
         true
     })
 }

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 
 from ..aibom_cli import _AIBOM_CLOUD_SYNC_OPTIONS, AibomCliOptions, AibomExportFormat
+from ..policy_decision_explain import matched_rule_for_receipt
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -274,6 +275,7 @@ def _run_guard_history_command(
             "receipt_id": receipt_id,
             "receipt": match,
             "embedded_scripts": embedded_scripts,
+            "matched_rule": matched_rule_for_receipt(store, match),
             "evidence": [
                 {
                     "evidence_id": e.get("evidence_id", ""),

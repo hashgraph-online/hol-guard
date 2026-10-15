@@ -153,6 +153,7 @@ impl Lab {
                 npm_config_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
                 ..PathContext::default()
             },
             Some(&environment),

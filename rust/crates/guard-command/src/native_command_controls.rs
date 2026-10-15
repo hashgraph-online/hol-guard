@@ -391,6 +391,7 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
+        floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
             .layers

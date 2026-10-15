@@ -178,6 +178,28 @@ pub(crate) fn verified_daemon_url(
     Ok(format!("http://{LOOPBACK}:{port}"))
 }
 
+/// The loopback URL of a daemon that is provably down: its authenticated
+/// state names a daemon of this package version on `127.0.0.1` whose pid no
+/// longer runs, as after a reboot or a crash. A running pid, even one that
+/// does not answer, is not down, so the caller hands it to Python.
+pub(crate) fn stopped_daemon_url(state_path: &Path) -> Result<DaemonUrl, String> {
+    let state = authenticated_state(state_path)?;
+    current_daemon(&state)?;
+    let pid = state
+        .payload
+        .get("pid")
+        .and_then(Value::as_i64)
+        .filter(|pid| *pid > 0)
+        .ok_or("daemon state names no pid")?;
+    if pid_running(pid) {
+        return Err("daemon process is still running".to_owned());
+    }
+    match state.port() {
+        0 => Err("daemon port is invalid".to_owned()),
+        port => Ok(format!("http://{LOOPBACK}:{port}")),
+    }
+}
+
 #[cfg(all(test, unix))]
 #[path = "claude_session_start_live_tests.rs"]
 pub(crate) mod tests;

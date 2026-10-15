@@ -25,15 +25,13 @@
 //! it.
 
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::bounded_hook_bridge_render::{
     daemon_response_to_native, event_name, failure_output, failure_output_for, Rendered,
-    FAILURE_REASON, NATIVE_HARNESSES,
+    FAILURE_REASON,
 };
 use crate::claude_hook_bridge_http::remaining;
-use crate::guard_store_json::py_repr_str;
 use crate::hook_bridge_daemon_start::{await_daemon, start_daemon, Attempt, TRANSPORT_FAILURE};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::pyjson::{self, PyVal, SurrogateMapped};
@@ -63,139 +61,15 @@ pub(crate) const DAEMON_BUDGET: Duration = Duration::from_secs(5);
 pub(crate) const PROMPT_DAEMON_BUDGET: Duration = Duration::from_secs(10);
 const STATE_FILE: &str = "daemon-state.json";
 const TOKEN_FILE: &str = "daemon-auth-token";
-const MANAGED_MARKER: &str = "HOL_GUARD_MANAGED_ZCODE";
 const OVERSIZE_REASON: &str =
     "HOL Guard blocked this action because hook input exceeded the safe size limit.";
 const DEFAULT_EVENT: &str = "PreToolUse";
 const HOOK_DEADLINE: &str = "daemon hook deadline exhausted";
 
-/// The fields of the install-time config the native bridge reads, after
-/// every check `run_bounded_cli_hook` applies.
-#[derive(Debug, PartialEq)]
-pub(crate) struct BridgeConfig {
-    pub(crate) harness: String,
-    pub(crate) guard_home: PathBuf,
-    pub(crate) timeout: Duration,
-    /// The daemon-start command, empty when the install wrote none.
-    pub(crate) start_command: Vec<String>,
-}
-
-/// The config argument of `[python, "-I", "-c", bootstrap, config]`, with
-/// ZCode's trailing `# HOL_GUARD_MANAGED_ZCODE` when a shell kept it.
-pub(crate) fn config_argument(python_argv: &[String]) -> Option<&str> {
-    let shaped = match python_argv {
-        [_, isolated, code, _, _] => isolated == "-I" && code == "-c",
-        [_, isolated, code, _, _, hash, marker] => {
-            isolated == "-I" && code == "-c" && hash == "#" && marker == MANAGED_MARKER
-        }
-        _ => false,
-    };
-    shaped.then(|| python_argv[4].as_str())
-}
-
-fn positive_seconds(value: Option<&PyVal>) -> Option<Duration> {
-    let seconds = match value? {
-        PyVal::Int(digits) => digits.parse::<f64>().ok()?,
-        PyVal::Float(number) => *number,
-        _ => return None,
-    };
-    if !seconds.is_finite() || seconds <= 0.0 {
-        return None;
-    }
-    Duration::try_from_secs_f64(seconds).ok()
-}
-
-/// The config a POSIX install wrote, or `None` for anything Python would
-/// refuse or handle in a step the native bridge does not port.
-pub(crate) fn parse_config(argument: &str) -> Option<BridgeConfig> {
-    let parsed = pyjson::parse_mapping_lone_surrogates(argument).ok()?;
-    if parsed.mapped {
-        return None;
-    }
-    let payload = parsed.value;
-    payload.as_dict()?;
-    let python_executable = payload.get("python_executable")?.as_str()?;
-    let package_root = payload.get("package_root")?.as_str()?;
-    let guard_home = payload.get("guard_home")?.as_str()?;
-    let cli_args = payload.get("cli_args")?.as_list()?;
-    let harness = payload.get("harness")?.as_str()?;
-    let timeout = positive_seconds(payload.get("timeout_seconds"))?;
-    let start_command = match payload.get("start_command") {
-        None => {
-            let cli_args: Vec<&str> = cli_args.iter().filter_map(PyVal::as_str).collect();
-            daemon_start_command(python_executable, package_root, guard_home, &cli_args)
-        }
-        Some(value) => value
-            .as_list()?
-            .iter()
-            .map(|item| item.as_str().map(str::to_owned))
-            .collect::<Option<Vec<_>>>()?,
-    };
-    let launcher_ok = matches!(
-        payload.get("frozen_launcher"),
-        None | Some(PyVal::Bool(false))
-    );
-    if !launcher_ok
-        || !cli_args.iter().all(|item| item.as_str().is_some())
-        || !NATIVE_HARNESSES.contains(&harness)
-        || !Path::new(guard_home).is_absolute()
-    {
-        return None;
-    }
-    Some(BridgeConfig {
-        harness: harness.to_owned(),
-        guard_home: PathBuf::from(guard_home),
-        timeout,
-        start_command,
-    })
-}
-
-/// `daemon_start_command(python_executable, package_root, guard_home,
-/// cli_args)` (`bounded_cli_hook_native.py`) for an install whose config
-/// predates `start_command`: the config already holds the resolved package
-/// root and Guard home, and the canonical home is the `--home` argument,
-/// else `Path.home()`.
-fn daemon_start_command(
-    python_executable: &str,
-    package_root: &str,
-    guard_home: &str,
-    cli_args: &[&str],
-) -> Vec<String> {
-    let home_dir = cli_args
-        .windows(2)
-        .find(|pair| pair[0] == "--home")
-        .map(|pair| pair[1].to_owned())
-        .or_else(python_home);
-    let Some(home_dir) = home_dir else {
-        return Vec::new();
-    };
-    let bootstrap = format!(
-        "import os,sys;\
-sys.path.insert(0, {});\
-from pathlib import Path;\
-from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;\
-failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');\
-failure_kind=failure_kind if failure_kind in \
-{{'overload','transport-failure','authenticated-control-plane-failure'}} \
-else 'transport-failure';\
-schedule_guard_daemon_recovery(Path({}),home_dir=Path({}),failure_kind=failure_kind)",
-        py_repr_str(package_root),
-        py_repr_str(guard_home),
-        py_repr_str(&home_dir),
-    );
-    vec![
-        python_executable.to_owned(),
-        "-I".to_owned(),
-        "-c".to_owned(),
-        bootstrap,
-    ]
-}
-
-/// `str(Path.home())`: `HOME` on POSIX, `USERPROFILE` on Windows.
-fn python_home() -> Option<String> {
-    let name = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    std::env::var(name).ok().filter(|home| !home.is_empty())
-}
+#[path = "bounded_hook_bridge_config.rs"]
+mod config;
+pub(crate) use config::{config_argument, parse_launch_config, BridgeConfig};
+use config::{frozen_launch, positive_seconds};
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Input {
@@ -452,7 +326,9 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     if python_argv.len() == 4 && python_argv[1] == "-I" && python_argv[2] != "-c" {
         return crate::bounded_hook_bridge_grok::run(python_argv, started);
     }
-    let config = config_argument(python_argv).and_then(parse_config);
+    let frozen = frozen_launch(python_argv);
+    let config =
+        config_argument(python_argv).and_then(|argument| parse_launch_config(argument, frozen));
     let Some(config) = config else {
         return refuse_config(config_argument(python_argv), started);
     };
@@ -522,3 +398,7 @@ fn emit(harness: &str, route: Route) -> i32 {
 #[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "bounded_hook_bridge_frozen_tests.rs"]
+mod frozen_tests;

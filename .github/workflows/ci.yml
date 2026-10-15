@@ -21,10 +21,8 @@ env:
   # the wheel-size gate measures.
   CARGO_PROFILE_RELEASE_LTO: "false"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-  # Every shard repeats checkout, setup and pytest startup (~45s), and the
-  # organization shares about twenty hosted runners across all open PRs.
-  # 64 shards keeps the slowest shard well inside its timeout while one
-  # push no longer queues hundreds of jobs ahead of every other PR.
+  # Balance the complete suite across parallel runners. Keep this independent
+  # of a fixed organization-wide runner count; scheduling capacity can change.
   CI_PYTEST_COVERAGE_SHARDS: "64"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
@@ -205,15 +203,17 @@ jobs:
           } >> "$GITHUB_ENV"
         env:
           SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
-      - name: Provision bubblewrap for the Linux workspace sandbox tests
+      - name: Provision the Linux test linker
         if: matrix.check != 'clippy'
-        # Without it the overlay sandbox tests take the unavailable-host branch
-        # and the live confinement run is skipped.
-        # The test wrapper links with lld; the sandbox needs bubblewrap 0.10+.
+        # The checked test wrapper links with lld. Reuse the runner's linker
+        # when present instead of refreshing apt for an installed tool.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends lld
-          bash ci/containment/install-bubblewrap.sh
+          if ! command -v ld.lld >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends lld
+          fi
+      - uses: ./.github/actions/setup-bubblewrap
+        if: matrix.check != 'clippy'
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
@@ -263,51 +263,27 @@ jobs:
 
   native-command-evaluators:
     runs-on: ubuntu-latest
+    outputs:
+      shard-indices: ${{ steps.shard-indices.outputs.indices }}
+      shard-count: ${{ steps.shard-indices.outputs.count }}
+    concurrency:
+      group: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('native-ci-build-{0}-linux', github.sha) || format('native-ci-build-run-{0}-linux', github.run_id) }}
+      cancel-in-progress: false
     # Build and verify both binaries, regenerate their matching public projections,
     # then publish artifacts before running Python contract and replay gates.
     # The normal cached producer targets a sub-five-minute wall clock.
-    timeout-minutes: 12
+    # Keep the former build (12 min) and planning (5 min) cold-run budgets.
+    timeout-minutes: 17
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-        with:
-          cache-key: pytest-native-command
-          components: rustfmt
-      - name: Check native formatting before compilation
-        run: cargo fmt --manifest-path rust/Cargo.toml --all --check
-      - name: Install content-addressed compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-        with:
-          version: v0.18.0
-      - name: Build native command evaluators once for pytest shards
-        env:
-          # Content-addressed cache survives fresh checkout mtimes; third-party
-          # crates still come from rust-cache, workspace members from sccache.
-          RUSTC_WORKSPACE_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: 'on'
-          SCCACHE_GHA_VERSION: pytest-native-command
-          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
-          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
-        run: |
-          python3 scripts/refresh_extension_artifacts.py --trust-only
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
-          "$SCCACHE_PATH" --show-stats
-      - name: Verify generated native command catalogs before pytest fan-out
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          arguments=(--compiler rust/target/release/guard-command-source)
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            arguments+=(--changed-from "$BASE_SHA")
-          fi
-          python3 scripts/ci/verify_native_command_program.py "${arguments[@]}"
+      - uses: ./.github/actions/ci-job-native-command-build
       - uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: "true"
       - name: Prepare current public directory before pytest collection
         run: |
           uv run --no-sync python scripts/export_extension_directory.py
@@ -333,6 +309,26 @@ jobs:
             src/codex_plugin_scanner/guard/contracts/data/extensions/
           if-no-files-found: error
           retention-days: 1
+      - name: Bind the compiled native runtime for test discovery
+        run: echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/plan-pytest
+        # Reuse this environment instead of a second planner runner. Artifact
+        # consumers also wait for this bounded collection before fan-out.
+        timeout-minutes: 5
+        with:
+          python-version: "3.12"
+          shard-count: ${{ env.CI_PYTEST_COVERAGE_SHARDS }}
+          telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          github-token: ${{ github.token }}
+      - name: Emit resolved shard indices
+        id: shard-indices
+        shell: bash
+        run: |
+          indices=$(ls pytest-shards/shard-*.txt | sed -E 's#.*shard-([0-9]+)\.txt#\1#' | sort -n | tr '\n' ' ' | sed 's/ $//')
+          test -n "$indices" || { echo "no shard files produced" >&2; exit 1; }
+          json=$(echo "$indices" | tr ' ' '\n' | jq -R 'tonumber' | jq -cs .)
+          echo "indices=${json}" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo "$indices" | wc -w | tr -d ' ')" >> "$GITHUB_OUTPUT"
 
   native-gates:
     name: native-gates (${{ matrix.shard-index }})
@@ -382,7 +378,7 @@ jobs:
         # Without it every command the sandbox would contain falls back to
         # review, and the gates measure a host that Linux users with
         # bubblewrap never see.
-        run: bash ci/containment/install-bubblewrap.sh
+        uses: ./.github/actions/setup-bubblewrap
       - name: Benign false-positive and Gauntlet replay gates (model-free, native path)
         env:
           SHARD_INDEX: ${{ matrix.shard-index }}
@@ -405,90 +401,20 @@ jobs:
   native-release-size:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    concurrency:
+      group: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('shipped-native-ci-build-{0}-linux', github.sha) || format('shipped-native-ci-build-run-{0}-linux', github.run_id) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-rust
-      - name: Install content-addressed compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-        with:
-          version: v0.18.0
-      - name: Measure the shipped fat-LTO runtime size
-        env:
-          RUSTC_WORKSPACE_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: 'on'
-          SCCACHE_GHA_VERSION: native-release-size
-          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
-          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
-        run: |
-          unset CARGO_PROFILE_RELEASE_LTO
-          unset CARGO_PROFILE_RELEASE_CODEGEN_UNITS
-          if [ -n "${CARGO_PROFILE_RELEASE_LTO+x}" ] || [ -n "${CARGO_PROFILE_RELEASE_CODEGEN_UNITS+x}" ]; then
-            echo "Shipped size gate must use the rust/Cargo.toml release profile" >&2
-            exit 1
-          fi
-          # Only the runtime ships in platform wheels; the native evaluator
-          # builds and verifies guard-command-source separately on this commit.
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
-          python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release --platform manylinux_2_17_x86_64
-
-  coverage-plan:
-    needs: native-command-evaluators
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      shard-indices: ${{ steps.shard-indices.outputs.indices }}
-      shard-count: ${{ steps.shard-indices.outputs.count }}
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-evaluators
-          path: rust/target/release
-      - name: Bind the compiled native runtime
-        run: |
-          chmod 0755 rust/target/release/hol-guard-runtime
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-      - name: Download this run's current command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
-      - uses: ./.github/actions/setup-ci-python
-        with:
-          python-version: ${{ env.CI_PYTHON_VERSION }}
-          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-          save-cache: "true"
-      - name: Build packaged command catalog before pytest inventory
-        run: |
-          chmod 0755 rust/target/release/guard-command-source
-          uv run --no-sync python scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
-      - uses: ./.github/actions/plan-pytest
-        with:
-          python-version: "3.12"
-          shard-count: ${{ env.CI_PYTEST_COVERAGE_SHARDS }}
-          telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
-          github-token: ${{ github.token }}
-      - name: Emit resolved shard indices
-        id: shard-indices
-        shell: bash
-        run: |
-          indices=$(ls pytest-shards/shard-*.txt | sed -E 's#.*shard-([0-9]+)\.txt#\1#' | sort -n | tr '\n' ' ' | sed 's/ $//')
-          test -n "$indices" || { echo "no shard files produced" >&2; exit 1; }
-          json=$(echo "$indices" | tr ' ' '\n' | jq -R 'tonumber' | jq -cs .)
-          echo "indices=${json}" >> "$GITHUB_OUTPUT"
-          echo "count=$(echo "$indices" | wc -w | tr -d ' ')" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/ci-job-native-release-size
 
   coverage:
     name: coverage (3.12, ${{ matrix.shard-index }})
-    needs: [plan, coverage-plan, native-command-evaluators]
+    needs: [plan, native-command-evaluators]
     if: >-
       !cancelled() &&
-      needs.coverage-plan.result == 'success' &&
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
@@ -499,7 +425,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard-index: ${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}
+        shard-index: ${{ fromJSON(needs.native-command-evaluators.outputs.shard-indices) }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -596,7 +522,7 @@ jobs:
 
   duration-manifest-candidate:
     if: needs.coverage.result == 'success'
-    needs: [coverage, coverage-plan]
+    needs: [coverage, native-command-evaluators]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -614,7 +540,7 @@ jobs:
         run: |
           shopt -s globstar nullglob
           reports=(duration-reports/**/pytest-durations.json)
-          if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ]; then
+          if [ "${#reports[@]}" -ne "${{ needs.native-command-evaluators.outputs.shard-count }}" ]; then
             echo "Incomplete attempt reports; retain the previous duration manifest."
             echo "complete=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -717,7 +643,7 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [plan, native-workspace, quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
+    needs: [plan, native-workspace, quality, native-command-evaluators, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -730,7 +656,7 @@ jobs:
         env:
           NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
-          COVERAGE_PLAN_RESULT: ${{ needs.coverage-plan.result }}
+          NATIVE_PRODUCER_RESULT: ${{ needs.native-command-evaluators.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
@@ -743,7 +669,7 @@ jobs:
           else
             ok_set='success'
           fi
-          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$COVERAGE_PLAN_RESULT" \
+          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$NATIVE_PRODUCER_RESULT" \
                    "$COVERAGE_RESULT" "$COMPATIBILITY_RESULT" "$SCHEDULING_SENSITIVE_RESULT"; do
             case " $ok_set " in *" $r "*) : ;; *) echo "dependency result not OK: $r"; exit 1;; esac
           done
@@ -828,6 +754,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
   windows-native-runtime:
+    concurrency:
+      group: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('native-ci-build-{0}-windows', github.sha) || format('native-ci-build-run-{0}-windows', github.run_id) }}
+      cancel-in-progress: false
     needs: [plan]
     if: >-
       !cancelled() &&
@@ -888,6 +817,9 @@ jobs:
           native-diagnostics: ${{ matrix.native-diagnostics }}
 
   macos-native-runtime:
+    concurrency:
+      group: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('native-ci-build-{0}-macos', github.sha) || format('native-ci-build-run-{0}-macos', github.run_id) }}
+      cancel-in-progress: false
     needs: [plan]
     if: >-
       !cancelled() &&
@@ -932,13 +864,15 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    # One runner took over 30 minutes for the whole gate; three shards keep
-    # each well inside the limit.
-    timeout-minutes: 30
+    # The full catalog exceeds 9,000 cases. Three shards took 20 minutes;
+    # keep every case, with two workers per runner and a five-minute budget.
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
-        shard-index: [0, 1, 2]
+        shard-index:
+          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+           12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -948,7 +882,7 @@ jobs:
           python-version: "3.12"
           suite: gates
           shard-index: ${{ matrix.shard-index }}
-          shard-count: 3
+          shard-count: 24
 
   # Shadow aggregate: reports the merged required-result contract. In shadow mode
   # it needs the full required set and evaluates the planner's lane choice so the
@@ -958,7 +892,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-gates, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
+    needs: [plan, native-workspace, native-command-evaluators, native-gates, native-release-size, quality, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -968,7 +902,7 @@ jobs:
       - name: Evaluate planned required results
         env:
           PLAN_LANES: ${{ needs.plan.outputs.lanes }}
-          PLAN_SHARD_COUNT: ${{ needs.coverage-plan.outputs.shard-count }}
+          PLAN_SHARD_COUNT: ${{ needs.native-command-evaluators.outputs.shard-count }}
           EXPECTED_SHARDS: ${{ env.CI_PYTEST_COVERAGE_SHARDS }}
           PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
           RESULTS: ${{ toJson(needs) }}
@@ -987,7 +921,7 @@ jobs:
           # skipped one, which means its `if`/needs chain broke) must not let a
           # data-only plan coast through on surviving lane-gated residue.
           always_on = ["plan","native-workspace","native-command-evaluators","native-gates",
-                       "native-release-size","quality","coverage-plan","ci-python-312"]
+                       "native-release-size","quality","ci-python-312"]
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
@@ -1025,7 +959,7 @@ jobs:
           expected = os.environ.get("EXPECTED_SHARDS", "")
           if not data_only:
               if not shard_count.isdigit() or int(shard_count) < 1:
-                  print(f"::error::coverage-plan shard count invalid ({shard_count!r})")
+                  print(f"::error::native producer shard count invalid ({shard_count!r})")
                   sys.exit(1)
               if expected.isdigit() and int(shard_count) != int(expected):
                   print(f"::error::coverage matrix {shard_count} != configured {expected}")
@@ -1035,7 +969,7 @@ jobs:
               print("::error::required jobs skipped on a full-lane plan: "+", ".join(skipped))
               sys.exit(1)
           # Evidence residue is already enforced: `always_on` (plan, quality,
-          # coverage-plan, ci-python-312, plus the native providers) must succeed,
+          # ci-python-312, plus the native providers) must succeed,
           # so a data-only plan cannot coast with no green evidence. Lane-gated
           # jobs are all skipped on data-only by design — counting them as
           # residue would fail every valid fast lane.

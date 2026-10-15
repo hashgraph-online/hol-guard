@@ -11,6 +11,7 @@ use super::search_scope_ignore::{
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
 use serde_json::{Map, Value};
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -18,6 +19,8 @@ const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
 /// so it may cover an ordinary mid-size repository in full.
 const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
+/// Links into the main checkout one names-only walk may follow and prove.
+const MAX_CHECKOUT_LINK_WALKS: usize = 8;
 
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -196,9 +199,10 @@ pub(super) fn omp_glob_scope_proven(
         let home = std::fs::canonicalize(home).ok()?;
         (!home.starts_with(&cwd)).then_some(cwd)
     });
-    let names_walk = |ignores| {
-        SearchFilter::from_input(&Map::new())
-            .is_some_and(|filter| walk_scope(&root, &filter, ignores, true, &mut None).is_ok())
+    let names_walk = |ignores, outside_link: &dyn Fn(&Path) -> bool| {
+        SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+            walk_scope_with(&root, &filter, ignores, true, outside_link, &mut None).is_ok()
+        })
     };
     // A linked worktree of a repository inside the workspace holds the same
     // checkout, so its names are the workspace's too.
@@ -209,11 +213,39 @@ pub(super) fn omp_glob_scope_proven(
                 .is_some_and(|checkout| checkout.starts_with(&cwd))
     });
     if !in_workspace {
-        return unfiltered_walk_proven(&root) && names_walk(Ignores::None);
+        return unfiltered_walk_proven(&root) && names_walk(Ignores::None, &|_| false);
     }
+    // A linked worktree often borrows its gitignored dependencies through a
+    // link into the main checkout. Without ignore rules the host may list
+    // through it, so that target is held to the rules for a walk outside the
+    // workspace. Any other link out of the root still fails the proof.
+    let checkout = super::worktree_writes::linked_worktree_common_dir(&root)
+        .and_then(|common| common.parent().map(Path::to_path_buf));
+    let home = home_dir.and_then(|home| std::fs::canonicalize(home).ok());
+    let walks = Cell::new(0_usize);
+    let checkout_link = |target: &Path| {
+        walks.set(walks.get() + 1);
+        walks.get() <= MAX_CHECKOUT_LINK_WALKS
+            && checkout
+                .as_deref()
+                .zip(home.as_deref())
+                .is_some_and(|(checkout, home)| {
+                    target != checkout
+                        && target.starts_with(checkout)
+                        && !home.starts_with(checkout)
+                })
+            && target.to_str().is_some_and(|target| {
+                super::safe_reads::bounded_omp_directory_read_target(target, home_dir, cwd)
+            })
+            && unfiltered_walk_proven(target)
+            && SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+                walk_scope(target, &filter, Ignores::None, true, &mut None).is_ok()
+            })
+    };
     // Without ignore rules the walk covers every entry the host can reach,
     // so it still proves the scope when a `.ignore` file stops the first.
-    gitignore && names_walk(Ignores::Gitignore) || names_walk(Ignores::None)
+    gitignore && names_walk(Ignores::Gitignore, &|_| false)
+        || names_walk(Ignores::None, &checkout_link)
 }
 
 /// Oh My Pi `grep` variant of [`content_search_scope_proven`]. The host
@@ -395,6 +427,19 @@ fn walk_scope(
     names: bool,
     blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
+    walk_scope_with(root, filter, ignores, names, &|_| false, blocker)
+}
+
+/// [`walk_scope`], where a names-only walk also accepts a link out of `root`
+/// whose canonical target `outside_link` proves.
+fn walk_scope_with(
+    root: &Path,
+    filter: &SearchFilter,
+    ignores: Ignores,
+    names: bool,
+    outside_link: &dyn Fn(&Path) -> bool,
+    blocker: &mut Option<PathBuf>,
+) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
     if ignores == Ignores::Ripgrep {
@@ -470,7 +515,7 @@ fn walk_scope(
                     // A link the ignore rules skip is never walked.
                     let skipped =
                         ignores != Ignores::None && link_ignored(&tiers, &path, target.as_deref())?;
-                    if escapes && !skipped {
+                    if escapes && !skipped && !target.as_deref().is_some_and(outside_link) {
                         return Err(ScopeUnproven);
                     }
                 } else if sensitive_scope_file(&path)

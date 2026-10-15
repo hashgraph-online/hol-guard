@@ -80,6 +80,16 @@ pub(crate) fn plain_printed_name(name: &str) -> bool {
                 | "COLORTERM"
                 | "VIRTUAL_ENV"
                 | "CONDA_PREFIX"
+                // Where a toolchain is installed or builds its output.
+                | "BUN_INSTALL"
+                | "NVM_DIR"
+                | "NVM_BIN"
+                | "PYENV_ROOT"
+                | "RBENV_ROOT"
+                | "GOROOT"
+                | "GOBIN"
+                | "CARGO_TARGET_DIR"
+                | "XDG_RUNTIME_DIR"
         )
         || name.ends_with("_HOME")
         || name.ends_with("PATH")
@@ -362,6 +372,8 @@ mod tests {
             "JAVA_HOME",
             "PYTHONPATH",
             "NODE_ENV",
+            "BUN_INSTALL",
+            "NVM_DIR",
         ] {
             assert!(plain_printed_name(name), "{name}");
         }
@@ -371,6 +383,8 @@ mod tests {
             "OPENAI_API_KEY",
             "AWS_SECRET_ACCESS_KEY",
             "TOKEN_PATH",
+            "BUN_AUTH_TOKEN",
+            "NPM_CONFIG_DIR",
             "path",
             "-0",
             "",

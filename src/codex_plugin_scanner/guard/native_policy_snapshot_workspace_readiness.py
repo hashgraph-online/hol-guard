@@ -30,11 +30,16 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         if workspace is None:
             return False
         candidate = publisher._resolved_workspace(workspace)
+        with publisher._condition:
+            # Only a new or deferred workspace needs the overlay scans below.
+            if candidate in publisher._workspace_paths and candidate not in publisher._deferred_workspace_paths:
+                return False
         file_less = publisher._file_less_canonical_workspace(candidate)
+        free_ancestors = file_less and publisher._overlay_free_ancestors(candidate)
         with publisher._condition:
             if candidate in publisher._workspace_paths:
                 if candidate not in publisher._deferred_workspace_paths or (
-                    file_less and publisher._under_settled_workspace_locked(candidate)
+                    file_less and publisher._covered_by_ack_locked(candidate, free_ancestors=free_ancestors)
                 ):
                     return False
                 # A deferred workspace gained an overlay; it now needs its own ACK.
@@ -46,7 +51,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
                 # Re-read input files including this workspace's overlays.
                 publisher._input_fingerprint = None
                 registered = True
-                if file_less and publisher._under_settled_workspace_locked(candidate):
+                if file_less and publisher._covered_by_ack_locked(candidate, free_ancestors=free_ancestors):
                     # The current ACK already carries this workspace's policy.
                     # A publish now would supersede the generation its hooks
                     # are presenting, so it compiles with the next publish.
@@ -74,11 +79,13 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
 
         A workspace config reads only that directory's own overlay files, and
         the snapshot merges every overlay strictest-first over the home config.
-        A canonical subdirectory of an already compiled workspace that has no
-        overlay file therefore contributes nothing beyond the home config, so
-        its hooks may use the current ACK until a later publish compiles it.
-        Any overlay entry, read error, symlink or junction keeps the workspace
-        gated on its own ACK.
+        A canonical directory that has no overlay file therefore contributes
+        nothing beyond the home config, so its hooks may use the current ACK
+        until a later publish compiles it. That holds below an already compiled
+        workspace, or where no ancestor holds an overlay; below an unsettled
+        overlay the directory waits, since that overlay joins the merge once it
+        settles. Any overlay entry, read error, symlink or junction keeps the
+        workspace gated on its own ACK.
         """
 
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -90,10 +97,17 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
                 return False
         if not publisher._file_less_canonical_workspace(candidate):
             return False
+        free_ancestors = publisher._overlay_free_ancestors(candidate)
         with publisher._condition:
-            return candidate in publisher._deferred_workspace_paths and publisher._under_settled_workspace_locked(
-                candidate
+            return candidate in publisher._deferred_workspace_paths and publisher._covered_by_ack_locked(
+                candidate, free_ancestors=free_ancestors
             )
+
+    def _covered_by_ack_locked(self, candidate: Path, *, free_ancestors: bool) -> bool:
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        if publisher._under_settled_workspace_locked(candidate):
+            return True
+        return free_ancestors and publisher._acked and publisher._snapshot is not None
 
     def _under_settled_workspace_locked(self, candidate: Path) -> bool:
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -107,9 +121,19 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
                 return False
         except (OSError, ValueError):
             return False
+        return NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(candidate)
+
+    @staticmethod
+    def _overlay_free_ancestors(candidate: Path) -> bool:
+        return candidate.is_absolute() and all(
+            NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(parent) for parent in candidate.parents
+        )
+
+    @staticmethod
+    def _overlay_absent(directory: Path) -> bool:
         for name in WORKSPACE_CONFIG_FILENAMES:
             try:
-                _ = os.lstat(candidate / name)
+                _ = os.lstat(directory / name)
             except FileNotFoundError:
                 continue
             except (OSError, ValueError):

@@ -57,6 +57,9 @@ pub(super) fn run() -> Result<(), String> {
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
         }
+        [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
+            std::process::exit(pi_hook_bridge::run(config))
+        }
         [command, python_argv @ ..]
             if command == mcp_relay::RELAY_COMMAND && python_argv.len() >= 2 =>
         {

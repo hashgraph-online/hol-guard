@@ -10,11 +10,14 @@ mod home;
 pub(in crate::pretool) use home::home_hidden_directory;
 
 /// Agent state and tool trees whose entry names reveal agent state inside a
-/// repository. Credential stores come from the shared home list.
+/// repository. Credential stores and harness homes come from the shared home
+/// lists.
 const AGENT_STATE_NAMES: [&str; 5] = [".agent", ".agents", ".config", ".local", ".npm"];
 
 fn guarded_hidden_name(name: &str) -> bool {
-    AGENT_STATE_NAMES.contains(&name) || home::CREDENTIAL_STORE_NAMES.contains(&name)
+    AGENT_STATE_NAMES.contains(&name)
+        || home::CREDENTIAL_STORE_NAMES.contains(&name)
+        || home::HARNESS_HOME_NAMES.contains(&name)
 }
 
 /// Whether `value` names an existing directory below a hidden component that

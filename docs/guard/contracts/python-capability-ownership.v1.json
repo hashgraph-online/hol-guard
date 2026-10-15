@@ -50,6 +50,7 @@
     "src/codex_plugin_scanner/guard/native_runtime_values.py",
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+    "src/codex_plugin_scanner/guard/native_runtime_durable.py",
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
@@ -1360,7 +1361,6 @@
     "_SHELL_FUNCTION_DEFINITION",
     "_SHELL_ALIAS_DEFINITION",
     "_DEFERRED_GITHUB_EFFECT",
-    "GitHubShellAnalysis",
     "parse_env_wrapper"
    ],
    "native_replacements": [

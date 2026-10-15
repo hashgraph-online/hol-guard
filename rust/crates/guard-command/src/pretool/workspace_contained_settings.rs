@@ -12,11 +12,12 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolResultV1};
 use std::path::Path;
 
 /// Move `projected`, the contained verdict for `command` without its
-/// settings, to the workspace sandbox when its launcher admits `command` as
-/// written. Returns whether it did.
+/// settings (`projected_command`), to the workspace sandbox when its launcher
+/// admits `command` as written. Returns whether it did.
 pub(in crate::pretool) fn carry_settings(
     projected: &mut PreToolResultV1,
     command: &str,
+    projected_command: &str,
     context: PathContext<'_>,
     execution_environment: Option<&GuardExecutionEnvironmentV1>,
     harness: &str,
@@ -29,12 +30,23 @@ pub(in crate::pretool) fn carry_settings(
         return false;
     }
     let home = context.home_dir.map(Path::new);
-    let Some(workspace) = context
-        .cwd
-        .and_then(|cwd| workspace_admissible(Path::new(cwd), home))
+    // After a `cd` into a sibling repository the sandbox starts at that
+    // repository's root, as it does for the command without its settings.
+    let root = sibling_root(command, context);
+    let Some(workspace) = root
+        .as_deref()
+        .or(context.cwd.map(Path::new))
+        .and_then(|cwd| workspace_admissible(cwd, home))
     else {
         return false;
     };
+    // A narrower profile claimed the command before the workspace route could
+    // apply its runner gate, so the upgrade applies that gate here.
+    if projected.reason_code != super::REASON
+        && !super::runner::runners_admitted(projected_command, &workspace, home)
+    {
+        return false;
+    }
     let admitted =
         super::super::workspace_git_environment::session_git_variables(execution_environment)
             .and_then(|variables| {
@@ -48,6 +60,18 @@ pub(in crate::pretool) fn carry_settings(
         mark_contained(projected);
     }
     admitted
+}
+
+/// The sibling repository root the sink runs `command` from, if any.
+fn sibling_root(command: &str, context: PathContext<'_>) -> Option<std::path::PathBuf> {
+    let model = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()?;
+    super::sibling::sibling_run(&model, context).map(|(root, _)| root)
 }
 
 #[cfg(unix)]

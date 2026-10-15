@@ -132,7 +132,44 @@ pub(super) fn sibling_project_root(
     None
 }
 
-/// Peel a verified `cd <workspace or sibling repository dir> &&` prefix, a
+/// Whether the execution sink can peel the leading `cd` of a command that
+/// `contained_core` accepted. The sink resolves a relative operand only when it
+/// names a sibling repository root outside the workspace, and runs a
+/// `;`-sequenced `cd` only into a sibling root, so a relative or sequenced cd
+/// inside the workspace classifies but cannot be peeled there.
+pub(super) fn sink_peels_leading_cd(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some(first) = model.segments.first() else {
+        return true;
+    };
+    if first.executable.as_deref() != Some("cd") {
+        return true;
+    }
+    let (Some(target), Some(cwd), Some(home)) = (
+        super::segment_proof::verified_cwd_compound_context(model, context),
+        context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()),
+        context.home_dir,
+    ) else {
+        return false;
+    };
+    let target = std::path::PathBuf::from(target);
+    let inside = target.starts_with(&cwd);
+    let operand = first.arguments.first().map_or("", String::as_str);
+    let relative = !operand.starts_with(['/', '~']);
+    let sequenced = model.segments.get(1).is_some_and(|next| {
+        text(model, first.span.end, next.span.start).is_some_and(|between| between == ";")
+    });
+    if inside {
+        return !relative && !sequenced;
+    }
+    let sibling = sibling_project_root(&target, home).is_some_and(|root| root == target);
+    !relative || sibling
+}
+
+/// Peel a verified `cd <workspace or sibling repository dir> &&` prefix
+/// spelled as the sink peels it, a
 /// trailing `2>&1`, a chain of bounded `| tail -N`/`| head -N` and
 /// standard-input `| grep` filters and a final `; echo "<label>$?"`,
 /// returning the sole core invocation.
@@ -155,9 +192,20 @@ pub(super) fn contained_core(
         let target = super::segment_proof::verified_cwd_compound_context(model, context)?;
         let workspace = std::fs::canonicalize(context.cwd?).ok()?;
         let target = std::path::Path::new(&target);
-        if !target.starts_with(&workspace)
-            && sibling_project_root(target, context.home_dir?).is_none()
-        {
+        let inside = target.starts_with(&workspace);
+        let sibling = sibling_project_root(target, context.home_dir?);
+        if !inside && sibling.is_none() {
+            return None;
+        }
+        // The sink peels a relative target only when it names a sibling
+        // repository root outside the workspace (`peel_contained_wrapper`).
+        // Any other relative target is left to the workspace sandbox, which
+        // runs the text whole, instead of a receipt the sink cannot redeem.
+        let [spelled] = segments[0].arguments.as_slice() else {
+            return None;
+        };
+        let anchored = spelled.starts_with('~') || std::path::Path::new(spelled).is_absolute();
+        if !anchored && (inside || sibling.as_deref() != Some(target)) {
             return None;
         }
         start = 1;

@@ -112,7 +112,7 @@ def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
     """Verify duration telemetry uses successful push on target branch."""
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
-    job = workflow["jobs"]["coverage-plan"]
+    job = workflow["jobs"]["native-command-evaluators"]
     plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
     assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))

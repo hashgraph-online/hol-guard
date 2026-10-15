@@ -6,19 +6,30 @@
 //! under test can differ.
 
 use std::collections::BTreeMap;
+#[cfg(unix)]
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
+#[cfg(unix)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(unix)]
 use flate2::read::GzDecoder;
+#[cfg(unix)]
 use guard_contracts::LocalCliIdentitySourceV1;
-use serde_json::{json, Map, Value};
+#[cfg(unix)]
+use serde_json::Map;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::{identify_with, owned_executables, Request};
+#[cfg(unix)]
 use crate::context_digest_local_cli::local_cli_identity;
 use crate::native_exact_action_op::context::{Engines, EvidenceFile, LocalExecution};
 
+// The recorded vectors materialize symlinked trees, so only unix replays them.
+#[cfg(unix)]
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/local_cli_identify_vectors.json.gz");
 const SCRIPT_KINDS: [(&str, &str); 8] = [
     ("python3", "python-script"),

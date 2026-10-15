@@ -9,6 +9,35 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+/// One `ln` beside read-only peers: `ln -s <a>/node_modules <wt>/node_modules
+/// && ls -la <wt>/ | grep node_module`. The `ln` is still proven on its own,
+/// so a chain only adds peers that print or filter. `cp`, `mv`, `rm`, `cd`,
+/// Git and a second `ln` stay out: nothing may write through, replace or
+/// re-anchor the fresh link before a later step runs. Redirects stay out too,
+/// since a write to `<link>/file` could not be proven before the link exists.
+/// `grep` and `rg` only filter piped output: a file operand could read
+/// through the fresh link, which did not exist when the operand was proven.
+pub(super) fn link_chain(model: &crate::CanonicalCommandV1) -> bool {
+    let links = |name: &str| {
+        model
+            .segments
+            .iter()
+            .filter(|segment| segment.executable.as_deref() == Some(name))
+            .count()
+    };
+    model.segments.len() > 1
+        && links("ln") == 1
+        && links("cp") == 0
+        && super::chain_temporary::plain_chain(model, &["ln"])
+        && model.segments.iter().all(|segment| {
+            !segment.text.replace("2>&1", "").contains(['>', '<'])
+                && (segment.executable.as_deref() != Some("ln") || segment.pipeline_index == 0)
+                && (!matches!(segment.executable.as_deref(), Some("grep" | "rg"))
+                    || (segment.pipeline_index > 0
+                        && super::segment_proof::stdin_filter_segment(segment)))
+        })
+}
+
 pub(super) fn safe_symlink_arguments(
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,

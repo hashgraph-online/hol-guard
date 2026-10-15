@@ -23,8 +23,9 @@
 //! its sink command, and defers without one. While custom extension
 //! block rules exist, an allowed `PreToolUse` whose command launches a local
 //! CLI reads that CLI's grant as the daemon does and, when the grant blocks
-//! it, answers with the daemon's block; a launch or grant the daemon would
-//! block as unverified still defers.
+//! it, answers with the daemon's block, including the unverified block when
+//! the grant answer cannot be trusted. A launch the daemon rejects as
+//! malformed and a catalog read failure still defer.
 //!
 //! The daemon also records evidence after it answers. An answer is returned
 //! only once that evidence is queued for the daemon to drain.
@@ -79,7 +80,9 @@ pub(crate) const DIRECT_HARNESSES: [&str; 14] = [
 ];
 const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
 const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
-const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = ["guard_payload_ref", "guard_source_ref"];
+const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
+const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
+const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];
 const EVENT_NAME_FIELDS: [&str; 6] = [
     "event",
     "eventName",
@@ -256,9 +259,10 @@ fn answer(
         // A probe carries a request identity only the daemon assigns.
         return Err(HookDirectDefer::TransitionProbe);
     }
-    if PAYLOAD_REFERENCE_FIELDS
-        .iter()
-        .any(|field| payload.contains_key(*field))
+    // The edge refuses an encrypted payload reference and reviews a source
+    // reference only after a tool ran, reading the file as the daemon does.
+    if payload.contains_key(ENCRYPTED_PAYLOAD_FIELD)
+        || (payload.contains_key(SOURCE_REFERENCE_FIELD) && event != POST_TOOL_USE)
     {
         return Err(HookDirectDefer::PayloadUnsupported);
     }
@@ -351,9 +355,10 @@ fn answer(
     let contained = pre_tool && (request.harness == CLAUDE_CODE || request.harness == ZCODE);
     let sink_command = binding.contained_sink_command.clone().filter(|_| contained);
     let guard_home = request.guard_home.clone();
-    // Without custom rules, the daemon reads a reviewed `PreToolUse` against
-    // the exact-action decisions the user saved.
-    let saved_payload = (pre_tool && !custom_rules && !recording_only).then(|| payload.clone());
+    // The daemon reads a reviewed `PreToolUse` against the exact-action
+    // decisions the user saved once no custom grant applies to its command,
+    // which the saved-decision read checks against the store it reads.
+    let saved_payload = (pre_tool && !recording_only).then(|| payload.clone());
     let envelope = GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: None,

@@ -217,13 +217,13 @@ def _daemon_start_command(
     )
 
 
-def _native_bridge_executable() -> Path | None:
+def _native_bridge_executable(guard_home: Path) -> Path | None:
     # HOL_GUARD_CODEX_HOOK_BRIDGE=python keeps the Python bridge argv. Contract
     # tests set it so a subprocess install and the parent verifier agree. The
     # Python bridge is the same fallback used when the native runtime is absent.
     if os.environ.get("HOL_GUARD_CODEX_HOOK_BRIDGE") == "python":
         return None
-    return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE)
+    return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE, guard_home=guard_home)
 
 
 def _hook_command_parts_for_home_mode(
@@ -268,9 +268,10 @@ def _hook_command_parts_for_home_mode(
     bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
     config_argument = encode_hook_config_argument(json.dumps(config, separators=(",", ":")))
     python_argv = (python_executable, "-I", str(bridge_path), config_argument)
-    # The native runtime answers ordinary hooks without starting Python and
-    # hands every other case to this same Python bridge argv.
-    native_bridge = _native_bridge_executable()
+    # The native runtime answers each hook from the daemon without starting
+    # Python and fails closed without one. It only reads the config this
+    # Python bridge argv carries.
+    native_bridge = _native_bridge_executable(guard_home)
     if native_bridge is None:
         return python_argv
     return (str(native_bridge), NATIVE_CODEX_HOOK_COMMAND, *python_argv)

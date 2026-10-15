@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
+from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .extension_adapters import EXTENSION_ADAPTERS
 from .realism_fixtures import add_home_tools, add_main_shapes, borrow_main_modules
 from .review_fixtures import (
@@ -110,10 +111,14 @@ def scratch_checkout(fixture_root: Path) -> Path:
     Agents routinely add scratch worktrees straight into the temporary root, outside
     every fixture directory. The name binds to this fixture root's identity, so parallel
     or later cases never share it, and the runner removes it after the case.
+
+    On Windows the temporary root is the fixture user's ``%TEMP%``, which Git Bash
+    mounts as ``/tmp``; a bare ``/tmp`` there is a drive-relative path no shell uses.
     """
     info = fixture_root.stat(follow_symlinks=False)
     seed = f"{fixture_root}:{info.st_dev}:{info.st_ino}:{info.st_ctime_ns}".encode()
-    return Path("/tmp") / f"hg-gauntlet-{hashlib.sha256(seed).hexdigest()[:16]}"
+    root = fixture_root / "home" / "AppData" / "Local" / "Temp" if os.name == "nt" else Path("/tmp")
+    return root / f"hg-gauntlet-{hashlib.sha256(seed).hexdigest()[:16]}"
 
 
 def remove_scratch_checkout(fixture_root: Path) -> None:
@@ -123,8 +128,23 @@ def remove_scratch_checkout(fixture_root: Path) -> None:
         info = scratch.lstat()
     except OSError:
         return
-    if stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid():
+    # Windows has no getuid and reports st_uid 0, so ownership is only checked on POSIX.
+    if stat.S_ISDIR(info.st_mode) and (not hasattr(os, "getuid") or info.st_uid == os.getuid()):
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def remove_native_cache(home: Path) -> None:
+    """Delete the native addon Oh My Pi unpacks into each case home.
+
+    The Windows addon is about 170 MB, so a full run would otherwise leave gigabytes behind.
+    """
+    natives = home / ".omp" / "natives"
+    try:
+        info = natives.lstat()
+    except OSError:
+        return
+    if stat.S_ISDIR(info.st_mode):
+        shutil.rmtree(natives, ignore_errors=True)
 
 
 def file_metadata(path: Path) -> tuple[int, ...]:
@@ -290,6 +310,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
         )
     checks.update(github_checks(fixture.workspace, scenario_id))
     checks.update(supply_chain_checks(fixture.workspace, scenario_id))
+    checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:
         checks["business-cli-executed-absent"] = not (fixture.workspace / EXECUTED_FLAG).exists()
@@ -462,4 +483,6 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         _git(args, nested, environment)
     # An untracked linked worktree inside the tree, another shape agents leave behind.
     _git(("worktree", "add", "--quiet", "-b", "inner", str(worktree / ".worktrees/inner")), worktree, environment)
+    # Last, so default signing never touches the fixture's own commits.
+    add_long_lived_clone_config(main, scenario_id)
     return worktree

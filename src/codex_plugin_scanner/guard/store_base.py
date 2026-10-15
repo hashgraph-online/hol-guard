@@ -32,7 +32,6 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
-from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
 from .fork_safety import forget_in_child
@@ -70,48 +69,18 @@ from .sqlite_tuning import (
     sqlite_connect_timeout_seconds,
 )
 from .store_approvals import (
-    _json_object,
-    _json_object_list,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
-    resolvable_approval_request_ids,
-)
-from .store_approval_writes import (
-    add_approval_request as persist_approval_request,
 )
 from .store_approvals import (
     bulk_resolve_approval_requests as persist_bulk_resolution,
 )
 from .store_approvals import (
-    count_approval_requests as count_pending_approval_requests,
-)
-from .store_approvals import (
     get_approval_request as load_approval_request,
 )
 from .store_approvals import (
-    get_approval_extension_allow_hint,
-)
-from .store_approvals import (
-    get_next_pending_request as load_next_pending_request,
-)
-from .store_approvals import (
-    list_approval_request_page as load_approval_request_page,
-)
-from .store_approvals import (
     list_approval_requests as load_approval_requests,
-)
-from .store_approvals import (
-    list_pending_approval_summaries as load_pending_approval_summaries,
-)
-from .store_approvals import (
-    resolve_approval_request as persist_approval_resolution,
-)
-from .store_approvals import (
-    resolve_matching_duplicate_requests as persist_duplicate_resolutions,
-)
-from .store_approvals import (
-    resolve_one_request_only as persist_one_resolution,
 )
 from .store_approvals import (
     resolve_request_with_queue_result as persist_queue_resolution,
@@ -120,7 +89,6 @@ from .store_connect import (
     connect_request_schema_statement,
     connect_state_schema_statement,
 )
-from .store_review_event_outbox_binding import bind_review_events_for_request
 from .store_evidence import (
     EvidenceRecord,
     ensure_evidence_schema,
@@ -233,7 +201,6 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
 
 
 _DEVICE_ROW_KEY = "local-device"
-_MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
 _POLICY_INTEGRITY_STATE_KEY = "policy_integrity"
@@ -1326,16 +1293,6 @@ def receipt_index_statements() -> list[str]:
             "on runtime_receipts(approval_request_id, policy_decision)"
         ),
     ]
-
-
-def _path_within_workspace(config_path: str, workspace: str) -> bool:
-    normalized_config = _normalized_workspace_path(config_path)
-    normalized_workspace = _normalized_workspace_path(workspace)
-    if not normalized_config or not normalized_workspace:
-        return False
-    if normalized_workspace == "/":
-        return normalized_config.startswith("/")
-    return normalized_config == normalized_workspace or normalized_config.startswith(f"{normalized_workspace}/")
 
 
 def _normalized_workspace_path(value: str) -> str:

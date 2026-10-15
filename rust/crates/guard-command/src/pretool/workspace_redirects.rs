@@ -249,7 +249,28 @@ pub(super) fn contained(
         && !projected.action.sensitive_target
         && !runs_directly
         && stays_offline(&projected_text, single);
-    if projected.reason_code != crate::pretool::workspace_contained::REASON && !allowed {
+    // macOS claims package and Node tool commands with narrower profiles
+    // before the workspace route runs. The redirect disqualifies those, so the
+    // workspace sandbox takes the command once it passes that route's gate.
+    // A trailing `2>&1` before bounded output filters is not such a redirect:
+    // the narrower sink peels it itself, so that command keeps its profile.
+    let home = context.home_dir.map(Path::new);
+    let narrower = super::redirect_projection::package_profile(&projected.reason_code)
+        && projected.minimum_action == "sandbox-required"
+        && !projected.action.sensitive_target
+        && !narrower_sink_runs(command, context)
+        && crate::pretool::workspace_contained::runner::runners_admitted(
+            &stripped, &workspace, home,
+        )
+        && crate::pretool::workspace_git_environment::session_git_variables(execution_environment)
+            .and_then(|variables| {
+                crate::pretool::workspace_git_config::workspace_write_denials(
+                    &workspace, home, &variables,
+                )
+            })
+            .is_some();
+    if projected.reason_code != crate::pretool::workspace_contained::REASON && !allowed && !narrower
+    {
         return None;
     }
     // The sandbox runs the command as written, so its shape is the stripped text's.
@@ -264,11 +285,14 @@ pub(super) fn contained(
         execution_environment,
         false,
     );
-    if raw.action.sensitive_target || raw.reason_code != "native_command_review_required" {
+    // On macOS the raw text can earn the same narrower profile on its own.
+    let raw_reviewed = raw.reason_code == "native_command_review_required"
+        || (narrower && raw.reason_code == projected.reason_code);
+    if raw.action.sensitive_target || !raw_reviewed {
         return None;
     }
     let mut projected = projected;
-    if allowed {
+    if allowed || narrower {
         crate::pretool::workspace_contained::mark_contained(&mut projected);
     }
     Some(projected)
@@ -315,6 +339,22 @@ fn stays_offline(projected: &str, single: bool) -> bool {
                 _ => false,
             }
         })
+}
+
+/// Whether the narrower read-only sink runs `raw` as issued: its only
+/// redirect is the `2>&1` it peels from the core (`contained_core`).
+fn narrower_sink_runs(raw: &str, context: crate::pretool::PathContext<'_>) -> bool {
+    crate::parse_command(&CommandModelRequestV1 {
+        command: raw.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()
+    .is_some_and(|model| {
+        crate::pretool::contained_wrapper::contained_core(&model, context).is_some()
+            && crate::pretool::contained_wrapper::sink_peels_leading_cd(&model, context)
+    })
 }
 
 /// The text of the simple command being written, after the last separator.

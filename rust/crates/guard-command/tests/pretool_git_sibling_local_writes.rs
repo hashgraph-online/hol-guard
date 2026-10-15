@@ -248,3 +248,35 @@ fn stash_listing_keeps_its_proof_beside_fallbacks_and_github_reads() {
         assert_reviewed(&session, &command);
     }
 }
+
+#[test]
+fn sibling_commit_identity_flags_match_the_identity_variables() {
+    let (session, service) = sibling("sibling-author");
+    let sib = service.display();
+    // `--author` and `--reset-author` only set the commit's metadata, like
+    // the `GIT_AUTHOR_*` variables a commit already accepts.
+    for command in [
+        format!("git -C {sib} commit --amend --author=\"A <a@example.test>\" --no-edit | tail -1"),
+        format!("git -C {sib} commit --amend --author \"A <a@example.test>\" --no-edit"),
+        format!("git -C {sib} commit --amend --reset-author --no-edit | tail -1"),
+        format!("git -C {sib} commit -qm x --author='A <a@example.test>'"),
+    ] {
+        assert_allowed(&session, &command);
+    }
+    // In this main checkout a plain commit may take the workspace sandbox.
+    assert_quiet(&session, "git commit --amend --reset-author --no-edit");
+    for command in [
+        // A substitution in the quoted author still runs a program.
+        format!("git -C {sib} commit --amend --author=\"$(id)\" --no-edit"),
+        format!("git -C {sib} commit --amend --author"),
+        format!(
+            "git -C {sib} -c core.hooksPath=/tmp/hooks commit --amend --reset-author --no-edit"
+        ),
+        format!("git -C {sib} commit --amend --reset-author"),
+        format!("git -C {sib} commit --amend --no-edit -e"),
+        format!("git -C {sib} commit -F message.txt"),
+        format!("git -C {sib} commit -c HEAD"),
+    ] {
+        assert_reviewed(&session, &command);
+    }
+}

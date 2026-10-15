@@ -29,8 +29,9 @@ pub(super) enum HashlineEdit {
     Routine,
     /// Every target is ordinary or names a path that does not exist, and at
     /// least one does not exist. The edit cannot apply, so the agent should
-    /// fix the path rather than wait on an approval.
-    MissingTarget,
+    /// fix the path rather than wait on an approval. Holds the first missing
+    /// path as the header wrote it.
+    MissingTarget(String),
 }
 
 /// Files a hashline `input` edits, each with whether a header carried a
@@ -125,10 +126,19 @@ fn header_path(line: &str) -> Option<(&str, bool)> {
     let home_relative = path
         .strip_prefix('~')
         .is_none_or(|rest| rest.starts_with('/'));
+    // A Windows drive path (`C:\Users\...` or `C:/Users/...`) is a host
+    // path: Oh My Pi only routes registered `scheme:/` names elsewhere, and
+    // no scheme is one letter. A drive-relative `C:name` stays unproven, and
+    // so does a backslash spelling off Windows, where it is one relative name.
+    let rest = match path.as_bytes() {
+        [drive, b':', b'/', ..] if drive.is_ascii_alphabetic() => &path[2..],
+        [drive, b':', b'\\', ..] if cfg!(windows) && drive.is_ascii_alphabetic() => &path[2..],
+        _ => path,
+    };
     let plain = !path.is_empty()
         && home_relative
         && !path.starts_with(['"', '\'', '*'])
-        && !path.contains(['#', ':']);
+        && !rest.contains(['#', ':']);
     plain.then_some((path, tagged))
 }
 
@@ -140,11 +150,11 @@ pub(super) fn evaluate_hashline_edit(
 ) -> Option<HashlineEdit> {
     let workspace = cwd.and_then(|root| std::fs::canonicalize(root).ok())?;
     let targets = hashline_targets(input)?;
-    let mut missing = false;
-    for (target, tagged) in &targets {
-        let target = &match target.strip_prefix("~/") {
+    let mut missing: Option<&str> = None;
+    for (written, tagged) in &targets {
+        let target = &match written.strip_prefix("~/") {
             Some(rest) => Path::new(home_dir?).join(rest).to_str()?.to_owned(),
-            None => target.clone(),
+            None => written.clone(),
         };
         // Only an ordinary name may say it is missing; a sensitive or
         // protected one keeps its review.
@@ -156,7 +166,7 @@ pub(super) fn evaluate_hashline_edit(
         // A tag is a snapshot of a file the agent read, so a tagged target
         // that does not exist is a wrong path, not a new file.
         if *tagged && missing_target() {
-            missing = true;
+            missing.get_or_insert(written);
             continue;
         }
         if super::safe_writes::bounded_structured_file_write_target(target, home_dir, cwd)
@@ -165,15 +175,14 @@ pub(super) fn evaluate_hashline_edit(
             continue;
         }
         if missing_target() {
-            missing = true;
+            missing.get_or_insert(written);
             continue;
         }
         return None;
     }
-    Some(if missing {
-        HashlineEdit::MissingTarget
-    } else {
-        HashlineEdit::Routine
+    Some(match missing {
+        Some(path) => HashlineEdit::MissingTarget(path.to_owned()),
+        None => HashlineEdit::Routine,
     })
 }
 

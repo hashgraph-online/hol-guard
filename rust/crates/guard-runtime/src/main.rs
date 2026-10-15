@@ -262,8 +262,19 @@ mod guard_config_update_value;
 mod guard_store_advisory_cache;
 #[cfg(test)]
 mod guard_store_advisory_cache_vectors_tests;
+mod guard_store_approval_backfill;
+mod guard_store_approval_created;
+mod guard_store_approval_metadata;
+mod guard_store_approval_page_reads;
+mod guard_store_approval_queue;
+mod guard_store_approval_queue_item;
+mod guard_store_approval_read_rows;
+mod guard_store_approval_read_scope;
+mod guard_store_approval_reads;
 mod guard_store_approval_request;
+mod guard_store_approval_resolve;
 mod guard_store_approval_row;
+mod guard_store_approval_sweep;
 mod guard_store_approval_write;
 mod guard_store_args;
 mod guard_store_claude_review;
@@ -362,6 +373,7 @@ mod guard_store_wfcap_state;
 mod guard_store_wfcap_wire;
 #[cfg(test)]
 mod guard_store_workflow_capability_vectors_tests;
+mod guard_store_write_cache;
 mod hardening;
 mod hermes_detect;
 mod hermes_inspect;
@@ -379,6 +391,8 @@ mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
+// Only the unix Claude session-start bridge records a fallback.
+#[cfg(unix)]
 mod hook_bridge_fallback;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
@@ -500,6 +514,7 @@ mod package_posture_op;
 mod package_protect_projection_op;
 mod pi_detect;
 mod pi_glob;
+mod pi_hook_bridge;
 #[cfg(all(test, unix))]
 mod pi_vectors_tests;
 mod policy_bundle_crypto;

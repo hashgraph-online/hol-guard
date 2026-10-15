@@ -27,6 +27,7 @@ from .case_helpers import (
     _scenario_prompt,
     _scenario_tools,
     _watch_binding,
+    generate_observed_extension,
     read_case_logs,
     ready_watch_binding,
 )
@@ -41,6 +42,7 @@ from .fixtures import (
     create_run_root,
     digest_file,
     filesystem_checks,
+    remove_native_cache,
     remove_scratch_checkout,
     scenario_fixture_name,
     scratch_checkout,
@@ -53,6 +55,7 @@ from .input_evidence import (
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
 from .native_tools import cleanup_private_temp
+from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
@@ -200,7 +203,7 @@ def run_case(
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(
+            generate_observed_extension(
                 extension, guard_home=fixture.root / "guard-home", home=fixture.home, settings_path=settings
             )
             case["guard_extension_sha256"] = digest_file(extension)
@@ -323,6 +326,7 @@ def run_case(
         remove_scratch_checkout(fixture.root)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
+        remove_native_cache(fixture.home)
     if first_contact:
         cleanup_private_temp(case.get("events", []))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)

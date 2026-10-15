@@ -52,6 +52,12 @@ def _published(
     return publisher, resident, existing
 
 
+def _overlay(workspace: Path) -> None:
+    """Give a new workspace its own overlay, so its hooks need its own ACK."""
+
+    (workspace / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+
+
 def test_new_workspace_keeps_existing_workspace_ready_and_epoch_stable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -61,6 +67,7 @@ def test_new_workspace_keeps_existing_workspace_ready_and_epoch_stable(
         epoch = publisher._epoch
         new = tmp_path / "new"
         new.mkdir()
+        _overlay(new)
         assert publisher.register_workspace(new)
 
         assert publisher._epoch == epoch, "Registering a workspace must not discard in-flight ACKs"
@@ -81,6 +88,7 @@ def test_in_flight_ack_without_new_workspace_does_not_release_it(
     resident.hold = True
     new = tmp_path / "new"
     new.mkdir()
+    _overlay(new)
     publish = threading.Thread(target=publisher._publish_once)
     publish.start()
     try:
@@ -114,6 +122,7 @@ def test_hook_worker_admits_existing_workspace_and_holds_new_one(
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     new = tmp_path / "new"
     new.mkdir()
+    _overlay(new)
     try:
         assert worker.prepare_workspace_policy(new, deadline=time.monotonic() + 0.1) is None
         started = time.monotonic()
@@ -135,6 +144,8 @@ def test_stricter_pending_overlay_does_not_withdraw_ack_in_background_loop(
     first, stricter = tmp_path / "first", tmp_path / "stricter"
     first.mkdir()
     stricter.mkdir()
+    # An overlay makes `first` a workspace of its own, so it needs a publish.
+    (first / ".hol-guard.toml").write_text("", encoding="utf-8")
     (stricter / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
     publisher.start()
     try:
@@ -201,6 +212,7 @@ def test_new_workspace_waits_for_its_publish_despite_a_stale_error(
     publisher._record_error("native_policy_snapshot_runtime_unavailable")
     new = tmp_path / "new"
     new.mkdir()
+    _overlay(new)
     waiting = threading.Event()
     original_wait = publisher.wait_until_ready
 
@@ -345,12 +357,35 @@ def test_subdirectory_with_its_own_overlay_waits_for_its_ack(
         publisher.close()
 
 
-def test_unrelated_file_less_workspace_still_waits_for_its_ack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unrelated_file_less_workspace_uses_the_current_ack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     publisher, worker, _existing = _subdirectory_worker(tmp_path, monkeypatch)
     sibling = tmp_path / "sibling"
     sibling.mkdir()
     try:
-        assert worker.prepare_workspace_policy(sibling, deadline=time.monotonic() + 0.1) is None
+        binding = publisher.current_snapshot_binding()
+        started = time.monotonic()
+        assert worker.prepare_workspace_policy(sibling, deadline=time.monotonic() + 2.0) == binding
+        assert time.monotonic() - started < 0.5, "A file-less workspace adds only the home config"
+        assert publisher.workspace_policy_pending(sibling), "The next publish still compiles the workspace"
+
+        publisher._publish_once()
+        assert not publisher.workspace_policy_pending(sibling)
+    finally:
+        publisher.close()
+
+
+@pytest.mark.parametrize("overlay", [".hol-guard.toml", ".ai-plugin-scanner-guard.toml"])
+def test_workspace_below_an_unsettled_overlay_waits_for_its_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overlay: str
+) -> None:
+    publisher, worker, _existing = _subdirectory_worker(tmp_path, monkeypatch)
+    parent = tmp_path / "parent"
+    nested = parent / "src"
+    nested.mkdir(parents=True)
+    (parent / overlay).write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+    try:
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 0.1) is None
+        assert not publisher.workspace_admissible_without_overlay(nested)
     finally:
         publisher.close()
 

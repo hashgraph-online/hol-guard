@@ -13,16 +13,20 @@ const APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL
      (`hol-guard approvals`). Do not retry the same action until it is approved; continue with \
      other work meanwhile.";
 /// `_NOT_QUEUED`.
-const NOT_QUEUED: &str = "No approval is waiting in HOL Guard for this action. Do not retry it \
-     or work around the block; continue with a permitted alternative or tell the user what is \
+const NOT_QUEUED: &str = "No approval is waiting in HOL Guard for this action. Do not retry the \
+     same action or work around the block; continue with a permitted alternative or tell the user what is \
      blocked.";
 const APPROVAL_ALWAYS_ONLY: &str = "It is waiting in the HOL Guard inbox (`hol-guard approvals`), but approving it just once will not \
      let you run it; only \"Always allow exact action\" will. Do not retry it unless the user says they \
      chose that; continue with other work meanwhile.";
 const APPROVAL_CANNOT_UNBLOCK: &str =
     "It is recorded in the HOL Guard inbox, but approving it there will not let you run it. \
-     Do not retry it. Tell the user exactly what is blocked so they can run it themselves, \
+     Do not retry this exact command. Tell the user exactly what is blocked so they can run it themselves, \
      or continue with a permitted alternative.";
+/// `_INBOX_APPROVAL_OFFER`: the native review text's offer of inbox approval,
+/// dropped when no approval can let the action run.
+const INBOX_APPROVAL_OFFER: &str = " Approve it in the HOL Guard inbox (choose Always for a \
+     repeated read-only command), or split it into simpler commands.";
 
 /// `_REASON_CODE_HINTS`: plain-language next steps keyed by the native
 /// decision's reason code; unknown codes have none.
@@ -51,7 +55,8 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
         }
         "native_command_review_required" => {
             "Guard could not prove this exact command is read-only. Use a simpler built-in tool \
-             where one fits."
+             where one fits. If it chains several steps, run each step as its own command; Guard \
+             checks each one on its own."
         }
         _ => "",
     }
@@ -87,9 +92,43 @@ pub(crate) fn safe_alternative_reason_with_retry(
     } else {
         APPROVAL_CANNOT_UNBLOCK
     };
-    [reason, hint, wait]
+    let reason = if wait == NOT_QUEUED || wait == APPROVAL_CANNOT_UNBLOCK {
+        reason.replace(INBOX_APPROVAL_OFFER, "")
+    } else {
+        reason.to_owned()
+    };
+    [reason.as_str(), hint, wait]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn review_drops_the_inbox_offer_only_when_approval_cannot_let_it_run() {
+        let native = "HOL Guard requires review because this command could not be confirmed \
+             read-only. Approve it in the HOL Guard inbox (choose Always for a repeated read-only \
+             command), or split it into simpler commands.";
+        for (queued, reuses, offered) in [
+            (true, false, false),
+            (false, true, false),
+            (true, true, true),
+        ] {
+            let text = safe_alternative_reason_with_retry(
+                native,
+                Some("native_command_review_required"),
+                Some(queued),
+                reuses,
+                false,
+            );
+            assert!(text.starts_with(
+                "HOL Guard requires review because this command could not be confirmed read-only."
+            ));
+            assert_eq!(text.contains("Approve it in the HOL Guard inbox"), offered);
+        }
+    }
 }

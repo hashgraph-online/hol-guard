@@ -3,33 +3,23 @@
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 import time
 import uuid
-from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import repair_approval_center_locator
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
+from tests.native_approval_writes import (
     add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
+    native_approval_connection,
+    seed_pending_approval_rows,
 )
 
 
 def _make_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    conn.execute("pragma journal_mode=wal")
-    conn.execute(approval_schema_statement())
-    for stmt in approval_index_statements():
-        conn.execute(stmt)
-    return conn
+    return native_approval_connection()
 
 
 def _make_request(
@@ -104,18 +94,12 @@ class TestNormalizedIdentityLookupPerformance:
         launch_target = "run perf-tool"
         now = "2026-01-01T00:00:00Z"
 
-        for _ in range(100_000):
-            req = _make_request(
-                harness=harness,
-                artifact_id=f"codex:project:tool-{uuid.uuid4().hex[:8]}",
-                workspace=workspace,
-            )
-            add_approval_request(conn, req, now, guard_home=tmp_path)
+        seed_pending_approval_rows(conn, 100_000, workspace=workspace)
 
         target = _make_request(
             harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target=launch_target
         )
-        add_approval_request(conn, target, now, guard_home=tmp_path)
+        add_approval_request(conn, target, now)
         identity_key = conn.execute(
             "select normalized_identity_key from approval_requests where request_id = ?", (target.request_id,)
         ).fetchone()[0]
@@ -152,13 +136,7 @@ class TestDuplicatePendingCollapsePerformance:
         launch_target = "run dedup-tool --flag"
         now = "2026-01-01T00:00:00Z"
 
-        for _ in range(99_999):
-            req = _make_request(
-                harness=harness,
-                artifact_id=f"codex:project:tool-{uuid.uuid4().hex[:8]}",
-                workspace=workspace,
-            )
-            add_approval_request(conn, req, now, guard_home=tmp_path)
+        seed_pending_approval_rows(conn, 99_999, workspace=workspace)
 
         first = _make_request(
             harness=harness,
@@ -166,13 +144,13 @@ class TestDuplicatePendingCollapsePerformance:
             workspace=workspace,
             launch_target=launch_target,
         )
-        first_id = add_approval_request(conn, first, now, guard_home=tmp_path)
+        first_id = add_approval_request(conn, first, now)
 
         repeat = _make_request(
             harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target=launch_target
         )
         start = time.monotonic()
-        second_id = add_approval_request(conn, repeat, now, guard_home=tmp_path)
+        second_id = add_approval_request(conn, repeat, now)
         elapsed_ms = (time.monotonic() - start) * 1000
 
         assert first_id == second_id, "Duplicate must be collapsed"

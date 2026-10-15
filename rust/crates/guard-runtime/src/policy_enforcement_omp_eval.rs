@@ -1,5 +1,6 @@
-//! Recheck bounded OMP eval reads and shell calls, result reports and
-//! names-only listings after output scanning.
+//! Recheck bounded OMP eval reads and shell calls, result reports,
+//! names-only listings and read-only language server queries after output
+//! scanning.
 //!
 //! An eval proved as literal tool calls keeps the action type of the calls it
 //! makes: reads stay file reads, and a cell that runs `tool.bash` is a command,
@@ -14,7 +15,7 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
     let tool = root.get("tool_name").and_then(Value::as_str)?;
     // Pi ships the same `find` and `ls` built-ins and gets the same listing proof.
     let proved_tool = match request.harness.as_str() {
-        "omp" => matches!(tool, "eval" | "yield" | "find" | "ls"),
+        "omp" => matches!(tool, "eval" | "yield" | "find" | "ls" | "lsp"),
         "pi" => matches!(tool, "find" | "ls"),
         _ => false,
     };
@@ -48,7 +49,8 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
     }
     match (proof.reason_code.as_str(), proof.action.action_type) {
         ("native_omp_eval_bounded_tools", PreToolActionTypeV1::FileRead)
-        | ("native_omp_directory_listing", PreToolActionTypeV1::FileRead) => {
+        | ("native_omp_directory_listing", PreToolActionTypeV1::FileRead)
+        | ("native_omp_lsp_read", PreToolActionTypeV1::FileRead) => {
             Some(PreToolActionTypeV1::FileRead)
         }
         ("native_omp_eval_bounded_tools", PreToolActionTypeV1::Command) => {
