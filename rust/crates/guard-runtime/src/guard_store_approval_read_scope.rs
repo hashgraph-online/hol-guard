@@ -36,9 +36,6 @@ const MAX_JSON_STRING_BYTES: usize = 1024 * 1024;
 const SCOPE_MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
 /// `decision_boundaries._UNREADABLE_ACTION_MAX_LENGTH`.
 const UNREADABLE_ACTION_MAX_CHARS: usize = 64;
-/// The projection request carries the Guard home path; its length is not
-/// known here, so a typical home stands in for it.
-const GUARD_HOME_ESTIMATE: usize = 96;
 /// Depth of one projection row and of one scope item inside its request.
 const PROJECTION_ROW_DEPTH: usize = 4;
 const SCOPE_ITEM_DEPTH: usize = 3;
@@ -130,7 +127,7 @@ fn decision_input(row: &Row, name: &str) -> StoreResult<Input> {
 
 /// `_project_listing_rows` for one stored row: the canonical surfaces, or the
 /// unreadable projection when the resident would have refused the row.
-pub(crate) fn project(row: &Row) -> StoreResult<Value> {
+pub(crate) fn project(row: &Row, guard_home: &str) -> StoreResult<Value> {
     let action = raw(row, "policy_action");
     let (decision, envelope) = match (
         decision_input(row, "decision_v2_json")?,
@@ -144,7 +141,7 @@ pub(crate) fn project(row: &Row) -> StoreResult<Value> {
     let request = json!({
         "schema": RUNNER_AUTHORITY_REQUEST_SCHEMA,
         "request_id": "0".repeat(32),
-        "guard_home": "h".repeat(GUARD_HOME_ESTIMATE),
+        "guard_home": guard_home,
         "kind": "projection_surfaces_batch",
         "args": {"rows": [null], "reject": false},
     });

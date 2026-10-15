@@ -5,10 +5,11 @@
 //! the package-script identity, else the unlisted-CLI identity, reads that
 //! identity's grant, and blocks the command when the grant blocks it. This
 //! module runs the same identity steps and grant read in the resident and
-//! renders the same block. A command the daemon would block as unverified,
-//! one whose command id the daemon resolves from its own shell model while
-//! some command of that CLI is blocked, and a block for a harness whose
-//! answer the resident shapes itself, still defer.
+//! renders the same block, including the unverified block when the grant
+//! answer cannot be trusted. A launch the daemon rejects as malformed, a
+//! catalog read failure, a command id the daemon resolves from its own shell
+//! model while some command of that CLI is blocked, and a block for a harness
+//! whose answer the resident shapes itself, still defer.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -62,8 +63,13 @@ pub(super) fn custom_rule_response(
     };
     match grant(&launch, check.guard_home)? {
         Verdict::Unchanged => Ok(None),
-        Verdict::Unverified => Err(()),
-        Verdict::Blocked(_) if check.own_shape => Err(()),
+        Verdict::Unverified | Verdict::Blocked(_) if check.own_shape => Err(()),
+        Verdict::Unverified => {
+            let result = result.as_object().ok_or(())?;
+            block::unverified_response(check.harness, result, check.recording_only)
+                .map(Some)
+                .ok_or(())
+        }
         Verdict::Blocked(name) => {
             let result = result.as_object().ok_or(())?;
             block::block_response(check.harness, result, &name, check.recording_only)

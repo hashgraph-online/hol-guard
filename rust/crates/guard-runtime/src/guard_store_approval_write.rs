@@ -16,6 +16,7 @@ use serde_json::Value;
 
 use crate::approval_queue_identity_op::identify;
 use crate::guard_store_approval_backfill;
+use crate::guard_store_approval_created::record_created_events;
 use crate::guard_store_approval_request::ApprovalRequest;
 use crate::guard_store_approval_row::{insert, update, Derived};
 use crate::guard_store_args::Args;
@@ -36,6 +37,7 @@ const SUPERSEDED: &str = "superseded_by_fresh_review:";
 const IDENTITY_INVALID: &str = "native_approval_queue_identity_invalid";
 /// `ApprovalQueueIdentityUnavailableError`'s message.
 const IDENTITY_UNAVAILABLE: &str = "native_approval_queue_identity_unavailable";
+const INVALID_ARGS: &str = "native_guard_store_args_invalid";
 
 pub(crate) fn add_native_review_approval_request(
     connection: &Connection,
@@ -62,6 +64,12 @@ pub(crate) fn add_approval_request(
 ) -> StoreResult<Value> {
     let request = ApprovalRequest::decode(args.raw("request"))?;
     let now = args.str("now")?;
+    // `queue_blocked_approvals` records the creation events; other writers
+    // leave `prompt_shown` out.
+    let prompt_shown = match args.raw("prompt_shown") {
+        None | Some(Value::Null) => None,
+        Some(value) => Some(value.as_bool().ok_or(StoreError::Invalid(INVALID_ARGS))?),
+    };
     let derived = derive(&request).map_err(|error| match error {
         StoreError::Invalid(IDENTITY_INVALID) => StoreError::Value(IDENTITY_UNAVAILABLE.to_owned()),
         other => other,
@@ -71,6 +79,9 @@ pub(crate) fn add_approval_request(
         guard_store_approval_backfill::backfill(connection)?;
     }
     let request_id = persist(connection, source, &request, &derived, now)?;
+    if let Some(prompt_shown) = prompt_shown.filter(|_| request_id == request.request_id) {
+        record_created_events(connection, &request, prompt_shown, now)?;
+    }
     if backfill {
         guard_store_approval_backfill::mark_complete(connection);
     }

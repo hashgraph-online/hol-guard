@@ -301,7 +301,7 @@ fn admit(
         .unwrap_or(&request.hash_workspace);
     let workspace = settled_directory(candidate)?;
     let (snapshot, binding) = policy_store
-        .admit_direct_hook(&workspace)
+        .admit_direct_hook_or_subdirectory(&workspace)
         .map_err(|defer| defer.code())?;
     if binding.evidence_drain != Some(true) {
         return Err(EVIDENCE_UNDRAINED);

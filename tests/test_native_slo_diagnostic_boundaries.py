@@ -37,6 +37,7 @@ def test_failure_after_rss_readiness_keeps_its_stage(monkeypatch: pytest.MonkeyP
 
     progress = SloProgress()
     monkeypatch.setattr(capacity, "_prime_load_executor", lambda *_: None)
+    monkeypatch.setattr(capacity, "_run_concurrent", lambda *_args, **_kwargs: ([], 0))
     monkeypatch.setattr(capacity, "_steady_state_rss_baseline", lambda *_args, **_kwargs: 10)
     monkeypatch.setattr(
         capacity,

@@ -8,6 +8,9 @@ fn directory(name: &str) -> PathBuf {
     root.canonicalize().unwrap()
 }
 
+// `project` substitutes only a POSIX absolute directory (`literal_directory`),
+// so a Windows working directory is never projected.
+#[cfg(unix)]
 #[test]
 fn uses_before_any_directory_change_take_the_working_directory() {
     let cwd = directory("uses");
@@ -75,10 +78,13 @@ fn a_possible_directory_change_before_a_use_keeps_it_opaque() {
     ] {
         assert_eq!(project(command, d), None, "{command}");
     }
-    // A change after the last use leaves the earlier uses exact.
-    assert!(project("echo $(pwd) && cd sub && ls", d).is_some());
-    // A redirection after the command word leaves it visible.
-    assert!(project("ls $(pwd) 2>/dev/null; cat .gitignore", d).is_some());
+    // A change after the last use leaves the earlier uses exact, and a
+    // redirection after the command word leaves it visible. Only a POSIX
+    // working directory is projected.
+    if cfg!(unix) {
+        assert!(project("echo $(pwd) && cd sub && ls", d).is_some());
+        assert!(project("ls $(pwd) 2>/dev/null; cat .gitignore", d).is_some());
+    }
 }
 
 #[test]

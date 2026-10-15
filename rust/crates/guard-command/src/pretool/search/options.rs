@@ -34,20 +34,80 @@ pub(super) fn unsafe_search_value(
                 || sensitive_path_argument(value)
                 || glob_can_select_sensitive_path(value)
         }
+        // `name:include:other` copies another type's globs unscreened.
         SearchValueRole::TypeGlob => value.split_once(':').is_none_or(|(_, glob)| {
-            sensitive_path_argument(glob) || glob_can_select_sensitive_path(glob)
+            glob.starts_with("include:")
+                || sensitive_path_argument(glob)
+                || glob_can_select_sensitive_path(glob)
         }),
+        SearchValueRole::RgType => !SOURCE_TYPES.contains(&value),
         SearchValueRole::DirectoryAction => value.eq_ignore_ascii_case("recurse"),
         SearchValueRole::Pattern | SearchValueRole::Other => false,
     }
 }
 
+/// `rg` file types whose built-in globs name only source and data
+/// extensions or ordinary build files. A selected type's globs also select
+/// hidden files, and some types name dotfiles outright: `sh` includes
+/// `.env` and `.bashrc`, so only these names are proven. A `--type-add`
+/// for one of them adds globs that pass the `TypeGlob` screen first.
+const SOURCE_TYPES: &[&str] = &[
+    "c",
+    "cmake",
+    "cpp",
+    "cs",
+    "csharp",
+    "css",
+    "dart",
+    "elixir",
+    "erlang",
+    "go",
+    "graphql",
+    "groovy",
+    "h",
+    "haskell",
+    "hs",
+    "html",
+    "java",
+    "js",
+    "json",
+    "jsonl",
+    "kotlin",
+    "lua",
+    "make",
+    "markdown",
+    "md",
+    "nix",
+    "ocaml",
+    "perl",
+    "php",
+    "protobuf",
+    "py",
+    "python",
+    "rust",
+    "scala",
+    "sql",
+    "svelte",
+    "swift",
+    "toml",
+    "ts",
+    "txt",
+    "typescript",
+    "vue",
+    "xml",
+    "yaml",
+    "zig",
+];
+
 pub(super) fn rg_value_role(name: &str) -> Option<SearchValueRole> {
     match name {
         "--glob" | "--iglob" => Some(SearchValueRole::RgGlob),
         "--regexp" => Some(SearchValueRole::Pattern),
-        "--file" | "--ignore-file" => Some(SearchValueRole::Path),
+        // An ignore file's `!` rules re-include hidden files, so
+        // `--ignore-file` stays unproved like `--no-ignore`.
+        "--file" => Some(SearchValueRole::Path),
         "--type-add" => Some(SearchValueRole::TypeGlob),
+        "--type" => Some(SearchValueRole::RgType),
         "--after-context"
         | "--before-context"
         | "--context"
@@ -57,7 +117,6 @@ pub(super) fn rg_value_role(name: &str) -> Option<SearchValueRole> {
         | "--max-count"
         | "--max-depth"
         | "--threads"
-        | "--type"
         | "--type-clear"
         | "--type-not"
         | "--color"

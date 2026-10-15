@@ -23,8 +23,9 @@
 //! its sink command, and defers without one. While custom extension
 //! block rules exist, an allowed `PreToolUse` whose command launches a local
 //! CLI reads that CLI's grant as the daemon does and, when the grant blocks
-//! it, answers with the daemon's block; a launch or grant the daemon would
-//! block as unverified still defers.
+//! it, answers with the daemon's block, including the unverified block when
+//! the grant answer cannot be trusted. A launch the daemon rejects as
+//! malformed and a catalog read failure still defer.
 //!
 //! The daemon also records evidence after it answers. An answer is returned
 //! only once that evidence is queued for the daemon to drain.

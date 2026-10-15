@@ -177,7 +177,6 @@ fn docker_listings_and_loopback_port_probes_need_no_prompt() {
     for command in [
         "docker ps",
         "docker ps -a",
-        "docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | head -8",
         "docker images",
         "docker container ls -q",
         "docker start app-test-pg",
@@ -188,6 +187,17 @@ fn docker_listings_and_loopback_port_probes_need_no_prompt() {
     ] {
         assert_eq!(action(&defaults, command), "allow", "{command}");
     }
+    // `2>/dev/null` is a null sink only on POSIX shells (see
+    // `stderr_null_sink_preserves_each_compound_command_risk`); a Windows
+    // shell writes a file there, so the review is kept on Windows.
+    #[cfg(unix)]
+    assert_eq!(
+        action(
+            &defaults,
+            "docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | head -8"
+        ),
+        "allow"
+    );
     // Container state that prints environments or project secrets, other
     // daemons, and network modes that move data keep the review.
     for command in [

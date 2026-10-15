@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 use crate::cloud_request_text::py_strip;
 use crate::guard_store_approval_read_rows::{browser_launch_target, json_list, py_bool, py_int};
 use crate::guard_store_approval_read_scope::{project, unavailable};
-use crate::guard_store_approval_reads::{payloads, COLUMNS, PAGE_BYTES};
+use crate::guard_store_approval_reads::{continuation, payloads, COLUMNS, PAGE_BYTES};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
 use crate::guard_store_json::dumps_sorted;
@@ -81,6 +81,32 @@ impl Filter {
         Ok(())
     }
 
+    /// Rows after the sort key of a chunk's last row, `after` from the
+    /// previous chunk; a null `last_seen_at` sorts last.
+    pub(crate) fn continue_after(&mut self, after: Option<&Value>) -> StoreResult<()> {
+        let Some(after) = after else {
+            return Ok(());
+        };
+        let Some([last_seen_at, Value::String(request_id)]) = after.as_array().map(Vec::as_slice)
+        else {
+            return Err(StoreError::Invalid("native_guard_store_args_invalid"));
+        };
+        let request_id = Value::from(request_id.as_str());
+        if last_seen_at.is_null() {
+            self.push(
+                "(last_seen_at is null and request_id < ?)",
+                vec![request_id],
+            );
+        } else {
+            self.push(
+                "(last_seen_at < ? or last_seen_at is null \
+                 or (last_seen_at = ? and request_id < ?))",
+                vec![last_seen_at.clone(), last_seen_at.clone(), request_id],
+            );
+        }
+        Ok(())
+    }
+
     /// `_approval_search_clause`: a case-folded substring of any searchable
     /// column, wildcards included.
     pub(crate) fn search(&mut self, search: Option<&str>) {
@@ -135,40 +161,46 @@ pub(crate) fn count_approval_requests(
 }
 
 /// `list_approval_request_page(status, limit, cursor, harness, search,
-/// include_totals, exclude_watch_only)` from summary `offset` on:
-/// `{"items": [...], "complete": bool}`. The chunk that completes the page
-/// also carries `next_cursor`, `status` and, when asked, the totals.
+/// include_totals, exclude_watch_only)` as bounded chunks:
+/// `{"items": [...], "complete": bool}`. An incomplete chunk carries `after`
+/// for the caller to pass back with `taken`, the items it holds; the chunk
+/// that completes the page also carries `next_cursor`, `status` and, when
+/// asked, the totals.
 pub(crate) fn list_approval_request_page(
     connection: &Connection,
+    guard_home: &str,
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     let page_limit = args.int("limit")?.clamp(1, MAX_PAGE_LIMIT);
-    let offset = args
-        .raw("offset")
-        .map_or(Ok(0), |_| args.int("offset"))?
+    let taken = args
+        .raw("taken")
+        .map_or(Ok(0), |_| args.int("taken"))?
         .clamp(0, page_limit);
+    let remaining = page_limit - taken;
     let status = args.opt_str("status")?;
     let mut filter = queue_filter(args, status)?;
     filter.after(args.strings("cursor")?)?;
+    filter.continue_after(args.raw("after"))?;
     let (sql, mut params) = filter.finish();
     // One row past the page tells whether another page follows.
-    params.extend([Value::from(page_limit + 1 - offset), Value::from(offset)]);
+    params.push(Value::from(remaining + 1));
     let rows = query_all(
         connection,
-        &format!("select {SUMMARY_COLUMNS} from approval_requests {sql} {ORDER} limit ? offset ?"),
+        &format!("select {SUMMARY_COLUMNS} from approval_requests {sql} {ORDER} limit ?"),
         &params,
     )?;
     // Python projected every row before mapping any of them.
-    let projections = rows.iter().map(project).collect::<StoreResult<Vec<_>>>()?;
+    let projections = rows
+        .iter()
+        .map(|row| project(row, guard_home))
+        .collect::<StoreResult<Vec<_>>>()?;
     let summaries = rows
         .iter()
         .zip(&projections)
         .map(|(row, projection)| summary(row, projection))
         .collect::<StoreResult<Vec<_>>>()?;
-    let has_more = offset + rows.len() as i64 > page_limit;
-    let wanted = summaries
-        .len()
-        .min(usize::try_from(page_limit - offset).unwrap_or(0));
+    let has_more = rows.len() as i64 > remaining;
+    let wanted = summaries.len().min(usize::try_from(remaining).unwrap_or(0));
     let mut items = Vec::new();
     let mut bytes = 0;
     for summary in summaries.into_iter().take(wanted) {
@@ -179,7 +211,8 @@ pub(crate) fn list_approval_request_page(
         items.push(Value::Object(summary));
     }
     if items.len() < wanted {
-        return Ok(json!({"items": items, "complete": false}));
+        let after = continuation(&rows[items.len() - 1]);
+        return Ok(json!({"items": items, "complete": false, "after": after}));
     }
     let next_cursor = match items.last() {
         Some(last) if has_more => Value::String(page_cursor(last)?),
@@ -203,6 +236,7 @@ pub(crate) fn list_approval_request_page(
 /// payloads whose id is not excluded.
 pub(crate) fn get_next_pending_request(
     connection: &Connection,
+    guard_home: &str,
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     let excluded = args.strings("exclude_ids")?.unwrap_or_default();
@@ -211,7 +245,10 @@ pub(crate) fn get_next_pending_request(
         &format!("select {COLUMNS} from approval_requests where status = ? {ORDER} limit ?"),
         &[Value::from("pending"), Value::from(NEXT_CANDIDATES)],
     )?;
-    let projections = rows.iter().map(project).collect::<StoreResult<Vec<_>>>()?;
+    let projections = rows
+        .iter()
+        .map(|row| project(row, guard_home))
+        .collect::<StoreResult<Vec<_>>>()?;
     let candidates = payloads(rows.iter().zip(projections).collect(), args.opt_str("cwd")?)?;
     Ok(candidates
         .into_iter()

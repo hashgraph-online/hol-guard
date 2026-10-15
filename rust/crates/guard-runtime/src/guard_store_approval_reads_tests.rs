@@ -173,26 +173,27 @@ pub(crate) fn expected(call: &Value, long_string: usize) -> Result<Value, (Strin
 fn list(home: &std::path::Path, source: &str, call: &Value) -> Result<Value, (String, String)> {
     let args = &call["args"];
     let mut items = Vec::new();
+    let mut after = Value::Null;
     loop {
-        let page = store_call(
-            home,
-            source,
-            "list_approval_requests",
-            json!({
-                "status": args["status"],
-                "harness": args["harness"],
-                "limit": args["limit"],
-                "cursor": call["cursor_marker"],
-                "search": args["search"],
-                "offset": items.len(),
-            }),
-        )?;
+        let mut chunk = json!({
+            "status": args["status"],
+            "harness": args["harness"],
+            "limit": args["limit"],
+            "cursor": call["cursor_marker"],
+            "search": args["search"],
+            "taken": items.len(),
+        });
+        if !after.is_null() {
+            chunk["after"] = after.clone();
+        }
+        let page = store_call(home, source, "list_approval_requests", chunk)?;
         let returned = page["items"].as_array().unwrap();
         items.extend(returned.iter().cloned());
         if page["complete"] == true {
             return Ok(Value::Array(items));
         }
         assert!(!returned.is_empty(), "an incomplete page returns items");
+        after = page["after"].clone();
     }
 }
 

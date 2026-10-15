@@ -261,3 +261,31 @@ fn an_unreadable_store_defers() {
     fs::write(format!("{}/guard.db", broken.guard_home), b"not a database").unwrap();
     assert_eq!(broken.check("npm run build", false, false), Err(()));
 }
+
+#[test]
+fn a_grant_the_resident_cannot_read_answers_as_unverified() {
+    // A hash of the wrong type fails the resident's grant read after the
+    // catalog read succeeds, which the daemon blocks as unverified.
+    let damaged = Case::new(
+        "damaged",
+        "insert into local_cli_grant values ('{cli}', x'00', 'blocked');",
+    );
+    let response = damaged
+        .check("npm run build", false, false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(response["approval_reuse_status"], "blocked");
+    let text = response.to_string();
+    assert!(
+        text.contains("Guard could not check this command against your custom extension rules.")
+    );
+    assert!(text.contains("local_cli_extension_unverified"));
+    let watch = damaged
+        .check("npm run build", true, false)
+        .unwrap()
+        .unwrap();
+    assert!(watch.get("approval_reuse_status").is_none());
+    assert!(!watch.to_string().contains("local_cli_extension_unverified"));
+    assert_eq!(damaged.check("npm run build", false, true), Err(()));
+    assert_eq!(damaged.check("pwd", false, false), Ok(None));
+}

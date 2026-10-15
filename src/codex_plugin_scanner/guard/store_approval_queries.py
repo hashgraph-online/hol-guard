@@ -110,14 +110,19 @@ class StoreApprovalQueriesMixin:
         return _with_approval_hints(payload) if payload is not None and derive_scope else payload
 
     def _native_approval_pages(self, method: str, args: dict[str, object]) -> dict[str, Any]:
-        """Every chunk of one native queue page; each chunk continues at the next item."""
+        """Every chunk of one native queue page.
+
+        Each chunk continues after the sort key of the previous chunk's last row.
+        """
 
         items: list[dict[str, object]] = []
+        continuation: dict[str, object] = {}
         while True:
-            page = self._native_approval_read(method, {**args, "offset": len(items)})
+            page = self._native_approval_read(method, {**args, **continuation})
             items.extend(page.pop("items"))
             if page.pop("complete"):
                 return {"items": items, **page}
+            continuation = {"after": page.pop("after"), "taken": len(items)}
 
     def _native_approval_read(self, method: str, args: dict[str, object]) -> Any:
         """One native queue read; a resident without an answer reads as scope unavailable."""

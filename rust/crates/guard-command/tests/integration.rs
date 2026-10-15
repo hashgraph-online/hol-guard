@@ -116,6 +116,7 @@ pub mod pretool_omp_hashline_edits;
 pub mod pretool_omp_home_documents;
 pub mod pretool_omp_project_dotfiles;
 pub mod pretool_omp_tools;
+pub mod pretool_omp_windows_streams;
 pub mod pretool_omp_workspace_search;
 pub mod pretool_omp_yield_reports;
 pub mod pretool_outside_workspace_files;

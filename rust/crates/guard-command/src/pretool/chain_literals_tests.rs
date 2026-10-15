@@ -356,7 +356,17 @@ mod envelope {
             }
             assert_judged_as_literal(&raw, &literal, &ws);
         }
-        assert_eq!(verdict("cat $(pwd)/package.json", &ws).0, "allow");
+        // A plain read of a workspace file stays allowed. On macOS the
+        // fixture lives below `/private/var/folders`, a system root that the
+        // fake home cannot vouch for, so its literal is the contained case
+        // above and the raw form keeps that review.
+        let (literal_action, literal_reason) = verdict(&format!("cat {d}/package.json"), &ws);
+        let contained =
+            host() && literal_action == "sandbox-required" && literal_reason == CONTAINED;
+        assert_eq!(
+            verdict("cat $(pwd)/package.json", &ws).0,
+            if contained { "review" } else { "allow" }
+        );
         // A chain that also creates the sibling and runs a project script is
         // reviewed on its real operands instead of failing to evaluate.
         let chain = "git worktree add ../x-wt -b report && ln -s \"$(pwd)/node_modules\" ../x-wt/node_modules && cd ../x-wt && npm run report";

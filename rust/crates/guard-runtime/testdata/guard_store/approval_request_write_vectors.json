@@ -56,6 +56,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -83,6 +84,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert",
@@ -195,6 +197,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -222,6 +225,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert_full_fields",
@@ -359,6 +363,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -386,6 +391,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert_correlation_from_decision",
@@ -500,6 +506,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -527,6 +534,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert_unshaped_correlation_ignored",
@@ -641,6 +649,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -668,6 +677,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert_frozen_snapshot",
@@ -786,6 +796,7 @@
       "workspace": null
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -813,6 +824,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert_no_workspace",
@@ -925,6 +937,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -952,6 +965,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "fresh_insert_blank_guard_version",
@@ -1064,6 +1078,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1166,6 +1181,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1330,6 +1346,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1432,6 +1449,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1597,6 +1615,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1699,6 +1718,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1870,6 +1890,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -1972,6 +1993,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -2141,6 +2163,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -2243,6 +2266,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -2460,6 +2484,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -2636,6 +2661,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -2902,6 +2928,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -3004,6 +3031,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -3220,6 +3248,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -3322,6 +3351,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -3541,6 +3571,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -3665,6 +3696,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -3882,6 +3914,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -4080,6 +4113,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -4347,6 +4381,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -4471,6 +4506,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -4688,6 +4724,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -4812,6 +4849,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -4977,6 +5015,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5057,6 +5096,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5222,6 +5262,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5324,6 +5365,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5435,10 +5477,12 @@
   {
    "after": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "error": "authoritative_decision_inconsistent",
@@ -5553,6 +5597,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5580,6 +5625,7 @@
    },
    "before": {
     "approval_requests": [],
+    "guard_events": [],
     "guard_review_outbox_events": []
    },
    "name": "binds_first_event_to_oauth",
@@ -5709,6 +5755,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5811,6 +5858,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -5942,6 +5990,1038 @@
      {
       "action_envelope_json": null,
       "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
+      "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": "Bash command",
+      "artifact_name": "Bash",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[\"command\"]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": "{\"capability\":\"retry-only\",\"correlationId\":\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\",\"hookAttached\":false,\"opaqueTargetId\":null,\"waitDeadline\":null}",
+      "created_at": "2026-03-01T12:00:00+00:00",
+      "decision_v2_json": "{\"action\": \"ask\", \"approval_scopes\": [\"artifact\", \"workspace\", \"publisher\", \"harness\"], \"confidence\": \"likely\", \"dashboard_primary_detail\": \"HOL Guard needs your approval before this action can run.\", \"guard_action\": \"review\", \"harness_message\": \"HOL Guard needs your approval before this action can run.\", \"reason\": \"review\", \"retry_instruction\": \"Choose an approval scope, then retry in the harness.\", \"signals\": [], \"user_body\": \"HOL Guard needs your approval before this action can run.\", \"user_title\": \"Approval required\"}",
+      "dedupe_count": 1,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.42.0",
+      "guard_version": "3.42.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T12:00:00+00:00",
+      "last_seen_guard_version": "3.42.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "review",
+      "publisher": null,
+      "queue_group_id": "approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-new",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-new",
+      "risk_headline": null,
+      "risk_signals_json": "[\"destructive\", \"filesystem\"]",
+      "risk_summary": "Deletes files",
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": "PreToolUse",
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": "/work/space"
+     }
+    ],
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"review\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     },
+     {
+      "event_id": 2,
+      "event_name": "guard.protection.ask_once_shown",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"policy_action\": \"review\"}"
+     }
+    ],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "eba221113894f3214953aa5d4f9438e8",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-new",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_hash": "ffa97a0dbbda98e6a124ba4f1b3c9acbd705bac4ee59ea75e4a63f9ce8ce4688",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-new\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T12:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-new\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"review\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[\\\"command\\\"]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"{\\\"action_type\\\":null,\\\"command\\\":\\\"rm -rf build\\\",\\\"mcp_server\\\":null,\\\"mcp_tool\\\":null,\\\"network_hosts\\\":[],\\\"package_manager\\\":null,\\\"package_name\\\":null,\\\"prompt_excerpt\\\":null,\\\"raw_payload_redacted\\\":null,\\\"script_name\\\":null,\\\"target_paths\\\":[],\\\"tool_name\\\":null,\\\"version\\\":\\\"v1\\\"}\",\"queue_group_id\":\"approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T12:00:00+00:00\",\"transport\":null,\"risk_summary\":\"Deletes files\",\"risk_signals_json\":\"[\\\"destructive\\\", \\\"filesystem\\\"]\",\"artifact_label\":\"Bash command\",\"source_label\":null,\"trigger_summary\":\"PreToolUse\",\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":\"{\\\"action\\\": \\\"ask\\\", \\\"approval_scopes\\\": [\\\"artifact\\\", \\\"workspace\\\", \\\"publisher\\\", \\\"harness\\\"], \\\"confidence\\\": \\\"likely\\\", \\\"dashboard_primary_detail\\\": \\\"HOL Guard needs your approval before this action can run.\\\", \\\"guard_action\\\": \\\"review\\\", \\\"harness_message\\\": \\\"HOL Guard needs your approval before this action can run.\\\", \\\"reason\\\": \\\"review\\\", \\\"retry_instruction\\\": \\\"Choose an approval scope, then retry in the harness.\\\", \\\"signals\\\": [], \\\"user_body\\\": \\\"HOL Guard needs your approval before this action can run.\\\", \\\"user_title\\\": \\\"Approval required\\\"}\",\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":\"{\\\"capability\\\":\\\"retry-only\\\",\\\"correlationId\\\":\\\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\\\",\\\"hookAttached\\\":false,\\\"opaqueTargetId\\\":null,\\\"waitDeadline\\\":null}\",\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.42.0\",\"first_seen_guard_version\":\"3.42.0\",\"last_seen_guard_version\":\"3.42.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-new\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-new\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T12:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     }
+    ]
+   },
+   "before": {
+    "approval_requests": [],
+    "guard_events": [],
+    "guard_review_outbox_events": []
+   },
+   "name": "created_events_prompted_review",
+   "native_defers": false,
+   "now": "2026-03-01T12:00:00+00:00",
+   "prompt_shown": true,
+   "request": {
+    "action_envelope_json": null,
+    "action_identity": null,
+    "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+    "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "native-review:codex:cmd",
+    "artifact_label": "Bash command",
+    "artifact_name": "Bash",
+    "artifact_type": "native_review",
+    "browser_intent": null,
+    "changed_fields": [
+     "command"
+    ],
+    "config_path": "/cfg/config.toml",
+    "continuation_snapshot": null,
+    "decision_v2_json": null,
+    "dedupe_count": 1,
+    "extension_allow_hint": null,
+    "fallback_cli_command": null,
+    "first_seen_guard_version": null,
+    "guard_version": "3.42.0",
+    "harness": "codex",
+    "last_seen_at": null,
+    "last_seen_guard_version": null,
+    "launch_summary": null,
+    "launch_target": "rm -rf build",
+    "policy_action": "review",
+    "publisher": null,
+    "queue_group_id": null,
+    "raw_command_text": null,
+    "recommended_scope": "once",
+    "request_id": "r-new",
+    "review_command": "hol-guard approvals approve r-new",
+    "risk_headline": null,
+    "risk_signals": [
+     "destructive",
+     "filesystem"
+    ],
+    "risk_summary": "Deletes files",
+    "scanner_evidence": [],
+    "source_label": null,
+    "source_scope": "workspace",
+    "transport": null,
+    "trigger_summary": "PreToolUse",
+    "why_now": null,
+    "workspace": "/work/space"
+   },
+   "result": "r-new",
+   "rows": [],
+   "seed": {}
+  },
+  {
+   "after": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
+      "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": "Bash command",
+      "artifact_name": "Bash",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[\"command\"]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": "{\"capability\":\"retry-only\",\"correlationId\":\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\",\"hookAttached\":false,\"opaqueTargetId\":null,\"waitDeadline\":null}",
+      "created_at": "2026-03-01T12:00:00+00:00",
+      "decision_v2_json": "{\"action\": \"ask\", \"approval_scopes\": [\"artifact\", \"workspace\", \"publisher\", \"harness\"], \"confidence\": \"likely\", \"dashboard_primary_detail\": \"HOL Guard needs a fresh approval before this action can run.\", \"guard_action\": \"require-reapproval\", \"harness_message\": \"HOL Guard needs a fresh approval before this action can run.\", \"reason\": \"require-reapproval\", \"retry_instruction\": \"Choose the smallest approval scope that matches your intent, then retry.\", \"signals\": [], \"user_body\": \"HOL Guard needs a fresh approval before this action can run.\", \"user_title\": \"Fresh approval required\"}",
+      "dedupe_count": 1,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.42.0",
+      "guard_version": "3.42.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T12:00:00+00:00",
+      "last_seen_guard_version": "3.42.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "require-reapproval",
+      "publisher": null,
+      "queue_group_id": "approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-new",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-new",
+      "risk_headline": null,
+      "risk_signals_json": "[\"destructive\", \"filesystem\"]",
+      "risk_summary": "Deletes files",
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": "PreToolUse",
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": "/work/space"
+     }
+    ],
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     },
+     {
+      "event_id": 2,
+      "event_name": "guard.protection.ask_once_shown",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"policy_action\": \"require-reapproval\"}"
+     }
+    ],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "9ee6e40c2b367a3a6265a475742db3f0",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-new",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_hash": "0068776f5446752bea4f710aa56b323113ead2a40ac494497276b4e39a3cb5ba",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-new\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T12:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-new\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"require-reapproval\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[\\\"command\\\"]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"{\\\"action_type\\\":null,\\\"command\\\":\\\"rm -rf build\\\",\\\"mcp_server\\\":null,\\\"mcp_tool\\\":null,\\\"network_hosts\\\":[],\\\"package_manager\\\":null,\\\"package_name\\\":null,\\\"prompt_excerpt\\\":null,\\\"raw_payload_redacted\\\":null,\\\"script_name\\\":null,\\\"target_paths\\\":[],\\\"tool_name\\\":null,\\\"version\\\":\\\"v1\\\"}\",\"queue_group_id\":\"approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T12:00:00+00:00\",\"transport\":null,\"risk_summary\":\"Deletes files\",\"risk_signals_json\":\"[\\\"destructive\\\", \\\"filesystem\\\"]\",\"artifact_label\":\"Bash command\",\"source_label\":null,\"trigger_summary\":\"PreToolUse\",\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":\"{\\\"action\\\": \\\"ask\\\", \\\"approval_scopes\\\": [\\\"artifact\\\", \\\"workspace\\\", \\\"publisher\\\", \\\"harness\\\"], \\\"confidence\\\": \\\"likely\\\", \\\"dashboard_primary_detail\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"guard_action\\\": \\\"require-reapproval\\\", \\\"harness_message\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"reason\\\": \\\"require-reapproval\\\", \\\"retry_instruction\\\": \\\"Choose the smallest approval scope that matches your intent, then retry.\\\", \\\"signals\\\": [], \\\"user_body\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"user_title\\\": \\\"Fresh approval required\\\"}\",\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":\"{\\\"capability\\\":\\\"retry-only\\\",\\\"correlationId\\\":\\\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\\\",\\\"hookAttached\\\":false,\\\"opaqueTargetId\\\":null,\\\"waitDeadline\\\":null}\",\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.42.0\",\"first_seen_guard_version\":\"3.42.0\",\"last_seen_guard_version\":\"3.42.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-new\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-new\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T12:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     }
+    ]
+   },
+   "before": {
+    "approval_requests": [],
+    "guard_events": [],
+    "guard_review_outbox_events": []
+   },
+   "name": "created_events_prompted_reapproval",
+   "native_defers": false,
+   "now": "2026-03-01T12:00:00+00:00",
+   "prompt_shown": true,
+   "request": {
+    "action_envelope_json": null,
+    "action_identity": null,
+    "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+    "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "native-review:codex:cmd",
+    "artifact_label": "Bash command",
+    "artifact_name": "Bash",
+    "artifact_type": "native_review",
+    "browser_intent": null,
+    "changed_fields": [
+     "command"
+    ],
+    "config_path": "/cfg/config.toml",
+    "continuation_snapshot": null,
+    "decision_v2_json": null,
+    "dedupe_count": 1,
+    "extension_allow_hint": null,
+    "fallback_cli_command": null,
+    "first_seen_guard_version": null,
+    "guard_version": "3.42.0",
+    "harness": "codex",
+    "last_seen_at": null,
+    "last_seen_guard_version": null,
+    "launch_summary": null,
+    "launch_target": "rm -rf build",
+    "policy_action": "require-reapproval",
+    "publisher": null,
+    "queue_group_id": null,
+    "raw_command_text": null,
+    "recommended_scope": "once",
+    "request_id": "r-new",
+    "review_command": "hol-guard approvals approve r-new",
+    "risk_headline": null,
+    "risk_signals": [
+     "destructive",
+     "filesystem"
+    ],
+    "risk_summary": "Deletes files",
+    "scanner_evidence": [],
+    "source_label": null,
+    "source_scope": "workspace",
+    "transport": null,
+    "trigger_summary": "PreToolUse",
+    "why_now": null,
+    "workspace": "/work/space"
+   },
+   "result": "r-new",
+   "rows": [],
+   "seed": {}
+  },
+  {
+   "after": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
+      "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": "Bash command",
+      "artifact_name": "Bash",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[\"command\"]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": "{\"capability\":\"retry-only\",\"correlationId\":\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\",\"hookAttached\":false,\"opaqueTargetId\":null,\"waitDeadline\":null}",
+      "created_at": "2026-03-01T12:00:00+00:00",
+      "decision_v2_json": "{\"action\": \"ask\", \"approval_scopes\": [\"artifact\", \"workspace\", \"publisher\", \"harness\"], \"confidence\": \"likely\", \"dashboard_primary_detail\": \"HOL Guard needs a fresh approval before this action can run.\", \"guard_action\": \"require-reapproval\", \"harness_message\": \"HOL Guard needs a fresh approval before this action can run.\", \"reason\": \"require-reapproval\", \"retry_instruction\": \"Choose the smallest approval scope that matches your intent, then retry.\", \"signals\": [], \"user_body\": \"HOL Guard needs a fresh approval before this action can run.\", \"user_title\": \"Fresh approval required\"}",
+      "dedupe_count": 1,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.42.0",
+      "guard_version": "3.42.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T12:00:00+00:00",
+      "last_seen_guard_version": "3.42.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "require-reapproval",
+      "publisher": null,
+      "queue_group_id": "approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-new",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-new",
+      "risk_headline": null,
+      "risk_signals_json": "[\"destructive\", \"filesystem\"]",
+      "risk_summary": "Deletes files",
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": "PreToolUse",
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": "/work/space"
+     }
+    ],
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "94f7984f3f0f0631556fbb78fa229526",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-new",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_hash": "0068776f5446752bea4f710aa56b323113ead2a40ac494497276b4e39a3cb5ba",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-new\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T12:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-new\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"require-reapproval\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[\\\"command\\\"]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"{\\\"action_type\\\":null,\\\"command\\\":\\\"rm -rf build\\\",\\\"mcp_server\\\":null,\\\"mcp_tool\\\":null,\\\"network_hosts\\\":[],\\\"package_manager\\\":null,\\\"package_name\\\":null,\\\"prompt_excerpt\\\":null,\\\"raw_payload_redacted\\\":null,\\\"script_name\\\":null,\\\"target_paths\\\":[],\\\"tool_name\\\":null,\\\"version\\\":\\\"v1\\\"}\",\"queue_group_id\":\"approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T12:00:00+00:00\",\"transport\":null,\"risk_summary\":\"Deletes files\",\"risk_signals_json\":\"[\\\"destructive\\\", \\\"filesystem\\\"]\",\"artifact_label\":\"Bash command\",\"source_label\":null,\"trigger_summary\":\"PreToolUse\",\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":\"{\\\"action\\\": \\\"ask\\\", \\\"approval_scopes\\\": [\\\"artifact\\\", \\\"workspace\\\", \\\"publisher\\\", \\\"harness\\\"], \\\"confidence\\\": \\\"likely\\\", \\\"dashboard_primary_detail\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"guard_action\\\": \\\"require-reapproval\\\", \\\"harness_message\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"reason\\\": \\\"require-reapproval\\\", \\\"retry_instruction\\\": \\\"Choose the smallest approval scope that matches your intent, then retry.\\\", \\\"signals\\\": [], \\\"user_body\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"user_title\\\": \\\"Fresh approval required\\\"}\",\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":\"{\\\"capability\\\":\\\"retry-only\\\",\\\"correlationId\\\":\\\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\\\",\\\"hookAttached\\\":false,\\\"opaqueTargetId\\\":null,\\\"waitDeadline\\\":null}\",\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.42.0\",\"first_seen_guard_version\":\"3.42.0\",\"last_seen_guard_version\":\"3.42.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-new\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-new\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T12:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     }
+    ]
+   },
+   "before": {
+    "approval_requests": [],
+    "guard_events": [],
+    "guard_review_outbox_events": []
+   },
+   "name": "created_events_unprompted",
+   "native_defers": false,
+   "now": "2026-03-01T12:00:00+00:00",
+   "prompt_shown": false,
+   "request": {
+    "action_envelope_json": null,
+    "action_identity": null,
+    "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+    "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "native-review:codex:cmd",
+    "artifact_label": "Bash command",
+    "artifact_name": "Bash",
+    "artifact_type": "native_review",
+    "browser_intent": null,
+    "changed_fields": [
+     "command"
+    ],
+    "config_path": "/cfg/config.toml",
+    "continuation_snapshot": null,
+    "decision_v2_json": null,
+    "dedupe_count": 1,
+    "extension_allow_hint": null,
+    "fallback_cli_command": null,
+    "first_seen_guard_version": null,
+    "guard_version": "3.42.0",
+    "harness": "codex",
+    "last_seen_at": null,
+    "last_seen_guard_version": null,
+    "launch_summary": null,
+    "launch_target": "rm -rf build",
+    "policy_action": "require-reapproval",
+    "publisher": null,
+    "queue_group_id": null,
+    "raw_command_text": null,
+    "recommended_scope": "once",
+    "request_id": "r-new",
+    "review_command": "hol-guard approvals approve r-new",
+    "risk_headline": null,
+    "risk_signals": [
+     "destructive",
+     "filesystem"
+    ],
+    "risk_summary": "Deletes files",
+    "scanner_evidence": [],
+    "source_label": null,
+    "source_scope": "workspace",
+    "transport": null,
+    "trigger_summary": "PreToolUse",
+    "why_now": null,
+    "workspace": "/work/space"
+   },
+   "result": "r-new",
+   "rows": [],
+   "seed": {}
+  },
+  {
+   "after": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
+      "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": "Bash command",
+      "artifact_name": "Bash",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[\"command\"]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": "{\"capability\":\"retry-only\",\"correlationId\":\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\",\"hookAttached\":false,\"opaqueTargetId\":null,\"waitDeadline\":null}",
+      "created_at": "2026-03-01T12:00:00+00:00",
+      "decision_v2_json": "{\"action\": \"block\", \"approval_scopes\": [], \"confidence\": \"likely\", \"dashboard_primary_detail\": \"HOL Guard blocked this action.\", \"guard_action\": \"block\", \"harness_message\": \"HOL Guard blocked this action.\", \"reason\": \"block\", \"retry_instruction\": \"Review the details before changing policy or retrying.\", \"signals\": [], \"user_body\": \"HOL Guard blocked this action.\", \"user_title\": \"Blocked by policy\"}",
+      "dedupe_count": 1,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.42.0",
+      "guard_version": "3.42.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T12:00:00+00:00",
+      "last_seen_guard_version": "3.42.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "block",
+      "publisher": null,
+      "queue_group_id": "approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-new",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-new",
+      "risk_headline": null,
+      "risk_signals_json": "[\"destructive\", \"filesystem\"]",
+      "risk_summary": "Deletes files",
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": "PreToolUse",
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": "/work/space"
+     }
+    ],
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"block\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "00d85ce7db3a2add6dd772303ef4d4f5",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-new",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_hash": "2c33be4b11eb69d0d4cf9b18c3c40faf7428644972a8efc8912cd59050dfb865",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-new\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T12:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-new\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"block\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[\\\"command\\\"]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"{\\\"action_type\\\":null,\\\"command\\\":\\\"rm -rf build\\\",\\\"mcp_server\\\":null,\\\"mcp_tool\\\":null,\\\"network_hosts\\\":[],\\\"package_manager\\\":null,\\\"package_name\\\":null,\\\"prompt_excerpt\\\":null,\\\"raw_payload_redacted\\\":null,\\\"script_name\\\":null,\\\"target_paths\\\":[],\\\"tool_name\\\":null,\\\"version\\\":\\\"v1\\\"}\",\"queue_group_id\":\"approval-group:v1:2b20845aa4f9d38aa49478124a27c0c193473fc7ba5f90632acc7b82b4b8ab76\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T12:00:00+00:00\",\"transport\":null,\"risk_summary\":\"Deletes files\",\"risk_signals_json\":\"[\\\"destructive\\\", \\\"filesystem\\\"]\",\"artifact_label\":\"Bash command\",\"source_label\":null,\"trigger_summary\":\"PreToolUse\",\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":\"{\\\"action\\\": \\\"block\\\", \\\"approval_scopes\\\": [], \\\"confidence\\\": \\\"likely\\\", \\\"dashboard_primary_detail\\\": \\\"HOL Guard blocked this action.\\\", \\\"guard_action\\\": \\\"block\\\", \\\"harness_message\\\": \\\"HOL Guard blocked this action.\\\", \\\"reason\\\": \\\"block\\\", \\\"retry_instruction\\\": \\\"Review the details before changing policy or retrying.\\\", \\\"signals\\\": [], \\\"user_body\\\": \\\"HOL Guard blocked this action.\\\", \\\"user_title\\\": \\\"Blocked by policy\\\"}\",\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":\"{\\\"capability\\\":\\\"retry-only\\\",\\\"correlationId\\\":\\\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\\\",\\\"hookAttached\\\":false,\\\"opaqueTargetId\\\":null,\\\"waitDeadline\\\":null}\",\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.42.0\",\"first_seen_guard_version\":\"3.42.0\",\"last_seen_guard_version\":\"3.42.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-new\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-new\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T12:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     }
+    ]
+   },
+   "before": {
+    "approval_requests": [],
+    "guard_events": [],
+    "guard_review_outbox_events": []
+   },
+   "name": "created_events_prompted_block",
+   "native_defers": false,
+   "now": "2026-03-01T12:00:00+00:00",
+   "prompt_shown": true,
+   "request": {
+    "action_envelope_json": null,
+    "action_identity": null,
+    "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+    "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "native-review:codex:cmd",
+    "artifact_label": "Bash command",
+    "artifact_name": "Bash",
+    "artifact_type": "native_review",
+    "browser_intent": null,
+    "changed_fields": [
+     "command"
+    ],
+    "config_path": "/cfg/config.toml",
+    "continuation_snapshot": null,
+    "decision_v2_json": null,
+    "dedupe_count": 1,
+    "extension_allow_hint": null,
+    "fallback_cli_command": null,
+    "first_seen_guard_version": null,
+    "guard_version": "3.42.0",
+    "harness": "codex",
+    "last_seen_at": null,
+    "last_seen_guard_version": null,
+    "launch_summary": null,
+    "launch_target": "rm -rf build",
+    "policy_action": "block",
+    "publisher": null,
+    "queue_group_id": null,
+    "raw_command_text": null,
+    "recommended_scope": "once",
+    "request_id": "r-new",
+    "review_command": "hol-guard approvals approve r-new",
+    "risk_headline": null,
+    "risk_signals": [
+     "destructive",
+     "filesystem"
+    ],
+    "risk_summary": "Deletes files",
+    "scanner_evidence": [],
+    "source_label": null,
+    "source_scope": "workspace",
+    "transport": null,
+    "trigger_summary": "PreToolUse",
+    "why_now": null,
+    "workspace": "/work/space"
+   },
+   "result": "r-new",
+   "rows": [],
+   "seed": {}
+  },
+  {
+   "after": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
+      "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": "Bash command",
+      "artifact_name": "Bash \ud83d\ude80",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[\"command\"]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": "{\"capability\":\"retry-only\",\"correlationId\":\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\",\"hookAttached\":false,\"opaqueTargetId\":null,\"waitDeadline\":null}",
+      "created_at": "2026-03-01T12:00:00+00:00",
+      "decision_v2_json": "{\"action\": \"ask\", \"approval_scopes\": [\"artifact\", \"workspace\", \"publisher\", \"harness\"], \"confidence\": \"likely\", \"dashboard_primary_detail\": \"HOL Guard needs a fresh approval before this action can run.\", \"guard_action\": \"require-reapproval\", \"harness_message\": \"HOL Guard needs a fresh approval before this action can run.\", \"reason\": \"require-reapproval\", \"retry_instruction\": \"Choose the smallest approval scope that matches your intent, then retry.\", \"signals\": [], \"user_body\": \"HOL Guard needs a fresh approval before this action can run.\", \"user_title\": \"Fresh approval required\"}",
+      "dedupe_count": 1,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.42.0",
+      "guard_version": "3.42.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T12:00:00+00:00",
+      "last_seen_guard_version": "3.42.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "require-reapproval",
+      "publisher": "acme \u00e9\u2713",
+      "queue_group_id": "approval-group:v1:8ee35c32dcde7512e312d034788a3de598a05ddb3f08ea6ab5def883a3aaa038",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-new",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-new",
+      "risk_headline": null,
+      "risk_signals_json": "[\"destructive\", \"filesystem\"]",
+      "risk_summary": "Deletes files",
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": "PreToolUse",
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": null
+     }
+    ],
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash \\ud83d\\ude80\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": null, \"publisher\": \"acme \\u00e9\\u2713\"}"
+     },
+     {
+      "event_id": 2,
+      "event_name": "guard.protection.ask_once_shown",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"policy_action\": \"require-reapproval\"}"
+     }
+    ],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "74bd1b5d09388fb9ef75426cee5b3da2",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-new",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_hash": "4e36431d600a5c97c8dbb1288f37646b94e5e834b4b66e996c0ac54de8caea07",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-new\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T12:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-new\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash \ud83d\ude80\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":\"acme \u00e9\u2713\",\"policy_action\":\"require-reapproval\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[\\\"command\\\"]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":null,\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"{\\\"action_type\\\":null,\\\"command\\\":\\\"rm -rf build\\\",\\\"mcp_server\\\":null,\\\"mcp_tool\\\":null,\\\"network_hosts\\\":[],\\\"package_manager\\\":null,\\\"package_name\\\":null,\\\"prompt_excerpt\\\":null,\\\"raw_payload_redacted\\\":null,\\\"script_name\\\":null,\\\"target_paths\\\":[],\\\"tool_name\\\":null,\\\"version\\\":\\\"v1\\\"}\",\"queue_group_id\":\"approval-group:v1:8ee35c32dcde7512e312d034788a3de598a05ddb3f08ea6ab5def883a3aaa038\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T12:00:00+00:00\",\"transport\":null,\"risk_summary\":\"Deletes files\",\"risk_signals_json\":\"[\\\"destructive\\\", \\\"filesystem\\\"]\",\"artifact_label\":\"Bash command\",\"source_label\":null,\"trigger_summary\":\"PreToolUse\",\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":\"{\\\"action\\\": \\\"ask\\\", \\\"approval_scopes\\\": [\\\"artifact\\\", \\\"workspace\\\", \\\"publisher\\\", \\\"harness\\\"], \\\"confidence\\\": \\\"likely\\\", \\\"dashboard_primary_detail\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"guard_action\\\": \\\"require-reapproval\\\", \\\"harness_message\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"reason\\\": \\\"require-reapproval\\\", \\\"retry_instruction\\\": \\\"Choose the smallest approval scope that matches your intent, then retry.\\\", \\\"signals\\\": [], \\\"user_body\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"user_title\\\": \\\"Fresh approval required\\\"}\",\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":\"{\\\"capability\\\":\\\"retry-only\\\",\\\"correlationId\\\":\\\"gcr_72d51ce4-dfd3-5c05-936d-c3c5befb747e\\\",\\\"hookAttached\\\":false,\\\"opaqueTargetId\\\":null,\\\"waitDeadline\\\":null}\",\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.42.0\",\"first_seen_guard_version\":\"3.42.0\",\"last_seen_guard_version\":\"3.42.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-new\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-new\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T12:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     }
+    ]
+   },
+   "before": {
+    "approval_requests": [],
+    "guard_events": [],
+    "guard_review_outbox_events": []
+   },
+   "name": "created_events_text_fields",
+   "native_defers": false,
+   "now": "2026-03-01T12:00:00+00:00",
+   "prompt_shown": true,
+   "request": {
+    "action_envelope_json": null,
+    "action_identity": null,
+    "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+    "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "native-review:codex:cmd",
+    "artifact_label": "Bash command",
+    "artifact_name": "Bash \ud83d\ude80",
+    "artifact_type": "native_review",
+    "browser_intent": null,
+    "changed_fields": [
+     "command"
+    ],
+    "config_path": "/cfg/config.toml",
+    "continuation_snapshot": null,
+    "decision_v2_json": null,
+    "dedupe_count": 1,
+    "extension_allow_hint": null,
+    "fallback_cli_command": null,
+    "first_seen_guard_version": null,
+    "guard_version": "3.42.0",
+    "harness": "codex",
+    "last_seen_at": null,
+    "last_seen_guard_version": null,
+    "launch_summary": null,
+    "launch_target": "rm -rf build",
+    "policy_action": "require-reapproval",
+    "publisher": "acme \u00e9\u2713",
+    "queue_group_id": null,
+    "raw_command_text": null,
+    "recommended_scope": "once",
+    "request_id": "r-new",
+    "review_command": "hol-guard approvals approve r-new",
+    "risk_headline": null,
+    "risk_signals": [
+     "destructive",
+     "filesystem"
+    ],
+    "risk_summary": "Deletes files",
+    "scanner_evidence": [],
+    "source_label": null,
+    "source_scope": "workspace",
+    "transport": null,
+    "trigger_summary": "PreToolUse",
+    "why_now": null,
+    "workspace": null
+   },
+   "result": "r-new",
+   "rows": [],
+   "seed": {}
+  },
+  {
+   "after": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
+      "approval_url": "http://127.0.0.1:4781/requests/r-old",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": "Bash command",
+      "artifact_name": "Bash",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[\"command\"]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": "{\"capability\":\"retry-only\",\"correlationId\":\"gcr_b8048ade-2838-5242-8ccd-a4d3ee48c8be\",\"hookAttached\":false,\"opaqueTargetId\":null,\"waitDeadline\":null}",
+      "created_at": "2026-03-01T11:00:00+00:00",
+      "decision_v2_json": "{\"action\": \"ask\", \"approval_scopes\": [\"artifact\", \"workspace\", \"publisher\", \"harness\"], \"confidence\": \"likely\", \"dashboard_primary_detail\": \"HOL Guard needs a fresh approval before this action can run.\", \"guard_action\": \"require-reapproval\", \"harness_message\": \"HOL Guard needs a fresh approval before this action can run.\", \"reason\": \"require-reapproval\", \"retry_instruction\": \"Choose the smallest approval scope that matches your intent, then retry.\", \"signals\": [], \"user_body\": \"HOL Guard needs a fresh approval before this action can run.\", \"user_title\": \"Fresh approval required\"}",
+      "dedupe_count": 2,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.40.0",
+      "guard_version": "3.42.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T12:00:00+00:00",
+      "last_seen_guard_version": "3.42.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "require-reapproval",
+      "publisher": null,
+      "queue_group_id": "qg-seeded",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-old",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-old",
+      "risk_headline": null,
+      "risk_signals_json": "[\"destructive\", \"filesystem\"]",
+      "risk_summary": "Deletes files",
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": "PreToolUse",
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": "/work/space"
+     }
+    ],
+    "guard_events": [],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "a1a78a9415f3860be6514ade74ca91ca",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-old",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T11:00:00+00:00",
+      "payload_hash": "9915fc0a8f92b2353620a5135be7ef7df3637076d2a2fa1c44d6cf8a3ebaa8fb",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-old\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T11:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-old\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"require-reapproval\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"seeded-identity\",\"queue_group_id\":\"qg-seeded\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T11:00:00+00:00\",\"transport\":null,\"risk_summary\":null,\"risk_signals_json\":\"[]\",\"artifact_label\":null,\"source_label\":null,\"trigger_summary\":null,\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":null,\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":null,\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.41.0\",\"first_seen_guard_version\":\"3.40.0\",\"last_seen_guard_version\":\"3.41.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-old\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-old\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T11:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     },
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "56e21e910580e43e9f7f07097ddac10a",
+      "event_schema_version": 1,
+      "event_type": "review.request.refreshed",
+      "last_error": null,
+      "local_request_id": "r-old",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_hash": "74f1699d4060823835cb93873f48f9c3e536f61b397bc3a1fc915a3621d3f87c",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-old\",\"eventType\":\"review.request.refreshed\",\"occurredAt\":\"2026-03-01T12:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-old\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"require-reapproval\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[\\\"command\\\"]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"{\\\"action_type\\\":null,\\\"command\\\":\\\"rm -rf build\\\",\\\"mcp_server\\\":null,\\\"mcp_tool\\\":null,\\\"network_hosts\\\":[],\\\"package_manager\\\":null,\\\"package_name\\\":null,\\\"prompt_excerpt\\\":null,\\\"raw_payload_redacted\\\":null,\\\"script_name\\\":null,\\\"target_paths\\\":[],\\\"tool_name\\\":null,\\\"version\\\":\\\"v1\\\"}\",\"queue_group_id\":\"qg-seeded\",\"dedupe_count\":2,\"last_seen_at\":\"2026-03-01T12:00:00+00:00\",\"transport\":null,\"risk_summary\":\"Deletes files\",\"risk_signals_json\":\"[\\\"destructive\\\", \\\"filesystem\\\"]\",\"artifact_label\":\"Bash command\",\"source_label\":null,\"trigger_summary\":\"PreToolUse\",\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":\"{\\\"action\\\": \\\"ask\\\", \\\"approval_scopes\\\": [\\\"artifact\\\", \\\"workspace\\\", \\\"publisher\\\", \\\"harness\\\"], \\\"confidence\\\": \\\"likely\\\", \\\"dashboard_primary_detail\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"guard_action\\\": \\\"require-reapproval\\\", \\\"harness_message\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"reason\\\": \\\"require-reapproval\\\", \\\"retry_instruction\\\": \\\"Choose the smallest approval scope that matches your intent, then retry.\\\", \\\"signals\\\": [], \\\"user_body\\\": \\\"HOL Guard needs a fresh approval before this action can run.\\\", \\\"user_title\\\": \\\"Fresh approval required\\\"}\",\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":\"{\\\"capability\\\":\\\"retry-only\\\",\\\"correlationId\\\":\\\"gcr_b8048ade-2838-5242-8ccd-a4d3ee48c8be\\\",\\\"hookAttached\\\":false,\\\"opaqueTargetId\\\":null,\\\"waitDeadline\\\":null}\",\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.42.0\",\"first_seen_guard_version\":\"3.40.0\",\"last_seen_guard_version\":\"3.42.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-old\",\"approval_url\":\"http://127.0.0.1:4781/requests/r-old\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T11:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 2,
+      "stream_sequence": 2,
+      "workspace_id": null
+     }
+    ]
+   },
+   "before": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "seeded-identity",
+      "approval_url": "http://127.0.0.1:4781/approvals/r-old",
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:codex:cmd",
+      "artifact_label": null,
+      "artifact_name": "Bash",
+      "artifact_type": "native_review",
+      "browser_intent_json": null,
+      "changed_fields_json": "[]",
+      "config_path": "/cfg/config.toml",
+      "continuation_snapshot_json": null,
+      "created_at": "2026-03-01T11:00:00+00:00",
+      "decision_v2_json": null,
+      "dedupe_count": 1,
+      "desktop_notified_at": null,
+      "extension_allow_hint_json": null,
+      "fallback_cli_command": null,
+      "first_seen_guard_version": "3.40.0",
+      "guard_version": "3.41.0",
+      "harness": "codex",
+      "last_seen_at": "2026-03-01T11:00:00+00:00",
+      "last_seen_guard_version": "3.41.0",
+      "launch_summary": null,
+      "launch_target": "rm -rf build",
+      "normalized_identity_key": "rm -rf build",
+      "oauth_source": "guard",
+      "policy_action": "require-reapproval",
+      "publisher": null,
+      "queue_group_id": "qg-seeded",
+      "raw_command_text": null,
+      "reason": null,
+      "recommended_scope": "once",
+      "request_id": "r-old",
+      "resolution_action": null,
+      "resolution_scope": null,
+      "resolved_at": null,
+      "review_command": "hol-guard approvals approve r-old",
+      "risk_headline": null,
+      "risk_signals_json": "[]",
+      "risk_summary": null,
+      "scanner_evidence_json": "[]",
+      "source_label": null,
+      "source_scope": "workspace",
+      "status": "pending",
+      "transport": null,
+      "trigger_summary": null,
+      "watch_only_observation": 0,
+      "why_now": null,
+      "workspace": "/work/space"
+     }
+    ],
+    "guard_events": [],
+    "guard_review_outbox_events": [
+     {
+      "acknowledged_at": null,
+      "attempt_count": 0,
+      "binding_status": "quarantined",
+      "event_id": "a1a78a9415f3860be6514ade74ca91ca",
+      "event_schema_version": 1,
+      "event_type": "review.request.created",
+      "last_error": null,
+      "local_request_id": "r-old",
+      "machine_id": null,
+      "machine_installation_id": null,
+      "next_attempt_at": null,
+      "oauth_source": "guard",
+      "oauth_subject_hash": null,
+      "occurred_at": "2026-03-01T11:00:00+00:00",
+      "payload_hash": "",
+      "payload_json": "{\"schema\":\"guard-cloud-review-event-v2\",\"localRequestId\":\"r-old\",\"eventType\":\"review.request.created\",\"occurredAt\":\"2026-03-01T11:00:00+00:00\",\"status\":\"pending\",\"resolutionAction\":null,\"resolutionScope\":null,\"reason\":null,\"oauthSource\":\"guard\",\"requestSnapshot\":{\"request_id\":\"r-old\",\"harness\":\"codex\",\"artifact_id\":\"native-review:codex:cmd\",\"artifact_name\":\"Bash\",\"artifact_type\":\"native_review\",\"artifact_hash\":\"native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"publisher\":null,\"policy_action\":\"require-reapproval\",\"recommended_scope\":\"once\",\"changed_fields_json\":\"[]\",\"source_scope\":\"workspace\",\"oauth_source\":\"guard\",\"config_path\":\"/cfg/config.toml\",\"workspace\":\"/work/space\",\"launch_target\":\"rm -rf build\",\"normalized_identity_key\":\"rm -rf build\",\"action_identity\":\"seeded-identity\",\"queue_group_id\":\"qg-seeded\",\"dedupe_count\":1,\"last_seen_at\":\"2026-03-01T11:00:00+00:00\",\"transport\":null,\"risk_summary\":null,\"risk_signals_json\":\"[]\",\"artifact_label\":null,\"source_label\":null,\"trigger_summary\":null,\"why_now\":null,\"launch_summary\":null,\"risk_headline\":null,\"action_envelope_json\":null,\"decision_v2_json\":null,\"fallback_cli_command\":null,\"scanner_evidence_json\":\"[]\",\"browser_intent_json\":null,\"continuation_snapshot_json\":null,\"desktop_notified_at\":null,\"raw_command_text\":null,\"guard_version\":\"3.41.0\",\"first_seen_guard_version\":\"3.40.0\",\"last_seen_guard_version\":\"3.41.0\",\"watch_only_observation\":0,\"review_command\":\"hol-guard approvals approve r-old\",\"approval_url\":\"http://127.0.0.1:4781/approvals/r-old\",\"status\":\"pending\",\"resolution_action\":null,\"resolution_scope\":null,\"reason\":null,\"created_at\":\"2026-03-01T11:00:00+00:00\",\"resolved_at\":null}}",
+      "quarantine_reason": "identity_incomplete",
+      "request_sequence": 1,
+      "stream_sequence": 1,
+      "workspace_id": null
+     }
+    ]
+   },
+   "name": "created_events_skipped_on_dedupe",
+   "native_defers": false,
+   "now": "2026-03-01T12:00:00+00:00",
+   "prompt_shown": true,
+   "request": {
+    "action_envelope_json": null,
+    "action_identity": null,
+    "approval_url": "http://127.0.0.1:4781/approvals/r-new",
+    "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "native-review:codex:cmd",
+    "artifact_label": "Bash command",
+    "artifact_name": "Bash",
+    "artifact_type": "native_review",
+    "browser_intent": null,
+    "changed_fields": [
+     "command"
+    ],
+    "config_path": "/cfg/config.toml",
+    "continuation_snapshot": null,
+    "decision_v2_json": null,
+    "dedupe_count": 1,
+    "extension_allow_hint": null,
+    "fallback_cli_command": null,
+    "first_seen_guard_version": null,
+    "guard_version": "3.42.0",
+    "harness": "codex",
+    "last_seen_at": null,
+    "last_seen_guard_version": null,
+    "launch_summary": null,
+    "launch_target": "rm -rf build",
+    "policy_action": "require-reapproval",
+    "publisher": null,
+    "queue_group_id": "qg-seeded",
+    "raw_command_text": null,
+    "recommended_scope": "once",
+    "request_id": "r-new",
+    "review_command": "hol-guard approvals approve r-new",
+    "risk_headline": null,
+    "risk_signals": [
+     "destructive",
+     "filesystem"
+    ],
+    "risk_summary": "Deletes files",
+    "scanner_evidence": [],
+    "source_label": null,
+    "source_scope": "workspace",
+    "transport": null,
+    "trigger_summary": "PreToolUse",
+    "why_now": null,
+    "workspace": "/work/space"
+   },
+   "result": "r-old",
+   "rows": [
+    {
+     "action_identity": "seeded-identity",
+     "approval_url": "http://127.0.0.1:4781/approvals/r-old",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "artifact_id": "native-review:codex:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg/config.toml",
+     "created_at": "2026-03-01T11:00:00+00:00",
+     "dedupe_count": 1,
+     "first_seen_guard_version": "3.40.0",
+     "guard_version": "3.41.0",
+     "harness": "codex",
+     "last_seen_at": "2026-03-01T11:00:00+00:00",
+     "last_seen_guard_version": "3.41.0",
+     "launch_target": "rm -rf build",
+     "normalized_identity_key": "rm -rf build",
+     "oauth_source": "guard",
+     "policy_action": "require-reapproval",
+     "queue_group_id": "qg-seeded",
+     "recommended_scope": "once",
+     "request_id": "r-old",
+     "review_command": "hol-guard approvals approve r-old",
+     "source_scope": "workspace",
+     "status": "pending",
+     "workspace": "/work/space"
+    }
+   ],
+   "seed": {}
+  },
+  {
+   "after": {
+    "approval_requests": [
+     {
+      "action_envelope_json": null,
+      "action_identity": "{\"action_type\":null,\"command\":\"rm -rf build\",\"mcp_server\":null,\"mcp_tool\":null,\"network_hosts\":[],\"package_manager\":null,\"package_name\":null,\"prompt_excerpt\":null,\"raw_payload_redacted\":null,\"script_name\":null,\"target_paths\":[],\"tool_name\":null,\"version\":\"v1\"}",
       "approval_url": "http://127.0.0.1:4781/requests/r-legacy",
       "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "artifact_id": "native-review:codex:cmd",
@@ -5992,6 +7072,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -6116,6 +7197,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -6332,6 +7414,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -6552,6 +7635,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -6819,6 +7903,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,
@@ -6943,6 +8028,7 @@
       "workspace": "/work/space"
      }
     ],
+    "guard_events": [],
     "guard_review_outbox_events": [
      {
       "acknowledged_at": null,

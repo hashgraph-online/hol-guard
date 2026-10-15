@@ -16,6 +16,7 @@ const VECTORS: &str = include_str!("../testdata/guard_store/approval_page_read_v
 fn page(home: &std::path::Path, source: &str, call: &Value) -> Result<Value, (String, String)> {
     let args = &call["args"];
     let mut items = Vec::new();
+    let mut after = Value::Null;
     loop {
         let mut chunk = store_call(
             home,
@@ -29,7 +30,8 @@ fn page(home: &std::path::Path, source: &str, call: &Value) -> Result<Value, (St
                 "search": args["search"],
                 "include_totals": args["include_totals"],
                 "exclude_watch_only": args["exclude_watch_only"],
-                "offset": items.len(),
+                "taken": items.len(),
+                "after": after,
             }),
         )?;
         let returned = chunk["items"].as_array().unwrap().clone();
@@ -39,6 +41,7 @@ fn page(home: &std::path::Path, source: &str, call: &Value) -> Result<Value, (St
         );
         items.extend(returned);
         let fields = chunk.as_object_mut().unwrap();
+        after = fields.remove("after").unwrap_or(Value::Null);
         if fields.remove("complete") == Some(Value::Bool(true)) {
             fields.insert("items".to_owned(), Value::Array(items));
             return Ok(chunk);

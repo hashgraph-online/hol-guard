@@ -45,12 +45,24 @@ class StoreApprovalsMixin:
             )
         )
 
-    def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
+    def add_approval_request(
+        self,
+        request: GuardApprovalRequest,
+        now: str,
+        *,
+        prompt_shown: bool | None = None,
+    ) -> str:
         # The resident backfills legacy queue rows, derives the canonical
         # surfaces and queue identity, deduplicates and binds the outbox event
-        # in one transaction. Its silence keeps the projection owner's error.
+        # in one transaction. With ``prompt_shown`` set, a newly queued request
+        # also gets its ``approval.created`` (and, when prompted,
+        # ``ask_once_shown``) event there. Its silence keeps the projection
+        # owner's error.
         try:
-            request_id = self._native_store_call("add_approval_request", {"request": request.to_dict(), "now": now})
+            request_id = self._native_store_call(
+                "add_approval_request",
+                {"request": request.to_dict(), "now": now, "prompt_shown": prompt_shown},
+            )
         except NativeGuardStoreUnavailable as error:
             raise NativeSignalProjectionUnavailableError(error.reason) from error
         except ValueError as error:

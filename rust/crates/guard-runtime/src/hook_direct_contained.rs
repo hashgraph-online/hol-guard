@@ -24,11 +24,22 @@ const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 #[cfg(target_os = "macos")]
 const NATIVE_SINK_SWITCH: &str = "HOL_GUARD_NATIVE_CONTAINED_SINK";
 /// Command text whose meaning depends on what the native sink does not yet
-/// replay: home expansion and tool flags that move the working directory.
-/// Pipes, stderr folding and exit-status reads run whole in the sandbox, as
-/// the edge classified them, so the shell gives them their own meaning.
+/// replay: home expansion. Pipes, stderr folding and exit-status reads run
+/// whole in the sandbox, as the edge classified them, so the shell gives
+/// them their own meaning.
 #[cfg(any(target_os = "macos", all(unix, test)))]
-const NATIVE_SINK_UNSUPPORTED: [&str; 5] = ["~", "--cwd", "--prefix", "--dir", " -C"];
+const NATIVE_SINK_UNSUPPORTED: [&str; 1] = ["~"];
+/// Package manager flags that run a script in another directory. The native
+/// sink takes them only when `inner_package_directory` holds.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+const PACKAGE_DIRECTORY_FLAGS: [&str; 3] = ["--cwd", "--prefix", "--dir"];
+/// The short directory flag, which moves the working directory for every
+/// tool that takes it (`git -C`, `make -C`). Only npm and pnpm, which the
+/// edge projects the same way as their long flags, take the native sink.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+const SHORT_DIRECTORY_FLAG: &str = "-C";
+#[cfg(any(target_os = "macos", all(unix, test)))]
+const SHORT_DIRECTORY_MANAGERS: [&str; 2] = ["npm", "pnpm"];
 const PRE_TOOL_EVENTS: [&str; 2] = ["PreToolUse", "pre_tool_use"];
 const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "run_terminal_command", "run_command"];
 
@@ -169,6 +180,11 @@ fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str
         && text("reason") != Some(PUBLISH_REASON)
         && !original.contains_key("cwd")
         && (!command.trim_start().starts_with("cd") || inner_directory_change(command, workspace))
+        && (!PACKAGE_DIRECTORY_FLAGS
+            .iter()
+            .chain([&SHORT_DIRECTORY_FLAG])
+            .any(|flag| command.contains(flag))
+            || inner_package_directory(command, workspace))
         && !NATIVE_SINK_UNSUPPORTED
             .iter()
             .any(|fragment| command.contains(fragment))
@@ -181,12 +197,6 @@ fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str
 /// sibling repository is planned again there, so it keeps the daemon's sink.
 #[cfg(any(target_os = "macos", all(unix, test)))]
 fn inner_directory_change(command: &str, workspace: &str) -> bool {
-    let plain = |text: &str| {
-        !text.is_empty()
-            && text
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"/._-+@,=:".contains(&byte))
-    };
     let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
         return false;
     };
@@ -205,6 +215,70 @@ fn inner_directory_change(command: &str, workspace: &str) -> bool {
     else {
         return false;
     };
+    strictly_inside(workspace, target)
+}
+
+/// Whether a package manager's directory flags (`bun --cwd web run build`,
+/// `pnpm -C web run build`) all name a plain directory strictly inside the
+/// workspace. A short flag counts only as its own word right after `npm` or
+/// `pnpm`. The daemon runs
+/// such a call whole from the workspace root, as the native sink does. The
+/// root itself or a sibling repository is planned again there, so it keeps
+/// the daemon's sink, as does any other spelling of the flags.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+fn inner_package_directory(command: &str, workspace: &str) -> bool {
+    if command.trim_start().starts_with("cd") {
+        return false;
+    }
+    let words: Vec<&str> = command
+        .split([' ', '\t'])
+        .filter(|word| !word.is_empty())
+        .collect();
+    let mut targets = Vec::new();
+    for (index, word) in words.iter().enumerate() {
+        if *word == SHORT_DIRECTORY_FLAG
+            && index
+                .checked_sub(1)
+                .is_some_and(|before| SHORT_DIRECTORY_MANAGERS.contains(&words[before]))
+        {
+            targets.push(words.get(index + 1).copied().unwrap_or_default());
+        }
+        for flag in PACKAGE_DIRECTORY_FLAGS {
+            if *word == flag {
+                targets.push(words.get(index + 1).copied().unwrap_or_default());
+            } else if let Some(value) = word
+                .strip_prefix(flag)
+                .and_then(|rest| rest.strip_prefix('='))
+            {
+                targets.push(value);
+            }
+        }
+    }
+    let mentions: usize = PACKAGE_DIRECTORY_FLAGS
+        .iter()
+        .chain([&SHORT_DIRECTORY_FLAG])
+        .map(|flag| command.matches(flag).count())
+        .sum();
+    !targets.is_empty()
+        && targets.len() == mentions
+        && targets.iter().all(|target| {
+            !target.starts_with('-') && plain(target) && strictly_inside(workspace, target)
+        })
+}
+
+/// Whether `text` is one plain shell word that needs no quoting or expansion.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+fn plain(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"/._-+@,=:".contains(&byte))
+}
+
+/// Whether `target`, from the workspace, is an existing directory strictly
+/// inside it.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+fn strictly_inside(workspace: &str, target: &str) -> bool {
     let (Ok(root), Ok(directory)) = (
         std::fs::canonicalize(workspace),
         std::fs::canonicalize(std::path::Path::new(workspace).join(target)),
