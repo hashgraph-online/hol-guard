@@ -241,3 +241,83 @@ fn false_and_float_zero_uncertainty_are_hint_candidates() {
         assert_eq!(allow_hint_candidate(payload, result), Some(true));
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_expanded_home_matches_cpython() {
+    for profile in [
+        r"C:\Users\Guard Tester",
+        r"C:\Users\Guard Tester\",
+        "~guard",
+    ] {
+        let output = std::process::Command::new("python")
+            .args(["-c", "import os; print(os.path.expanduser('~'), end='')"])
+            .env("USERPROFILE", profile)
+            .output()
+            .expect("python runs");
+        assert!(output.status.success(), "{profile:?}");
+        let cpython = String::from_utf8(output.stdout).expect("utf-8");
+        let environment = BTreeMap::from([("USERPROFILE".to_owned(), profile.to_owned())]);
+        assert_eq!(expanded_home(&environment), Some(cpython), "{profile:?}");
+    }
+    // Without `USERPROFILE` ntpath joins `HOMEDRIVE` and `HOMEPATH`.
+    for (drive, path) in [
+        (Some("C:"), r"\Users\guard"),
+        (None, r"\Users\guard"),
+        (Some("c:"), "/Users/guard"),
+        (Some("C:"), "Users"),
+    ] {
+        let mut command = std::process::Command::new("python");
+        command
+            .args(["-c", "import os; print(os.path.expanduser('~'), end='')"])
+            .env_remove("USERPROFILE")
+            .env("HOMEPATH", path);
+        let mut environment = BTreeMap::from([("HOMEPATH".to_owned(), path.to_owned())]);
+        match drive {
+            Some(drive) => {
+                command.env("HOMEDRIVE", drive);
+                environment.insert("HOMEDRIVE".to_owned(), drive.to_owned());
+            }
+            None => {
+                command.env_remove("HOMEDRIVE");
+            }
+        }
+        let output = command.output().expect("python runs");
+        assert!(output.status.success(), "{drive:?} {path:?}");
+        let cpython = String::from_utf8(output.stdout).expect("utf-8");
+        assert_eq!(
+            expanded_home(&environment),
+            Some(cpython),
+            "{drive:?} {path:?}"
+        );
+    }
+    // A UNC home share goes through `splitroot`; the daemon joins it.
+    let environment = BTreeMap::from([
+        ("HOMEDRIVE".to_owned(), r"\\srv\share".to_owned()),
+        ("HOMEPATH".to_owned(), r"\".to_owned()),
+    ]);
+    assert_eq!(expanded_home(&environment), None);
+}
+
+/// Expected values are CPython's `ntpath.join(drive, path)`.
+#[test]
+fn home_drive_join_is_ntpath_join_or_left_to_the_daemon() {
+    for (drive, path, joined) in [
+        ("C:", r"\Users\guard", Some(r"C:\Users\guard")),
+        ("", r"\Users\guard", Some(r"\Users\guard")),
+        ("c:", "/Users/guard", Some("c:/Users/guard")),
+        ("C:", "Users", Some("C:Users")),
+        ("C:", "", Some("C:")),
+        ("", "", Some("")),
+        (r"\\srv\share", r"\", None),
+        ("C:", r"\\srv\share", None),
+        ("C:", r"D:\x", None),
+        ("CD", r"\x", None),
+    ] {
+        assert_eq!(
+            join_home_drive(drive, path).as_deref(),
+            joined,
+            "{drive:?} {path:?}"
+        );
+    }
+}

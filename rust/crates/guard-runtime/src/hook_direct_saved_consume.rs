@@ -152,7 +152,26 @@ fn open_no_follow(path: &Path) -> Option<File> {
         .ok()
 }
 
-#[cfg(not(unix))]
+/// The gate opened without following a link at the leaf. Python takes it
+/// with `msvcrt.locking` on its first byte, which has no shared mode; the
+/// shared whole-file `LockFileEx` here still excludes that hold and any
+/// exclusive one, so a spend never overlaps a daemon store call.
+#[cfg(windows)]
+fn open_no_follow(path: &Path) -> Option<File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    (metadata.is_file() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0)
+        .then_some(file)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn open_no_follow(_path: &Path) -> Option<File> {
     None
 }
@@ -170,6 +189,8 @@ pub(super) fn repair_store_permissions(guard_home: &Path) {
     }
 }
 
+/// The daemon's `_set_private_mode` leaves Windows store files alone: they
+/// inherit the private Guard home's DACL.
 #[cfg(not(unix))]
 pub(super) fn repair_store_permissions(_guard_home: &Path) {}
 

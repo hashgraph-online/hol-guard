@@ -276,7 +276,10 @@ def _run_guard_doctor_command(
         guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
         _emit(
             "doctor",
-            {"desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance)},
+            {
+                "desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance),
+                "approval_gate": approval_gate_posture(guard_home, passive=True),
+            },
             getattr(args, "json", False),
         )
         return 0
@@ -297,7 +300,11 @@ def _run_guard_doctor_command(
             }
             for c in HARNESS_CONTRACTS
         ]
-        _emit("doctor", {"harnesses": contracts_payload}, getattr(args, "json", False))
+        _emit(
+            "doctor",
+            {"harnesses": contracts_payload, "approval_gate": approval_gate_posture(guard_home, passive=True)},
+            getattr(args, "json", False),
+        )
         return 0
     if args.harness:
         adapter = get_adapter(args.harness)
@@ -393,7 +400,8 @@ def _run_guard_doctor_command(
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
     payload.update(harness_posture_summary(config))
-    payload["approval_gate"] = approval_gate_posture(guard_home)
+    # Doctor stays passive: read the gate state file, never the native resident.
+    payload["approval_gate"] = approval_gate_posture(guard_home, passive=True)
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

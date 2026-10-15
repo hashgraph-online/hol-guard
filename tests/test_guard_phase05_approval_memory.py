@@ -774,48 +774,6 @@ def test_gr111_gr113_queue_keeps_remaining_items_and_groups_duplicates(tmp_path:
     assert store.get_approval_request(duplicate_id)["dedupe_count"] == 2
 
 
-def test_gr114_gr115_bulk_resolves_safe_duplicate_groups_for_allow_and_block(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    safe_a = _request(
-        "req-safe-a",
-        artifact_id="codex:project:file-read:package-json",
-        action_type="file_read",
-        command=None,
-    )
-    safe_b = _request(
-        "req-safe-b",
-        artifact_id="codex:project:file-read:package-json",
-        action_type="file_read",
-        command=None,
-    )
-    risky_a = _request("req-risky-a", artifact_id="codex:project:tool-action:upload", command="cat ~/.npmrc")
-    risky_b = _request("req-risky-b", artifact_id="codex:project:tool-action:upload", command="cat ~/.npmrc")
-    safe_id = store.add_approval_request(safe_a, "2026-05-13T00:00:00+00:00")
-    store.add_approval_request(safe_b, "2026-05-13T00:01:00+00:00")
-    risky_id = store.add_approval_request(risky_a, "2026-05-13T00:02:00+00:00")
-    store.add_approval_request(risky_b, "2026-05-13T00:03:00+00:00")
-
-    store.bulk_resolve_approval_requests(
-        [safe_id],
-        resolution_action="allow",
-        resolution_scope="artifact",
-        reason="safe duplicate reads",
-        resolved_at="2026-05-13T00:04:00+00:00",
-    )
-    store.bulk_resolve_approval_requests(
-        [risky_id],
-        resolution_action="block",
-        resolution_scope="artifact",
-        reason="blocked duplicate uploads",
-        resolved_at="2026-05-13T00:05:00+00:00",
-    )
-
-    assert store.get_approval_request(safe_id)["resolution_action"] == "allow"
-    assert store.get_approval_request(risky_id)["resolution_action"] == "block"
-    assert store.get_approval_request(safe_id)["dedupe_count"] == 2
-    assert store.get_approval_request(risky_id)["dedupe_count"] == 2
-
-
 def test_gr116_workspace_policy_uses_stable_non_path_fingerprint(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

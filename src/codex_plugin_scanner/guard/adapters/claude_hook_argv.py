@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -165,12 +164,11 @@ def _native_session_start_command_parts(
     The runtime prints the context only when the daemon is verified live and
     the managed entries already equal what the Python refresh would write;
     otherwise it execs ``python_argv`` unchanged. The lane reproduces the
-    refresh only for the installing user's own home, so other homes and
-    Windows keep the Python command.
+    refresh only for the installing user's own home, so other homes keep the
+    Python command. Windows has no ``exec``, so there the runtime runs
+    ``python_argv`` as a child with the same stdio and exits with its status.
     """
 
-    if os.name == "nt":
-        return None
     runtime = native_hook_bridge_executable(NATIVE_CLAUDE_SESSION_START_FEATURE, guard_home=context.guard_home)
     if runtime is None or runtime != _native_bridge_executable(context.guard_home):
         return None

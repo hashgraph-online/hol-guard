@@ -138,3 +138,43 @@ fn a_subdirectory_run_reads_the_nearest_manifest() {
     }
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// A direct `vite build` keeps the build receipt only for an output directory
+/// the build sink accepts: a `dist`, `build` or `out` directory next to the
+/// workspace root or a package manifest. Any other `--outDir` would be refused
+/// by the sink, so it takes the generic route instead.
+#[test]
+fn a_direct_build_keeps_the_receipt_only_for_an_accepted_output() {
+    let root = root();
+    let ws = project(&root, "direct", json!({}), &[VITE]);
+    let entry = ws.join("node_modules").join(VITE);
+    let accepted = [
+        "vite build --outDir dist".to_string(),
+        "bunx vite build --outDir=out".to_string(),
+        format!("node {} build --outDir ./build", entry.display()),
+    ];
+    for command in &accepted {
+        let result = classify(&ws, "omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.reason_code, NODE_BUILD, "{command}");
+        }
+    }
+    let refused = [
+        "vite build --outDir=/tmp/out".to_string(),
+        "vite build --outDir /tmp/out".to_string(),
+        "vite build --outDir=dist --outDir /tmp/dist".to_string(),
+        "bunx vite build --outDir public".to_string(),
+        "npx vite build --outDir=../dist".to_string(),
+        "vite build --outDir src/dist".to_string(),
+        format!("node {} build --outDir", entry.display()),
+    ];
+    for harness in HARNESSES {
+        for command in &refused {
+            let result = classify(&ws, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_ne!(result.reason_code, NODE_BUILD, "{harness}: {command}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}

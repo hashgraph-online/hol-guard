@@ -48,6 +48,17 @@ runs:
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op
+    - name: Observe direct-lane policy inputs as CPython stats them
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime storage_gate
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime windows_expanded_home
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test process_liveness
     - name: Contain MCP server process trees in a JobObject on Windows
       if: inputs.shim-gate == 'native-op'
       shell: pwsh

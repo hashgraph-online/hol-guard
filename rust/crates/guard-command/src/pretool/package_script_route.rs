@@ -8,6 +8,10 @@
 //! makes the sink refuse a benign command. Such a script stays an untrusted
 //! package script: it keeps the generic route, which is the workspace sandbox
 //! where that applies and an approval prompt otherwise.
+//!
+//! The build sink also refuses a `vite build` whose `--outDir` names anything
+//! but a conventional build directory, so a direct `vite build` or a build
+//! script keeps the narrow receipt only for an output directory it accepts.
 
 #[cfg(unix)]
 use crate::contained_runner::pkg_json::{object_of, read_json_with_integrity};
@@ -86,7 +90,7 @@ fn resolved(
     let segment = model.segments.first()?;
     let manager = executable_basename(segment.executable.as_deref()?);
     if !matches!(manager, "npm" | "pnpm" | "bun") {
-        return Some(reason);
+        return direct_tool(reason, &segment.arguments, cwd, context);
     }
     let arguments = segment.arguments.as_slice();
     let task = match arguments {
@@ -101,8 +105,9 @@ fn resolved(
         return None;
     }
     if !test && task.is_none() {
-        // `pnpm exec <tool>` runs the tool itself, not a script.
-        return Some(reason);
+        // `pnpm exec <tool>` or `bun x <tool>` runs the tool itself, not a
+        // script.
+        return direct_tool(reason, arguments, cwd, context);
     }
     let Some((workspace, directory)) = cwd.and_then(|cwd| locations(&cwd, context)) else {
         // No real directory to read: the sink cannot run it either, and no
@@ -120,6 +125,95 @@ fn resolved(
         return test_script(scripts?, arguments).then_some(PACKAGE_TEST);
     }
     tool_script(scripts?, task?, &directory, &workspace)
+}
+
+#[cfg(unix)]
+/// A tool run directly (`vite build`, `npx vite build`, `node
+/// node_modules/vite/bin/vite.js build`): a build keeps its receipt only for an
+/// output directory the sink accepts. The launcher words before the tool are
+/// never `--outDir`, so the whole argument list reads as the tool's.
+fn direct_tool(
+    reason: &'static str,
+    arguments: &[String],
+    cwd: Option<PathBuf>,
+    context: PathContext<'_>,
+) -> Option<&'static str> {
+    if reason != NODE_BUILD {
+        return Some(reason);
+    }
+    let found = cwd.and_then(|cwd| locations(&cwd, context));
+    let roots = found
+        .as_ref()
+        .map(|(workspace, directory)| (directory.as_path(), workspace.as_path()));
+    build_output_allowed(arguments, roots).then_some(reason)
+}
+
+#[cfg(unix)]
+/// `prepare_restricted_node_tool`'s output rule for `vite build`: the last
+/// `--outDir <dir>` or `--outDir=<dir>` wins, and an empty one means the
+/// default. An explicit directory must pass `validate_build_output_root`
+/// without a config: a `dist`, `build` or `out` directory next to the
+/// workspace root or a package manifest below it, reached without links or
+/// hidden or `node_modules` components, and not a link or a file itself.
+/// Without a run directory only the parts that need no filesystem are checked;
+/// the sink cannot run there either.
+fn build_output_allowed(arguments: &[String], roots: Option<(&Path, &Path)>) -> bool {
+    let mut output = None;
+    for (index, word) in arguments.iter().enumerate() {
+        if let Some(value) = word.strip_prefix("--outDir=") {
+            output = Some(value);
+        } else if word == "--outDir" {
+            let Some(value) = arguments.get(index + 1) else {
+                return false;
+            };
+            output = Some(value.as_str());
+        }
+    }
+    let Some(output) = output.filter(|output| !output.is_empty()) else {
+        // The default `dist` or the config's own output, as before.
+        return true;
+    };
+    let output = Path::new(output);
+    if output
+        .components()
+        .any(|part| matches!(part, std::path::Component::ParentDir))
+        || !output
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| matches!(name, "dist" | "build" | "out"))
+    {
+        return false;
+    }
+    let Some((directory, workspace)) = roots else {
+        return true;
+    };
+    // An absolute directory replaces the run directory, and `.` parts drop
+    // out as they do in a Python path.
+    let output: PathBuf = directory.join(output).components().collect();
+    let Some(parent) = output.parent() else {
+        return false;
+    };
+    let is_link = |path: &Path| {
+        std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
+    };
+    if is_link(&output) || std::fs::metadata(&output).is_ok_and(|metadata| !metadata.is_dir()) {
+        return false;
+    }
+    if parent == workspace {
+        return true;
+    }
+    let Ok(relative) = parent.strip_prefix(workspace) else {
+        return false;
+    };
+    if !std::fs::metadata(parent.join("package.json")).is_ok_and(|metadata| metadata.is_file()) {
+        return false;
+    }
+    let mut reached = workspace.to_path_buf();
+    relative.components().all(|part| {
+        let name = part.as_os_str().to_string_lossy();
+        reached.push(part);
+        !name.starts_with('.') && name != "node_modules" && !is_link(&reached)
+    })
 }
 
 #[cfg(unix)]
@@ -231,6 +325,9 @@ fn tool_script(
         }
         _ => return None,
     };
+    if reason == NODE_BUILD && !build_output_allowed(arguments, Some((directory, workspace))) {
+        return None;
+    }
     if arguments.iter().any(|word| {
         matches!(
             word.as_str(),

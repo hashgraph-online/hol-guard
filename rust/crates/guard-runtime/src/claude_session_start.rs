@@ -34,7 +34,8 @@
 //! does not answer, or a start that fails, replaces this process with the
 //! installer's Python SessionStart command (same argv, same environment,
 //! same stdin), so the Python transaction runs exactly as before inside the
-//! same hook timeout. This lane never writes settings, never reads or
+//! same hook timeout. Windows has no `exec`, so there it runs that command
+//! as a child on the same stdio and exits with its status. This lane never writes settings, never reads or
 //! writes the installation journal, and never mints the auth token.
 //!
 //! The config pins the runtime build (`PACKAGE_VERSION+BUILD_SHA`) that
@@ -284,6 +285,7 @@ pub(crate) fn fallback_process(argv: &[String]) -> Command {
 }
 
 /// Replace this process with the Python SessionStart command.
+#[cfg(unix)]
 fn hand_off(argv: &[String]) -> i32 {
     use std::os::unix::process::CommandExt;
 
@@ -293,6 +295,22 @@ fn hand_off(argv: &[String]) -> i32 {
         "claude session start fallback could not start: {error}"
     );
     1
+}
+
+/// Windows has no `exec`: run the Python SessionStart command with this
+/// process's stdin, stdout and stderr, and exit with its status.
+#[cfg(not(unix))]
+fn hand_off(argv: &[String]) -> i32 {
+    match fallback_process(argv).status() {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr(),
+                "claude session start fallback could not start: {error}"
+            );
+            1
+        }
+    }
 }
 
 /// Run the lane; the exit status when this process is not replaced.
@@ -325,6 +343,6 @@ pub(crate) fn run(config_text: &str) -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_session_start_tests.rs"]
 mod tests;

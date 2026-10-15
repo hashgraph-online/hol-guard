@@ -103,11 +103,8 @@ mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
-#[cfg(unix)]
 mod claude_session_start;
-#[cfg(unix)]
 mod claude_session_start_contract;
-#[cfg(unix)]
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
@@ -268,6 +265,7 @@ mod guard_store_approval_metadata;
 mod guard_store_approval_page_reads;
 mod guard_store_approval_queue;
 mod guard_store_approval_queue_item;
+mod guard_store_approval_queue_result;
 mod guard_store_approval_read_rows;
 mod guard_store_approval_read_scope;
 mod guard_store_approval_reads;
@@ -391,8 +389,6 @@ mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
-// Only the unix Claude session-start bridge records a fallback.
-#[cfg(unix)]
 mod hook_bridge_fallback;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;

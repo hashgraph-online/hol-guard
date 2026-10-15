@@ -55,9 +55,9 @@ runs:
     uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
     with:
       workspaces: rust
-      # Profile overrides are set inside the coverage recipe, after restore.
-      # Bind its dependency cache to that recipe to avoid perpetual flag misses.
-      shared-key: sonar-${{ hashFiles('scripts/ci/prepare_sonar_rust_coverage.sh') }}
+      # Profile overrides are set after restore. Bind the compiler recipe,
+      # not scheduling/report options that cannot affect dependency builds.
+      shared-key: sonar-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
       # A failing quality gate must not leave the next run to rebuild cold.
       cache-on-failure: true
       save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -68,9 +68,27 @@ runs:
     # and tests that expect a contained run see a review instead.
     uses: ./.github/actions/setup-bubblewrap
     if: inputs.has-token == 'true'
+  - name: Provision the checked test linker
+    if: inputs.has-token == 'true'
+    shell: bash
+    run: |
+      if ! command -v ld.lld >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends lld
+      fi
+  - name: Install instrumented compiler cache
+    uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+    with:
+      version: v0.18.0
+    if: inputs.has-token == 'true'
   - name: Generate current-checkout Rust coverage
     shell: bash
     run: bash scripts/ci/prepare_sonar_rust_coverage.sh
+    env:
+      SCCACHE_GHA_ENABLED: 'on'
+      SCCACHE_GHA_VERSION: sonar-rust-checked-v1
+      SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+      SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
     if: inputs.has-token == 'true'
   - name: Wait for successful current-attempt strict Clippy report
     id: clippy-selection

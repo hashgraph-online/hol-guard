@@ -231,15 +231,16 @@ class StoreApprovalsMixin:
             approval_gate_grant=approval_gate_grant,
             now=resolved_at,
         )
-        with self._connect() as connection:
-            return persist_queue_resolution(
-                connection,
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
+        return self._native_approval_read(
+            "resolve_request_with_queue_result",
+            {
+                "request_id": request_id,
+                "resolution_action": resolution_action,
+                "resolution_scope": resolution_scope,
+                "reason": reason,
+                "resolved_at": resolved_at,
+            },
+        )
 
     def resolve_matching_approval_requests(
         self,
@@ -278,30 +279,3 @@ class StoreApprovalsMixin:
                 "resolved_at": resolved_at,
             },
         )
-
-    def bulk_resolve_approval_requests(
-        self,
-        request_ids: list[str],
-        *,
-        resolution_action: str,
-        resolution_scope: str,
-        reason: str | None,
-        resolved_at: str,
-        approval_gate_grant: ApprovalGateGrant | None = None,
-    ) -> None:
-        require_request_resolution(
-            self.guard_home,
-            resolution_action=resolution_action,
-            resolution_scope=resolution_scope,
-            approval_gate_grant=approval_gate_grant,
-            now=resolved_at,
-        )
-        with self._connect() as connection:
-            persist_bulk_resolution(
-                connection,
-                request_ids,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )

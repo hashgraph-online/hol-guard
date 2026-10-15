@@ -28,7 +28,7 @@ _RUST_SOURCE = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "claude_ses
 _CURSOR_ENV = ("CURSOR_VERSION", "CURSOR_PROJECT_DIR", "CURSOR_TRACE_ID", "CURSOR_SESSION_ID", "CURSOR_TRANSCRIPT_PATH")
 _BOTH_FEATURES = (claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE, claude_hook_argv.NATIVE_CLAUDE_SESSION_START_FEATURE)
 
-posix_only = pytest.mark.skipif(os.name == "nt", reason="the native SessionStart lane is POSIX only")
+posix_only = pytest.mark.skipif(os.name == "nt", reason="these lane fixtures are POSIX only")
 
 
 def _status(features: tuple[str, ...], path: Path) -> NativeRuntimeStatus:

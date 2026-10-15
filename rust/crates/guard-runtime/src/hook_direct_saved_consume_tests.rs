@@ -50,6 +50,44 @@ fn a_missing_storage_gate_defers() {
     assert!(storage_gate(&home).is_ok());
 }
 
+/// The daemon's Windows hold, `msvcrt.locking` on the gate's first byte,
+/// keeps the resident out until it is released.
+#[cfg(windows)]
+#[test]
+fn a_daemon_storage_hold_defers_on_windows() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+    let home = std::env::temp_dir().join(format!("hg-consume-hold-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let gate = home.join(STORAGE_GATE_FILE_NAME);
+    std::fs::write(&gate, b"0").unwrap();
+    let script = "import msvcrt, sys\n\
+        handle = open(sys.argv[1], 'a+b')\n\
+        handle.seek(0)\n\
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBRLCK, 1)\n\
+        print('held', flush=True)\n\
+        sys.stdin.read()\n";
+    let mut daemon = Command::new("python")
+        .args(["-c", script])
+        .arg(&gate)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    BufReader::new(daemon.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    assert_eq!(line.trim(), "held");
+    assert!(matches!(
+        storage_gate(&home),
+        Err(HookDirectDefer::SavedDecision)
+    ));
+    daemon.stdin.take().unwrap().write_all(b"").unwrap();
+    assert!(daemon.wait().unwrap().success());
+    assert!(storage_gate(&home).is_ok());
+}
+
 #[cfg(unix)]
 #[test]
 fn store_files_stay_owner_only() {

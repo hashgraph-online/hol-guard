@@ -13,15 +13,14 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run_rust_coverage(
-    tmp_path: Path, mode: str = "", fail_command: str = ""
-) -> subprocess.CompletedProcess[str]:
+def _run_rust_coverage(tmp_path: Path, mode: str = "", fail_command: str = "") -> subprocess.CompletedProcess[str]:
     bash = shutil.which("bash")
     if os.name == "nt" or bash is None:
         pytest.skip("Rust coverage runs on an Ubuntu Bash runner")
     script = tmp_path / "scripts/ci/prepare_sonar_rust_coverage.sh"
     script.parent.mkdir(parents=True)
     shutil.copyfile(ROOT / "scripts/ci/prepare_sonar_rust_coverage.sh", script)
+    shutil.copyfile(ROOT / "scripts/ci/sonar_rust_profile.sh", script.with_name("sonar_rust_profile.sh"))
     (tmp_path / "rust").mkdir()
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -33,25 +32,25 @@ def _run_rust_coverage(
         stub.write_text(
             f"#!{bash}\n"
             'command="${0##*/} $*"\n'
-            'printf "%s|%s|%s|%s|%s\\n" "$command" "${CARGO_PROFILE_TEST_OPT_LEVEL:-}" '
+            'printf "%s|%s|%s|%s|%s|%s\\n" "$command" "${CARGO_PROFILE_TEST_OPT_LEVEL:-}" '
             '"${CARGO_PROFILE_TEST_DEBUG:-}" "${CARGO_PROFILE_TEST_DEBUG_ASSERTIONS:-}" '
-            '"${CARGO_PROFILE_TEST_OVERFLOW_CHECKS:-}" >> "$COMMAND_LOG"\n'
+            '"${CARGO_PROFILE_TEST_OVERFLOW_CHECKS:-}" "${LLVM_PROFILE_FILE_NAME:-}" >> "$COMMAND_LOG"\n'
             'if [[ -n "$FAIL_COMMAND" && "$command" == "$FAIL_COMMAND"* ]]; then exit 7; fi\n'
             'if [[ "${0##*/}" == python ]]; then echo 1.88.0; exit 0; fi\n'
             'if [[ "$*" == *"llvm-cov --version" ]]; then\n'
             '  if [[ "$COVERAGE_MODE" != install ]]; then echo "cargo-llvm-cov 0.6.21"; fi\n'
-            '  exit 0\n'
-            'fi\n'
+            "  exit 0\n"
+            "fi\n"
             'if [[ "$*" == *"--output-path"* ]]; then\n'
             '  if [[ -e "$REPORT" ]]; then echo "stale report survived" >&2; exit 8; fi\n'
             '  if [[ "$COVERAGE_MODE" == failed-tests ]]; then exit 7; fi\n'
             '  case "$COVERAGE_MODE" in\n'
-            '    missing) ;;\n'
+            "    missing) ;;\n"
             '    empty) : > "$REPORT" ;;\n'
             '    malformed) echo "not LCOV" > "$REPORT" ;;\n'
             '    *) printf "SF:crates/example/src/lib.rs\\nDA:1,1\\nend_of_record\\n" > "$REPORT" ;;\n'
-            '  esac\n'
-            'fi\n',
+            "  esac\n"
+            "fi\n",
             encoding="utf-8",
         )
         stub.chmod(0o700)
@@ -113,18 +112,34 @@ def test_coverage_retains_all_checked_tests_and_uses_ci_scheduling(tmp_path: Pat
     lines = (tmp_path / "commands.log").read_text().splitlines()
     clean = next(index for index, line in enumerate(lines) if "llvm-cov clean --workspace" in line)
     run = next(index for index, line in enumerate(lines) if "llvm-cov nextest" in line)
-    command, optimization, debug, assertions, overflow = lines[run].split("|")
+    command, optimization, debug, assertions, overflow, profile_file = lines[run].split("|")
     assert clean < run
     assert "--locked --workspace --all-targets" in command
     assert "--profile ci --test-threads 4 --retries 0 --no-fail-fast" in command
     assert "--lcov --output-path" in command
     assert (optimization, debug, assertions, overflow) == ("1", "line-tables-only", "true", "true")
+    assert profile_file == "guard-%8m.profraw"
     assert "--filter" not in command and "--ignore" not in command
 
 
 def test_dependency_cache_tracks_the_instrumented_build_profile() -> None:
     action = yaml.safe_load((ROOT / ".github/actions/ci-job-sonar/action.yml").read_text())
     cache = next(step for step in action["runs"]["steps"] if step.get("name") == "Cache Rust analysis dependencies")
-    assert "hashFiles('scripts/ci/prepare_sonar_rust_coverage.sh')" in cache["with"]["shared-key"]
+    assert (
+        "hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml')"
+        in cache["with"]["shared-key"]
+    )
     assert cache["with"]["cache-on-failure"] is True
     assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+    run = next(
+        step for step in action["runs"]["steps"] if step.get("name") == "Generate current-checkout Rust coverage"
+    )
+    assert (
+        run["env"]["SCCACHE_GHA_RW_MODE"]
+        == "${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}"
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix Cargo wrappers require executable mode bits")
+def test_coverage_workspace_compiler_wrapper_is_executable() -> None:
+    assert os.access(ROOT / "scripts/ci/rust_test_compiler.sh", os.X_OK)

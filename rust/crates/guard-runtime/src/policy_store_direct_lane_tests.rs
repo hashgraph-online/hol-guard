@@ -395,10 +395,6 @@ fn malformed_binding_rejects_the_push_without_installing_it() {
 
 #[test]
 fn defer_reasons_name_the_daemon_path() {
-    assert_eq!(
-        DirectLaneDefer::Unsupported.code(),
-        "direct_lane_unsupported"
-    );
     assert_eq!(DirectLaneDefer::Unbound.code(), "direct_lane_unbound");
     assert_eq!(
         DirectLaneDefer::SnapshotUnavailable.code(),

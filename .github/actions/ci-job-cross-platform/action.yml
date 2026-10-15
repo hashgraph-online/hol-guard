@@ -63,6 +63,10 @@ runs:
       HOL_GUARD_NATIVE_REGRESSION: "1"
     run: uv run --no-sync pytest tests/test_native_skill_directory_portable.py --tb=short
     shell: pwsh
+  - name: Run Windows direct-lane ACK regressions
+    if: runner.os == 'Windows'
+    run: uv run --no-sync pytest tests/test_native_policy_snapshot_direct_lane_windows.py --tb=short
+    shell: pwsh
   - name: Run Windows Codex hook process-tree regressions
     if: runner.os == 'Windows'
     run: uv run --no-sync pytest tests/test_codex_hook_fallback_isolation.py -k "isolated_process_timeout_kills_descendants

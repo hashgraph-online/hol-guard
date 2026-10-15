@@ -25,6 +25,7 @@ use crate::guard_store_approval_backfill;
 use crate::guard_store_approval_metadata as approval_metadata;
 use crate::guard_store_approval_page_reads as approval_pages;
 use crate::guard_store_approval_queue::queue_blocked_approvals;
+use crate::guard_store_approval_queue_result as queue_result;
 use crate::guard_store_approval_reads as approval_reads;
 use crate::guard_store_approval_resolve::{
     resolve_approval_request, resolve_harness_native_approval_request,
@@ -327,6 +328,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "resolve_approval_request"
         | "resolve_one_request_only"
         | "resolve_harness_native_approval_request"
+        | "resolve_request_with_queue_result"
+        | "resolve_native_workspace_review_request"
         | "resolve_matching_duplicate_requests"
         | "mark_approval_desktop_notified"
         | "add_approval_request"
@@ -589,6 +592,12 @@ fn dispatch(
         "resolve_one_request_only" => resolve_approval_request(connection, guard_home, args, true),
         "resolve_harness_native_approval_request" => {
             resolve_harness_native_approval_request(connection, guard_home, args)
+        }
+        "resolve_request_with_queue_result" => {
+            queue_result::resolve_request_with_queue_result(connection, guard_home, args)
+        }
+        "resolve_native_workspace_review_request" => {
+            queue_result::resolve_native_workspace_review_request(connection, guard_home, args)
         }
         "resolve_matching_duplicate_requests" => {
             resolve_matching_duplicate_requests(connection, source, guard_home, args)

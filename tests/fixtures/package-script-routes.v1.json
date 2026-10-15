@@ -289,6 +289,149 @@
       "command": "bun test",
       "entries": [],
       "reason": null
+    },
+    {
+      "name": "outdir-dist",
+      "scripts": {
+        "build": "vite build --outDir dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-equals-build",
+      "scripts": {
+        "build": "vite build --outDir=build"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-dot-out",
+      "scripts": {
+        "build": "vite build --outDir ./out/"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-empty",
+      "scripts": {
+        "build": "vite build --outDir="
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-last-wins",
+      "scripts": {
+        "build": "vite build --outDir=/tmp/out --outDir dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-absolute",
+      "scripts": {
+        "build": "vite build --outDir=/tmp/out"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-absolute-split",
+      "scripts": {
+        "build": "vite build --outDir /tmp/out"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-absolute-dist",
+      "scripts": {
+        "build": "vite build --outDir=/tmp/dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-custom",
+      "scripts": {
+        "build": "vite build --outDir=public"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-parent",
+      "scripts": {
+        "build": "vite build --outDir ../dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-hidden",
+      "scripts": {
+        "build": "vite build --outDir .cache/dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-nested",
+      "scripts": {
+        "build": "vite build --outDir src/dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-missing",
+      "scripts": {
+        "build": "vite build --outDir"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
     }
   ]
 }

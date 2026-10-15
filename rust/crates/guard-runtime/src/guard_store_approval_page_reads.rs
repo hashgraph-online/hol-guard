@@ -16,7 +16,8 @@ use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
 use crate::guard_store_json::dumps_sorted;
 use crate::guard_store_silent_review::{py_str, raw};
 
-const SUMMARY_COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact_type, \
+pub(crate) const SUMMARY_COLUMNS: &str =
+    "request_id, harness, artifact_id, artifact_name, artifact_type, \
      policy_action, decision_v2_json, action_envelope_json, changed_fields_json, source_scope, \
      config_path, workspace, launch_target, risk_summary, risk_headline, action_identity, \
      queue_group_id, dedupe_count, raw_command_text, fallback_cli_command, \
@@ -304,7 +305,7 @@ fn page_cursor(item: &Value) -> StoreResult<String> {
 }
 
 /// `_row_to_approval_summary`, field by field in Python's order.
-fn summary(row: &Row, projection: &Value) -> StoreResult<Map<String, Value>> {
+pub(crate) fn summary(row: &Row, projection: &Value) -> StoreResult<Map<String, Value>> {
     let (launch_target, _) = browser_launch_target(raw(row, "launch_target"));
     let envelope = projection["action_envelope_json"].as_object();
     let text = |name: &str| py_str(row.get(name)).map(Value::String);

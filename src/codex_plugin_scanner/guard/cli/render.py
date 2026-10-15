@@ -925,6 +925,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if settings_url:
             summary.add_row("Settings URL", str(settings_url))
         console.print(Panel(summary, title="Guard notification setup", border_style="cyan"))
+        print_approval_gate_nudge(console, payload)
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
         name, protection_off = _protection_status_copy(payload, "protected")
@@ -959,6 +960,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 textwrap.shorten(blind_spots, width=60),
             )
         console.print(table)
+        print_approval_gate_nudge(console, payload)
     else:
         warnings = _coerce_string_list(payload.get("warnings"))
         summary = Table.grid(padding=(0, 1))

@@ -44,7 +44,7 @@ fn load(
     Ok(Some((row, blocked)))
 }
 
-fn set_resolution(
+pub(crate) fn set_resolution(
     connection: &Connection,
     request_id: &str,
     resolution: [Value; 4],
@@ -142,6 +142,27 @@ pub(crate) fn resolve_matching_duplicate_requests(
     let Some(queue_group_id) = args.opt_str("queue_group_id")? else {
         return Ok(Value::Array(Vec::new()));
     };
+    let ids = resolve_duplicates(
+        connection,
+        guard_home,
+        queue_group_id,
+        Value::from(oauth_source(source)),
+        args.str("request_id")?,
+        &resolution,
+    )?;
+    Ok(Value::from(ids))
+}
+
+/// Resolves every other resolvable pending request of the queue group and
+/// OAuth source (`None` matches a null source) and returns their ids.
+pub(crate) fn resolve_duplicates(
+    connection: &Connection,
+    guard_home: &str,
+    queue_group_id: &str,
+    oauth_source: Value,
+    request_id: &str,
+    resolution: &[Value; 4],
+) -> StoreResult<Vec<String>> {
     let rows = query_all(
         connection,
         &format!(
@@ -151,8 +172,8 @@ pub(crate) fn resolve_matching_duplicate_requests(
         ),
         &[
             Value::from(queue_group_id),
-            Value::from(oauth_source(source)),
-            Value::from(args.str("request_id")?),
+            oauth_source,
+            Value::from(request_id),
         ],
     )?;
     let ids = resolvable_ids(&rows, guard_home)?;
@@ -161,8 +182,8 @@ pub(crate) fn resolve_matching_duplicate_requests(
     if serde_json::to_vec(&ids).map_or(usize::MAX, |bytes| bytes.len()) > REPLY_LIMIT_BYTES {
         return value_error("approval_duplicate_group_too_large");
     }
-    resolve_ids(connection, &ids, &resolution)?;
-    Ok(Value::from(ids))
+    resolve_ids(connection, &ids, resolution)?;
+    Ok(ids)
 }
 
 #[cfg(all(test, unix))]
