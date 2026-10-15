@@ -116,3 +116,58 @@ fn work_before_a_bootstrapped_init_is_sliced_from_the_raw_bytes() {
     let raw = "cat <<'EOF' > notes.txt\nhello && git init\nEOF\ngit init";
     assert!(contained_shape(raw, &project(raw).unwrap(), &ws).is_none());
 }
+
+/// The execution sink plans the exact text the edge classified, pipes,
+/// stderr folding and status reads included, so every such call the edge
+/// sends to the workspace sandbox is one the plan accepts as issued.
+#[cfg(unix)]
+#[test]
+fn the_sink_plans_every_wrapped_call_the_edge_contains() {
+    use crate::pretool::workspace_contained_tests::{reason, workspace, CONTAINED};
+    let ws = workspace("redirect-wrapped", true);
+    for command in ["npm run build 2>&1", "npm run build 2>&1 | tail -20"] {
+        assert!(
+            crate::restricted_pytest::workspace_exact_shape(command, &ws).is_some(),
+            "{command}"
+        );
+    }
+    for command in [
+        "npm run build 2>&1",
+        "npm run build 2>&1 | tail -20",
+        "npm run lint | head -50",
+        "python3 app.py | tee log.txt",
+        "npm run build; echo \"EXIT:$?\"",
+        "python3 app.py 2>&1 | head -40; echo $?",
+    ] {
+        if reason("claude-code", command, &ws, true) == CONTAINED {
+            assert!(
+                crate::restricted_pytest::workspace_exact_shape(command, &ws).is_some(),
+                "{command}"
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_sink_plans_package_directory_calls_whole_from_the_root() {
+    use crate::pretool::workspace_contained_tests::workspace;
+    let ws = workspace("package-directory", true);
+    std::fs::create_dir_all(ws.join("web")).unwrap();
+    std::fs::write(ws.join("web/package.json"), "{}").unwrap();
+    for command in [
+        "bun --cwd web run build",
+        "yarn --cwd web test",
+        "npm --prefix web run lint",
+        "pnpm --dir=web run build 2>&1 | tail -20",
+        "pnpm -C web run build",
+        "npm -C web test",
+    ] {
+        // Planned whatever the host's containment, so the check never
+        // depends on the edge classifying the call as contained first.
+        assert!(
+            crate::restricted_pytest::workspace_exact_shape(command, &ws).is_some(),
+            "{command}"
+        );
+    }
+}

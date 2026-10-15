@@ -218,7 +218,11 @@ def pause_native_pre_tool_for_approval(
             retry_reuses_approval=identity is not None,
             exact_action_allowable=exact_token is not None,
         )
-        raw_url = queued.get("approval_url") if queued is not None else None
+        # Approving a row that is neither bound to the retry nor eligible
+        # for an exact-action Always cannot let the agent run the action,
+        # so the reason does not send the user to approve it.
+        approval_can_unblock = identity is not None or exact_token is not None
+        raw_url = queued.get("approval_url") if queued is not None and approval_can_unblock else None
         if isinstance(raw_url, str) and raw_url.strip():
             # The agent passes the link on, so the user can open the queued row.
             reason = native_review_reason(canonical_harness(harness), reason, raw_url.strip(), guard_home=guard_home)

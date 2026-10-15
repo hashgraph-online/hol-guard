@@ -259,6 +259,14 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries added to ~/.claude/settings.json",
+                *(
+                    [
+                        f"Hooks are installed globally (not in {context.workspace_dir}/.claude); "
+                        "the workspace only scopes the hook URL and Guard policy."
+                    ]
+                    if context.workspace_dir is not None
+                    else []
+                ),
                 *_manifest_notes(shim_manifest),
             ],
         }

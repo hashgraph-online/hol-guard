@@ -3,7 +3,9 @@ use super::BoundaryResult as Result;
 use std::collections::BTreeMap;
 use std::path::{Component, PathBuf};
 
+#[cfg(target_os = "linux")]
 pub(super) const BIND: u64 = 4096;
+#[cfg(target_os = "linux")]
 pub(super) const REMOUNT: u64 = 32;
 pub(super) const READONLY: u64 = 1;
 pub(super) const NOSUID: u64 = 2;

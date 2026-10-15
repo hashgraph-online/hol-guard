@@ -8,33 +8,22 @@ T721: different workspaces still get separate approval requests.
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 import uuid
 from dataclasses import replace
 from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
     count_approval_requests,
     get_approval_request,
     list_approval_requests,
 )
+from tests.native_approval_writes import add_approval_request, native_approval_connection
 
 
 def _make_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    conn.execute("pragma journal_mode=wal")
-    conn.execute(approval_schema_statement())
-    for stmt in approval_index_statements():
-        conn.execute(stmt)
-    return conn
+    return native_approval_connection()
 
 
 def _make_request(

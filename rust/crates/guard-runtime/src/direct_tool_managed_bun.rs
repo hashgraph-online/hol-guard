@@ -140,7 +140,7 @@ fn path_text(path: &Path) -> String {
     #[cfg(windows)]
     {
         if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
-            return format!(r"\\{}", rest);
+            return format!(r"\\{rest}");
         }
         if let Some(rest) = text.strip_prefix(r"\\?\") {
             return rest.to_owned();

@@ -8,11 +8,9 @@ import logging
 import re
 import sqlite3
 from collections.abc import Sequence
-from contextlib import suppress
 from pathlib import Path
 
 from .approval_resolution import approval_resolution_block_reason
-from .models import GuardApprovalRequest
 from .native_approval_queue_identity import (
     ApprovalQueueIdentityUnavailableError,
     connection_guard_home,
@@ -137,20 +135,6 @@ def approval_schema_statement() -> str:
           resolved_at text
         )
         """
-
-
-def add_approval_request(
-    connection: sqlite3.Connection,
-    request: GuardApprovalRequest,
-    now: str,
-    *,
-    oauth_source: str = "default",
-    guard_home: Path | None = None,
-) -> str:
-    """Compatibility facade for the focused approval write service."""
-    from .store_approval_writes import add_approval_request as persist_approval_request
-
-    return persist_approval_request(connection, request, now, oauth_source=oauth_source, guard_home=guard_home)
 
 
 def list_approval_requests(
@@ -717,34 +701,6 @@ def _backfill_queue_counters(connection: sqlite3.Connection) -> None:
     )
 
 
-_QUEUE_BACKFILLED_HOMES: set[str] = set()
-
-
-def backfill_queue_identities_once(connection: sqlite3.Connection, guard_home: Path) -> None:
-    """Backfill legacy rows the schema migration could not identify without a resident.
-
-    The migration runs inside store initialization, before the home has a
-    verifier key. The first write that reaches the resident finishes the job,
-    once per home and process, and never inside a caller-owned transaction.
-    The home is remembered when the scan finishes without an unavailable
-    resident, including when a row was rejected and left unidentified. An
-    unavailable resident or a sqlite failure leaves the home retryable.
-    """
-
-    key = str(guard_home)
-    if key in _QUEUE_BACKFILLED_HOMES or connection.in_transaction or connection.row_factory is not sqlite3.Row:
-        return
-    try:
-        complete = backfill_approval_queue_columns(connection, guard_home=guard_home, commit_batches=True)
-    except sqlite3.Error:
-        logger.warning("approval queue identity backfill rolled back", exc_info=True)
-        with suppress(sqlite3.Error):
-            connection.rollback()
-        return
-    if complete:
-        _QUEUE_BACKFILLED_HOMES.add(key)
-
-
 def _legacy_queue_rows(connection: sqlite3.Connection, *, after: tuple[str, str] | None) -> list[sqlite3.Row]:
     predicate = ""
     parameters: list[object] = []
@@ -852,26 +808,13 @@ def _apply_backfill_updates(
         )
 
 
-def _commit_backfill_batch(connection: sqlite3.Connection, *, commit_batches: bool) -> None:
-    if commit_batches:
-        connection.commit()
+def backfill_approval_queue_columns(connection: sqlite3.Connection) -> bool:
+    """Fill legacy queue identities inside the schema migration's transaction.
 
-
-def backfill_approval_queue_columns(
-    connection: sqlite3.Connection,
-    *,
-    guard_home: Path | None = None,
-    commit_batches: bool = False,
-) -> bool:
-    """Fill legacy queue identities.
-
-    Returns True when this scan should not be repeated: every selected row was
-    identified, or the only rows left unidentified were rejected. Returns False
-    when the resident was unavailable or no home could be resolved, so a later
-    write retries. ``commit_batches`` commits each batch before the next
-    resident call so the write lock is not held across the lookup. Schema
-    migration leaves it false and keeps its own transaction. A rejected row
-    stays unidentified and is skipped for this call; later rows still run.
+    Returns True when every selected row was identified, or the only rows left
+    unidentified were rejected. Returns False when the resident was unavailable
+    or no home could be resolved; the resident's queue write fills the rest. A
+    rejected row stays unidentified and is skipped; later rows still run.
     """
 
     complete = True
@@ -885,22 +828,18 @@ def backfill_approval_queue_columns(
         if missing:
             # The identity is derived natively. Without a resident the rows keep
             # their legacy shape, which the duplicate lookup already handles.
-            resolved_home = guard_home if guard_home is not None else connection_guard_home(connection)
+            resolved_home = connection_guard_home(connection)
             if resolved_home is None:
                 _backfill_queue_counters(connection)
-                _commit_backfill_batch(connection, commit_batches=commit_batches)
                 return False
             found, unavailable = _queue_identities_for_rows(missing, resolved_home)
             identities = found
             _apply_backfill_updates(connection, rows, identities)
-            _commit_backfill_batch(connection, commit_batches=commit_batches)
             if unavailable:
                 _backfill_queue_counters(connection)
-                _commit_backfill_batch(connection, commit_batches=commit_batches)
                 return False
         else:
             _apply_backfill_updates(connection, rows, identities)
-            _commit_backfill_batch(connection, commit_batches=commit_batches)
         after = (str(rows[-1]["created_at"]), str(rows[-1]["request_id"]))
 
 

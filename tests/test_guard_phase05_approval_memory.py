@@ -8,14 +8,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import store_approval_writes
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.native_approval_queue_identity import (
-    QueueIdentity,
     native_approval_queue_identities,
     queue_identity_item,
 )
@@ -1123,17 +1121,17 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
 def test_resolution_without_any_integrity_backend_names_the_missing_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The native queue write provisions the verifier key for its home; this
+    # test needs a home that never had one, so the row is queued elsewhere and
+    # copied in.
+    writer = GuardStore(tmp_path / "writer-home")
+    shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
+    writer.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
     store = _store(tmp_path)
     store._policy_integrity_secret_store = None
-    # Queue identity provisions the verifier key for the home; this test needs
-    # a home that never had one, so the identity is supplied directly.
-    monkeypatch.setattr(
-        store_approval_writes,
-        "native_approval_queue_identities",
-        lambda items, *, guard_home: [QueueIdentity("cat ~/.npmrc", "action", "approval-group:v1:test")],
-    )
-    shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
-    store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("attach database ? as writer", (str(writer.path),))
+        connection.execute("insert into approval_requests select * from writer.approval_requests")
 
     with pytest.raises(ApprovalResolutionPlanUnavailableError, match="integrity_unavailable"):
         apply_approval_resolution(

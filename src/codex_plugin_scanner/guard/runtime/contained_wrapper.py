@@ -214,6 +214,23 @@ def _joined_list(tokens: list[tuple[str, bool]]) -> str | None:
     return " && ".join(shlex.join(segment) for segment in segments)
 
 
+_INLINE_PROGRAM_FLAGS = {"node": ("-e", "--eval"), "nodejs": ("-e", "--eval"), "bun": ("-e", "--eval")}
+
+
+def _inline_program_index(tokens: list[tuple[str, bool]]) -> int | None:
+    """Where a bare `node -e <program>` or `python3 -c <program>` holds its program, else None.
+
+    That word is one argument the sandbox passes to the interpreter, never to a
+    shell, and the peeled core is re-authorized as quoted text. So `;` or `|`
+    inside its quotes (`node -e "a(); b()"`) is code, not an operator.
+    """
+    if len(tokens) != 3 or any(operator for _value, operator in tokens):
+        return None
+    name, flag = tokens[0][0], tokens[1][0]
+    flags = _INLINE_PROGRAM_FLAGS.get(name, ("-c",) if name in {"python", "python3"} else ())
+    return 2 if flag in flags else None
+
+
 def peel_contained_wrapper(
     command: str, *, workspace: Path, home: Path | None = None, cwd: Path | None = None
 ) -> tuple[str, Path, OutputFilter | None] | None:
@@ -307,7 +324,15 @@ def peel_contained_wrapper(
         output = replace(output or OutputFilter("all", 0, False), status_label=label)
     if not wrapped:
         return None
-    if not exact or not tokens or any(operator or set(value) & _ARGUMENT_REJECT for value, operator in tokens):
+    program = _inline_program_index(tokens)
+    if (
+        not exact
+        or not tokens
+        or any(
+            operator or (index != program and set(value) & _ARGUMENT_REJECT)
+            for index, (value, operator) in enumerate(tokens)
+        )
+    ):
         raise ValueError("unsupported wrapper shape")
     return shlex.join(value for value, _operator in tokens), directory, output
 

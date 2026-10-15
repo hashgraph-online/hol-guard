@@ -12,11 +12,12 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolResultV1};
 use std::path::Path;
 
 /// Move `projected`, the contained verdict for `command` without its
-/// settings, to the workspace sandbox when its launcher admits `command` as
-/// written. Returns whether it did.
+/// settings (`projected_command`), to the workspace sandbox when its launcher
+/// admits `command` as written. Returns whether it did.
 pub(in crate::pretool) fn carry_settings(
     projected: &mut PreToolResultV1,
     command: &str,
+    projected_command: &str,
     context: PathContext<'_>,
     execution_environment: Option<&GuardExecutionEnvironmentV1>,
     harness: &str,
@@ -35,6 +36,13 @@ pub(in crate::pretool) fn carry_settings(
     else {
         return false;
     };
+    // A narrower profile claimed the command before the workspace route could
+    // apply its runner gate, so the upgrade applies that gate here.
+    if projected.reason_code != super::REASON
+        && !super::runner::runners_admitted(projected_command, &workspace, home)
+    {
+        return false;
+    }
     let admitted =
         super::super::workspace_git_environment::session_git_variables(execution_environment)
             .and_then(|variables| {

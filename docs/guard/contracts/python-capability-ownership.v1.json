@@ -1360,7 +1360,6 @@
     "_SHELL_FUNCTION_DEFINITION",
     "_SHELL_ALIAS_DEFINITION",
     "_DEFERRED_GITHUB_EFFECT",
-    "GitHubShellAnalysis",
     "parse_env_wrapper"
    ],
    "native_replacements": [

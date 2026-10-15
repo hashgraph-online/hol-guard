@@ -128,6 +128,11 @@ fn proven_no_scripts_install_skips_only_the_package_script_floor() {
         assert!(held.reason.contains(&format!("`{form}`")), "{form}");
         assert_eq!(apply(form).reason_code, "native_package_review", "{form}");
     }
+    // Every package command reaches here as an install, so the advice
+    // follows the command text: a script run gets none.
+    let script = apply("bun scripts/report.ts --json");
+    assert_eq!(script.reason_code, "native_policy_reapproval_required");
+    assert!(!script.reason.contains("--ignore-scripts"));
     // Commands that are not installs get no install advice.
     let mut build = review.clone();
     build.action.operation = PreToolOperationV1::Execute;

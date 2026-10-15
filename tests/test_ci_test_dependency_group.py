@@ -63,6 +63,26 @@ def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source
     assert "--no-deps evaluation-dist/*.whl" in commands
 
 
+def test_staged_evaluator_compiler_uses_a_fast_non_shipping_profile() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/evaluation-wheel-ci.yml").read_text())
+    environment = workflow["env"]
+    assert environment["CARGO_PROFILE_RELEASE_OPT_LEVEL"] == "0"
+    assert environment["CARGO_PROFILE_RELEASE_LTO"] == "false"
+    assert environment["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] == "16"
+    job = workflow["jobs"]["staged-evaluator-wheel"]
+    assert job["timeout-minutes"] == 5
+    assert job["strategy"]["fail-fast"] is False
+    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-15"}
+    verification = next(step for step in job["steps"] if step.get("name", "").startswith("Verify installed"))
+    assert "-I scripts/ci/check_evaluation_wheel.py" in verification["run"]
+    assert not verification.get("continue-on-error", False)
+    # The distribution profile and its independent size gate remain authoritative.
+    release = (ROOT / "rust/Cargo.toml").read_text().split("[profile.release]", 1)[1].split("[", 1)[0]
+    assert 'opt-level = "s"' in release
+    assert 'lto = "fat"' in release
+    assert "codegen-units = 1" in release
+
+
 def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     """Verify coverage cache keeps prebuilt wheels for read only workers."""
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/setup-ci-python/action.yml").read_text()))

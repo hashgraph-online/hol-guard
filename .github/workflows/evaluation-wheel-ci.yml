@@ -12,6 +12,10 @@ permissions:
 
 env:
   UV_HTTP_TIMEOUT: "120"
+  # This compiler generates wheel data; it is not a shipped enforcement binary.
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: "0"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
 concurrency:
   group: evaluation-wheel-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
@@ -21,7 +25,7 @@ jobs:
   staged-evaluator-wheel:
     name: Staged evaluator wheel (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:

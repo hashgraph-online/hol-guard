@@ -82,5 +82,17 @@ name = "pretool_git_push_unregistered"
 path = "tests/pretool_git_push_unregistered.rs"
 
 [[test]]
+name = "pretool_worktree_cd_windows"
+path = "tests/pretool_worktree_cd_windows.rs"
+
+[[test]]
 name = "shim_admin_vectors"
 path = "tests/shim_admin_vectors.rs"
+
+[[test]]
+name = "pretool_rg_hidden_whitelist"
+path = "tests/pretool_rg_hidden_whitelist.rs"
+
+[[test]]
+name = "pretool_search_pattern_options"
+path = "tests/pretool_search_pattern_options.rs"

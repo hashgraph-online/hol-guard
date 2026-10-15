@@ -359,7 +359,8 @@ fn an_explicit_git_allow_settles_only_known_built_ins() {
         assert_ne!(result.minimum_action, "allow", "{command}");
     }
     // The fixture has no repository, so read-only commands may still wait on
-    // the Git context probes; they must not be held as unmodeled.
+    // the Git context probes; they must not be held as unmodeled. macOS runs a
+    // helper-context review in the Seatbelt git-readonly profile instead.
     for command in [
         "git status",
         "git log --oneline",
@@ -367,8 +368,12 @@ fn an_explicit_git_allow_settles_only_known_built_ins() {
         "git config user.name x",
     ] {
         let result = evaluate(&enabled, command);
+        let contained = cfg!(target_os = "macos")
+            && result.minimum_action == "sandbox-required"
+            && result.reason_code == "native_git_readonly_containment_required";
         assert!(
             result.minimum_action == "allow"
+                || contained
                 || (result.reason_code.starts_with("native_git_")
                     && result.reason_code.ends_with("_context_review")),
             "{command}: {} {}",

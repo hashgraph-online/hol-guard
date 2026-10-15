@@ -7,8 +7,6 @@ import sqlite3
 from hashlib import sha256
 from typing import cast
 
-from .review_event_integrity import review_event_payload_digest
-
 # pyright: reportAny=false, reportUnusedCallResult=false
 
 
@@ -58,81 +56,6 @@ def load_review_oauth_binding(connection: sqlite3.Connection, source: str) -> di
         "machine_id": str(machine_id).strip(),
         "machine_installation_id": str(installation_id).strip(),
     }
-
-
-def bind_review_events_for_request(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    oauth_source: str,
-) -> bool:
-    """Bind newly written events inside the approval write transaction."""
-
-    binding = load_review_oauth_binding(connection, oauth_source)
-    if binding is None:
-        return False
-    candidate = connection.execute(
-        """
-        select stream_sequence, payload_json from guard_review_outbox_events
-        where local_request_id = ?
-          and request_sequence = 1
-          and oauth_source = ?
-          and binding_status = 'quarantined'
-          and oauth_subject_hash is null
-          and workspace_id is null
-          and machine_id is null
-          and machine_installation_id is null
-          and not exists (
-            select 1 from guard_review_outbox_events as later
-            where later.local_request_id = guard_review_outbox_events.local_request_id
-              and later.request_sequence > 1
-          )
-        """,
-        (request_id, oauth_source),
-    ).fetchone()
-    if candidate is None:
-        return False
-    payload_hash = review_event_payload_digest(
-        str(candidate["payload_json"]),
-        oauth_source=oauth_source,
-        oauth_subject_hash=binding["oauth_subject_hash"],
-        workspace_id=binding["workspace_id"],
-        machine_id=binding["machine_id"],
-        machine_installation_id=binding["machine_installation_id"],
-    )
-    connection.execute(
-        """
-        update guard_review_outbox_events
-        set payload_hash = ?, oauth_subject_hash = ?, workspace_id = ?, machine_id = ?,
-            machine_installation_id = ?, binding_status = 'ready', quarantine_reason = null
-        where stream_sequence = ?
-        """,
-        (
-            payload_hash,
-            binding["oauth_subject_hash"],
-            binding["workspace_id"],
-            binding["machine_id"],
-            binding["machine_installation_id"],
-            candidate["stream_sequence"],
-        ),
-    )
-    connection.execute(
-        """
-        update guard_review_outbox_request_sequences
-        set oauth_source = ?, oauth_subject_hash = ?, workspace_id = ?,
-            machine_id = ?, machine_installation_id = ?
-        where local_request_id = ?
-        """,
-        (
-            oauth_source,
-            binding["oauth_subject_hash"],
-            binding["workspace_id"],
-            binding["machine_id"],
-            binding["machine_installation_id"],
-            request_id,
-        ),
-    )
-    return True
 
 
 def normalized_delivery_binding(

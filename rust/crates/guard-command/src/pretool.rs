@@ -33,14 +33,17 @@ pub(crate) mod kubectl_reads;
 pub(crate) mod port_probes;
 mod workspace_contained;
 #[cfg(unix)]
+pub(crate) use workspace_contained::Shape;
+#[cfg(unix)]
 pub(crate) use workspace_contained::PROFILE as WORKSPACE_PROFILE;
-pub(crate) use workspace_contained::{command_shape, init_arguments, Shape};
+pub(crate) use workspace_contained::{command_shape, init_arguments};
 pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
 mod awk_reads;
 mod base64_reads;
+mod brace_words;
 mod brew_reads;
 mod bun_eval;
 mod chain_temporary;
@@ -128,7 +131,7 @@ mod wrangler_reads;
 
 pub mod generic;
 mod package_scripts_disabled;
-pub use package_scripts_disabled::no_script_install_command;
+pub use package_scripts_disabled::{held_command_installs, no_script_install_command};
 
 pub use generic::bounded_task_metadata_output;
 pub use generic::evaluate_pre_tool_envelope;
@@ -189,7 +192,8 @@ pub(super) fn normalized_haystack(value: &str) -> String {
 }
 
 /// Floors no extension permission can settle: Guard self-protection, secret
-/// exfiltration, and Git configuration that runs a program Guard cannot read.
+/// exfiltration, a glob that could name a secret file, and Git configuration
+/// that runs a program Guard cannot read.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model
         .segments
@@ -203,23 +207,180 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
         )
         || ps::sensitive_exfiltration(model, sensitive_command, exfiltration_command)
         || model.segments.iter().any(names_guard_outside_message)
+        || model.segments.iter().any(selects_secret_outside_message)
 }
 
 /// A Git alias, hook or config value can carry a program the parser never
 /// models; any argument naming Guard, other than a commit message, keeps the
 /// native decision.
 fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    arguments_outside_message(segment).any(|argument| {
+        let lowered = argument.to_ascii_lowercase();
+        ["hol-guard", "plugin-guard", ".hol-guard"]
+            .iter()
+            .any(|needle| lowered.contains(needle))
+    })
+}
+
+/// A glob or brace pattern, other than a commit message, that the shell or a
+/// Git pathspec could expand to a secret file name. Rust reviews such a read
+/// as an unproven shape rather than as secret access, so without this floor
+/// an explicit Allow would settle `git diff --no-index .en? README.md`.
+///
+/// Two kinds of text are not screened as a pattern:
+/// - Text whose last path component has whitespace outside any `[...]` or
+///   `{...}`, such as a comment body or a query. A match would have to hold
+///   that whitespace literally. Whitespace inside a class (`'[ .]env'`) can
+///   still match `.env`, so it is screened.
+/// - A `name=value` field whose name is a plain word, that is not an
+///   option and that has no `/`. A `*` or `?` there matches only names that start with `if=`, so
+///   the field is screened only for the words its braces expand to, each as
+///   a literal path: `if=.e{n,m}v` makes `if=.env`, and
+///   `if={safe:dummy,.env}` makes `if=.env`. A `{v..v}` sequence is not
+///   followed and keeps the floor. With a `/`, Git can read the word as a
+///   path whose first component holds the `=`: `x=y/../.en*` is `.en*`. An
+///   `=` inside a pattern (`[=.]env`,
+///   `{=,.}env`) is not a field, so the whole word is screened.
+///
+/// A class the glob check reads differently from the shell and Git is
+/// screened as `?`; see [`readable_pattern`].
+fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    arguments_outside_message(segment).any(|argument| {
+        let last_component = argument.rsplit('/').next().unwrap_or(argument);
+        if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
+            return false;
+        }
+        match argument.split_once('=') {
+            Some((name, _))
+                if !argument.starts_with('-')
+                    && !argument.contains('/')
+                    && plain_field_name(name) =>
+            {
+                brace_words::shell_brace_words(argument).is_none_or(|words| {
+                    words.len() > 1
+                        && words.iter().any(|word| {
+                            word.split_once('=')
+                                .is_some_and(|(_, value)| sensitive_literal_path(value))
+                        })
+                })
+            }
+            _ => sensitive_read_path_argument(&readable_pattern(argument).0),
+        }
+    })
+}
+
+/// A path that names a secret or credential file as written, with no glob:
+/// `.env`, `id_rsa`, or `host:.env`.
+fn sensitive_literal_path(value: &str) -> bool {
+    let normalized = normalized_haystack(value);
+    [
+        normalized.as_str(),
+        normalized.rsplit_once(':').map_or("", |(_, tail)| tail),
+    ]
+    .iter()
+    .any(|candidate| {
+        let relative = Path::new(candidate.strip_prefix("./").unwrap_or(candidate));
+        sensitive_path_family(relative).is_some()
+            || guard_secure_fs::credential_named_path(relative)
+    })
+}
+
+/// A field name such as `if`, `query` or `user.name`: no glob or brace
+/// character, so the `=` after it cannot be part of a pattern.
+fn plain_field_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+/// `text` with each `[...]` class that the glob check cannot read replaced
+/// by `?`, and whether `text` has whitespace outside every class and brace.
+///
+/// The shell and Git take a `]` right after `[`, `[!` or `[^` as a member,
+/// let a backslash escape the next character, and read `[:space:]`-style
+/// names inside a class. So `'[] .]env'`, `'[\] .]env'` and
+/// `'[[:space:].]env'` are each one class that can match `.env`. The glob
+/// check closes a class at its first `]`, so it would read them as a short
+/// class and literal text. Such a class becomes `?`, which matches any one
+/// character. A `[` with no closing `]` is literal.
+fn readable_pattern(text: &str) -> (String, bool) {
+    let chars: Vec<char> = text.chars().collect();
+    let (mut read, mut spaced, mut brace, mut index) = (String::new(), false, 0usize, 0);
+    while let Some(&c) = chars.get(index) {
+        if c == '[' {
+            if let Some((end, readable)) = class_end(&chars, index) {
+                if readable {
+                    read.extend(&chars[index..=end]);
+                } else {
+                    read.push('?');
+                }
+                index = end + 1;
+                continue;
+            }
+        }
+        match c {
+            '\\' if index + 1 < chars.len() => {
+                read.extend(&chars[index..index + 2]);
+                index += 2;
+                continue;
+            }
+            '{' => brace += 1,
+            '}' if brace > 0 => brace -= 1,
+            _ => spaced |= c.is_whitespace() && brace == 0,
+        }
+        read.push(c);
+        index += 1;
+    }
+    (read, spaced)
+}
+
+/// The index of the `]` that closes the class opened at `start`, and whether
+/// the glob check reads the class the same way: no leading `]`, no backslash
+/// and no `[:name:]`, `[=c=]` or `[.c.]` inside it.
+fn class_end(chars: &[char], start: usize) -> Option<(usize, bool)> {
+    let mut index = start + 1;
+    if matches!(chars.get(index), Some('!' | '^')) {
+        index += 1;
+    }
+    let mut readable = chars.get(index) != Some(&']');
+    if !readable {
+        index += 1;
+    }
+    while let Some(&c) = chars.get(index) {
+        match (c, chars.get(index + 1)) {
+            (']', _) => return Some((index, readable)),
+            ('\\', _) => {
+                readable = false;
+                index += 1;
+            }
+            ('[', Some(&kind @ (':' | '=' | '.'))) => {
+                readable = false;
+                if let Some(close) = (index + 2..chars.len().saturating_sub(1))
+                    .find(|&at| chars[at] == kind && chars[at + 1] == ']')
+                {
+                    index = close + 1;
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+/// A segment's arguments other than a `-m`/`--message` commit message.
+fn arguments_outside_message(
+    segment: &crate::CommandSegmentV1,
+) -> impl Iterator<Item = &String> + '_ {
     let mut message_value = false;
-    segment.arguments.iter().any(|argument| {
+    segment.arguments.iter().filter(move |argument| {
         let is_message = std::mem::take(&mut message_value);
         message_value = matches!(argument.as_str(), "-m" | "--message");
         let lowered = argument.to_ascii_lowercase();
         let attached_message = lowered.starts_with("--message=")
             || (lowered.starts_with("-m") && !lowered.starts_with("--"));
         !(is_message || attached_message)
-            && ["hol-guard", "plugin-guard", ".hol-guard"]
-                .iter()
-                .any(|needle| lowered.contains(needle))
     })
 }
 
@@ -295,6 +456,7 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
         normalized.as_str(),
         normalized.split_once('=').map_or("", |(_, tail)| tail),
         normalized.rsplit_once(':').map_or("", |(_, tail)| tail),
+        pathspec_magic_path(&normalized),
     ];
     candidates.iter().any(|candidate| {
         let relative = candidate.strip_prefix("./").unwrap_or(candidate);
@@ -305,6 +467,19 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
             || relative == ".git/config"
             || relative.ends_with("/.git/config")
     })
+}
+
+/// The path a Git magic pathspec names, or `""`: `:(top).env` and
+/// `:/!.env` both name `.env`.
+fn pathspec_magic_path(value: &str) -> &str {
+    let Some(rest) = value.strip_prefix(':') else {
+        return "";
+    };
+    if let Some(long) = rest.strip_prefix('(') {
+        return long.split_once(')').map_or("", |(_, path)| path);
+    }
+    let path = rest.trim_start_matches(['/', '!', '^']);
+    path.strip_prefix(':').unwrap_or(path)
 }
 
 fn destructive_command(value: &str) -> bool {
@@ -694,6 +869,7 @@ fn evaluate_single_command(
     let reason = repo_create_reason::private_alternative_reason(&model)
         .or_else(|| repo_create_reason::created_remote_push_reason(&model))
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
+        .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
     Ok(pretool_decision(
