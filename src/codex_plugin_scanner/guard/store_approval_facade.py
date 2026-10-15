@@ -7,6 +7,7 @@ from __future__ import annotations
 # ruff: noqa: F403,F405
 from .native_approval_queue_identity import UNAVAILABLE as APPROVAL_QUEUE_IDENTITY_UNAVAILABLE
 from .native_approval_queue_identity import ApprovalQueueIdentityUnavailableError
+from .native_consumer_artifact_project import NativeConsumerProjectError
 from .native_guard_store import NativeGuardStoreUnavailable
 from .native_signal_projection import NativeSignalProjectionUnavailableError
 from .store_base import *
@@ -72,6 +73,31 @@ class StoreApprovalsMixin:
         if not isinstance(request_id, str) or not request_id:
             raise NativeSignalProjectionUnavailableError("native_guard_store_approval_request_invalid")
         return request_id
+
+    def queue_blocked_approvals(self, args: dict[str, object]) -> tuple[list[dict[str, object]], Exception | None]:
+        # The resident writes one request per reviewable item, each under its
+        # own savepoint, and answers the queued notices plus the error that
+        # stopped the loop; the earlier requests stay queued.
+        try:
+            reply = self._native_store_call("queue_blocked_approvals", args)
+        except NativeGuardStoreUnavailable as error:
+            raise NativeSignalProjectionUnavailableError(error.reason) from error
+        queued = reply.get("queued") if isinstance(reply, dict) else None
+        if not isinstance(queued, list):
+            raise NativeSignalProjectionUnavailableError("native_guard_store_approval_request_invalid")
+        error = reply.get("error")
+        if not isinstance(error, dict):
+            return queued, None
+        kind, message = error.get("type"), str(error.get("message"))
+        if kind == "value" and message == APPROVAL_QUEUE_IDENTITY_UNAVAILABLE:
+            return queued, ApprovalQueueIdentityUnavailableError(reason="rejected")
+        failures: dict[object, type[Exception]] = {
+            "value": ValueError,
+            "consumer": NativeConsumerProjectError,
+            "integrity": sqlite3.IntegrityError,
+            "os": OSError,
+        }
+        return queued, failures.get(kind, RuntimeError)(message)
 
     def resolve_harness_native_approval_request(
         self,

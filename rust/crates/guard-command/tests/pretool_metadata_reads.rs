@@ -159,6 +159,29 @@ fn configuration_reads_proceed() {
     }
 }
 
+/// A long-lived clone records a remote and merge ref for every branch it ever
+/// tracked; the listing then runs well past a quarter megabyte.
+#[test]
+fn configuration_reads_proceed_in_a_long_lived_clone() {
+    let home = home();
+    let config = home.join("project/.git/config");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    for branch in 0..8_000 {
+        text.push_str(&format!(
+            "[branch \"feature/b{branch}\"]\n\tremote = origin\n\tmerge = refs/heads/feature/b{branch}\n"
+        ));
+    }
+    std::fs::write(&config, &text).unwrap();
+    assert!(text.len() > 512 * 1024);
+    for command in ["git config --get user.email", "git config --list"] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+    text.push_str("[github]\n\ttoken = synthetic\n");
+    std::fs::write(&config, text).unwrap();
+    assert!(!shell(&home, "git config --list").contains("allow"));
+    assert_eq!(shell(&home, "git config --get user.email"), "allow");
+}
+
 #[test]
 fn configuration_writes_and_credentials_still_ask() {
     let home = home();

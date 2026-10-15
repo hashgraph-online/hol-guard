@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as payload_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
@@ -210,3 +211,28 @@ def test_daemon_operation_failure_records_category_on_fallback(tmp_path: Path, m
     )
 
     assert result["daemon_queue_unavailable"] == "OperationError: blocked operation rejected"
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [],
+        ["not-a-dict"],
+        [{"artifact_id": "art-1", "policy_action": "allow"}],
+        [{"artifact_id": "", "policy_action": "review"}],
+    ],
+)
+def test_queue_without_reviewable_items_never_touches_the_store(items: list[object]) -> None:
+    class _UntouchedStore:
+        def __getattr__(self, name: str) -> object:
+            raise AssertionError(f"store.{name} used without a reviewable item")
+
+    queued = queue_blocked_approvals(
+        detection=_detection(),
+        evaluation={"artifacts": items},
+        store=_UntouchedStore(),  # type: ignore[arg-type]
+        approval_center_url="http://127.0.0.1:4781",
+        now="not-a-timestamp",
+    )
+
+    assert queued == []

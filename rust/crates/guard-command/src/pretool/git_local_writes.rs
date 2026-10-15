@@ -52,7 +52,7 @@ mod signing;
 mod start;
 
 use forms::{created_branch, moves_head};
-use hooks::{write_hooks, CHECKOUT_HOOKS};
+use hooks::{write_hooks, CHECKOUT_HOOKS, COMMIT_HOOKS};
 
 pub(crate) const REASON: &str = "native_exact_safe_git_local_write";
 pub(crate) const PUBLISH_REASON: &str = "native_exact_safe_git_publish_chain";
@@ -336,9 +336,14 @@ fn proven(
             .any(|key| key.to_ascii_lowercase().starts_with("includeif.onbranch"));
     let merging = writes.iter().any(|(_, hooks)| *hooks == merge::HOOKS);
     let rebasing = writes.iter().any(|(_, hooks)| *hooks == rebase::HOOKS);
-    let signs = writes
-        .iter()
-        .any(|(index, _)| forms::signs(&model.segments[*index]));
+    // `commit.gpgsign` signs every commit Git creates, so a commit then runs
+    // the signing program as if it had asked with `-S`. Merges and rebases
+    // already refuse it through `merge::inert`.
+    let committing = writes.iter().any(|(_, hooks)| *hooks == COMMIT_HOOKS);
+    let signs = (committing && signs_by_default(&effective))
+        || writes
+            .iter()
+            .any(|(index, _)| forms::signs(&model.segments[*index]));
     if branch_scoped
         || !inert(&effective, &repository)
         || ((merging || rebasing) && !merge::inert(&effective, &repository))
@@ -442,7 +447,18 @@ fn identity_only(segment: &CommandSegmentV1) -> bool {
         .all(|name| crate::command_compatibility::inert_git_environment_name(name))
 }
 
+/// Whether the effective configuration signs commits without `-S`.
+pub(in crate::pretool) fn signs_by_default(effective: &GitConfig) -> bool {
+    effective.get("commit.gpgsign").is_some_and(|values| {
+        values
+            .iter()
+            .any(|value| !super::git_remote_ops::pull::disabled(value))
+    })
+}
+
 /// Whether the effective configuration lets these writes start no program.
+/// Commit signing is left to the caller: only a write that creates a commit
+/// runs the signing program, and [`signs_by_default`] reports it.
 pub(in crate::pretool) fn inert(effective: &GitConfig, repository: &GitConfig) -> bool {
     !super::git_remote_ops::pull::repository_lfs_program(repository)
         && !effective.iter().any(|(key, values)| {
@@ -462,9 +478,6 @@ pub(in crate::pretool) fn inert(effective: &GitConfig, repository: &GitConfig) -
                 || (key.starts_with("trailer.")
                     && (key.ends_with(".command") || key.ends_with(".cmd")))
                 || (key.starts_with("remote.") && key.ends_with(".promisor") && enabled)
-                || (matches!(
-                    key.as_str(),
-                    "core.fsmonitor" | "commit.gpgsign" | "submodule.recurse"
-                ) && enabled)
+                || (matches!(key.as_str(), "core.fsmonitor" | "submodule.recurse") && enabled)
         })
 }

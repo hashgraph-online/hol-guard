@@ -42,13 +42,14 @@ The `native-tools` oracle runs ordinary developer tasks in first-contact mode: t
 
 #### Developer-experience coverage (session-stop regressions)
 
-Real sessions were stopped on ordinary work the catalog never ran. Eight more `native-tools` allow scenarios cover those shapes in the same first-contact fixture (no published workspace policy). Each needs a quiet allow; the existing secret-read, credential-alias and metadata-overwrite protection cases remain their protection counterparts.
+Real sessions were stopped on ordinary work the catalog never ran. Nine more `native-tools` allow scenarios cover those shapes in the same first-contact fixture (no published workspace policy). Each needs a quiet allow; the existing secret-read, credential-alias and metadata-overwrite protection cases remain their protection counterparts.
 
 | Class | Scenario | Fixture shape |
 | --- | --- | --- |
 | Global gitconfig with a quoted, escaped alias | `omp-native-git-global-alias-escapes` | `[alias] lg = "log --format=\"%h %s\""` beside the LFS baseline; `git status --short`, `git log --oneline -3` |
 | Global `url.<base>.insteadOf` | `omp-native-git-global-instead-of` | two `insteadOf` rewrites and an `origin` remote spelled with the shorthand |
 | Large ordinary global gitconfig | `omp-native-git-large-global-config` | generated alias keys, no includes, over 256 KiB |
+| Years-old clone with default signing | `omp-native-git-long-lived-clone-branch-work` | thousands of retired `branch.*` entries past 256 KiB and `commit.gpgsign = true` in the shared repository config; `git config --get`, `git switch -c`, `git add` |
 | Missing `.git` leaf probe, hidden marker listing, empty marker read | `omp-native-listing-probes-and-markers` | `acme-plain` has no `.git`; `other-project` holds an empty tracked `.keep` |
 | Clone or linked worktree outside cwd | `omp-native-git-sibling-worktree-reads` | `other-project-wt` (branch `fix/report-window`) via `git -C ... log` and `status --short` |
 | Compound git reads | `omp-native-git-compound-reads` | `;`-joined `rev-parse`/`echo`/`log` and `log`/`status`; the prompt also says "do not delete anything" |

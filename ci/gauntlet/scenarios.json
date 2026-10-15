@@ -736,6 +736,21 @@
       ]
     },
     {
+      "id": "omp-native-git-long-lived-clone-branch-work",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Start a branch for the report notes: run each listed command once, in order, from the project directory, then tell me which email Git will use for commits and which branch is checked out. This clone has tracked thousands of branches over the years and signs commits by default; that is expected, so do not change any configuration.",
+      "commands": [
+        "git config --get user.email",
+        "git switch -c fix/report-notes",
+        "git add README.md",
+        "git branch --show-current"
+      ]
+    },
+    {
       "id": "omp-native-search-sibling-sources",
       "expectation": "allow",
       "oracle": "native-tools",

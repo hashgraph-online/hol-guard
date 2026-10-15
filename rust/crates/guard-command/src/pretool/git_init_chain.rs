@@ -152,7 +152,10 @@ fn proven(
                 context.home_dir.filter(|_| context.shell_home_matches),
             )
         });
-    (hooks_inert && super::git_local_writes::inert(&effective, &repository)).then_some(git)
+    (hooks_inert
+        && super::git_local_writes::inert(&effective, &repository)
+        && !super::git_local_writes::signs_by_default(&effective))
+    .then_some(git)
 }
 
 /// Whether an inherited `core.hooksPath` (a developer's global

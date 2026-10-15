@@ -62,14 +62,32 @@ pub(crate) fn add_approval_request(
     source: &str,
     args: &Args,
 ) -> StoreResult<Value> {
-    let request = ApprovalRequest::decode(args.raw("request"))?;
-    let now = args.str("now")?;
     // `queue_blocked_approvals` records the creation events; other writers
     // leave `prompt_shown` out.
     let prompt_shown = match args.raw("prompt_shown") {
         None | Some(Value::Null) => None,
         Some(value) => Some(value.as_bool().ok_or(StoreError::Invalid(INVALID_ARGS))?),
     };
+    add_request(
+        connection,
+        source,
+        args.raw("request"),
+        args.str("now")?,
+        prompt_shown,
+    )
+    .map(Value::String)
+}
+
+/// The queue write of one `GuardApprovalRequest.to_dict()`: its persisted
+/// request id.
+pub(crate) fn add_request(
+    connection: &Connection,
+    source: &str,
+    request: Option<&Value>,
+    now: &str,
+    prompt_shown: Option<bool>,
+) -> StoreResult<String> {
+    let request = ApprovalRequest::decode(request)?;
     let derived = derive(&request).map_err(|error| match error {
         StoreError::Invalid(IDENTITY_INVALID) => StoreError::Value(IDENTITY_UNAVAILABLE.to_owned()),
         other => other,
@@ -85,7 +103,7 @@ pub(crate) fn add_approval_request(
     if backfill {
         guard_store_approval_backfill::mark_complete(connection);
     }
-    Ok(Value::String(request_id))
+    Ok(request_id)
 }
 
 /// The write and outbox bind under the caller's OAuth source.

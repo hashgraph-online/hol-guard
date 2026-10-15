@@ -6,7 +6,7 @@ use super::{merge, rebase, start};
 use crate::CommandSegmentV1;
 
 const INDEX_HOOKS: &[&str] = &["post-index-change"];
-const COMMIT_HOOKS: &[&str] = &[
+pub(super) const COMMIT_HOOKS: &[&str] = &[
     "pre-commit",
     "prepare-commit-msg",
     "commit-msg",

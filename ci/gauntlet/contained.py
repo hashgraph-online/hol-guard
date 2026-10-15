@@ -34,6 +34,7 @@ from .evidence import public_events, read_events
 from .fixtures import create_fixture, create_run_root, digest_file
 from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
+from .observed_extension import generate_observed_extension
 from .provider import InferenceRelay, LoopbackCollector
 from .runner import HERE, REPO
 from .source_files import digest_runner_files

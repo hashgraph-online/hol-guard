@@ -64,6 +64,18 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Synthetic API key in the approval-queue redaction parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/approval_queue_vectors\.json$''',
+  '''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/record_approval_queue_vectors\.py$''',
+]
+regexes = [
+  '''^sk\-abcdefghijklmnopqrstuvwxyz0123$''',
+]
+
+[[rules.allowlists]]
 description = "Synthetic byte-range policy-integrity key recorded in the policy-integrity row parity vectors, not a credential"
 condition = "AND"
 regexTarget = "line"

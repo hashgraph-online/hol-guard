@@ -24,6 +24,7 @@ use crate::guard_store_advisory_cache as advisory_cache;
 use crate::guard_store_approval_backfill;
 use crate::guard_store_approval_metadata as approval_metadata;
 use crate::guard_store_approval_page_reads as approval_pages;
+use crate::guard_store_approval_queue::queue_blocked_approvals;
 use crate::guard_store_approval_reads as approval_reads;
 use crate::guard_store_approval_resolve::{
     resolve_approval_request, resolve_harness_native_approval_request,
@@ -329,6 +330,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "resolve_matching_duplicate_requests"
         | "mark_approval_desktop_notified"
         | "add_approval_request"
+        | "queue_blocked_approvals"
         | "add_native_review_approval_request"
         | "add_silent_native_review_approval_request"
         | "add_claude_native_review_approval_request"
@@ -490,6 +492,7 @@ fn dispatch(
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
         "matching_native_review_block" => native_review_consume::matching_block(connection, args),
         "add_approval_request" => add_approval_request(connection, source, args),
+        "queue_blocked_approvals" => queue_blocked_approvals(connection, source, args),
         "add_native_review_approval_request" => {
             add_native_review_approval_request(connection, source, args)
         }

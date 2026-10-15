@@ -39,6 +39,7 @@ from .full_tasks import (
     load_full_tasks,
 )
 from .host_process import clean_environment, realistic_environment, run_process
+from .observed_extension import generate_observed_extension
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
 

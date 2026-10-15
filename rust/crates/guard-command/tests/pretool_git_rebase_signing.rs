@@ -170,3 +170,28 @@ fn signed_commits_need_the_users_installed_signing_program() {
     allowed(&session, "git commit -S -m x").unwrap();
     assert!(allowed(&session, "git -c gpg.ssh.program=/tmp/x commit -S -m x").is_err());
 }
+
+#[test]
+fn commit_signing_by_default_only_holds_writes_that_create_commits() {
+    let session = session("gpgsign-default");
+    let home = &session.home;
+    let global = |arguments: &[&str]| {
+        let mut full = vec!["config", "--global"];
+        full.extend_from_slice(arguments);
+        git(home, home, &full);
+    };
+    global(&["commit.gpgsign", "true"]);
+    // Staging and starting a branch sign nothing, whatever the signing setup.
+    session.config(&["gpg.program", "/tmp/gpg"]);
+    for command in ["git add tracked.txt", "git switch -c gpgsign-probe"] {
+        allowed(&session, command).unwrap();
+    }
+    // A commit signs as if asked with `-S`, so the repository may not pick
+    // the program.
+    assert!(allowed(&session, "git commit -m x").is_err());
+    session.config(&["--unset-all", "gpg.program"]);
+    global(&["gpg.format", "ssh"]);
+    allowed(&session, "git commit -m x").unwrap();
+    global(&["gpg.ssh.program", "/tmp/gpg"]);
+    assert!(allowed(&session, "git commit -m x").is_err());
+}

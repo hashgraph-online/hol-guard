@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
+from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .extension_adapters import EXTENSION_ADAPTERS
 from .realism_fixtures import add_home_tools, add_main_shapes, borrow_main_modules
 from .review_fixtures import (
@@ -309,6 +310,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
         )
     checks.update(github_checks(fixture.workspace, scenario_id))
     checks.update(supply_chain_checks(fixture.workspace, scenario_id))
+    checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:
         checks["business-cli-executed-absent"] = not (fixture.workspace / EXECUTED_FLAG).exists()
@@ -481,4 +483,6 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         _git(args, nested, environment)
     # An untracked linked worktree inside the tree, another shape agents leave behind.
     _git(("worktree", "add", "--quiet", "-b", "inner", str(worktree / ".worktrees/inner")), worktree, environment)
+    # Last, so default signing never touches the fixture's own commits.
+    add_long_lived_clone_config(main, scenario_id)
     return worktree
