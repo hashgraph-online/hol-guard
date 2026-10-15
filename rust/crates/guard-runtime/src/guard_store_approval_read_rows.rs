@@ -125,7 +125,7 @@ fn decoded(value: &PyVal, surrogate: bool) -> StoreResult<Value> {
 }
 
 /// `_safe_json_list`.
-fn json_list(row: &Row, name: &str) -> StoreResult<Vec<Value>> {
+pub(crate) fn json_list(row: &Row, name: &str) -> StoreResult<Vec<Value>> {
     match parse_cell(row, name)? {
         Some((value @ PyVal::List(_), surrogate)) => match decoded(&value, surrogate)? {
             Value::Array(items) => Ok(items),
@@ -156,7 +156,7 @@ fn json_object_list(row: &Row, name: &str) -> StoreResult<Vec<Value>> {
 }
 
 /// `bool(cell)`.
-fn py_bool(cell: &Value) -> bool {
+pub(crate) fn py_bool(cell: &Value) -> bool {
     match cell {
         Value::Null => false,
         Value::Bool(flag) => *flag,
@@ -168,7 +168,7 @@ fn py_bool(cell: &Value) -> bool {
 }
 
 /// `int(cell or 1)`.
-fn py_int(cell: &Value) -> StoreResult<Value> {
+pub(crate) fn py_int(cell: &Value) -> StoreResult<Value> {
     let digits = match cell {
         Value::Null => "1".to_owned(),
         Value::Number(number) => match number.as_i64() {
@@ -228,7 +228,7 @@ fn int_literal(text: &str) -> Option<String> {
 
 /// `_browser_launch_target_for_display`: a legacy `server op unknown` label
 /// with the target its operation names.
-fn browser_launch_target(value: Value) -> (Value, Option<String>) {
+pub(crate) fn browser_launch_target(value: Value) -> (Value, Option<String>) {
     let Value::String(text) = &value else {
         return (value, None);
     };

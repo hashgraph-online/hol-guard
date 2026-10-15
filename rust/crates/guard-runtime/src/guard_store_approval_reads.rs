@@ -6,12 +6,13 @@
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
+use crate::guard_store_approval_page_reads::{Filter, ORDER};
 use crate::guard_store_approval_read_rows::draft;
 use crate::guard_store_approval_read_scope::{project, scope_contract, unavailable};
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
+use crate::guard_store_db::{query_all, query_one, Row, StoreResult};
 
-const COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact_type, \
+pub(crate) const COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact_type, \
      artifact_hash, publisher, policy_action, recommended_scope, changed_fields_json, \
      source_scope, oauth_source, config_path, workspace, launch_target, \
      normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, \
@@ -21,28 +22,11 @@ const COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact
      browser_intent_json, continuation_snapshot_json, review_command, approval_url, status, \
      resolution_action, resolution_scope, reason, created_at, resolved_at, raw_command_text, \
      guard_version, first_seen_guard_version, last_seen_guard_version";
-const SEARCH_COLUMNS: [&str; 15] = [
-    "artifact_name",
-    "artifact_id",
-    "risk_summary",
-    "risk_headline",
-    "trigger_summary",
-    "why_now",
-    "launch_summary",
-    "launch_target",
-    "raw_command_text",
-    "fallback_cli_command",
-    "review_command",
-    "action_identity",
-    "action_envelope_json",
-    "decision_v2_json",
-    "config_path",
-];
 const SUPERSEDED_PREFIX: &str = "superseded_by_fresh_review:";
 /// Rows one list call reads, and the payload bytes it returns before the
 /// caller asks for the rest; the reply must stay under the resident cap.
 const PAGE_ROWS: i64 = 128;
-const PAGE_BYTES: usize = 1536 * 1024;
+pub(crate) const PAGE_BYTES: usize = 1536 * 1024;
 
 /// `get_approval_request(request_id, derive_scope=...)`.
 pub(crate) fn get_approval_request(
@@ -79,82 +63,36 @@ pub(crate) fn get_approval_request(
 }
 
 /// `list_approval_requests(status, harness, limit, cursor, search)` as
-/// bounded chunks: `{"items": [...], "complete": bool, "after": key}`. The
-/// caller continues an incomplete chunk by passing `after`, the sort key of
-/// its last item, so rows that move or arrive between chunks are neither
-/// repeated nor skipped the way an offset would.
+/// bounded chunks: `{"items": [...], "complete": bool}`. An incomplete chunk
+/// also carries `after`, the sort key of its last item; the caller passes it
+/// back with `taken`, the items it holds, so rows that move or arrive between
+/// chunks are neither repeated nor skipped the way an offset would.
 pub(crate) fn list_approval_requests(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     let limit = args.raw("limit").map(|_| args.int("limit")).transpose()?;
-    let page = match limit {
-        Some(limit) if limit >= 0 => limit.clamp(0, PAGE_ROWS),
-        _ => PAGE_ROWS,
-    };
-    let mut clauses = Vec::new();
-    let mut params = Vec::new();
-    for column in ["status", "harness"] {
-        if let Some(value) = args.opt_str(column)? {
-            clauses.push(format!("{column} = ?"));
-            params.push(Value::from(value));
-        }
-    }
-    if let Some(cursor) = args.strings("cursor")? {
-        let [last_seen_at, request_id] = cursor[..] else {
-            return Err(StoreError::Invalid("native_guard_store_args_invalid"));
-        };
-        clauses.push("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))".to_owned());
-        params.extend([last_seen_at, last_seen_at, request_id].map(Value::from));
-    }
-    if let Some(after) = args.raw("after") {
-        // Rows sort newest first with a null `last_seen_at` last.
-        let Some([last_seen_at, Value::String(request_id)]) = after.as_array().map(Vec::as_slice)
-        else {
-            return Err(StoreError::Invalid("native_guard_store_args_invalid"));
-        };
-        if last_seen_at.is_null() {
-            clauses.push("(last_seen_at is null and request_id < ?)".to_owned());
-            params.push(Value::from(request_id.as_str()));
-        } else {
-            clauses.push(
-                "(last_seen_at < ? or last_seen_at is null \
-                 or (last_seen_at = ? and request_id < ?))"
-                    .to_owned(),
-            );
-            params.extend([
-                last_seen_at.clone(),
-                last_seen_at.clone(),
-                Value::from(request_id.as_str()),
-            ]);
-        }
-    }
-    if let Some(search) = args.opt_str("search")? {
-        let terms: Vec<String> = SEARCH_COLUMNS
-            .iter()
-            .map(|column| format!("lower(coalesce({column}, '')) like lower(?)"))
-            .collect();
-        clauses.push(format!("({})", terms.join(" or ")));
-        params.extend(SEARCH_COLUMNS.map(|_| Value::from(format!("%{search}%"))));
-    }
-    let filter = if clauses.is_empty() {
-        String::new()
-    } else {
-        format!("where {}", clauses.join(" and "))
-    };
+    let taken = args.raw("taken").map_or(Ok(0), |_| args.int("taken"))?;
+    let remaining = limit
+        .filter(|limit| *limit >= 0)
+        .map(|limit| (limit - taken).max(0));
+    let page = remaining.map_or(PAGE_ROWS, |remaining| remaining.min(PAGE_ROWS));
+    let mut filter = Filter::default();
+    filter.equals("status", args.opt_str("status")?);
+    filter.equals("harness", args.opt_str("harness")?);
+    filter.after(args.strings("cursor")?)?;
+    filter.continue_after(args.raw("after"))?;
+    filter.search(args.opt_str("search")?);
+    let (filter, mut params) = filter.finish();
     params.push(Value::from(page));
     let rows = query_all(
         connection,
-        &format!(
-            "select {COLUMNS} from approval_requests {filter} \
-             order by last_seen_at desc, request_id desc limit ?"
-        ),
+        &format!("select {COLUMNS} from approval_requests {filter} {ORDER} limit ?"),
         &params,
     )?;
     let cwd = args.opt_str("cwd")?;
     let mut returned = Vec::new();
-    let mut after = Value::Null;
     let mut bytes = 0;
     // Rows project one at a time so a chunk stops at its byte budget without
     // projecting rows the next chunk reads again.
@@ -166,16 +104,27 @@ pub(crate) fn list_approval_requests(
             break;
         }
         returned.push(Value::Object(item));
-        after = json!([row.get("last_seen_at"), row.get("request_id")]);
     }
-    let reached_limit = limit.is_some_and(|limit| limit >= 0 && returned.len() as i64 >= limit);
-    let complete = returned.len() == rows.len() && (rows.len() < page as usize || reached_limit);
-    Ok(json!({"items": returned, "complete": complete, "after": after}))
+    let reached_limit = remaining.is_some_and(|remaining| returned.len() as i64 >= remaining);
+    if returned.len() < rows.len() || (rows.len() as i64 == page && !reached_limit) {
+        let after = continuation(&rows[returned.len() - 1]);
+        return Ok(json!({"items": returned, "complete": false, "after": after}));
+    }
+    Ok(json!({"items": returned, "complete": true}))
+}
+
+/// The sort key a chunk's caller passes back as `after` to read on from
+/// `row`.
+pub(crate) fn continuation(row: &Row) -> Value {
+    json!([row.get("last_seen_at"), row.get("request_id")])
 }
 
 /// `_rows_to_payloads` for projected rows: drafts first, then each draft's
 /// scope contract and its legacy scope surfaces.
-fn payloads(rows: Vec<(&Row, Value)>, cwd: Option<&str>) -> StoreResult<Vec<Map<String, Value>>> {
+pub(crate) fn payloads(
+    rows: Vec<(&Row, Value)>,
+    cwd: Option<&str>,
+) -> StoreResult<Vec<Map<String, Value>>> {
     let drafts = rows
         .iter()
         .map(|(row, projection)| draft(row, projection))
@@ -266,4 +215,4 @@ fn superseded_by(
 
 #[cfg(all(test, unix))]
 #[path = "guard_store_approval_reads_tests.rs"]
-mod tests;
+pub(crate) mod tests;

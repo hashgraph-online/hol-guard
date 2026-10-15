@@ -7,6 +7,7 @@ a config path is lexical on every runner.
 
 from __future__ import annotations
 
+import base64
 import json
 
 ROOT = "/hol-guard-read-vectors"
@@ -39,6 +40,17 @@ ENVELOPE = json.dumps(
         "tool_input": {"ignored": True},
     }
 )
+
+
+def encode_page_cursor(item: dict[str, object]) -> str:
+    """The queue page cursor for `item`, frozen from `store_approvals._encode_page_cursor`."""
+
+    raw = json.dumps(
+        {"last_seen_at": item["last_seen_at"], "request_id": item["request_id"]},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def padded_envelope(pad: int | list[int]) -> str:

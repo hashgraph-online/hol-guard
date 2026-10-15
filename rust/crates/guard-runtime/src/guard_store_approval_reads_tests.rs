@@ -51,7 +51,7 @@ fn expand(value: &Value) -> Value {
     }
 }
 
-fn seed(path: &std::path::Path, vectors: &Value, scenario: &Value) {
+pub(crate) fn seed(path: &std::path::Path, vectors: &Value, scenario: &Value) {
     let connection = Connection::open(path).unwrap();
     for statement in vectors["schema_sql"].as_array().unwrap() {
         connection
@@ -79,7 +79,7 @@ fn seed(path: &std::path::Path, vectors: &Value, scenario: &Value) {
 }
 
 /// One store call: `Ok(payload)` or `Err((code, message))`.
-fn store_call(
+pub(crate) fn store_call(
     home: &std::path::Path,
     source: &str,
     method: &str,
@@ -111,7 +111,7 @@ fn store_call(
 }
 
 /// `record_approval_read_vectors.mark_long`, with numbers in one spelling.
-fn normalized(value: Value, long_string: usize) -> Value {
+pub(crate) fn normalized(value: Value, long_string: usize) -> Value {
     match value {
         Value::String(text) if text.chars().count() > long_string => {
             let digest = Sha256::digest(text.as_bytes());
@@ -153,7 +153,7 @@ fn without_hints(value: &Value) -> Value {
 }
 
 /// The recorded outcome as the store reply spells it.
-fn expected(call: &Value, long_string: usize) -> Result<Value, (String, String)> {
+pub(crate) fn expected(call: &Value, long_string: usize) -> Result<Value, (String, String)> {
     match call.get("error") {
         None => Ok(normalized(without_hints(&call["result"]), long_string)),
         Some(error) => {
@@ -175,16 +175,13 @@ fn list(home: &std::path::Path, source: &str, call: &Value) -> Result<Value, (St
     let mut items = Vec::new();
     let mut after = Value::Null;
     loop {
-        let limit = match args["limit"].as_i64() {
-            Some(limit) if limit >= 0 => json!(limit - items.len() as i64),
-            _ => args["limit"].clone(),
-        };
         let mut chunk = json!({
             "status": args["status"],
             "harness": args["harness"],
-            "limit": limit,
+            "limit": args["limit"],
             "cursor": call["cursor_marker"],
             "search": args["search"],
+            "taken": items.len(),
         });
         if !after.is_null() {
             chunk["after"] = after.clone();
