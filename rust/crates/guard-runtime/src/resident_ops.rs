@@ -590,6 +590,10 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::CodexBindingCapture(request) => Some(&request.guard_home),
         ResidentOperationV1::ProtectRequest(request) => Some(&request.guard_home),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.guard_home),
+        ResidentOperationV1::PolicyIntegrityRows(request) => request
+            .generation
+            .as_ref()
+            .map(|generation| generation.guard_home.as_str()),
         _ => None,
     }
 }
@@ -618,6 +622,10 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.store_path),
         ResidentOperationV1::ProtectRequest(request) => request.store_path.as_deref(),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.store_path),
+        ResidentOperationV1::PolicyIntegrityRows(request) => request
+            .generation
+            .as_ref()
+            .map(|generation| generation.store_path.as_str()),
         _ => None,
     }
 }

@@ -543,6 +543,7 @@ mod policy_decision_lookup_op;
 mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
+mod policy_integrity_generation;
 mod policy_integrity_resolver;
 mod policy_integrity_rows_op;
 mod policy_lookup_groups;
