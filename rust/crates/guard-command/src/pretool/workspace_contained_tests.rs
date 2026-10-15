@@ -360,7 +360,7 @@ fn git_commands_that_write_sandbox_denied_metadata_stay_out_of_the_sandbox() {
 
 /// Whether this host runs the workspace sandbox at all.
 pub(super) fn host() -> bool {
-    cfg!(target_os = "macos") || crate::restricted_pytest::linux_workspace_sandbox_available()
+    crate::pretool::workspace_contained::sandbox_available()
 }
 
 #[test]

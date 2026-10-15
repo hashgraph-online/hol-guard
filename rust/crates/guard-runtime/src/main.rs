@@ -171,6 +171,8 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+#[cfg(unix)]
+mod contained_workspace_sink;
 mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;

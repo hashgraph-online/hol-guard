@@ -436,6 +436,30 @@ pub(crate) fn grok_direct_answer(
     answered_response(&output)
 }
 
+/// The harness response a live resident answered for `data` as `harness`
+/// would send it from `workspace`, or `None` when no resident answered.
+/// The contained-workspace sink asks this way for the receipt it runs under.
+#[cfg(unix)]
+pub(crate) fn resident_hook_answer(
+    harness: &str,
+    guard_home: &Path,
+    home: &Path,
+    workspace: &str,
+    data: &str,
+    deadline: Instant,
+) -> Option<String> {
+    let request = request_body(
+        harness,
+        guard_home,
+        Some(home),
+        Some(workspace.to_owned()),
+        data,
+        remaining(deadline),
+    )?;
+    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response(&output)
+}
+
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_direct_tests.rs"]
 mod tests;

@@ -12,15 +12,20 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolActionTypeV1, PreToolR
 use std::path::Path;
 
 #[cfg(unix)]
-use crate::restricted_pytest::workspace_admissible;
+use crate::restricted_pytest::{linux_workspace_sandbox_available, workspace_admissible};
 
 /// The workspace sandbox runs on macOS and Linux; Windows never admits a workspace.
 #[cfg(not(unix))]
 fn workspace_admissible(_cwd: &Path, _home: Option<&Path>) -> Option<std::path::PathBuf> {
     None
 }
+#[cfg(not(unix))]
+fn linux_workspace_sandbox_available() -> bool {
+    false
+}
 
 pub(crate) const REASON: &str = "native_workspace_containment_required";
+#[cfg(unix)]
 pub(crate) const PROFILE: &str = "workspace-contained-v1";
 
 #[path = "workspace_contained_chmod.rs"]
@@ -102,6 +107,7 @@ const EXTENSION_REVIEW: &str = "native_command_extension_review";
 pub(crate) struct Shape {
     /// Arguments for a trusted `git init`, run before the sandbox starts
     /// because `git init` always rewrites the write-denied `.git/config`.
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub bootstrap: Option<Vec<String>>,
     /// Text run before `git init`, which runs only if it succeeds (`&&`).
     pub prefix: Option<String>,
@@ -345,14 +351,8 @@ pub(super) fn host_eligible(harness: &str, event: &str) -> bool {
         && sandbox_available()
 }
 
-#[cfg(unix)]
-fn sandbox_available() -> bool {
-    cfg!(target_os = "macos") || crate::restricted_pytest::linux_workspace_sandbox_available()
-}
-
-#[cfg(not(unix))]
-fn sandbox_available() -> bool {
-    false
+pub(super) fn sandbox_available() -> bool {
+    cfg!(target_os = "macos") || linux_workspace_sandbox_available()
 }
 
 /// Whether a redirect in `command` names a path outside `workspace`.

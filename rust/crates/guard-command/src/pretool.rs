@@ -33,8 +33,10 @@ pub(crate) mod kubectl_reads;
 pub(crate) mod port_probes;
 mod workspace_contained;
 #[cfg(unix)]
+pub(crate) use workspace_contained::Shape;
+#[cfg(unix)]
 pub(crate) use workspace_contained::PROFILE as WORKSPACE_PROFILE;
-pub(crate) use workspace_contained::{command_shape, init_arguments, Shape};
+pub(crate) use workspace_contained::{command_shape, init_arguments};
 pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;

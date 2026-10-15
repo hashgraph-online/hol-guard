@@ -17,6 +17,15 @@ const ROUTED_REASON: &str = "native_contained_execution_routed";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
 #[cfg(any(target_os = "linux", all(unix, test)))]
 const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
+/// Set to `0` to keep every workspace sandbox on the daemon's sink.
+#[cfg(target_os = "macos")]
+const NATIVE_SINK_SWITCH: &str = "HOL_GUARD_NATIVE_CONTAINED_SINK";
+/// Command text whose meaning depends on what the native sink does not yet
+/// replay: pipes, stderr folding, exit-status reads, home expansion, and
+/// tool flags that move the working directory.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+const NATIVE_SINK_UNSUPPORTED: [&str; 8] =
+    ["|", "2>&1", "$?", "~", "--cwd", "--prefix", "--dir", " -C"];
 const PRE_TOOL_EVENTS: [&str; 2] = ["PreToolUse", "pre_tool_use"];
 const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "run_terminal_command", "run_command"];
 
@@ -76,20 +85,30 @@ pub(super) fn route(
         response,
         payload,
         target,
-        platform_contains,
+        Host {
+            platform: platform_contains,
+            native: native_sink,
+        },
         &std::env::temp_dir(),
     )
 }
 
-/// `route` for a platform that runs the profiles `platform` accepts, with
-/// request snapshots under `temp`.
+/// What the host runs: the contained profiles `platform` accepts, and the
+/// runtime's own sink for the calls `native` names it for.
+struct Host {
+    platform: fn(&str) -> bool,
+    native: fn(&Value, &Map<String, Value>, &str) -> Option<String>,
+}
+
+/// `route` on `host`, with request snapshots under `temp`.
 fn route_on(
     response: &Value,
     payload: &Map<String, Value>,
     target: &SinkTarget<'_>,
-    platform: fn(&str) -> bool,
+    host: Host,
     temp: &std::path::Path,
 ) -> Result<Option<Routed>, HookDirectDefer> {
+    let platform = host.platform;
     // The sink asks for the receipt alone; an untrusted caller setting this
     // only keeps its own call denied.
     if payload.get(RECEIPT_ONLY_FIELD) == Some(&Value::Bool(true)) || !routable(response, platform)
@@ -99,7 +118,95 @@ fn route_on(
     let Some(original) = shell_input(payload) else {
         return Ok(None);
     };
-    request::write_and_route(temp, payload, original, target)
+    let native = (host.native)(response, original, target.workspace);
+    request::write_and_route(temp, payload, original, target, native.as_deref())
+}
+
+/// The runtime executable, when it runs this call's sink itself: a macOS
+/// workspace sandbox of a shape the native sink reproduces. Any other call
+/// keeps the daemon's sink.
+#[cfg(target_os = "macos")]
+fn native_sink(response: &Value, original: &Map<String, Value>, workspace: &str) -> Option<String> {
+    if !native_shape(response, original, workspace)
+        || std::env::var_os(NATIVE_SINK_SWITCH).is_some_and(|value| value == "0")
+    {
+        return None;
+    }
+    let executable = std::env::current_exe().ok()?;
+    executable
+        .is_file()
+        .then(|| executable.to_str().map(str::to_owned))
+        .flatten()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn native_sink(
+    _response: &Value,
+    _original: &Map<String, Value>,
+    _workspace: &str,
+) -> Option<String> {
+    None
+}
+
+/// Whether the native sink reproduces this workspace sandbox: a plain
+/// workspace run, not a chain whose Git steps follow the checks, started in
+/// the workspace itself, with no pipe, redirection of stderr, exit-status
+/// read, home expansion or directory change the sink does not yet replay.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str) -> bool {
+    use crate::contained_workspace_sink::{PUBLISH_REASON, WORKSPACE_PROFILE, WORKSPACE_REASON};
+    let text = |name: &str| response.get(name).and_then(Value::as_str);
+    let Some(command) = original.get("command").and_then(Value::as_str) else {
+        return false;
+    };
+    text("reason_code") == Some(WORKSPACE_REASON)
+        && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
+        && text("reason") != Some(PUBLISH_REASON)
+        && !original.contains_key("cwd")
+        && (!command.trim_start().starts_with("cd") || inner_directory_change(command, workspace))
+        && !NATIVE_SINK_UNSUPPORTED
+            .iter()
+            .any(|fragment| command.contains(fragment))
+}
+
+/// Whether a leading `cd` leaves the call as the daemon's sink runs it: a
+/// plain target naming a directory strictly inside the workspace, then `&&`.
+/// The daemon runs such a command whole, `cd` included, from the workspace
+/// root, as the native sink does. A `cd` to the root itself or out to a
+/// sibling repository is planned again there, so it keeps the daemon's sink.
+#[cfg(any(target_os = "macos", all(unix, test)))]
+fn inner_directory_change(command: &str, workspace: &str) -> bool {
+    let plain = |text: &str| {
+        !text.is_empty()
+            && text
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"/._-+@,=:".contains(&byte))
+    };
+    let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
+        return false;
+    };
+    let Some(target) = rest
+        .strip_prefix([' ', '\t'])
+        .map(|rest| rest.trim_start_matches([' ', '\t']))
+        .and_then(|rest| rest.split_once([' ', '\t']))
+        .filter(|(target, after)| {
+            plain(target)
+                && after
+                    .trim_start_matches([' ', '\t'])
+                    .strip_prefix("&&")
+                    .is_some_and(|core| core.starts_with([' ', '\t']) && !core.trim().is_empty())
+        })
+        .map(|(target, _)| target)
+    else {
+        return false;
+    };
+    let (Ok(root), Ok(directory)) = (
+        std::fs::canonicalize(workspace),
+        std::fs::canonicalize(std::path::Path::new(workspace).join(target)),
+    ) else {
+        return false;
+    };
+    directory.is_dir() && directory != root && directory.starts_with(&root)
 }
 
 /// Whether the daemon routes this edge response: a contained-run denial
@@ -186,6 +293,7 @@ mod request {
         _payload: &Map<String, Value>,
         _original: &Map<String, Value>,
         _target: &SinkTarget<'_>,
+        _native: Option<&str>,
     ) -> Result<Option<Routed>, HookDirectDefer> {
         Err(HookDirectDefer::ContainedRouteFailed)
     }

@@ -7,6 +7,14 @@ pub(super) fn run() -> Result<(), String> {
             let digest = if args.len() == 2 { args[1].as_str() } else { "" };
             std::process::exit(restricted_linux_launch::launch(digest))
         }
+        #[cfg(unix)]
+        [command, rest @ ..] if command == contained_workspace_sink::SINK_COMMAND => {
+            std::process::exit(contained_workspace_sink::run(rest))
+        }
+        #[cfg(unix)]
+        [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
+            std::process::exit(contained_workspace_sink::launch(rest))
+        }
         [command] if command == "capabilities" => write_json(&capabilities()),
         [command, flag] if command == "capabilities" && flag == "--json" => {
             write_json(&capabilities())
