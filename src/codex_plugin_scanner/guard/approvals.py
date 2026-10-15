@@ -59,6 +59,7 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
+    GuardArtifact,
     HarnessDetection,
     PolicyDecision,
 )
@@ -281,12 +282,13 @@ def queue_blocked_approvals(
     redaction_level: str = "full",
     continuation_operation: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
-    timestamp = now or _now()
     items = evaluation.get("artifacts")
     if not isinstance(items, list):
         return []
-    items = [item for item in items if isinstance(item, dict)]
-    named = {str(item.get("artifact_id") or "") for item in items}
+    reviewable = [item for item in items if isinstance(item, dict) and _needs_review(item)]
+    if not reviewable:
+        return []
+    timestamp = now or _now()
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
     observed_at = parse_aware_timestamp(timestamp)
     facts = continuation_offer_facts(
@@ -296,52 +298,64 @@ def queue_blocked_approvals(
         cwd: str | None = str(Path.cwd())
     except OSError:
         cwd = None
-    # The resident derives each request's surfaces, incident copy and
-    # continuation snapshot, and writes it; Python keeps the notices.
-    queued, error = store.queue_blocked_approvals(
-        {
-            "harness": detection.harness,
-            "items": items,
-            "artifacts": {
-                artifact_id: {
-                    "wire": wire_artifact(artifact),
-                    **{key: artifact.metadata.get(key) for key in _QUEUE_METADATA_KEYS},
-                    "risk_summary": artifact_risk_summary(artifact),
-                    "risk_signals": list(artifact_risk_signals(artifact)),
-                }
-                for artifact_id, artifact in artifacts.items()
-                if artifact_id in named
-            },
-            "approval_center_url": approval_center_url,
-            "now": timestamp,
-            "prompt_shown": prompt_shown,
-            "redaction_level": redaction_level,
-            "guard_version": _current_guard_version(),
-            "cwd": cwd,
-            "continuation": {
-                "harness": facts.harness,
-                "original_hook_attached": facts.original_hook_attached,
-                "wait_deadline": facts.wait_deadline.isoformat() if facts.wait_deadline is not None else None,
-                "opaque_target_id": facts.opaque_target_id,
-                "session_target_verified": facts.session_target_verified,
-                "now": observed_at.isoformat(),
-                "correlation_candidates": [facts.metadata.get(key) for key in ("correlationId", "correlation_id")],
-            },
-        }
-    )
+    continuation = {
+        "harness": facts.harness,
+        "original_hook_attached": facts.original_hook_attached,
+        "wait_deadline": facts.wait_deadline.isoformat() if facts.wait_deadline is not None else None,
+        "opaque_target_id": facts.opaque_target_id,
+        "session_target_verified": facts.session_target_verified,
+        "now": observed_at.isoformat(),
+        "correlation_candidates": [facts.metadata.get(key) for key in ("correlationId", "correlation_id")],
+    }
     payloads: list[dict[str, object]] = []
-    for entry in queued:
-        request_id = str(entry["request_id"])
-        if notify:
-            notice = cast(dict[str, str], entry["notice"])
-            _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
-        request_payload = store.get_approval_request(request_id)
-        if request_payload is None:
-            raise RuntimeError(f"Persisted approval request not found: {request_id}")
-        payloads.append(request_payload)
-    if error is not None:
-        raise error
+    # One store write per item keeps the former order: each request is
+    # written, announced and read back before the next one is written.
+    # The resident derives the request's surfaces, incident copy and
+    # continuation snapshot; Python keeps the notices.
+    for item in reviewable:
+        artifact = artifacts.get(str(item["artifact_id"]))
+        queued, error = store.queue_blocked_approvals(
+            {
+                "harness": detection.harness,
+                "items": [item],
+                "artifacts": {} if artifact is None else {artifact.artifact_id: _queue_artifact(artifact)},
+                "approval_center_url": approval_center_url,
+                "now": timestamp,
+                "prompt_shown": prompt_shown,
+                "redaction_level": redaction_level,
+                "guard_version": _current_guard_version(),
+                "cwd": cwd,
+                "continuation": continuation,
+            }
+        )
+        for entry in queued:
+            request_id = str(entry["request_id"])
+            if notify:
+                notice = cast(dict[str, str], entry["notice"])
+                _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
+            request_payload = store.get_approval_request(request_id)
+            if request_payload is None:
+                raise RuntimeError(f"Persisted approval request not found: {request_id}")
+            payloads.append(request_payload)
+        if error is not None:
+            raise error
     return payloads
+
+
+def _needs_review(item: Mapping[str, object]) -> bool:
+    if not str(item.get("artifact_id") or ""):
+        return False
+    action = normalize_guard_action_result(item.get("policy_action"), unknown_action="require-reapproval").action
+    return action in {"require-reapproval", "review"}
+
+
+def _queue_artifact(artifact: GuardArtifact) -> dict[str, object]:
+    return {
+        "wire": wire_artifact(artifact),
+        **{key: artifact.metadata.get(key) for key in _QUEUE_METADATA_KEYS},
+        "risk_summary": artifact_risk_summary(artifact),
+        "risk_signals": list(artifact_risk_signals(artifact)),
+    }
 
 
 @dataclass(frozen=True, slots=True)
