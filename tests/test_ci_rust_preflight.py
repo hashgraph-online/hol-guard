@@ -108,9 +108,13 @@ def test_shipped_runtime_cache_is_exact_and_only_main_can_write() -> None:
         "runner.os", "runner.arch", "steps.shipping-platform.outputs.image",
         "'rust/**'", "'contributions/**'", "'contracts/**'", "'spec/**'",
         "'src/codex_plugin_scanner/guard/contracts/**'",
-        "'.github/actions/setup-rust/action.yml'", "'.github/workflows/ci.yml'",
+        "'.github/actions/setup-rust/action.yml'", "'.github/actions/ci-job-native-release-size/action.yml'",
+        "'scripts/ci/native_cache_environment.py'", "'scripts/refresh_extension_artifacts.py'", "'.cargo/**'",
+        "steps.shipping-platform.outputs.compiler-env",
     ):
         assert token in restore["with"]["key"]
+    assert "'.github/workflows/ci.yml'" not in restore["with"]["key"]
+    assert "python3 -m scripts.ci.native_cache_environment" in platform["run"]
     miss = "steps.shipped-runtime-cache.outputs.cache-hit != 'true'"
     for name in ("Install content-addressed compiler cache", "Build the shipped fat-LTO runtime"):
         assert next(step for step in steps if step.get("name") == name)["if"] == miss
