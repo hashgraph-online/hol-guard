@@ -274,3 +274,81 @@ fn standard_input_grep_filters_reach_containment() {
         }
     }
 }
+
+/// The execution sink peels a `cd` only to an absolute directory or to a
+/// relative sibling repository root. A relative `cd` into a workspace
+/// subdirectory therefore stays on the workspace sandbox, which the sink
+/// can run as written, instead of the narrower node build profile it would
+/// reject.
+#[test]
+fn relative_workspace_cd_stays_on_the_workspace_sandbox() {
+    let root = fixture();
+    let project = root.join("project");
+    let sibling = root.join("sibling-worktree");
+    std::fs::create_dir_all(sibling.join("dashboard/node_modules/.bin")).unwrap();
+    std::fs::write(
+        sibling.join("dashboard/node_modules/.bin/vite"),
+        "#!/bin/sh\n",
+    )
+    .unwrap();
+    std::fs::write(sibling.join(".git"), "gitdir: /nonexistent\n").unwrap();
+    std::fs::create_dir_all(project.join("dashboard")).unwrap();
+    std::os::unix::fs::symlink(
+        sibling.join("dashboard/node_modules"),
+        project.join("dashboard/node_modules"),
+    )
+    .unwrap();
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: Vec::new(),
+        environment_digest: "0".repeat(64),
+        home: root.to_str().map(str::to_owned),
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: false,
+        library_search_paths: Default::default(),
+    };
+    let decide = |harness: &str, command: &str| {
+        guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            harness,
+            "PreToolUse",
+            &json!({"tool_name":"bash","tool_input":{"command":command}}),
+            None,
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: root.to_str(),
+                cwd: project.to_str(),
+                cdpath_unset: true,
+                ..guard_command::pretool::PathContext::default()
+            },
+            Some(&environment),
+        )
+    };
+    let project = project.to_str().unwrap();
+    let build = "./node_modules/.bin/vite build 2>&1 | tail -15";
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        // The sink cannot peel these, so the narrower profile must not claim them.
+        for command in [
+            format!("cd dashboard && {build}"),
+            format!("cd dashboard; {build}"),
+            format!("cd {project}/dashboard; {build}"),
+        ] {
+            let result = decide(harness, &command);
+            assert_ne!(
+                result.reason_code, "native_node_build_output_containment_required",
+                "{harness}: {command}"
+            );
+        }
+        // An absolute cd keeps the narrower profile.
+        let command = format!("cd {project}/dashboard && {build}");
+        let result = decide(harness, &command);
+        assert_eq!(result.decision, "deny", "{harness}: {command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code, "native_node_build_output_containment_required",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
