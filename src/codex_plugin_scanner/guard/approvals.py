@@ -559,8 +559,7 @@ def queue_blocked_approvals(
                 operation=continuation_operation,
             ),
         )
-        persisted_request_id = store.add_approval_request(request, timestamp)
-        created_new_request = persisted_request_id == request.request_id
+        persisted_request_id = store.add_approval_request(request, timestamp, prompt_shown=prompt_shown)
         if persisted_request_id != request.request_id:
             request = replace(
                 request,
@@ -568,8 +567,6 @@ def queue_blocked_approvals(
                 review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
                 approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
-        if created_new_request:
-            _record_created_event(store, request, timestamp, prompt_shown=prompt_shown)
         if notify:
             _notify_pending_approval(store=store, request=request)
         request_payload = store.get_approval_request(persisted_request_id)
@@ -1133,42 +1130,6 @@ def _enqueue_memory_decision_for_resolution(
         scope=scope,
         resolved_at=resolved_at,
     )
-
-
-def _record_created_event(
-    store: GuardStore,
-    request: GuardApprovalRequest,
-    created_at: str,
-    *,
-    prompt_shown: bool = True,
-) -> None:
-    store.add_event(
-        "approval.created",
-        {
-            "request_id": request.request_id,
-            "harness": request.harness,
-            "artifact_id": request.artifact_id,
-            "artifact_name": request.artifact_name,
-            "artifact_type": request.artifact_type,
-            "policy_action": request.policy_action,
-            "recommended_scope": request.recommended_scope,
-            "source_scope": request.source_scope,
-            "workspace": request.workspace,
-            "publisher": request.publisher,
-        },
-        created_at,
-    )
-    if prompt_shown and request.policy_action in {"review", "require-reapproval"}:
-        store.add_event(
-            "guard.protection.ask_once_shown",
-            {
-                "request_id": request.request_id,
-                "harness": request.harness,
-                "artifact_id": request.artifact_id,
-                "policy_action": request.policy_action,
-            },
-            created_at,
-        )
 
 
 def _refresh_queue_result(
