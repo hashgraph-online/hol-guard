@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.architecture-intelligence-platform",
+  "version": "1.0.0",
+  "name": "Architecture Intelligence Platform MCP",
+  "description": "Read-only evidence-qualified distributed architecture queries for coding agents. Known AIP query tools stay on Guard's usual handling; unknown future tools require review.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.michaelegner",
+    "displayName": "Architecture Intelligence Platform",
+    "url": "https://github.com/michaelegner/architecture-intelligence-platform"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/michaelegner/architecture-intelligence-platform",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mcp.daip.io/mcp",
+    "serverNames": [
+      "aip",
+      "plugin:aip:aip",
+      "architecture-intelligence-platform"
+    ]
+  },
+  "riskClasses": [
+    "external-architecture-read"
+  ],
+  "tools": [
+    {
+      "name": "get_api_consumer_usage",
+      "state": "inherit"
+    },
+    {
+      "name": "get_architecture_drift",
+      "state": "inherit"
+    },
+    {
+      "name": "get_evidence",
+      "state": "inherit"
+    },
+    {
+      "name": "get_service_dependencies",
+      "state": "inherit"
+    },
+    {
+      "name": "get_service_dependencies_by_locality",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/michaelegner/architecture-intelligence-platform",
+    "https://github.com/michaelegner/architecture-intelligence-platform/blob/main/docs/mcp.md",
+    "https://github.com/michaelegner/architecture-intelligence-platform/blob/main/examples/pitstop-demo/TRY_IT_HOSTED.md"
+  ],
+  "saferAlternatives": [
+    "Use the documented AIP read-only query tools for architecture evidence.",
+    "Review any tool that is not part of AIP's documented read-only MCP surface."
+  ]
+}
