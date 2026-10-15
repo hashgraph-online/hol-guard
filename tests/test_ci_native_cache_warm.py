@@ -42,7 +42,12 @@ def test_warmer_and_ci_share_builds_profiles_and_per_commit_deduplication() -> N
     ):
         job, required = warm["jobs"][platform], raw_ci["jobs"][producer]
         assert job["runs-on"] == required["runs-on"]
-        assert job["timeout-minutes"] == required["timeout-minutes"]
+        if platform == "linux":
+            planning = next(step for step in required["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
+            assert planning["timeout-minutes"] == 5
+            assert required["timeout-minutes"] == job["timeout-minutes"] + planning["timeout-minutes"]
+        else:
+            assert job["timeout-minutes"] == required["timeout-minutes"]
         assert job["concurrency"] == {
             "group": f"native-ci-build-${{{{ github.sha }}}}-{platform}",
             "cancel-in-progress": False,

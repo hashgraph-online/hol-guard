@@ -93,7 +93,8 @@ def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     assert action["inputs"]["save-cache"]["default"] == "false"
     jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer = next(
-        step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/setup-ci-python"
+        step for step in jobs["native-command-evaluators"]["steps"]
+        if step.get("uses") == "./.github/actions/setup-ci-python"
     )
     consumer = next(
         step for step in jobs["coverage"]["steps"] if step.get("uses") == "./.github/actions/setup-ci-python"
@@ -102,7 +103,7 @@ def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     assert consumer["with"].get("save-cache", "false") == "false"
     assert producer["with"]["python-version"] == consumer["with"]["python-version"]
     assert producer["with"]["cache-dependency-glob"] == consumer["with"]["cache-dependency-glob"]
-    assert "coverage-plan" in jobs["coverage"]["needs"]
+    assert "native-command-evaluators" in jobs["coverage"]["needs"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="macOS proof setup executes in Bash")
