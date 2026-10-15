@@ -84,7 +84,11 @@ fn try_home_states(
         let identity = crate::resident_client::ExpectedProcessIdentity {
             process_id: state.process_id,
             start_marker: &state.process_start_marker,
-            digest: (!same_runtime).then_some(&state.runtime_sha256),
+            runtime: if same_runtime {
+                crate::resident_client::ExpectedRuntime::Package
+            } else {
+                crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256)
+            },
         };
         let timeout = deadline.saturating_duration_since(Instant::now());
         if timeout.is_zero() {

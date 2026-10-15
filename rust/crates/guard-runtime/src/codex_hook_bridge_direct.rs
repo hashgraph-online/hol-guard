@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 
 use crate::claude_hook_bridge_http::remaining;
 use crate::claude_hook_bridge_render::py_strip;
+use crate::codex_hook_bridge_direct_resident::send_to_live_resident;
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 
 const STATE_DIRECTORY: &str = "native-runtime";
@@ -75,7 +76,6 @@ const GROK: &str = "grok";
 /// A resident answers an allow well inside this. A slower resident leaves
 /// the daemon most of the hook's budget.
 const DIRECT_TIMEOUT: Duration = Duration::from_millis(1_000);
-const MINIMUM_DIRECT_TIMEOUT: Duration = Duration::from_millis(50);
 
 /// The query parameters the daemon reads, as `parse_qs(query)[name][-1]`.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -364,52 +364,6 @@ fn harness_event(harness: &DirectHarness, event_name: &str) -> bool {
         || (harness.name == CLAUDE_CODE.name
             && [PERMISSION_REQUEST, NOTIFICATION].contains(&event_name))
         || (harness.name == CODEX.name && event_name == PERMISSION_REQUEST)
-}
-
-/// Send the request to a live resident that runs this very executable.
-///
-/// The same steps serve every platform. Discovery reads only owner-only
-/// state, the resident must run this executable path and still carry the
-/// start marker its state records, and the client checks that identity
-/// again around the connect before the token handshake. A Windows resident
-/// publishes a loopback endpoint; a unix resident may publish either.
-fn send_to_live_resident(state_base: &Path, request: &[u8], deadline: Instant) -> Option<Vec<u8>> {
-    // Discovery checks the directory's privacy; it must already exist.
-    if !std::fs::symlink_metadata(state_base).is_ok_and(|metadata| metadata.is_dir()) {
-        return None;
-    }
-    let states = crate::resident_state::discover_same_executable_states(state_base).ok()?;
-    for (_scope, _digest, state) in states {
-        if crate::resident_state::validate_same_executable_process_identity(
-            state.process_id,
-            &state.process_start_marker,
-        )
-        .is_err()
-        {
-            continue;
-        }
-        let token = crate::resident_state::token_from_state(&state).ok()?;
-        let timeout = remaining(deadline);
-        if timeout < MINIMUM_DIRECT_TIMEOUT {
-            return None;
-        }
-        let identity = crate::resident_client::ExpectedProcessIdentity {
-            process_id: state.process_id,
-            start_marker: &state.process_start_marker,
-            digest: None,
-        };
-        // One live resident serves a home; any failure goes to the daemon.
-        return crate::resident_client::send_request_for_digest_detailed(
-            &state.transport,
-            &state.endpoint,
-            &token,
-            request,
-            timeout,
-            &identity,
-        )
-        .ok();
-    }
-    None
 }
 
 /// The harness response a live resident answered for this hook, or `None`

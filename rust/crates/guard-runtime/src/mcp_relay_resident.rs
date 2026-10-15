@@ -94,6 +94,9 @@ impl ProcessFacts {
 struct Resident {
     state: ResidentState,
     token: Vec<u8>,
+    /// The digest this relay's own durable copy is published under, when it
+    /// runs as one.
+    durable_digest: Option<String>,
 }
 
 /// The decision authority the relay ships with.
@@ -411,21 +414,28 @@ fn reply(output: &[u8]) -> Option<Reply> {
     }
 }
 
-/// The first live resident of this executable, with its token.
+/// The first live resident of this caller's own runtime, with its token.
 fn discover(state_base: &Path) -> Option<Resident> {
     // Discovery checks the directory's privacy; it must already exist.
     if !std::fs::symlink_metadata(state_base).is_ok_and(|metadata| metadata.is_dir()) {
         return None;
     }
+    let durable_digest = crate::resident_state::durable_runtime_digest(state_base);
     let states = crate::resident_state::discover_same_executable_states(state_base).ok()?;
     states.into_iter().find_map(|(_scope, _digest, state)| {
-        crate::resident_state::validate_same_executable_process_identity(
+        crate::resident_state::validate_direct_lane_process_identity(
             state.process_id,
             &state.process_start_marker,
+            &state.runtime_sha256,
+            durable_digest.as_deref(),
         )
         .ok()?;
         let token = crate::resident_state::token_from_state(&state).ok()?;
-        Some(Resident { state, token })
+        Some(Resident {
+            state,
+            token,
+            durable_digest: durable_digest.clone(),
+        })
     })
 }
 
@@ -439,7 +449,10 @@ fn send(resident: &Resident, payload: &[u8], deadline: Instant) -> Result<Vec<u8
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: resident.state.process_id,
         start_marker: &resident.state.process_start_marker,
-        digest: None,
+        runtime: crate::resident_client::ExpectedRuntime::for_direct_lane(
+            &resident.state.runtime_sha256,
+            resident.durable_digest.as_deref(),
+        ),
     };
     crate::resident_client::send_request_for_digest_detailed(
         &resident.state.transport,

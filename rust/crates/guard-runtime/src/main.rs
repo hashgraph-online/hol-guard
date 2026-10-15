@@ -124,6 +124,7 @@ mod codex_detect;
 mod codex_hook_artifacts;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
+mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
 mod codex_hook_identity;
 mod codex_hook_response;

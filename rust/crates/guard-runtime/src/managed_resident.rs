@@ -169,7 +169,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: state.process_id,
         start_marker: &state.process_start_marker,
-        digest: Some(&state.runtime_sha256),
+        runtime: crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256),
     };
     if crate::resident_client::send_request_for_digest(
         &state.transport,

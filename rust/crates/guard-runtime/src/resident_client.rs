@@ -19,7 +19,42 @@ use crate::resident_diagnostics::{observe, Phase};
 pub(crate) struct ExpectedProcessIdentity<'a> {
     pub(crate) process_id: u32,
     pub(crate) start_marker: &'a str,
-    pub(crate) digest: Option<&'a str>,
+    pub(crate) runtime: ExpectedRuntime<'a>,
+}
+
+/// How a client proves the peer runs the runtime it expects.
+pub(crate) enum ExpectedRuntime<'a> {
+    /// The peer shares this executable's path, or its bytes hash to this
+    /// runtime's digest. A onefile launcher extracts identical runtimes into
+    /// distinct directories, so this reads the peer's runtime when the paths
+    /// differ.
+    Package,
+    /// The peer's runtime hashes to this digest.
+    Digest(&'a str),
+    /// The peer shares this executable's path, or its state records the digest
+    /// that this executable's own durable copy is published under. A caller on
+    /// the hook path takes this because it can afford no runtime hash.
+    DurableCopy {
+        recorded: &'a str,
+        published: &'a str,
+    },
+}
+
+impl<'a> ExpectedRuntime<'a> {
+    /// What a direct-lane client requires of the resident it connects to.
+    ///
+    /// A durable copy knows its own digest from the directory it was published
+    /// under, so it can accept the resident its state records without reading a
+    /// runtime. Any other launcher keeps the package expectation it had before.
+    pub(crate) fn for_direct_lane(recorded: &'a str, durable_digest: Option<&'a str>) -> Self {
+        match durable_digest {
+            Some(published) => Self::DurableCopy {
+                recorded,
+                published,
+            },
+            None => Self::Package,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -154,15 +189,26 @@ fn authenticate(
 }
 
 fn validate_runtime_owner(identity: &ExpectedProcessIdentity<'_>) -> Result<(), String> {
-    match identity.digest {
-        Some(digest) => crate::resident_state::validate_runtime_process_identity(
+    match identity.runtime {
+        ExpectedRuntime::Digest(digest) => {
+            crate::resident_state::validate_runtime_process_identity(
+                identity.process_id,
+                identity.start_marker,
+                digest,
+            )
+        }
+        ExpectedRuntime::Package => crate::resident_state::validate_package_process_identity(
             identity.process_id,
             identity.start_marker,
-            digest,
         ),
-        None => crate::resident_state::validate_package_process_identity(
+        ExpectedRuntime::DurableCopy {
+            recorded,
+            published,
+        } => crate::resident_state::validate_direct_lane_process_identity(
             identity.process_id,
             identity.start_marker,
+            recorded,
+            Some(published),
         ),
     }
 }

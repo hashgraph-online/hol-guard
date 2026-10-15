@@ -3,9 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::{
-    ensure_private_directory_under, private_root_for_state_base, process_start_marker,
-    read_state_file_raw, validate_package_process_identity, validate_runtime_process_identity,
-    validate_state, ResidentState, MAX_STATE_FILES, STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
+    durable_runtime_digest, ensure_private_directory_under, private_root_for_state_base,
+    process_start_marker, read_state_file_raw, validate_package_process_identity,
+    validate_runtime_process_identity, validate_state, ResidentState, MAX_STATE_FILES,
+    STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
 };
 
 const MAX_SCOPES: usize = 16;
@@ -34,9 +35,10 @@ pub(crate) fn discover_home_states_prefer(
 }
 
 /// Discovery for a short-lived caller that can only use a resident running
-/// this very executable. A scope's resident counts as live when its start
-/// marker matches and it runs this executable's path, so no runtime is
-/// hashed; the caller still validates the identity it connects to.
+/// this caller's own runtime. A scope's resident counts as live when its start
+/// marker matches and it either runs this executable's path or is recorded
+/// under the digest this executable's durable copy is published as, so no
+/// runtime is hashed; the caller still validates the identity it connects to.
 pub(crate) fn discover_same_executable_states(
     base: &Path,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
@@ -48,7 +50,7 @@ pub(crate) fn discover_same_executable_states(
 enum Liveness {
     /// The process runs bytes matching the state's runtime digest.
     RuntimeDigest,
-    /// The process runs this executable's path.
+    /// The process runs this caller's own runtime, proven without a hash.
     SameExecutable,
 }
 
@@ -58,6 +60,10 @@ fn discover_states(
     liveness: Liveness,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let private_root = private_root_for_state_base(base)?;
+    let durable_digest = match liveness {
+        Liveness::RuntimeDigest => None,
+        Liveness::SameExecutable => durable_runtime_digest(base),
+    };
     let base = ensure_private_directory_under(base, &private_root, false)?;
     let validated_preferred_digest = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -110,6 +116,7 @@ fn discover_states(
     let mut states = Vec::new();
     let mut budget = DiscoveryBudget::new();
     budget.liveness = liveness;
+    budget.durable_digest = durable_digest;
     if let Some((path, digest_prefix)) = preferred_candidate {
         match load_scope_states(&path, &digest_prefix, &private_root, &mut budget) {
             Ok(found) => states.extend(found),
@@ -117,8 +124,16 @@ fn discover_states(
             Err(_) => {}
         }
     }
-    let preferred_live = states.iter().any(|(_, _, state)| {
-        validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
+    // Only a `RuntimeDigest` caller names a preferred scope, so only its
+    // states reach this check; a `SameExecutable` caller passes no preferred
+    // digest and goes straight to the fallback scopes below. The arm is kept
+    // so a preferred scope added to that mode proves liveness the way it
+    // proves it everywhere else: without hashing a runtime on the hook path.
+    let preferred_live = states.iter().any(|(_, _, state)| match liveness {
+        Liveness::RuntimeDigest => {
+            validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
+        }
+        Liveness::SameExecutable => budget.verified_live(state).unwrap_or(false),
     });
     if truncated && !preferred_live {
         // An unseen fallback may still hold the home-wide resident owner lock.
@@ -174,6 +189,7 @@ struct DiscoveryBudget {
     probes: HashMap<(u32, String, String), bool>,
     exhausted: bool,
     liveness: Liveness,
+    durable_digest: Option<String>,
 }
 
 impl DiscoveryBudget {
@@ -185,6 +201,7 @@ impl DiscoveryBudget {
             probes: HashMap::new(),
             exhausted: false,
             liveness: Liveness::RuntimeDigest,
+            durable_digest: None,
         }
     }
 
@@ -208,9 +225,13 @@ impl DiscoveryBudget {
             Liveness::RuntimeDigest => {
                 validate_runtime_process_identity(key.0, &key.1, &key.2).is_ok()
             }
-            Liveness::SameExecutable => {
-                super::validate_same_executable_process_identity(key.0, &key.1).is_ok()
-            }
+            Liveness::SameExecutable => super::validate_direct_lane_process_identity(
+                key.0,
+                &key.1,
+                &key.2,
+                self.durable_digest.as_deref(),
+            )
+            .is_ok(),
         };
         self.probes.insert(key, verified);
         Ok(verified)
