@@ -7,7 +7,11 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const RESTART_WINDOW_MS: u64 = 60_000;
-const RESTART_CIRCUIT_MS: u64 = 30_000;
+// A crash loop is slowed by bounded exponential backoff, not stopped for a
+// fixed half minute: the first refusal lasts RESTART_BACKOFF_BASE_MS and each
+// further restart doubles it up to RESTART_BACKOFF_MAX_MS.
+const RESTART_BACKOFF_BASE_MS: u64 = 2_000;
+const RESTART_BACKOFF_MAX_MS: u64 = 30_000;
 const MAX_RESTARTS_PER_WINDOW: u32 = 3;
 const BUDGET_SCHEMA: &str = "hol-guard-resident-restart-budget.v1";
 const BUDGET_LOCK_FILE: &str = "restart-budget.lock";
@@ -19,6 +23,14 @@ struct RestartBudget {
     window_start_ms: u64,
     attempts: u32,
     circuit_until_ms: u64,
+    #[serde(default)]
+    backoff_steps: u32,
+}
+
+fn backoff_ms(steps: u32) -> u64 {
+    RESTART_BACKOFF_BASE_MS
+        .saturating_mul(1u64 << steps.min(8))
+        .min(RESTART_BACKOFF_MAX_MS)
 }
 
 struct RestartBudgetLock {
@@ -301,6 +313,7 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
             window_start_ms: now,
             attempts: 0,
             circuit_until_ms: 0,
+            backoff_steps: 0,
         }
     };
     if budget.schema != BUDGET_SCHEMA {
@@ -313,13 +326,20 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
         budget.window_start_ms = now;
         budget.attempts = 0;
         budget.circuit_until_ms = 0;
+        budget.backoff_steps = 0;
     }
     if budget.attempts >= MAX_RESTARTS_PER_WINDOW {
-        budget.circuit_until_ms = now.saturating_add(RESTART_CIRCUIT_MS);
-        let encoded = serde_json::to_vec(&budget)
-            .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
-        write_private(&path, &encoded, &private_root)?;
-        return Err("native_resident_restart_circuit_open".to_owned());
+        // Past the free restarts the resident is respawned at most once per
+        // backoff interval instead of being refused for the whole window.
+        let backoff_elapsed = budget.circuit_until_ms != 0;
+        budget.circuit_until_ms = now.saturating_add(backoff_ms(budget.backoff_steps));
+        budget.backoff_steps = budget.backoff_steps.saturating_add(1);
+        if !backoff_elapsed {
+            let encoded = serde_json::to_vec(&budget)
+                .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
+            write_private(&path, &encoded, &private_root)?;
+            return Err("native_resident_restart_circuit_open".to_owned());
+        }
     }
     budget.attempts += 1;
     let encoded = serde_json::to_vec(&budget)
@@ -339,140 +359,12 @@ pub(super) fn clear(scope: &Path) -> Result<(), String> {
         window_start_ms: now_ms()?,
         attempts: 0,
         circuit_until_ms: 0,
+        backoff_steps: 0,
     })
     .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
     write_private(&path, &encoded, &private_root)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[cfg(windows)]
-    use std::fs;
-
-    #[test]
-    fn repeated_updates_replace_budget_without_leaving_temporary_state() {
-        let scope = std::env::temp_dir().join(format!(
-            "hol-guard-restart-budget-{}-{}",
-            std::process::id(),
-            now_ms().unwrap()
-        ));
-        fs::create_dir(&scope).unwrap();
-
-        consume(&scope).unwrap();
-        consume(&scope).unwrap();
-
-        let encoded = fs::read(scope.join("restart-budget.json")).unwrap();
-        let budget: RestartBudget = serde_json::from_slice(&encoded).unwrap();
-        assert_eq!(budget.schema, BUDGET_SCHEMA);
-        assert_eq!(budget.attempts, 2);
-        assert_eq!(
-            fs::read_dir(&scope)
-                .unwrap()
-                .filter_map(Result::ok)
-                .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
-                .count(),
-            0
-        );
-
-        fs::remove_dir_all(scope).unwrap();
-    }
-
-    #[test]
-    fn authenticated_stop_clears_restart_attempts() {
-        let scope = std::env::temp_dir().join(format!(
-            "hol-guard-restart-budget-clear-{}-{}",
-            std::process::id(),
-            now_ms().unwrap()
-        ));
-        std::fs::create_dir(&scope).unwrap();
-
-        consume(&scope).unwrap();
-        consume(&scope).unwrap();
-        consume(&scope).unwrap();
-        assert_eq!(
-            consume(&scope).unwrap_err(),
-            "native_resident_restart_circuit_open"
-        );
-        clear(&scope).unwrap();
-        consume(&scope).unwrap();
-
-        std::fs::remove_dir_all(scope).unwrap();
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn restart_budget_lock_retains_directory_binding_until_drop() {
-        let scope = std::env::temp_dir().join(format!(
-            "hol-guard-restart-budget-directory-binding-{}-{}",
-            std::process::id(),
-            now_ms().unwrap()
-        ));
-        crate::resident_state::ensure_private_directory(&scope, true).unwrap();
-        let renamed = scope.with_file_name(format!(
-            "{}-renamed",
-            scope.file_name().unwrap().to_string_lossy()
-        ));
-        let lock = acquire_budget_lock(&scope).unwrap();
-
-        assert!(fs::rename(&scope, &renamed).is_err());
-
-        drop(lock);
-        fs::rename(&scope, &renamed).unwrap();
-        fs::remove_dir_all(renamed).unwrap();
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn interrupted_windows_replace_restores_previous_budget() {
-        let scope = std::env::temp_dir().join(format!(
-            "hol-guard-restart-budget-recovery-{}-{}",
-            std::process::id(),
-            now_ms().unwrap()
-        ));
-        fs::create_dir(&scope).unwrap();
-        consume(&scope).unwrap();
-        let path = scope.join("restart-budget.json");
-        let encoded = {
-            let mut file =
-                crate::resident_state::open_private_read(&path, 4096, "restart_budget", &scope)
-                    .unwrap()
-                    .unwrap();
-            let mut encoded = Vec::new();
-            file.read_to_end(&mut encoded).unwrap();
-            encoded
-        };
-        let backup = backup_path(&path);
-        let mut backup_file = crate::resident_state::private_file(&backup, true, &scope).unwrap();
-        backup_file.write_all(&encoded).unwrap();
-        backup_file.sync_all().unwrap();
-        drop(backup_file);
-        crate::resident_state::remove_windows_private_file(&path, &scope).unwrap();
-
-        consume(&scope).unwrap();
-
-        let budget: RestartBudget = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-        assert_eq!(budget.attempts, 2);
-        fs::remove_dir_all(scope).unwrap();
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn windows_budget_existence_requires_private_regular_file_handle() {
-        let scope = std::env::temp_dir().join(format!(
-            "hol-guard-restart-budget-handle-check-{}-{}",
-            std::process::id(),
-            now_ms().unwrap()
-        ));
-        crate::resident_state::ensure_private_directory(&scope, true).unwrap();
-        let path = scope.join("restart-budget.json");
-
-        assert!(!existing_private_file(&path, &scope).unwrap());
-        let file = crate::resident_state::private_file(&path, true, &scope).unwrap();
-        drop(file);
-        assert!(existing_private_file(&path, &scope).unwrap());
-        assert!(existing_private_file(&scope, &scope).is_err());
-
-        fs::remove_dir_all(scope).unwrap();
-    }
-}
+#[path = "resident_restart_budget_tests.rs"]
+mod tests;

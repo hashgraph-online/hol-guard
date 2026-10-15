@@ -256,6 +256,8 @@ def test_validation_failure_preserves_specific_causes_and_redacts_unknown_detail
         (_DaemonResponseError(403, "private-detail", authenticated=True), "daemon_authenticated_http_error"),
         (ValueError("daemon identity challenge authentication failed"), "daemon_challenge_authentication_failed"),
         (TimeoutError("private-endpoint"), "daemon_transport_timeout"),
+        (ValueError("daemon state is unavailable"), "daemon_state_missing"),
+        (ValueError("daemon state records a stopped daemon"), "daemon_state_stopped"),
     ],
 )
 def test_daemon_failure_categories_preserve_authentication_boundary(error, reason) -> None:

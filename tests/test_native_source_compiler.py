@@ -47,7 +47,9 @@ def test_compile_source_uses_explicit_native_compiler_and_canonical_stdin(
 
     assert result["source_digest"] == "a" * 64
     assert calls[0][0][1:] == ["compile"]
-    assert Path(calls[0][0][0]).name == "guard-command-source"
+    # The verified executable snapshot is staged under the runtime name; the
+    # runtime accepts the compiler operations at top level.
+    assert Path(calls[0][0][0]).name == compiler._COMPILER_NAME
     assert calls[0][1] == (b'{"mcp_sources":[],"schema":"guard.command-extension-build.v1","sources":[],"trust":{}}\n')
 
 
@@ -58,13 +60,13 @@ def test_packaged_compiler_manifest_binds_runtime_identity_and_binary(
     raw = executable.read_bytes()
     native = tmp_path / "_native"
     native.mkdir()
-    packaged = native / executable.name
+    packaged = native / compiler._COMPILER_NAME
     packaged.write_bytes(raw)
     packaged.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     source_sha = "a" * 40
     base_program_digest = "b" * 64
     manifest = {
-        "schema": "hol-guard-native-source-compiler.v1",
+        "schema": "hol-guard-native-source-compiler.v2",
         "protocol_version": 1,
         "package_version": "3.0.1",
         "target": "x86_64-unknown-linux-gnu",
@@ -72,6 +74,7 @@ def test_packaged_compiler_manifest_binds_runtime_identity_and_binary(
         "source_sha": source_sha,
         "implementation_digest": "c" * 64,
         "base_program_digest": base_program_digest,
+        "executable": compiler._COMPILER_NAME,
         "compiler_sha256": hashlib.sha256(raw).hexdigest(),
         "compiler_size": len(raw),
     }
@@ -122,7 +125,7 @@ def _packaged_compiler(
     packaged.write_bytes(raw)
     packaged.chmod(0o700)
     manifest: dict[str, object] = {
-        "schema": "hol-guard-native-source-compiler.v1",
+        "schema": "hol-guard-native-source-compiler.v2",
         "protocol_version": 1,
         "package_version": "3.0.1",
         "target": "x86_64-unknown-linux-gnu",
@@ -130,6 +133,7 @@ def _packaged_compiler(
         "source_sha": "a" * 40,
         "implementation_digest": "c" * 64,
         "base_program_digest": "b" * 64,
+        "executable": compiler._COMPILER_NAME,
         "compiler_sha256": hashlib.sha256(raw).hexdigest(),
         "compiler_size": len(raw),
     }

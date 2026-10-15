@@ -782,13 +782,10 @@ def _assert_negative_results(
 
 
 def _probe_native_identity() -> tuple[Any, Any, Any]:
-    from codex_plugin_scanner.guard.config import hook_fast_path_enabled
     from codex_plugin_scanner.guard.native_runtime import native_mode, native_runtime_status
 
     if native_mode() != "auto":
         raise ProbeError(f"unexpected native mode: {native_mode()}")
-    if not hook_fast_path_enabled():
-        raise ProbeError("unset fast-path configuration must be enabled")
     status = native_runtime_status()
     if not status.available or not status.compatible or status.reason != "native_ready":
         raise ProbeError(f"installed native runtime is not ready: {status}")
@@ -814,7 +811,9 @@ def _close_startup_resource(resource: Any | None) -> BaseException | None:
     return None
 
 
-def _start_installed_daemon(*, guard_home: Path, home: Path, workspace: Path, identity: Any) -> Any:
+def _start_installed_daemon(
+    *, guard_home: Path, home: Path, workspace: Path, identity: Any, register_workspace_policy: bool = True
+) -> Any:
     """Start the installed Guard daemon that the generated extension will use."""
     from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
@@ -842,7 +841,8 @@ def _start_installed_daemon(*, guard_home: Path, home: Path, workspace: Path, id
             "register_workspace",
             None,
         )
-        if callable(register_workspace):
+        # First-contact scenarios skip this on purpose: a freshly installed Guard has no bound policy.
+        if register_workspace_policy and callable(register_workspace):
             _ = register_workspace(workspace)
         daemon.start()
     except BaseException as startup_error:

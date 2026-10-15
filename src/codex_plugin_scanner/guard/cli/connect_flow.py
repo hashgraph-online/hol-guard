@@ -25,6 +25,7 @@ from typing_extensions import Unpack
 from ...version import __version__
 from ..browser_opener import open_browser_url
 from ..mdm.network import managed_urlopen
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
 from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
@@ -36,6 +37,8 @@ from ..portable_command import portable_command_payload
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
+from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
+from .commands_parser_constants import DEFAULT_GUARD_SYNC_URL as DEFAULT_GUARD_SYNC_URL
 from .oauth_client import (
     GuardDpopKeyMaterial,
     GuardOAuthClientConfig,
@@ -47,8 +50,6 @@ from .oauth_client import (
 )
 from .oauth_credential_persistence import OAuthCredentialUpdateParams, persist_oauth_local_credentials
 
-DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
-DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
 DEFAULT_GUARD_DEVICE_SCOPES = (
     "guard:runtime.sync",
     "guard:receipt.write",
@@ -1265,15 +1266,21 @@ def build_connect_status_payload(
     connect_url: str,
     action: str = "status",
 ) -> dict[str, object]:
-    review_event_binding = store.get_review_event_oauth_binding()
-    review_event_status = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(
-            {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
-            if review_event_binding is not None
-            else {}
-        ),
-    )
+    review_event_binding: dict[str, str] | None
+    review_event_status: dict[str, object]
+    try:
+        review_event_binding = store.get_review_event_oauth_binding()
+        review_event_status = store.review_event_outbox_status(
+            now=datetime.now(timezone.utc).isoformat(),
+            **(
+                {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
+                if review_event_binding is not None
+                else {}
+            ),
+        )
+    except NativeGuardStoreUnavailable as error:
+        review_event_binding = None
+        review_event_status = unavailable_outbox_status(error)
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()

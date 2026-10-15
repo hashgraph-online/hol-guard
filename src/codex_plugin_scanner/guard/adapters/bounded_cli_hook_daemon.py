@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..action_lattice import is_guard_action
+from ..daemon.auth_token import load_guard_daemon_auth_token as _read_daemon_auth_token
 from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
 from .bounded_cli_hook_envelope import _canonical_event_token, _event_name, _json_object
@@ -45,15 +46,6 @@ class _LoopbackOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
         _assert_loopback_http_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def _read_daemon_auth_token(guard_home: Path) -> str | None:
-    token = read_private_regular_text(
-        guard_home / "daemon-auth-token",
-        max_bytes=4096,
-        require_private_parent=True,
-    )
-    return token or None
 
 
 def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:

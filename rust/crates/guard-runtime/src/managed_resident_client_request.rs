@@ -98,10 +98,11 @@ fn try_home_states(
             timeout,
             &identity,
         ) {
-            // A foreign resident that rejects this runtime's policy snapshot
-            // never will admit it; replace it with a resident of our runtime.
+            // A foreign resident that rejects this runtime's policy snapshot or
+            // a request it predates never will admit it; replace it with a
+            // resident of our runtime.
             Ok(response)
-                if handoff::retire_foreign_resident_rejecting_policy(
+                if handoff::retire_foreign_resident_rejecting_request(
                     &scope,
                     &state,
                     &runtime_digest,

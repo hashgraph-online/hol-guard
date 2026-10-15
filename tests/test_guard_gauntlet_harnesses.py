@@ -3,13 +3,14 @@
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.harness_judge import _relative, _tokens, assess_harness_case, effective_decision, guard_decisions
-from ci.gauntlet.harnesses import CredentialSeed, adapter, read_transcript
+from ci.gauntlet.harnesses import CredentialSeed, adapter, keep_login_shell_path, read_transcript
 from ci.gauntlet.proofs import required_checks
 
 SCENARIOS = {scenario.id: scenario for scenario in load_catalog()}
@@ -217,11 +218,9 @@ def test_every_hooked_call_needs_a_guard_review():
     assert assess_harness_case(scenario, case(scenario.id, [], [BASH_CALL]))["outcome"] == "harness-error"
     one = [row("PreToolUse", ALLOW, decision="allow", command=scenario.commands[0])]
     result = assess_harness_case(scenario, case(scenario.id, one, [BASH_CALL] * 4))
-    assert result == {
-        "outcome": "harness-error",
-        "reason": "3 of 4 tool calls ran without a Guard review",
-        "harness": "codex",
-    }
+    assert result["outcome"] == "harness-error"
+    assert result["reason"] == "3 of 4 tool calls ran without a Guard review"
+    assert result["harness"] == "codex"
 
 
 def test_ordinary_case_needs_every_requested_command():
@@ -426,3 +425,32 @@ def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
     environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
     assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
     assert environment["USERPROFILE"] == str(tmp_path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the Keychain account name comes from the POSIX user database")
+def test_keychain_logins_get_the_operator_account_name(tmp_path, monkeypatch):
+    # Claude Code looks up its Keychain login by $USER and reports "Not logged in" without it.
+    import pwd
+
+    from ci.gauntlet.harness_case import harness_environment
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    account = pwd.getpwuid(os.getuid()).pw_name
+    environment = harness_environment(adapter("claude-code"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["USER"] == account
+    assert adapter("cursor").keychain_environment() == {"USER": account}
+    assert adapter("codex").keychain_environment() == {}
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert adapter("claude-code").keychain_environment() == {}
+
+
+def test_macos_login_shells_keep_the_runner_path_order(tmp_path, monkeypatch):
+    # Codex runs commands through `zsh -lc`; path_helper would otherwise put BSD sed first.
+    path = os.pathsep.join(["/opt/gnu sed/bin", "/usr/bin"])
+    monkeypatch.setattr(sys, "platform", "linux")
+    keep_login_shell_path(tmp_path, path)
+    assert not (tmp_path / ".zprofile").exists()
+    monkeypatch.setattr(sys, "platform", "darwin")
+    keep_login_shell_path(tmp_path, path)
+    assert (tmp_path / ".zprofile").read_text(encoding="utf-8") == f"export PATH='{path}'\n"

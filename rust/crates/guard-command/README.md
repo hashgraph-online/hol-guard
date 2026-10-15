@@ -11,7 +11,10 @@ renders native results and coordinates the control plane; it does not replace
 the native semantic decision after a failure. See the
 [native runtime authority contract](../../../docs/guard/adr/0010-native-posttool-default-auto.md).
 
-The offline `guard-command-source` compiler is also built from this crate.
+The offline `guard-command-source` compiler is also built from this crate. It
+remains a standalone development, CI, and build-time binary; the packaged
+`hol-guard-runtime` executable hosts the same operations at top level, so
+platform wheels ship only the runtime.
 Compiling a contribution or passing its fixtures does not activate an extension,
 create an authenticated receipt, or qualify an installed runtime.
 

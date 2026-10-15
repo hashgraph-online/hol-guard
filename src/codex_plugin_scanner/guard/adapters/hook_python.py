@@ -121,33 +121,6 @@ class _ParentExpectation:
         }
 
 
-def _path_looks_like_worktree(path: Path) -> bool:
-    text = str(path.resolve()).replace("\\", "/")
-    if any(marker in text for marker in _WORKTREE_MARKERS):
-        return True
-    return any(segment.startswith(prefix) for segment in text.split("/") for prefix in _WORKTREE_SEGMENT_PREFIXES)
-
-
-def filter_worktree_path_entries(entries: list[str]) -> list[str]:
-    """Return stable, unique path entries for legacy callers."""
-
-    filtered: list[str] = []
-    for entry in entries:
-        trimmed = entry.strip()
-        if not trimmed or _path_looks_like_worktree(Path(trimmed)):
-            continue
-        if trimmed not in filtered:
-            filtered.append(trimmed)
-    return filtered
-
-
-def _guard_hook_python_candidates(context: HarnessContext) -> list[Path]:
-    """Compatibility seam returning only the Python already running Guard."""
-
-    del context
-    return [Path(sys.executable).absolute()]
-
-
 def _probe_environment(neutral_cwd: Path) -> dict[str, str]:
     env = {key: os.environ[key] for key in _PROBE_INHERITED_ENV_KEYS if key in os.environ}
     env.update(
@@ -516,26 +489,12 @@ def guard_cli_command(context: HarnessContext, args: list[str]) -> list[str]:
     return [executable, *args[3:]]
 
 
-def package_root_from_python(python: Path, context: HarnessContext) -> str:
-    """Return the active Guard root after re-attesting the running Python."""
-
-    return str(
-        _attest_python(
-            python,
-            neutral_cwd=_attestation_probe_cwd(context),
-            expected_package_root=_active_package_root(),
-        ).package_root
-    )
-
-
 __all__ = [
     "HookPythonAttestation",
     "HookPythonExecutableIdentity",
     "HookPythonFileMetadata",
     "attest_guard_hook_python",
     "disposable_guard_hook_probe",
-    "filter_worktree_path_entries",
     "guard_cli_command",
-    "package_root_from_python",
     "resolve_guard_hook_python",
 ]

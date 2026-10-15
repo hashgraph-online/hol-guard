@@ -7,10 +7,25 @@ import json
 from collections.abc import Mapping, Sequence
 
 _MAX_COMPATIBLE_BRIDGE_GENERATIONS = 8
+NATIVE_CODEX_HOOK_COMMAND = "codex-hook-bridge"
+NATIVE_CODEX_HOOK_FEATURE = "codex-hook-bridge-v1"
+
+
+def python_bridge_argv(argv: Sequence[object]) -> list[object]:
+    """The Python bridge argv inside a native launcher prefix, else ``argv``.
+
+    The native runtime answers a Codex hook itself and hands anything else to
+    the Python bridge argv that follows its subcommand, so a native and a
+    Python registration of one bridge share one identity.
+    """
+    values = list(argv)
+    if len(values) > 2 and isinstance(values[0], str) and values[0] and values[1] == NATIVE_CODEX_HOOK_COMMAND:
+        return values[2:]
+    return values
 
 
 def bridge_argv_sha256(argv: Sequence[object]) -> str:
-    payload = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    payload = json.dumps(python_bridge_argv(argv), ensure_ascii=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -109,4 +124,10 @@ def retained_launch_generations(manifest: Mapping[str, object]) -> list[dict[str
     return result
 
 
-__all__ = ["bridge_argv_sha256", "compatible_bridge_argv_hashes"]
+__all__ = [
+    "NATIVE_CODEX_HOOK_COMMAND",
+    "NATIVE_CODEX_HOOK_FEATURE",
+    "bridge_argv_sha256",
+    "compatible_bridge_argv_hashes",
+    "python_bridge_argv",
+]

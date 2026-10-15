@@ -500,6 +500,17 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
             "propose_remote",
             "github.command.pr-proposal",
         ),
+        (
+            ("repo", "create", "todo-app", "--private", "--source=.", "--remote", "origin"),
+            "create_private_remote",
+            "github.command.private-repository-creation",
+        ),
+        (("repo", "create", "todo-app", "--public"), "content_remote", "github.command.content-mutation"),
+        (
+            ("repo", "create", "todo-app", "--private", "--source=.", "--push"),
+            "content_remote",
+            "github.command.content-mutation",
+        ),
         (("pr", "create", "--title", "Ready"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "--fill"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "-f"), "content_remote", "github.command.content-mutation"),
@@ -862,6 +873,8 @@ def test_guard_reviews_unbounded_review_thread_response_selections(selection: st
             "'repos/example/project/contents/ci/baseline.json?ref=main'"
         ),
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
+        "gh repo create todo-app --private --source=. --remote origin",
+        'gh repo create todo-app --private -d "A small todo app"',
         (
             "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
             "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
@@ -1058,6 +1071,9 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ('gh issue lock "$ISSUE" --repo "$REPO"', "Unverified GitHub command capability"),
         ('gh pr ready "$(cat number)" -R "$REPO"', "Unverified GitHub command capability"),
         ('gh issue pin "${NUMBER}"', "Unverified GitHub command capability"),
+        ("gh repo create todo-app --public --source=.", "GitHub content mutation command"),
+        ("gh repo create todo-app --private --source=. --push", "GitHub content mutation command"),
+        ("gh repo create example-org/todo-app --private", "GitHub content mutation command"),
     ),
 )
 def test_guard_requires_confirmation_for_github_mutations_and_unverified_compositions(

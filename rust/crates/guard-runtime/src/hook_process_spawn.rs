@@ -38,7 +38,7 @@ const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// base-env keys forwarded to a contained hook process. `LC_*` is a prefix
 /// allowlist on top.
 #[allow(dead_code)]
-const HOOK_ENVIRONMENT_KEYS: [&str; 18] = [
+const HOOK_ENVIRONMENT_KEYS: [&str; 19] = [
     "CODEX_HOME",
     "COMSPEC",
     "HOME",
@@ -47,6 +47,7 @@ const HOOK_ENVIRONMENT_KEYS: [&str; 18] = [
     "HOL_GUARD_NATIVE_BINARY",
     "HOL_GUARD_TEST_MODE",
     "HOL_GUARD_NATIVE_DIAGNOSTIC",
+    "HOL_GUARD_RESIDENT_TEST_SEAMS",
     "LANG",
     "PATH",
     "PATHEXT",

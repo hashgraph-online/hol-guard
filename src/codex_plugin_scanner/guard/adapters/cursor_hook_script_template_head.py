@@ -40,6 +40,11 @@ GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 _HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + GUARD_HOOK_TIMEOUT_SECONDS
+# The native runtime hands over a hook it did not answer with the time it
+# already spent; that time comes out of this client's budget, never added.
+_NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
+if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
+    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(GUARD_HOOK_TIMEOUT_SECONDS))
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _FALLBACK_LOCK = threading.Lock()
 

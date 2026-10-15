@@ -42,6 +42,22 @@ pub struct McpStdioSessionSendRequestV1 {
     pub session_id: String,
     /// Raw JSON-RPC message to frame onto the child's stdin.
     pub message: Value,
+    /// When present the op is a fused exchange: wait for a quiet edge on the
+    /// child's output, frame the message, then wait for its correlated
+    /// response, all under one session lock and one round trip.
+    #[serde(default)]
+    pub exchange: Option<McpStdioSessionExchangeV1>,
+}
+
+/// Timing for a fused `send` exchange. Both windows are bounded by the op.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpStdioSessionExchangeV1 {
+    /// Child output must stay silent this long before the message is written.
+    /// Any frame that arrives first is returned unwritten as a boundary frame.
+    pub quiet_ms: u64,
+    /// How long to wait for the response correlated to `message.id`.
+    pub response_timeout_ms: u64,
 }
 
 /// `recv` — drain the next inbound child frame within `timeout_ms`. When

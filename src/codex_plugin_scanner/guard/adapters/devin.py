@@ -25,10 +25,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..aibom_detection import extend_detection_with_workspace_aibom
+from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection_with_warnings
 from ..codex_hook_integrity import atomic_write_text
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
-from ..models import GuardArtifact, HarnessDetection
+from ..models import HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
@@ -36,27 +36,14 @@ from .base import (
     PreparedHarnessInstall,
     _command_available,
     _ensure_path_within_root,
-    _json_payload,
     _shell_command,
+    detection_request,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .devin_config import (
-    CLAUDE_HOOK_SETTINGS_BASENAMES,
-    CLAUDE_HOOK_USER_PATHS,
-    DEVIN_AGENTS_SKILLS_DIR,
     DEVIN_CONFIG_FILE,
     DEVIN_DIR,
     DEVIN_GUARD_TOOL_MATCHER,
-    DEVIN_HOOKS_FILE,
-    DEVIN_LOCAL_CONFIG_FILE,
-    DEVIN_LOCAL_MCP_CONFIG_FILE,
-    DEVIN_MCP_CONFIG_FILE,
-    DEVIN_SKILLS_DIR,
-    append_devin_hook_artifacts,
-    append_devin_skill_artifacts,
-    append_found_path,
-    append_mcp_server_artifacts,
-    has_guard_managed_claude_hooks,
     is_guard_managed_hook_command,
     load_devin_jsonc,
     parse_devin_jsonc,
@@ -127,10 +114,6 @@ class DevinHarnessAdapter(HarnessAdapter):
     def _user_config_path(cls, context: HarnessContext) -> Path:
         return cls._devin_config_dir(context) / DEVIN_CONFIG_FILE
 
-    @classmethod
-    def _user_mcp_path(cls, context: HarnessContext) -> Path:
-        return cls._devin_config_dir(context) / DEVIN_MCP_CONFIG_FILE
-
     def policy_path(self, context: HarnessContext) -> Path:
         if context.workspace_dir is not None:
             project_config = context.workspace_dir / DEVIN_DIR / DEVIN_CONFIG_FILE
@@ -142,184 +125,26 @@ class DevinHarnessAdapter(HarnessAdapter):
         del context
         return ()
 
-    def _config_candidates(self, context: HarnessContext) -> list[tuple[Path, str]]:
-        candidates: list[tuple[Path, str]] = [(self._user_config_path(context), "global")]
-        if context.workspace_dir is not None:
-            project_root = context.workspace_dir / DEVIN_DIR
-            candidates.extend(
-                [
-                    (project_root / DEVIN_CONFIG_FILE, "project"),
-                    (project_root / DEVIN_LOCAL_CONFIG_FILE, "project"),
-                ]
-            )
-        return candidates
-
-    def _mcp_candidates(self, context: HarnessContext) -> list[tuple[Path, str]]:
-        candidates: list[tuple[Path, str]] = [(self._user_mcp_path(context), "global")]
-        if context.workspace_dir is not None:
-            project_root = context.workspace_dir / DEVIN_DIR
-            candidates.extend(
-                [
-                    (project_root / DEVIN_MCP_CONFIG_FILE, "project"),
-                    (project_root / DEVIN_LOCAL_MCP_CONFIG_FILE, "project"),
-                ]
-            )
-        return candidates
-
-    def _skill_candidates(self, context: HarnessContext) -> list[tuple[Path, Path, str]]:
-        candidates: list[tuple[Path, Path, str]] = [
-            (
-                self._devin_config_dir(context) / DEVIN_SKILLS_DIR,
-                self._devin_config_dir(context).parent,
-                "global",
-            ),
-            (
-                context.home_dir / DEVIN_AGENTS_SKILLS_DIR,
-                context.home_dir,
-                "global",
-            ),
-        ]
-        if context.workspace_dir is not None:
-            candidates.extend(
-                [
-                    (
-                        context.workspace_dir / DEVIN_DIR / DEVIN_SKILLS_DIR,
-                        context.workspace_dir,
-                        "project",
-                    ),
-                    (
-                        context.workspace_dir / DEVIN_AGENTS_SKILLS_DIR,
-                        context.workspace_dir,
-                        "project",
-                    ),
-                ]
-            )
-        return candidates
-
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
-        warnings: list[str] = []
-
-        user_config_payload: dict[str, object] = {}
-        for config_path, scope in self._config_candidates(context):
-            if not config_path.is_file():
-                continue
-            append_found_path(found_paths, config_path)
-            document = load_devin_jsonc(config_path)
-            if document.parse_failed:
-                warnings.append(
-                    f"Devin config at {config_path} could not be parsed; "
-                    "hooks and MCP servers in it were not inventoried."
-                )
-                continue
-            payload = document.payload
-            if config_path == self._user_config_path(context):
-                user_config_payload = payload
-            if not payload:
-                continue
-            append_devin_hook_artifacts(
-                artifacts=artifacts,
-                hooks=payload.get("hooks"),
-                config_path=config_path,
-                scope=scope,
-            )
-            # Legacy Devin versions kept mcpServers inside config.json.
-            append_mcp_server_artifacts(
-                harness=self.harness,
-                artifacts=artifacts,
-                servers=payload.get("mcpServers"),
-                config_path=config_path,
-                scope=scope,
-            )
-
-        if context.workspace_dir is not None:
-            hooks_v1_path = context.workspace_dir / DEVIN_DIR / DEVIN_HOOKS_FILE
-            if hooks_v1_path.is_file():
-                append_found_path(found_paths, hooks_v1_path)
-                document = load_devin_jsonc(hooks_v1_path)
-                if document.parse_failed:
-                    warnings.append(
-                        f"Devin config at {hooks_v1_path} could not be parsed; "
-                        "hooks and MCP servers in it were not inventoried."
-                    )
-                else:
-                    # hooks.v1.json is the hooks object itself, not wrapped.
-                    append_devin_hook_artifacts(
-                        artifacts=artifacts,
-                        hooks=document.payload,
-                        config_path=hooks_v1_path,
-                        scope="project",
-                    )
-
-        for mcp_path, scope in self._mcp_candidates(context):
-            if not mcp_path.is_file():
-                continue
-            append_found_path(found_paths, mcp_path)
-            document = load_devin_jsonc(mcp_path)
-            if document.parse_failed:
-                warnings.append(
-                    f"Devin config at {mcp_path} could not be parsed; hooks and MCP servers in it were not inventoried."
-                )
-                continue
-            payload = document.payload
-            append_mcp_server_artifacts(
-                harness=self.harness,
-                artifacts=artifacts,
-                servers=payload.get("mcpServers"),
-                config_path=mcp_path,
-                scope=scope,
-            )
-
-        for skill_root, identity_scope_root, scope in self._skill_candidates(context):
-            append_devin_skill_artifacts(
-                artifacts=artifacts,
-                found_paths=found_paths,
-                warnings=warnings,
-                skill_root=skill_root,
-                identity_scope_root=identity_scope_root,
-                scope=scope,
-            )
-
+        config_dir = self._devin_config_dir(context)
+        request = {**detection_request(self.harness, context), "config_dir": str(config_dir)}
+        if not config_dir.is_absolute() and "cwd" not in request:
+            request["cwd"] = os.getcwd()
+        artifacts, found_paths, warnings = native_adapter_detection_with_warnings("devin_detect", request)
         command_available = _command_available(self.executable)
-        if self._claude_hooks_overlap(context, user_config_payload):
-            warnings.append(
-                "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside "
-                "Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in "
-                "Devin's user config if you want Devin events attributed only to the Devin adapter."
-            )
-
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or command_available,
             command_available=command_available,
-            config_paths=tuple(found_paths),
-            artifacts=tuple(artifacts),
-            warnings=tuple(dict.fromkeys(warnings)),
+            config_paths=found_paths,
+            artifacts=artifacts,
+            warnings=warnings,
         )
         return extend_detection_with_workspace_aibom(
             detection,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
-
-    def _claude_hooks_overlap(self, context: HarnessContext, user_config: dict[str, object]) -> bool:
-        """Return True when Guard-managed Claude hooks would also run in Devin."""
-
-        read_config_from = user_config.get("read_config_from")
-        if isinstance(read_config_from, dict) and read_config_from.get("claude") is False:
-            return False
-
-        candidates = [context.home_dir / relative for relative in CLAUDE_HOOK_USER_PATHS]
-        if context.workspace_dir is not None:
-            candidates.extend(context.workspace_dir / relative for relative in CLAUDE_HOOK_SETTINGS_BASENAMES)
-        for path in candidates:
-            if not path.is_file():
-                continue
-            payload = _json_payload(path)
-            if payload and has_guard_managed_claude_hooks(payload):
-                return True
-        return False
 
     def _managed_state_paths(self, context: HarnessContext) -> tuple[Path, Path, Path]:
         state_dir = context.guard_home / "managed" / "devin"

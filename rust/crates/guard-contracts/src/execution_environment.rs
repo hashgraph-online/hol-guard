@@ -1,10 +1,21 @@
 //! Caller-declared lookup context shared by hook and command entry points.
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub const MAX_EXECUTION_ENVIRONMENT_PATH_BYTES: usize = 32 * 1024;
 pub const MAX_EXECUTION_ENVIRONMENT_NAMES: usize = 512;
 pub const MAX_EXECUTION_ENVIRONMENT_NAME_BYTES: usize = 256;
 pub const EXECUTION_ENVIRONMENT_DIGEST_HEX_BYTES: usize = 64;
+/// Dynamic-loader search paths whose values the hook stamps so a receiver can
+/// check each directory. Injection variables such as `LD_PRELOAD` are never
+/// stamped; a receiver treats them by name only.
+pub const LIBRARY_SEARCH_PATH_NAMES: &[&str] = &[
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+    "DYLD_FALLBACK_LIBRARY_PATH",
+    "DYLD_FRAMEWORK_PATH",
+    "DYLD_FALLBACK_FRAMEWORK_PATH",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -24,6 +35,9 @@ pub struct GuardExecutionEnvironmentV1 {
     pub xdg_config_home: Option<String>,
     #[serde(default)]
     pub git_config_no_system: bool,
+    /// Values of the exported variables in [`LIBRARY_SEARCH_PATH_NAMES`].
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub library_search_paths: BTreeMap<String, String>,
 }
 
 impl GuardExecutionEnvironmentV1 {
@@ -35,6 +49,9 @@ impl GuardExecutionEnvironmentV1 {
         path_valid(&self.path)
             && self.home.as_deref().is_none_or(path_valid)
             && self.xdg_config_home.as_deref().is_none_or(path_valid)
+            && self.library_search_paths.iter().all(|(name, value)| {
+                LIBRARY_SEARCH_PATH_NAMES.contains(&name.as_str()) && path_valid(value)
+            })
             && self.environment_names.len() <= MAX_EXECUTION_ENVIRONMENT_NAMES
             && self.environment_names.iter().all(|name| {
                 name.len() <= MAX_EXECUTION_ENVIRONMENT_NAME_BYTES
@@ -57,6 +74,7 @@ impl GuardExecutionEnvironmentV1 {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: BTreeMap::new(),
         }
     }
 }

@@ -34,6 +34,7 @@ import { protectionHealthFor, useProtectionPresentationState } from "./protectio
 import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
 import { FleetProtectionRecovery } from "./fleet-protection-recovery";
+import { FleetAppProtection, type FleetPostureApp } from "./fleet-app-protection";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -55,6 +56,7 @@ type FleetWorkspaceProps = {
   onRepairHarness?: (harness: string) => void;
   onRepairProtection: (harnesses: string[]) => Promise<string>;
   onOpenAppDetail?: (harness: string) => void;
+  onRuntimeRefresh?: () => Promise<void> | void;
 };
 
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
@@ -200,6 +202,14 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     )) ?? visibleHarnesses[0];
   const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
+  // Apps known to this machine and whether Guard actually manages their hooks.
+  // The posture card only speaks about the managed ones.
+  const postureApps: FleetPostureApp[] = (() => {
+    const activeSet = new Set(activeInstalls.map((install) => install.harness));
+    const known = new Set([...managedInstalls.map((install) => install.harness), ...visibleHarnesses]);
+    return Array.from(known, (harness) => ({ harness, active: activeSet.has(harness) }))
+      .sort((a, b) => a.harness.localeCompare(b.harness));
+  })();
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -260,6 +270,8 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
           onRepairHarness={props.onRepairHarness ?? props.onConnectHarness}
         />
       ) : null}
+
+      <FleetAppProtection apps={postureApps} onChanged={props.onRuntimeRefresh} />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
         <section>

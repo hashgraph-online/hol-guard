@@ -349,19 +349,30 @@ fn dispatch_intent(
     }
 }
 
+/// Whether `extract_package_intent_request` reads the arguments of
+/// `tool_name` as shell commands (`_SHELL_TOOL_NAMES`).
+pub fn shell_tool_name(tool_name: &str) -> bool {
+    normalize_tool_name(tool_name).is_some_and(|name| SHELL_TOOL_NAMES.contains(&name.as_str()))
+}
+
 /// `extract_package_intent_request`  (package_intent_parser.py :1541-…).
+///
+/// `environment` is the one each `parse_package_intent` resolves the launch
+/// in; the Python caller passes none, which the resident request binds to the
+/// caller's `PATH` (`_resident_environment`).
 pub fn extract_package_intent_request(
     tool_name: &str,
     arguments: &Value,
     action_envelope_command: Option<&str>,
     workspace: Option<&Path>,
     home_dir: Option<&Path>,
+    environment: Option<&BTreeMap<String, String>>,
 ) -> Option<PackageIntent> {
     if let Some(normalized_tool_name) = normalize_tool_name(tool_name) {
         if SHELL_TOOL_NAMES.contains(&normalized_tool_name.as_str()) {
             for command_text in candidate_command_texts(arguments) {
                 if let Some(intent) =
-                    parse_package_intent(&command_text, workspace, home_dir, None, None)
+                    parse_package_intent(&command_text, workspace, home_dir, None, environment)
                 {
                     return Some(intent);
                 }
@@ -369,7 +380,7 @@ pub fn extract_package_intent_request(
         }
     }
     if let Some(command) = action_envelope_command {
-        return parse_package_intent(command, workspace, home_dir, None, None);
+        return parse_package_intent(command, workspace, home_dir, None, environment);
     }
     None
 }

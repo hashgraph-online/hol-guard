@@ -1,5 +1,5 @@
-import { U as isUnsupportedPlatformCheck, i as harnessDisplayName, j as jsxRuntimeExports, V as RECHECK_UNAVAILABLE_SIGNATURE, X as protectionReasonText, r as reactExports, A as ActionButton, Y as HiMiniExclamationCircle, Z as hasRepairableProtectionGap, _ as remainingProtectionRepairParts, $ as protectionGapSignature, a0 as repairOutcomeIsStalled, a1 as ProtectionRepairFlowError, a2 as nextProtectionRepairOutcome, a3 as waitForAuthorizeUrl, a4 as startOrRecoverCloudConnect, a5 as safeCloudConnectUrl, a6 as openPackageFirewallAuthorizeFallback, a7 as waitForCloudConnection, a8 as activeFailedHarnesses, a9 as resetRepairOutcomeTracker, aa as HiMiniWrenchScrewdriver, s as HiMiniCheckCircle, I as HiMiniChevronDown, k as isConnectableAppHarness, p as protectionHealthFor, l as useProtectionPresentationState, t as GuardHero, ab as ProofStrip, S as SectionLabel, n as EmptyState, c as HiMiniChevronRight, ac as HiMiniEye, ad as HiMiniXCircle, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard } from "../guard-dashboard.js";
-import { S as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog.js";
+import { X as isUnsupportedPlatformCheck, i as harnessDisplayName, j as jsxRuntimeExports, Y as RECHECK_UNAVAILABLE_SIGNATURE, Z as protectionReasonText, r as reactExports, A as ActionButton, _ as HiMiniExclamationCircle, $ as hasRepairableProtectionGap, a0 as remainingProtectionRepairParts, a1 as protectionGapSignature, a2 as repairOutcomeIsStalled, a3 as ProtectionRepairFlowError, a4 as nextProtectionRepairOutcome, a5 as waitForAuthorizeUrl, a6 as startOrRecoverCloudConnect, a7 as safeCloudConnectUrl, a8 as openPackageFirewallAuthorizeFallback, a9 as waitForCloudConnection, aa as activeFailedHarnesses, ab as resetRepairOutcomeTracker, ac as HiMiniWrenchScrewdriver, s as HiMiniCheckCircle, K as HiMiniChevronDown, ad as fetchSettings, ae as harnessPostureRows, af as selectHarnessPosture, ag as harnessPosturePatch, e as updateSettings, ah as harnessRowTone, S as SectionLabel, ai as harnessPostureOptions, aj as HiMiniEye, y as HiMiniShieldCheck, ak as harnessRowStatus, al as PROTECTION_POSTURE_COPY, am as globalPosture, k as isConnectableAppHarness, p as protectionHealthFor, l as useProtectionPresentationState, v as GuardHero, an as ProofStrip, n as EmptyState, c as HiMiniChevronRight, ao as HiMiniXCircle, ap as HiMiniClipboardDocumentCheck, aq as HiMiniClipboard } from "../guard-dashboard.js";
+import { S as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, G as GuardRepairControl, H as HarnessPostureChoiceLabel, a as SettingsSaveProofModal, A as APP_STATUS_LABELS } from "./settings-save-proof-modal.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
@@ -508,6 +508,7 @@ function FleetProtectionRecovery(props) {
           },
           harness
         )) }) : null,
+        hasRepairableGaps && repairableGaps.some((check) => check.check_id === "harness_hooks") ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 border-t border-slate-200 pt-3", id: "guard-repair-banner", children: /* @__PURE__ */ jsxRuntimeExports.jsx(GuardRepairControl, { description: "Hooks timing out or an app stuck blocked? Repair Guard restarts what is stuck, clears stale state, and reinstalls broken hooks." }) }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
@@ -535,6 +536,298 @@ function FleetProtectionRecovery(props) {
           },
           check.check_id
         )) }) : null
+      ]
+    }
+  );
+}
+function fleetMachinePosture(settings) {
+  return globalPosture(settings);
+}
+function fleetMachinePostureLabel(settings) {
+  return PROTECTION_POSTURE_COPY[fleetMachinePosture(settings)].label;
+}
+function fleetManagedCapabilities(capabilities, apps) {
+  const managed = new Set(apps.filter((app) => app.active).map((app) => app.harness));
+  const kept = capabilities.filter((capability) => managed.has(capability.harness));
+  const known = new Set(kept.map((capability) => capability.harness));
+  const synthesized = [...managed].filter((harness) => !known.has(harness)).map((harness) => ({
+    harness,
+    display_name: harnessDisplayName(harness),
+    can_pre_block: false,
+    can_ask_inline: false,
+    has_native_remember: false,
+    fail_open_on_hook_failure: true,
+    can_pre_block_limited: false,
+    honesty_sentence: "",
+    limited: false
+  }));
+  return [...kept, ...synthesized];
+}
+function fleetManagedRows(rows, apps) {
+  const managed = new Set(apps.filter((app) => app.active).map((app) => app.harness));
+  const byName = (a, b) => a.displayName.localeCompare(b.displayName);
+  const watching = rows.filter((row) => managed.has(row.harness) && row.effective === "watch").sort(byName);
+  const rest = rows.filter((row) => managed.has(row.harness) && row.effective !== "watch").sort(byName);
+  return [...watching, ...rest];
+}
+function fleetInactiveAppCount(apps) {
+  return apps.filter((app) => !app.active).length;
+}
+function fleetPostureStatusMessage(choice, displayName) {
+  return choice === "watch" ? `Guard is only recording in ${displayName}.` : `Protection restored in ${displayName}.`;
+}
+function gateProofUpdate(gate, proof) {
+  return {
+    enabled: gate?.enabled ?? false,
+    configured: gate?.configured ?? false,
+    cooldown_seconds: gate?.cooldown_seconds ?? 0,
+    cooldown_active: gate?.cooldown_active ?? false,
+    cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+    locked_until: gate?.locked_until ?? null,
+    fail_closed: gate?.fail_closed ?? false,
+    strict_all_decisions: gate?.strict_all_decisions ?? false,
+    totp_enabled: gate?.totp_enabled ?? false,
+    totp_pending: gate?.totp_pending ?? false,
+    ...proof?.currentPassword ? { current_password: proof.currentPassword } : {},
+    ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
+  };
+}
+function FleetAppProtection(props) {
+  const { onChanged } = props;
+  const [state, setState] = reactExports.useState({ kind: "loading" });
+  const [pendingWatch, setPendingWatch] = reactExports.useState(null);
+  const [savingHarness, setSavingHarness] = reactExports.useState(null);
+  const [proofRequest, setProofRequest] = reactExports.useState(null);
+  const [proofPending, setProofPending] = reactExports.useState(false);
+  const [proofError, setProofError] = reactExports.useState(null);
+  const [statusMessage, setStatusMessage] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchSettings().then((payload) => {
+      if (cancelled) return;
+      setState({
+        kind: "ready",
+        settings: payload.settings,
+        capabilities: payload.protection_capabilities ?? []
+      });
+    }).catch((cause) => {
+      if (cancelled) return;
+      setState({ kind: "error", message: cause instanceof Error ? cause.message : "Unable to load app protection." });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const gate = state.kind === "ready" ? state.settings.approval_gate ?? null : null;
+  const gateEnabled = gate?.enabled === true;
+  const rows = reactExports.useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return fleetManagedRows(
+      harnessPostureRows(state.settings, fleetManagedCapabilities(state.capabilities, props.apps)),
+      props.apps
+    );
+  }, [state, props.apps]);
+  const commit = reactExports.useCallback(async (harness, choice, proof) => {
+    if (state.kind !== "ready") return "App protection is still loading.";
+    const saved = state.settings;
+    const next = selectHarnessPosture(saved, harness, choice);
+    const patch = harnessPosturePatch(next, saved);
+    if (patch === null) {
+      setPendingWatch(null);
+      return null;
+    }
+    const update = { harness_postures: patch };
+    if (gateEnabled) {
+      update.approval_gate = gateProofUpdate(saved.approval_gate, proof);
+    }
+    setSavingHarness(harness);
+    setError(null);
+    try {
+      const payload = await updateSettings(update);
+      setState((current) => current.kind === "ready" ? { ...current, settings: payload.settings } : current);
+      const name = rows.find((row) => row.harness === harness)?.displayName ?? harness;
+      setStatusMessage(fleetPostureStatusMessage(choice, name));
+      setPendingWatch(null);
+      onChanged?.();
+      return null;
+    } catch (cause) {
+      return cause instanceof Error ? cause.message : "Unable to change protection for this app.";
+    } finally {
+      setSavingHarness(null);
+    }
+  }, [state, gateEnabled, rows, onChanged]);
+  const handleChoice = reactExports.useCallback((harness, choice) => {
+    if (state.kind !== "ready" || state.settings.harness_postures_locked === true) return;
+    setError(null);
+    setStatusMessage(null);
+    if (choice === "watch") {
+      setPendingWatch(harness);
+      return;
+    }
+    setPendingWatch(null);
+    if (gateEnabled) {
+      const displayName = rows.find((row) => row.harness === harness)?.displayName ?? harness;
+      setProofError(null);
+      setProofRequest({ harness, displayName, choice });
+      return;
+    }
+    void commit(harness, choice).then((failure) => {
+      if (failure !== null) setError(failure);
+    });
+  }, [state, gateEnabled, rows, commit]);
+  const handleConfirmWatch = reactExports.useCallback((harness) => {
+    setPendingWatch(null);
+    if (gateEnabled) {
+      const displayName = rows.find((row) => row.harness === harness)?.displayName ?? harness;
+      setProofError(null);
+      setProofRequest({ harness, displayName, choice: "watch" });
+      return;
+    }
+    void commit(harness, "watch").then((failure) => {
+      if (failure !== null) setError(failure);
+    });
+  }, [gateEnabled, rows, commit]);
+  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+    if (proofRequest === null) return;
+    setProofPending(true);
+    setProofError(null);
+    const failure = await commit(proofRequest.harness, proofRequest.choice, proof);
+    setProofPending(false);
+    if (failure === null) {
+      setProofRequest(null);
+    } else {
+      setProofError(failure);
+    }
+  }, [proofRequest, commit]);
+  const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
+  if (state.kind === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-14 w-full", "aria-hidden": "true" });
+  }
+  if (state.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-xs text-slate-500", children: "App protection settings are unavailable right now." });
+  }
+  if (rows.length === 0) return null;
+  const locked = state.settings.harness_postures_locked === true;
+  const watchingCount = rows.filter((row) => harnessRowTone(row) === "watch").length;
+  const inactiveCount = fleetInactiveAppCount(props.apps);
+  const pendingRow = pendingWatch !== null ? rows.find((row) => row.harness === pendingWatch) : void 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: "overflow-hidden rounded-2xl border border-slate-100 bg-white",
+      "data-testid": "fleet-app-protection",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 pb-2 pt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection by app" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+            "Machine:",
+            " ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: fleetMachinePostureLabel(state.settings) }),
+            watchingCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-attention", children: [
+              " · ",
+              watchingCount,
+              " in Watch"
+            ] }) : null
+          ] })
+        ] }),
+        error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "border-t border-brand-attention/20 bg-brand-attention/[0.05] px-4 py-2 text-xs text-brand-dark", children: error }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 border-t border-slate-100", children: rows.map((row) => {
+          const tone = harnessRowTone(row);
+          const saving = savingHarness === row.harness;
+          const options = harnessPostureOptions(state.settings, row.harness);
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "li",
+              {
+                className: `flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between ${tone === "watch" ? "bg-brand-attention/[0.05]" : ""}`,
+                "data-harness": row.harness,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
+                    tone === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-semibold text-brand-dark", children: row.displayName }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden truncate text-xs text-slate-400 lg:inline", children: harnessRowStatus(row) }),
+                    saving ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Saving…" }) : null
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "border-0 p-0", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: `Protection for ${row.displayName}` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex gap-1 rounded-xl bg-slate-100 p-1", children: options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      HarnessPostureChoiceLabel,
+                      {
+                        groupName: `fleet-posture-${row.harness}`,
+                        choice: option.choice,
+                        label: option.label,
+                        selected: row.selected === option.choice,
+                        disabled: locked || saving,
+                        harness: row.harness,
+                        onChoose: handleChoice,
+                        compact: true
+                      },
+                      option.choice
+                    )) })
+                  ] })
+                ]
+              }
+            ),
+            pendingRow?.harness === row.harness ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "li",
+              {
+                className: "bg-brand-attention/[0.06]",
+                role: "alertdialog",
+                "aria-label": `Switch ${pendingRow.displayName} to Watch`,
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+                    "Guard will only record in ",
+                    pendingRow.displayName,
+                    " until you switch it back."
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        onClick: () => handleConfirmWatch(pendingRow.harness),
+                        className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+                        children: "Switch to Watch"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        onClick: handleCancelWatch,
+                        className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+                        children: "Keep protection on"
+                      }
+                    )
+                  ] })
+                ] })
+              }
+            ) : null
+          ] }, row.harness);
+        }) }),
+        inactiveCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "border-t border-slate-100 px-4 py-2 text-xs text-slate-400", children: inactiveCount === 1 ? "1 more app isn't connected yet — see App coverage below." : `${inactiveCount} more apps aren't connected yet — see App coverage below.` }) : null,
+        locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "border-t border-slate-100 px-4 py-2 text-xs text-slate-400", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: statusMessage ?? "" }),
+        proofRequest !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsSaveProofModal,
+          {
+            open: true,
+            mode: "verify-save",
+            gate,
+            title: "Confirm before changing protection",
+            detail: `Enter your approval proof to switch ${proofRequest.displayName}.`,
+            confirmLabel: "Save change",
+            error: proofError,
+            pending: proofPending,
+            onCancel: () => {
+              if (proofPending) return;
+              setProofRequest(null);
+              setProofError(null);
+            },
+            onConfirm: handleProofConfirm
+          }
+        ) : null
       ]
     }
   );
@@ -660,6 +953,11 @@ function FleetWorkspace(props) {
     (check) => check.check_id === "harness_hooks" && check.status === "fail"
   )) ?? visibleHarnesses[0];
   const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
+  const postureApps = (() => {
+    const activeSet = new Set(activeInstalls.map((install) => install.harness));
+    const known = /* @__PURE__ */ new Set([...managedInstalls.map((install) => install.harness), ...visibleHarnesses]);
+    return Array.from(known, (harness) => ({ harness, active: activeSet.has(harness) })).sort((a, b) => a.harness.localeCompare(b.harness));
+  })();
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -709,6 +1007,7 @@ function FleetWorkspace(props) {
         onRepairHarness: props.onRepairHarness ?? props.onConnectHarness
       }
     ) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(FleetAppProtection, { apps: postureApps, onChanged: props.onRuntimeRefresh }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [

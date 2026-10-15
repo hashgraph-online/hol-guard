@@ -135,6 +135,7 @@ async function terminateGuardProcessGroup(
 
 export async function spawnGuardProcess(options: {
   args: string[];
+  nativeArgs?: (pythonTarget: string) => string[];
   cwd: string;
   deadlineMs: number;
   env: Record<string, string>;
@@ -184,17 +185,35 @@ export async function spawnGuardProcess(options: {
       finish({ kind: "reject", error });
       return;
     }
+    let command = pythonTarget;
+    let args = options.args;
+    const nativeRuntime = options.nativeArgs === undefined ? null : resolveGuardNativeRuntime();
+    if (nativeRuntime !== null && options.nativeArgs !== undefined) {
+      command = nativeRuntime;
+      args = options.nativeArgs(pythonTarget);
+    }
+    const spawnOptions = {
+      cwd: options.cwd,
+      detached: process.platform !== "win32",
+      env: options.env,
+      stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
+    };
     let proc: ReturnType<typeof nodeSpawn>;
     try {
-      proc = nodeSpawn(pythonTarget, options.args, {
-        cwd: options.cwd,
-        detached: process.platform !== "win32",
-        env: options.env,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      proc = nodeSpawn(command, args, spawnOptions);
     } catch (error) {
-      finish({ kind: "reject", error });
-      return;
+      if (command === pythonTarget) {
+        finish({ kind: "reject", error });
+        return;
+      }
+      command = pythonTarget;
+      args = options.args;
+      try {
+        proc = nodeSpawn(command, args, spawnOptions);
+      } catch (fallbackError) {
+        finish({ kind: "reject", error: fallbackError });
+        return;
+      }
     }
     let stdout = "";
     let stderr = "";
@@ -211,12 +230,53 @@ export async function spawnGuardProcess(options: {
       }
       stderr += chunk;
     });
+    const launched = proc;
+    const usePythonLauncher = (cause: unknown) => {
+      if (command === pythonTarget || stdout !== "" || stderr !== "") {
+        finish({ kind: "reject", error: cause });
+        return;
+      }
+      command = pythonTarget;
+      args = options.args;
+      try {
+        proc = nodeSpawn(command, args, spawnOptions);
+      } catch (fallbackError) {
+        finish({ kind: "reject", error: fallbackError });
+        return;
+      }
+      proc.stdout?.setEncoding("utf8");
+      proc.stderr?.setEncoding("utf8");
+      proc.stdout?.on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+      proc.stderr?.on("data", (chunk: string) => {
+        if (chunk.includes(GUARD_WINDOWS_JOB_MARKER)) {
+          windowsJobContained = true;
+          chunk = chunk.replaceAll(GUARD_WINDOWS_JOB_MARKER, "");
+        }
+        stderr += chunk;
+      });
+      proc.on("error", (fallbackError) => {
+        if (timedOut) return;
+        finish({ kind: "reject", error: fallbackError });
+      });
+      proc.on("close", (code: number | null) => {
+        if (timedOut) return;
+        finish({ kind: "resolve", value: { exitCode: code ?? 1, stdout, stderr } });
+      });
+      proc.stdin?.on("error", () => {});
+      proc.stdin?.end(options.stdin);
+    };
     proc.on("error", (error) => {
-      if (timedOut) return;
-      finish({ kind: "reject", error });
+      if (timedOut || launched !== proc) return;
+      usePythonLauncher(error);
     });
     proc.on("close", (code: number | null) => {
-      if (timedOut) return;
+      if (timedOut || launched !== proc) return;
+      if (command !== pythonTarget && stdout === "" && stderr === "" && (code ?? 1) !== 0) {
+        usePythonLauncher(new Error("HOL Guard native runtime launch produced no output"));
+        return;
+      }
       finish({ kind: "resolve", value: { exitCode: code ?? 1, stdout, stderr } });
     });
     timer = setTimeout(() => {

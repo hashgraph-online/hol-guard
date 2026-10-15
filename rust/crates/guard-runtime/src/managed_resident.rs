@@ -191,6 +191,15 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     Err("native_resident_stop_unavailable".to_owned())
 }
 
+/// Forget the crash-loop history of this runtime's resident so the next
+/// request may start it immediately.  This only lifts the restart pacing; the
+/// resident itself is still started by the normal authenticated client path.
+pub(crate) fn reset_restart_budget(state_base: &Path) -> Result<(), String> {
+    let digest = runtime_digest()?;
+    let scope = state_scope(state_base, &digest)?;
+    restart_budget::clear(&scope)
+}
+
 pub(crate) fn serve_managed(
     state_base: &Path,
     generation: u64,
@@ -205,6 +214,11 @@ pub(crate) fn serve_managed(
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
     let owner_lock = acquire_managed_owner_lock(state_base)?;
+    // Build the immutable catalog read snapshot off the request path so the
+    // first catalog_read does not pay for it; failures surface on that read.
+    thread::spawn(|| {
+        let _ = guard_command::catalog_read_model::packaged_catalog_read_snapshot();
+    });
     // Initialize before fallible policy startup so every client can see a
     // resident still starting. This guard drops before owner_lock on all exits.
     let _diagnostic_lifetime =
@@ -321,35 +335,15 @@ pub(crate) fn supervise_managed_for_owner(
             .and_then(|()| liveness_writer.write_all(b"\n"))
             .and_then(|()| liveness_writer.flush())
             .map_err(|_| "native_resident_spawn_auth_failed".to_owned())?;
-        let owner_start_marker = process_start_marker(owner_process_id).ok();
         let child_done = Arc::new(AtomicBool::new(false));
-        let watcher_done = Arc::clone(&child_done);
-        let watcher_base = state_base.to_owned();
-        let watcher_digest = expected_digest.to_owned();
-        let watcher = thread::spawn(move || {
-            let mut no_lease_since = None;
-            loop {
-                if watcher_done.load(Ordering::Acquire) {
-                    break;
-                }
-                if crate::resident_process_identity::executable_missing(&executable) {
-                    break;
-                }
-                let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {
-                    process_start_marker(owner_process_id).is_ok_and(|actual| actual == expected)
-                });
-                if owner_alive || lease::any_live(&watcher_base, &watcher_digest) {
-                    no_lease_since = None;
-                } else {
-                    let started = no_lease_since.get_or_insert_with(Instant::now);
-                    if started.elapsed() >= lease::LEASE_EXPIRY {
-                        drop(liveness_writer);
-                        break;
-                    }
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
-        });
+        let watcher = spawn_owner_lease_watcher(
+            executable,
+            state_base,
+            expected_digest,
+            owner_process_id,
+            liveness_writer,
+            Arc::clone(&child_done),
+        );
         let status = child
             .wait()
             .map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;
@@ -361,6 +355,48 @@ pub(crate) fn supervise_managed_for_owner(
             Err("native_resident_managed_exit_failed".to_owned())
         }
     }
+}
+
+/// Hold the serving child's stdin until its owner has exited and no client of
+/// this runtime has held a lease for `LEASE_EXPIRY`, then close it so the child
+/// sees EOF and shuts down. Without this an ownerless resident lingers until
+/// its idle timeout.
+fn spawn_owner_lease_watcher<W: Send + 'static>(
+    executable: std::path::PathBuf,
+    state_base: &Path,
+    expected_digest: &str,
+    owner_process_id: u32,
+    liveness_writer: W,
+    child_done: Arc<AtomicBool>,
+) -> thread::JoinHandle<()> {
+    let owner_start_marker = process_start_marker(owner_process_id).ok();
+    let watcher_base = state_base.to_owned();
+    let watcher_digest = expected_digest.to_owned();
+    thread::spawn(move || {
+        let mut no_lease_since = None;
+        loop {
+            if child_done.load(Ordering::Acquire) {
+                break;
+            }
+            if crate::resident_process_identity::executable_missing(&executable) {
+                break;
+            }
+            let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {
+                crate::resident_process_identity::running_process_start_marker(owner_process_id)
+                    .is_ok_and(|actual| actual == expected)
+            });
+            if owner_alive || lease::any_live(&watcher_base, &watcher_digest) {
+                no_lease_since = None;
+            } else {
+                let started = no_lease_since.get_or_insert_with(Instant::now);
+                if started.elapsed() >= lease::LEASE_EXPIRY {
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        drop(liveness_writer);
+    })
 }
 
 pub(crate) fn parse_generation(value: &str) -> Result<u64, String> {
@@ -384,6 +420,19 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
 /// legitimately read hundreds of megabytes and is granted a longer ceiling.
 const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
 const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
+/// Contained local runners honour the caller's process timeout (up to ten
+/// minutes) plus a minute of transport slack for the probe and snapshot, so their budget must not be clamped to the
+/// nine-second ceiling that would abort a legitimate test run mid-flight. The
+/// package-shim admin op shares it: a probe runs each installed shim under its
+/// own per-shim timeout.
+const CONTAINED_RUNNER_TIMEOUT_CEILING_MS: u64 = 670_000;
+/// A Codex resume retry waits up to a minute for the app server to accept
+/// the turn and up to its busy timeout for the store; the caller adds five
+/// seconds of transport grace.
+const CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS: u64 =
+    guard_contracts::CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS
+        + guard_contracts::CODEX_REQUEST_RESUME_MAX_BUSY_TIMEOUT_MS
+        + 5_000;
 
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -391,7 +440,14 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
         .as_ref()
         .and_then(|value| value.get("operation")?.as_str())
     {
-        Some("skill_directory_identity") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        Some("skill_directory_identity" | "package_context_build") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        Some(
+            "contained_node_execute"
+            | "contained_typescript_execute"
+            | "contained_package_script_execute"
+            | "shim_admin",
+        ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
+        Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
         _ => CLIENT_TIMEOUT_CEILING_MS,
     };
     let budget = value

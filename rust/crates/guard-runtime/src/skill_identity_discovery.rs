@@ -9,7 +9,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use guard_contracts::{SkillDirectoryLimitsV1, SkillDiscoveryIssueV1, SkillDiscoveryV1};
@@ -17,6 +16,7 @@ use sha2::{Digest, Sha256};
 
 use crate::skill_identity_canon::{canonical_component, Failure};
 use crate::skill_identity_inspect::incomplete_identity;
+use crate::skill_identity_platform::{directory_guard, link_loop, path_bytes, unsupported_reparse};
 use crate::skill_identity_walk::is_directory;
 
 const PRIMARY_NAME: &str = "SKILL.md";
@@ -66,7 +66,7 @@ fn linked_directory_failure(path: &Path) -> Failure {
         Ok(resolved) if is_directory(&resolved) => Failure::SymlinkDirectoryUnsupported,
         Ok(_) => Failure::RootNotDirectory,
         Err(error) if error.kind() == io::ErrorKind::NotFound => Failure::SymlinkBroken,
-        Err(error) if error.raw_os_error() == Some(libc::ELOOP) => Failure::SymlinkLoop,
+        Err(error) if link_loop(&error) => Failure::SymlinkLoop,
         Err(_) => Failure::UnreadableEntry,
     }
 }
@@ -150,6 +150,9 @@ pub(crate) fn discover_skill_documents(
         Ok(metadata) if metadata.file_type().is_symlink() => {
             issues.record(b"", linked_directory_failure(root));
         }
+        Ok(metadata) if unsupported_reparse(&metadata) => {
+            issues.record(b"", Failure::UnsupportedReparsePoint);
+        }
         Ok(metadata) if !metadata.file_type().is_dir() => {
             issues.record(b"", Failure::RootNotDirectory);
         }
@@ -179,6 +182,13 @@ fn walk(
                 continue;
             }
         }
+        let _guard = match directory_guard(&directory) {
+            Ok(guard) => guard,
+            Err(reason) => {
+                issues.record(&relative, reason);
+                continue;
+            }
+        };
         let children = match fs::read_dir(&directory) {
             Ok(children) => children,
             Err(_) => {
@@ -197,7 +207,7 @@ fn walk(
             }
             visited += 1;
             let name = child.file_name();
-            let child_relative = join_relative(&relative, name.as_bytes());
+            let child_relative = join_relative(&relative, &path_bytes(&name));
             if let Err(reason) = canonical_component(&name) {
                 issues.record(&child_relative, reason);
                 continue;
@@ -207,6 +217,10 @@ fn walk(
                 issues.record(&child_relative, Failure::UnreadableEntry);
                 continue;
             };
+            if unsupported_reparse(&metadata) {
+                issues.record(&child_relative, Failure::UnsupportedReparsePoint);
+                continue;
+            }
             if metadata.file_type().is_symlink() {
                 issues.record(&child_relative, linked_directory_failure(&path));
                 continue;

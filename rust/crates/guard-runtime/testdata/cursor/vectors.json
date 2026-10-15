@@ -1,0 +1,2439 @@
+{
+ "cases": [
+  {
+   "args": {
+    "configs": [],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"], \"env\": {\"A\": \"1\", \" B \": \"2\", \"\": \"x\", \"C\": 3}}, \"remote\": {\"url\": \"https://mcp.example/x\", \"headers\": {\"Authorization\": \"t\", \" X \": \"y\", \"N\": 1}}, \"environment\": {\"command\": \"uvx\", \"environment\": {\"Z\": \"z\", \"A\": \"a\"}}, \"env_not_dict\": {\"command\": \"uvx\", \"env\": [\"x\"], \"environment\": {\"E\": \"e\"}}, \"both\": {\"command\": \"c\", \"env\": {\"K\": \"env\"}, \"environment\": {\"K\": \"environment\"}}, \"dup_keys\": {\"command\": \"c\", \"env\": {\"K\": \"1\", \" K\": \"2\", \"K \": \"3\"}}, \"args_str\": {\"command\": \"c\", \"args\": \"abc\"}, \"args_dict\": {\"command\": \"c\", \"args\": {\"x\": 1, \"y\": 2}}, \"args_empty\": {\"command\": \"c\", \"args\": []}, \"non_str_command\": {\"command\": 5, \"url\": 7}, \"url_and_command\": {\"command\": \"c\", \"url\": \"https://mcp.example/y\"}, \"guard_proxy\": {\"command\": \"hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--server\", \"x\"]}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "b"
+     ],
+     "artifact_id": "cursor:global:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "6c6add6af6cae8a0ada42517f02944b6b035cd02b28802d456b69ea826143632",
+      "env": {
+       "A": "1",
+       "B": "2"
+      },
+      "env_keys": [
+       "A",
+       "B"
+      ],
+      "env_values_hash": "4612fb17942aea41c62eaa70c9a04ffa941b807a9ace1423544ad1621456e946",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "6c6add6af6cae8a0ada42517f02944b6b035cd02b28802d456b69ea826143632",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "c6064c9f2394d66e9d10e11cd4018dc87229064954e482ad9f559d4518384f4d",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "ba80b2f74168e78e69bf95c9d95bbb465f2c692ebcee02db5a49a4bba44ef89e",
+      "headers_keys": [
+       "Authorization",
+       "X"
+      ],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "c6064c9f2394d66e9d10e11cd4018dc87229064954e482ad9f559d4518384f4d",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:environment",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bfde3b056e5580ba31184ec48a0833009affc6166f3c258501c1541737f1d81b",
+      "env": {
+       "A": "a",
+       "Z": "z"
+      },
+      "env_keys": [
+       "A",
+       "Z"
+      ],
+      "env_values_hash": "2b33eade7a8cdecdddb4f51cc31146f62afaab11a25bc79b96aab4d5054e3151",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "environment",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bfde3b056e5580ba31184ec48a0833009affc6166f3c258501c1541737f1d81b",
+       "hashBasis": "content",
+       "versionLabel": "environment"
+      }
+     },
+     "name": "environment",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:env_not_dict",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "4ef3841d2fa118ab00e5ce6e31fede333d6f418cea8597bb413c2031fa065d30",
+      "env": {
+       "E": "e"
+      },
+      "env_keys": [
+       "E"
+      ],
+      "env_values_hash": "865739259b1d7b4c82a7b794b942a8e2fe3217768b0ebe18d217cbaec9aa3f8e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env_not_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "4ef3841d2fa118ab00e5ce6e31fede333d6f418cea8597bb413c2031fa065d30",
+       "hashBasis": "content",
+       "versionLabel": "env_not_dict"
+      }
+     },
+     "name": "env_not_dict",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:both",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "30cb142a24416d836f21751fe0c45a5dd210cdf69d9e62d21e636e059f87ac9a",
+      "env": {
+       "K": "env"
+      },
+      "env_keys": [
+       "K"
+      ],
+      "env_values_hash": "8cb02603da8d76dcebccbd6d3d0889755cd8336851bbd2f677548c546b103d89",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "both",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "30cb142a24416d836f21751fe0c45a5dd210cdf69d9e62d21e636e059f87ac9a",
+       "hashBasis": "content",
+       "versionLabel": "both"
+      }
+     },
+     "name": "both",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:dup_keys",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "d52be6e8f869874e2fdc8763f497c0695f99329cbc1724d2610cf3fc8206b456",
+      "env": {
+       "K": "3"
+      },
+      "env_keys": [
+       "K"
+      ],
+      "env_values_hash": "47bfed55e225767ff89130e5cc1a6fd5166be8c90b76b4d3f951f6b0cf2dd1dc",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "dup_keys",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "d52be6e8f869874e2fdc8763f497c0695f99329cbc1724d2610cf3fc8206b456",
+       "hashBasis": "content",
+       "versionLabel": "dup_keys"
+      }
+     },
+     "name": "dup_keys",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "b",
+      "c"
+     ],
+     "artifact_id": "cursor:global:args_str",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "852ca9169c22fc25d47f7202f82857f589b1f0a633781bf8ecc7b12bb220081c",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_str",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "852ca9169c22fc25d47f7202f82857f589b1f0a633781bf8ecc7b12bb220081c",
+       "hashBasis": "content",
+       "versionLabel": "args_str"
+      }
+     },
+     "name": "args_str",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "x",
+      "y"
+     ],
+     "artifact_id": "cursor:global:args_dict",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "689e39c180dbc7c245cd121e37a961eb61fc0aae606a89459feb3ce17c5b6a50",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "689e39c180dbc7c245cd121e37a961eb61fc0aae606a89459feb3ce17c5b6a50",
+       "hashBasis": "content",
+       "versionLabel": "args_dict"
+      }
+     },
+     "name": "args_dict",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:args_empty",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_empty",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "args_empty"
+      }
+     },
+     "name": "args_empty",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:non_str_command",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "non_str_command",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "non_str_command"
+      }
+     },
+     "name": "non_str_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:url_and_command",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "2f0d52f3d7e636c44b11a04288536996420f69480bb1c68ff759fc28b3ba0080",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "url_and_command",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "2f0d52f3d7e636c44b11a04288536996420f69480bb1c68ff759fc28b3ba0080",
+       "hashBasis": "content",
+       "versionLabel": "url_and_command"
+      }
+     },
+     "name": "url_and_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/y"
+    },
+    {
+     "args": [
+      "guard",
+      "mcp-proxy",
+      "--server",
+      "x"
+     ],
+     "artifact_id": "cursor:global:guard_proxy",
+     "artifact_type": "mcp_server",
+     "command": "hol-guard",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bae26a4b59309d43d9777e9dc40ce4de5a7c14c01a4b0494d96b55622b653c43",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": true,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "guard_proxy",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bae26a4b59309d43d9777e9dc40ce4de5a7c14c01a4b0494d96b55622b653c43",
+       "hashBasis": "content",
+       "versionLabel": "guard_proxy"
+      }
+     },
+     "name": "guard_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:bare",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "bare",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "bare"
+      }
+     },
+     "name": "bare",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"], \"env\": {\"A\": \"1\", \" B \": \"2\", \"\": \"x\", \"C\": 3}}, \"remote\": {\"url\": \"https://mcp.example/x\", \"headers\": {\"Authorization\": \"t\", \" X \": \"y\", \"N\": 1}}, \"environment\": {\"command\": \"uvx\", \"environment\": {\"Z\": \"z\", \"A\": \"a\"}}, \"env_not_dict\": {\"command\": \"uvx\", \"env\": [\"x\"], \"environment\": {\"E\": \"e\"}}, \"both\": {\"command\": \"c\", \"env\": {\"K\": \"env\"}, \"environment\": {\"K\": \"environment\"}}, \"dup_keys\": {\"command\": \"c\", \"env\": {\"K\": \"1\", \" K\": \"2\", \"K \": \"3\"}}, \"args_str\": {\"command\": \"c\", \"args\": \"abc\"}, \"args_dict\": {\"command\": \"c\", \"args\": {\"x\": 1, \"y\": 2}}, \"args_empty\": {\"command\": \"c\", \"args\": []}, \"non_str_command\": {\"command\": 5, \"url\": 7}, \"url_and_command\": {\"command\": \"c\", \"url\": \"https://mcp.example/y\"}, \"guard_proxy\": {\"command\": \"hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--server\", \"x\"]}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "global_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/work/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"], \"env\": {\"A\": \"1\", \" B \": \"2\", \"\": \"x\", \"C\": 3}}, \"remote\": {\"url\": \"https://mcp.example/x\", \"headers\": {\"Authorization\": \"t\", \" X \": \"y\", \"N\": 1}}, \"environment\": {\"command\": \"uvx\", \"environment\": {\"Z\": \"z\", \"A\": \"a\"}}, \"env_not_dict\": {\"command\": \"uvx\", \"env\": [\"x\"], \"environment\": {\"E\": \"e\"}}, \"both\": {\"command\": \"c\", \"env\": {\"K\": \"env\"}, \"environment\": {\"K\": \"environment\"}}, \"dup_keys\": {\"command\": \"c\", \"env\": {\"K\": \"1\", \" K\": \"2\", \"K \": \"3\"}}, \"args_str\": {\"command\": \"c\", \"args\": \"abc\"}, \"args_dict\": {\"command\": \"c\", \"args\": {\"x\": 1, \"y\": 2}}, \"args_empty\": {\"command\": \"c\", \"args\": []}, \"non_str_command\": {\"command\": 5, \"url\": 7}, \"url_and_command\": {\"command\": \"c\", \"url\": \"https://mcp.example/y\"}, \"guard_proxy\": {\"command\": \"hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--server\", \"x\"]}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "b"
+     ],
+     "artifact_id": "cursor:project:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "6c6add6af6cae8a0ada42517f02944b6b035cd02b28802d456b69ea826143632",
+      "env": {
+       "A": "1",
+       "B": "2"
+      },
+      "env_keys": [
+       "A",
+       "B"
+      ],
+      "env_values_hash": "4612fb17942aea41c62eaa70c9a04ffa941b807a9ace1423544ad1621456e946",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "6c6add6af6cae8a0ada42517f02944b6b035cd02b28802d456b69ea826143632",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "c6064c9f2394d66e9d10e11cd4018dc87229064954e482ad9f559d4518384f4d",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "ba80b2f74168e78e69bf95c9d95bbb465f2c692ebcee02db5a49a4bba44ef89e",
+      "headers_keys": [
+       "Authorization",
+       "X"
+      ],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "c6064c9f2394d66e9d10e11cd4018dc87229064954e482ad9f559d4518384f4d",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:environment",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bfde3b056e5580ba31184ec48a0833009affc6166f3c258501c1541737f1d81b",
+      "env": {
+       "A": "a",
+       "Z": "z"
+      },
+      "env_keys": [
+       "A",
+       "Z"
+      ],
+      "env_values_hash": "2b33eade7a8cdecdddb4f51cc31146f62afaab11a25bc79b96aab4d5054e3151",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "environment",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bfde3b056e5580ba31184ec48a0833009affc6166f3c258501c1541737f1d81b",
+       "hashBasis": "content",
+       "versionLabel": "environment"
+      }
+     },
+     "name": "environment",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:env_not_dict",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "4ef3841d2fa118ab00e5ce6e31fede333d6f418cea8597bb413c2031fa065d30",
+      "env": {
+       "E": "e"
+      },
+      "env_keys": [
+       "E"
+      ],
+      "env_values_hash": "865739259b1d7b4c82a7b794b942a8e2fe3217768b0ebe18d217cbaec9aa3f8e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env_not_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "4ef3841d2fa118ab00e5ce6e31fede333d6f418cea8597bb413c2031fa065d30",
+       "hashBasis": "content",
+       "versionLabel": "env_not_dict"
+      }
+     },
+     "name": "env_not_dict",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:both",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "30cb142a24416d836f21751fe0c45a5dd210cdf69d9e62d21e636e059f87ac9a",
+      "env": {
+       "K": "env"
+      },
+      "env_keys": [
+       "K"
+      ],
+      "env_values_hash": "8cb02603da8d76dcebccbd6d3d0889755cd8336851bbd2f677548c546b103d89",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "both",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "30cb142a24416d836f21751fe0c45a5dd210cdf69d9e62d21e636e059f87ac9a",
+       "hashBasis": "content",
+       "versionLabel": "both"
+      }
+     },
+     "name": "both",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:dup_keys",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "d52be6e8f869874e2fdc8763f497c0695f99329cbc1724d2610cf3fc8206b456",
+      "env": {
+       "K": "3"
+      },
+      "env_keys": [
+       "K"
+      ],
+      "env_values_hash": "47bfed55e225767ff89130e5cc1a6fd5166be8c90b76b4d3f951f6b0cf2dd1dc",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "dup_keys",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "d52be6e8f869874e2fdc8763f497c0695f99329cbc1724d2610cf3fc8206b456",
+       "hashBasis": "content",
+       "versionLabel": "dup_keys"
+      }
+     },
+     "name": "dup_keys",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "b",
+      "c"
+     ],
+     "artifact_id": "cursor:project:args_str",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "852ca9169c22fc25d47f7202f82857f589b1f0a633781bf8ecc7b12bb220081c",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_str",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "852ca9169c22fc25d47f7202f82857f589b1f0a633781bf8ecc7b12bb220081c",
+       "hashBasis": "content",
+       "versionLabel": "args_str"
+      }
+     },
+     "name": "args_str",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "x",
+      "y"
+     ],
+     "artifact_id": "cursor:project:args_dict",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "689e39c180dbc7c245cd121e37a961eb61fc0aae606a89459feb3ce17c5b6a50",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "689e39c180dbc7c245cd121e37a961eb61fc0aae606a89459feb3ce17c5b6a50",
+       "hashBasis": "content",
+       "versionLabel": "args_dict"
+      }
+     },
+     "name": "args_dict",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:args_empty",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_empty",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "args_empty"
+      }
+     },
+     "name": "args_empty",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:non_str_command",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "non_str_command",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "non_str_command"
+      }
+     },
+     "name": "non_str_command",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:url_and_command",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "2f0d52f3d7e636c44b11a04288536996420f69480bb1c68ff759fc28b3ba0080",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "url_and_command",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "2f0d52f3d7e636c44b11a04288536996420f69480bb1c68ff759fc28b3ba0080",
+       "hashBasis": "content",
+       "versionLabel": "url_and_command"
+      }
+     },
+     "name": "url_and_command",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://mcp.example/y"
+    },
+    {
+     "args": [
+      "guard",
+      "mcp-proxy",
+      "--server",
+      "x"
+     ],
+     "artifact_id": "cursor:project:guard_proxy",
+     "artifact_type": "mcp_server",
+     "command": "hol-guard",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bae26a4b59309d43d9777e9dc40ce4de5a7c14c01a4b0494d96b55622b653c43",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": true,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "guard_proxy",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bae26a4b59309d43d9777e9dc40ce4de5a7c14c01a4b0494d96b55622b653c43",
+       "hashBasis": "content",
+       "versionLabel": "guard_proxy"
+      }
+     },
+     "name": "guard_proxy",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:bare",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "bare",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "bare"
+      }
+     },
+     "name": "bare",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"], \"env\": {\"A\": \"1\", \" B \": \"2\", \"\": \"x\", \"C\": 3}}, \"remote\": {\"url\": \"https://mcp.example/x\", \"headers\": {\"Authorization\": \"t\", \" X \": \"y\", \"N\": 1}}, \"environment\": {\"command\": \"uvx\", \"environment\": {\"Z\": \"z\", \"A\": \"a\"}}, \"env_not_dict\": {\"command\": \"uvx\", \"env\": [\"x\"], \"environment\": {\"E\": \"e\"}}, \"both\": {\"command\": \"c\", \"env\": {\"K\": \"env\"}, \"environment\": {\"K\": \"environment\"}}, \"dup_keys\": {\"command\": \"c\", \"env\": {\"K\": \"1\", \" K\": \"2\", \"K \": \"3\"}}, \"args_str\": {\"command\": \"c\", \"args\": \"abc\"}, \"args_dict\": {\"command\": \"c\", \"args\": {\"x\": 1, \"y\": 2}}, \"args_empty\": {\"command\": \"c\", \"args\": []}, \"non_str_command\": {\"command\": 5, \"url\": 7}, \"url_and_command\": {\"command\": \"c\", \"url\": \"https://mcp.example/y\"}, \"guard_proxy\": {\"command\": \"hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--server\", \"x\"]}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "project_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"same\": {\"command\": \"g\"}}}"
+     },
+     {
+      "path": "<ROOT>/work/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"same\": {\"command\": \"p\"}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:global:same",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "8ed3e896decb4c838df0ff2a2131a0f71e13b32e55d9d671dd81af670dbfbcf1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "same",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "8ed3e896decb4c838df0ff2a2131a0f71e13b32e55d9d671dd81af670dbfbcf1",
+       "hashBasis": "content",
+       "versionLabel": "same"
+      }
+     },
+     "name": "same",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:same",
+     "artifact_type": "mcp_server",
+     "command": "p",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bc7ac04d354646dc1db40df83658a74896f0ca67850f6731a8b11b43140c89f2",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "same",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bc7ac04d354646dc1db40df83658a74896f0ca67850f6731a8b11b43140c89f2",
+       "hashBasis": "content",
+       "versionLabel": "same"
+      }
+     },
+     "name": "same",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"same\": {\"command\": \"g\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"same\": {\"command\": \"p\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json",
+    "<ROOT>/work/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "both_configs",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:global:g",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "8ed3e896decb4c838df0ff2a2131a0f71e13b32e55d9d671dd81af670dbfbcf1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "g",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "8ed3e896decb4c838df0ff2a2131a0f71e13b32e55d9d671dd81af670dbfbcf1",
+       "hashBasis": "content",
+       "versionLabel": "g"
+      }
+     },
+     "name": "g",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/proj/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"p\": {\"command\": \"p\"}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/home/proj"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:project:p",
+     "artifact_type": "mcp_server",
+     "command": "p",
+     "config_path": "<ROOT>/home/proj/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bc7ac04d354646dc1db40df83658a74896f0ca67850f6731a8b11b43140c89f2",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "p",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bc7ac04d354646dc1db40df83658a74896f0ca67850f6731a8b11b43140c89f2",
+       "hashBasis": "content",
+       "versionLabel": "p"
+      }
+     },
+     "name": "p",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/proj/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"p\": {\"command\": \"p\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/proj/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "workspace_inside_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home/proj"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/work/h/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"h\": {\"command\": \"h\"}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/work/h",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:project:h",
+     "artifact_type": "mcp_server",
+     "command": "h",
+     "config_path": "<ROOT>/work/h/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "4131fbeeb8393ad00b1ba1f106b170ac09588a06560f6152475ce9a213515b6b",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "h",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "4131fbeeb8393ad00b1ba1f106b170ac09588a06560f6152475ce9a213515b6b",
+       "hashBasis": "content",
+       "versionLabel": "h"
+      }
+     },
+     "name": "h",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/h/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"h\": {\"command\": \"h\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/h/.cursor/mcp.json"
+   ],
+   "home": "work/h",
+   "name": "home_inside_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": null}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": null}}}"
+    }
+   ],
+   "home": "home",
+   "name": "args_null",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": 4}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": 4}}}"
+    }
+   ],
+   "home": "home",
+   "name": "args_number",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": [\"x\"]}"
+     },
+     {
+      "path": "<ROOT>/work/.cursor/mcp.json",
+      "payload": "{\"other\": 1}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": [\"x\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": "{\"other\": 1}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json",
+    "<ROOT>/work/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "servers_not_dict",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "empty_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{nope"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": ""
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "invalid_json",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "empty_object",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "[{\"mcpServers\": {}}]"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "list_top_level",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"x\": {\"command\": \"c\"}}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"r\": {\"command\": \"r\"}}}"
+     },
+     {
+      "path": "work/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"w\": {\"url\": \"u\"}}}"
+     }
+    ],
+    "cwd": "<ROOT>",
+    "harness": "cursor",
+    "home": "home",
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:global:r",
+     "artifact_type": "mcp_server",
+     "command": "r",
+     "config_path": "home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "6a42725cb7effd59d67b084fa722aadfab0bceb54fbd2e7e02d3bbd895903350",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "r",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "6a42725cb7effd59d67b084fa722aadfab0bceb54fbd2e7e02d3bbd895903350",
+       "hashBasis": "content",
+       "versionLabel": "r"
+      }
+     },
+     "name": "r",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:w",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "ad9b40dc035e1b4d4ae70858fffa22b1acab7416e12ee6c4c50acb024ab23634",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "w",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "ad9b40dc035e1b4d4ae70858fffa22b1acab7416e12ee6c4c50acb024ab23634",
+       "hashBasis": "content",
+       "versionLabel": "w"
+      }
+     },
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "u"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"r\": {\"command\": \"r\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"w\": {\"url\": \"u\"}}}"
+    }
+   ],
+   "found_paths": [
+    "home/.cursor/mcp.json",
+    "work/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "relative_paths",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"bad\\ud800\": {\"command\": \"x\"}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"bad\\ud800\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_name",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"s\": {\"command\": \"x\", \"env\": {\"K\": \"\\udc80\"}}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"x\", \"env\": {\"K\": \"\\udc80\"}}}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_env",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"\\u00c4\": {\"command\": \"\\u00fc\", \"args\": [\"\\u00e9\"], \"env\": {\"\\u00d6\": \"\\u00df\"}}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "é"
+     ],
+     "artifact_id": "cursor:global:Ä",
+     "artifact_type": "mcp_server",
+     "command": "ü",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "74e3c7bf96ba5efe9b08df702958bb573eee189140023665f810ee6be6768489",
+      "env": {
+       "Ö": "ß"
+      },
+      "env_keys": [
+       "Ö"
+      ],
+      "env_values_hash": "69c4fa02643119e0b3d539cc800e691357d0ceed8329d22e46f53bcba259fb47",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "Ä",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "74e3c7bf96ba5efe9b08df702958bb573eee189140023665f810ee6be6768489",
+       "hashBasis": "content",
+       "versionLabel": "Ä"
+      }
+     },
+     "name": "Ä",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"\\u00c4\": {\"command\": \"\\u00fc\", \"args\": [\"\\u00e9\"], \"env\": {\"\\u00d6\": \"\\u00df\"}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "unicode",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"extra\": {\"a\": [1.5, true]}, \"env\": {\"A\": {\"x\": 1}}}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:global:n",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "n",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "n"
+      }
+     },
+     "name": "n",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"extra\": {\"a\": [1.5, true]}, \"env\": {\"A\": {\"x\": 1}}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "nested_values",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": [Infinity, 123456789012345678901234567890, \"ok\"]}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "ok"
+     ],
+     "artifact_id": "cursor:global:n",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "e53ff63678433fed8013bcd64675b719668c6aea897ad3059d476f416bbda97f",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "n",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "e53ff63678433fed8013bcd64675b719668c6aea897ad3059d476f416bbda97f",
+       "hashBasis": "content",
+       "versionLabel": "n"
+      }
+     },
+     "name": "n",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": [1e400, 123456789012345678901234567890, \"ok\"]}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "big_numbers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"d\": {\"command\": \"last\"}, \"e\": {}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:global:d",
+     "artifact_type": "mcp_server",
+     "command": "last",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bab5e6c4d830c56158886165da2f14e383facc3c7dad1afcfe078803d44b5d5e",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "d",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bab5e6c4d830c56158886165da2f14e383facc3c7dad1afcfe078803d44b5d5e",
+       "hashBasis": "content",
+       "versionLabel": "d"
+      }
+     },
+     "name": "d",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:e",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "e",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "e"
+      }
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"d\": {\"command\": \"first\"}, \"e\": {}, \"d\": {\"command\": \"last\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "duplicate_server_keys",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"s0\": {\"command\": \"c0\"}, \"s1\": {\"command\": \"c1\"}, \"s2\": {\"command\": \"c2\"}, \"s3\": {\"command\": \"c3\"}, \"s4\": {\"command\": \"c4\"}, \"s5\": {\"command\": \"c5\"}, \"s6\": {\"command\": \"c6\"}, \"s7\": {\"command\": \"c7\"}, \"s8\": {\"command\": \"c8\"}, \"s9\": {\"command\": \"c9\"}, \"s10\": {\"command\": \"c10\"}, \"s11\": {\"command\": \"c11\"}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s0",
+     "artifact_type": "mcp_server",
+     "command": "c0",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "6ff028facedc1eaa9722e869d51a7d4ef1474537fc15227057021921f0bfb3b5",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s0",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "6ff028facedc1eaa9722e869d51a7d4ef1474537fc15227057021921f0bfb3b5",
+       "hashBasis": "content",
+       "versionLabel": "s0"
+      }
+     },
+     "name": "s0",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s1",
+     "artifact_type": "mcp_server",
+     "command": "c1",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "c02a558e5c458d61b0351de39fa82ae85e3114391333ca226402876ad0c90756",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s1",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "c02a558e5c458d61b0351de39fa82ae85e3114391333ca226402876ad0c90756",
+       "hashBasis": "content",
+       "versionLabel": "s1"
+      }
+     },
+     "name": "s1",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s2",
+     "artifact_type": "mcp_server",
+     "command": "c2",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "32f57b1d1373566e7470a4bf3b66ab851d2f1d4fc4493605ef1db06272c48bc1",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s2",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "32f57b1d1373566e7470a4bf3b66ab851d2f1d4fc4493605ef1db06272c48bc1",
+       "hashBasis": "content",
+       "versionLabel": "s2"
+      }
+     },
+     "name": "s2",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s3",
+     "artifact_type": "mcp_server",
+     "command": "c3",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "77528b3832468be7aa2fe831790bd6da5fba8e08b6c3854eefcf7b1ee5a570ca",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s3",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "77528b3832468be7aa2fe831790bd6da5fba8e08b6c3854eefcf7b1ee5a570ca",
+       "hashBasis": "content",
+       "versionLabel": "s3"
+      }
+     },
+     "name": "s3",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s4",
+     "artifact_type": "mcp_server",
+     "command": "c4",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "3f1c48de25fe5ce0eeafd875278421b4246119e787d94e84eeaaa1bf3fdc70e2",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s4",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "3f1c48de25fe5ce0eeafd875278421b4246119e787d94e84eeaaa1bf3fdc70e2",
+       "hashBasis": "content",
+       "versionLabel": "s4"
+      }
+     },
+     "name": "s4",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s5",
+     "artifact_type": "mcp_server",
+     "command": "c5",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "571cffaef45e7748218c5e0a22effbf8c9931732d6c2c22bc43c9bf0363bf522",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s5",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "571cffaef45e7748218c5e0a22effbf8c9931732d6c2c22bc43c9bf0363bf522",
+       "hashBasis": "content",
+       "versionLabel": "s5"
+      }
+     },
+     "name": "s5",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s6",
+     "artifact_type": "mcp_server",
+     "command": "c6",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "71882564d74b4277fe7b34fc86e41546b369ef816c5b81fdb0aba2c26cd2d81e",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s6",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "71882564d74b4277fe7b34fc86e41546b369ef816c5b81fdb0aba2c26cd2d81e",
+       "hashBasis": "content",
+       "versionLabel": "s6"
+      }
+     },
+     "name": "s6",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s7",
+     "artifact_type": "mcp_server",
+     "command": "c7",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "0bb3503cc197988909b7ea72b1ae62032024ddb24fbc2b0c7d2b89e7c26b5aa0",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s7",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "0bb3503cc197988909b7ea72b1ae62032024ddb24fbc2b0c7d2b89e7c26b5aa0",
+       "hashBasis": "content",
+       "versionLabel": "s7"
+      }
+     },
+     "name": "s7",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s8",
+     "artifact_type": "mcp_server",
+     "command": "c8",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "35ba4b352d3d46d21c76e5a1468f93ad66d291c94e5f5fb8c0868d78a96802e7",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s8",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "35ba4b352d3d46d21c76e5a1468f93ad66d291c94e5f5fb8c0868d78a96802e7",
+       "hashBasis": "content",
+       "versionLabel": "s8"
+      }
+     },
+     "name": "s8",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s9",
+     "artifact_type": "mcp_server",
+     "command": "c9",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "23f42be38085171e75e43be94c1770c92379939d2fee95cb2dc49b4049ed536e",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s9",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "23f42be38085171e75e43be94c1770c92379939d2fee95cb2dc49b4049ed536e",
+       "hashBasis": "content",
+       "versionLabel": "s9"
+      }
+     },
+     "name": "s9",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s10",
+     "artifact_type": "mcp_server",
+     "command": "c10",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "75bbdfc143402d034994d2e37cfe0a8350f038e27d751038b1c16a73ab56bb97",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s10",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "75bbdfc143402d034994d2e37cfe0a8350f038e27d751038b1c16a73ab56bb97",
+       "hashBasis": "content",
+       "versionLabel": "s10"
+      }
+     },
+     "name": "s10",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:s11",
+     "artifact_type": "mcp_server",
+     "command": "c11",
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "722411f1522e1c9b39dccff21fab820c6aee37712b77c357e35d524793016b36",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s11",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "722411f1522e1c9b39dccff21fab820c6aee37712b77c357e35d524793016b36",
+       "hashBasis": "content",
+       "versionLabel": "s11"
+      }
+     },
+     "name": "s11",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"s0\": {\"command\": \"c0\"}, \"s1\": {\"command\": \"c1\"}, \"s2\": {\"command\": \"c2\"}, \"s3\": {\"command\": \"c3\"}, \"s4\": {\"command\": \"c4\"}, \"s5\": {\"command\": \"c5\"}, \"s6\": {\"command\": \"c6\"}, \"s7\": {\"command\": \"c7\"}, \"s8\": {\"command\": \"c8\"}, \"s9\": {\"command\": \"c9\"}, \"s10\": {\"command\": \"c10\"}, \"s11\": {\"command\": \"c11\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "many_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/home/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"l\": {\"command\": [\"node\", \"x\"], \"args\": [\"y\"]}, \"u\": {\"url\": [\"x\"]}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "y"
+     ],
+     "artifact_id": "cursor:global:l",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "6b8f89fabf96605927fb16e15ee6a382ebfcb7d038e184eeeed7f81d7406a185",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "l",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "6b8f89fabf96605927fb16e15ee6a382ebfcb7d038e184eeeed7f81d7406a185",
+       "hashBasis": "content",
+       "versionLabel": "l"
+      }
+     },
+     "name": "l",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:global:u",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": false,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "u",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41bbcb14d4af3c7743fa76d551fc41e4578a605d2c14e1cf36d3366085c78b60",
+       "hashBasis": "content",
+       "versionLabel": "u"
+      }
+     },
+     "name": "u",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"l\": {\"command\": [\"node\", \"x\"], \"args\": [\"y\"]}, \"u\": {\"url\": [\"x\"]}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "list_command",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "configs": [
+     {
+      "path": "<ROOT>/work/.cursor/mcp.json",
+      "payload": "{\"mcpServers\": {\"guarded\": {\"command\": \"hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--server\", \"x\"]}}}"
+     }
+    ],
+    "harness": "cursor",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "guard",
+      "mcp-proxy",
+      "--server",
+      "x"
+     ],
+     "artifact_id": "cursor:project:guarded",
+     "artifact_type": "mcp_server",
+     "command": "hol-guard",
+     "config_path": "<ROOT>/work/.cursor/mcp.json",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "bae26a4b59309d43d9777e9dc40ce4de5a7c14c01a4b0494d96b55622b653c43",
+      "env": {},
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "guard_managed_proxy": true,
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "guarded",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bae26a4b59309d43d9777e9dc40ce4de5a7c14c01a4b0494d96b55622b653c43",
+       "hashBasis": "content",
+       "versionLabel": "guarded"
+      }
+     },
+     "name": "guarded",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.cursor/mcp.json",
+     "text": "{\"mcpServers\": {\"guarded\": {\"command\": \"hol-guard\", \"args\": [\"guard\", \"mcp-proxy\", \"--server\", \"x\"]}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.cursor/mcp.json"
+   ],
+   "home": "home",
+   "name": "proxy_in_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-cursor-vectors.v1"
+}

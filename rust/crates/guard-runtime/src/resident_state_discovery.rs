@@ -30,6 +30,33 @@ pub(crate) fn discover_home_states_prefer(
     base: &Path,
     preferred_digest: Option<&str>,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
+    discover_states(base, preferred_digest, Liveness::RuntimeDigest)
+}
+
+/// Discovery for a short-lived caller that can only use a resident running
+/// this very executable. A scope's resident counts as live when its start
+/// marker matches and it runs this executable's path, so no runtime is
+/// hashed; the caller still validates the identity it connects to.
+pub(crate) fn discover_same_executable_states(
+    base: &Path,
+) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
+    discover_states(base, None, Liveness::SameExecutable)
+}
+
+/// How discovery proves a fallback scope's resident is live.
+#[derive(Clone, Copy)]
+enum Liveness {
+    /// The process runs bytes matching the state's runtime digest.
+    RuntimeDigest,
+    /// The process runs this executable's path.
+    SameExecutable,
+}
+
+fn discover_states(
+    base: &Path,
+    preferred_digest: Option<&str>,
+    liveness: Liveness,
+) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let private_root = private_root_for_state_base(base)?;
     let base = ensure_private_directory_under(base, &private_root, false)?;
     let validated_preferred_digest = preferred_digest
@@ -82,6 +109,7 @@ pub(crate) fn discover_home_states_prefer(
     // directory must not fail every hook.
     let mut states = Vec::new();
     let mut budget = DiscoveryBudget::new();
+    budget.liveness = liveness;
     if let Some((path, digest_prefix)) = preferred_candidate {
         match load_scope_states(&path, &digest_prefix, &private_root, &mut budget) {
             Ok(found) => states.extend(found),
@@ -145,6 +173,7 @@ struct DiscoveryBudget {
     identities: usize,
     probes: HashMap<(u32, String, String), bool>,
     exhausted: bool,
+    liveness: Liveness,
 }
 
 impl DiscoveryBudget {
@@ -155,6 +184,7 @@ impl DiscoveryBudget {
             identities: MAX_SCOPES,
             probes: HashMap::new(),
             exhausted: false,
+            liveness: Liveness::RuntimeDigest,
         }
     }
 
@@ -174,7 +204,14 @@ impl DiscoveryBudget {
             return Err("native_resident_state_list_failed".to_owned());
         }
         self.identities -= 1;
-        let verified = validate_runtime_process_identity(key.0, &key.1, &key.2).is_ok();
+        let verified = match self.liveness {
+            Liveness::RuntimeDigest => {
+                validate_runtime_process_identity(key.0, &key.1, &key.2).is_ok()
+            }
+            Liveness::SameExecutable => {
+                super::validate_same_executable_process_identity(key.0, &key.1).is_ok()
+            }
+        };
         self.probes.insert(key, verified);
         Ok(verified)
     }

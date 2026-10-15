@@ -58,7 +58,7 @@ impl Disposition {
         }
     }
 
-    fn parse(raw: Option<&str>) -> Option<Self> {
+    pub(crate) fn parse(raw: Option<&str>) -> Option<Self> {
         match raw {
             Some("consumed") => Some(Self::Consumed),
             Some("retained") => Some(Self::Retained),
@@ -153,14 +153,28 @@ pub(crate) fn decide(query: &ApprovalProofQueryV1) -> Outcome {
             claim_disposition,
             claimed_decision,
             current_decision,
-        } => Outcome::flag(match Disposition::parse(claim_disposition.as_deref()) {
-            Some(Disposition::Consumed) => true,
-            Some(Disposition::Retained) => match (claimed_decision, current_decision) {
-                (Some(claimed), Some(current)) => decisions_match(claimed, current),
-                _ => false,
-            },
-            None => false,
-        }),
+        } => Outcome::flag(postclaim_review_authorized(
+            Disposition::parse(claim_disposition.as_deref()),
+            claimed_decision.as_ref(),
+            current_decision.as_ref(),
+        )),
+    }
+}
+
+/// Whether a claimed row still authorizes the post-claim review: a consumed
+/// claim always does; a retained one only while the same row is still selected.
+pub(crate) fn postclaim_review_authorized(
+    disposition: Option<Disposition>,
+    claimed: Option<&Map<String, Value>>,
+    current: Option<&Map<String, Value>>,
+) -> bool {
+    match disposition {
+        Some(Disposition::Consumed) => true,
+        Some(Disposition::Retained) => match (claimed, current) {
+            (Some(claimed), Some(current)) => decisions_match(claimed, current),
+            _ => false,
+        },
+        None => false,
     }
 }
 
@@ -210,7 +224,7 @@ pub(crate) fn claim_disposition(decision: &Map<String, Value>) -> Option<Disposi
 
 /// Consumption may expose no grant or an older allow requiring reapproval.
 /// Neither grants new authority; integrity and context failures never pass.
-fn lookup_preserves_claim(reason_code: Option<&str>) -> bool {
+pub(crate) fn lookup_preserves_claim(reason_code: Option<&str>) -> bool {
     matches!(
         reason_code,
         None | Some(NO_SAVED_DECISION) | Some(REAPPROVAL_REQUIRED)
@@ -219,7 +233,7 @@ fn lookup_preserves_claim(reason_code: Option<&str>) -> bool {
 
 /// Shape-check exact proof only after validated lookup or atomic claim. This
 /// is not integrity validation; retained policy cannot satisfy it.
-fn fresh_tool_approval(
+pub(crate) fn fresh_tool_approval(
     decision: Option<&Map<String, Value>>,
     harness: &str,
     artifact_id: &str,

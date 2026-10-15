@@ -17,6 +17,11 @@ from scripts.ci.wait_for_pytest_shards import github_json
 REPOSITORY = "hashgraph-online/hol-guard"
 CONTEXT_PATH = Path("sonar-scan-context.json")
 SETTINGS_PATH = Path("sonar-scan.properties")
+VERSION_MANIFEST_PATH = Path(".release-please-manifest.json")
+# SemVer: MAJOR.MINOR.PATCH with optional prerelease and build identifiers,
+# each a nonempty dot-separated alphanumeric run.
+_SEMVER_IDENTIFIERS = r"[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*"
+_PACKAGE_VERSION = rf"[0-9]+\.[0-9]+\.[0-9]+(?:-{_SEMVER_IDENTIFIERS})?(?:\+{_SEMVER_IDENTIFIERS})?"
 TASK_PATH = Path(".scannerwork/report-task.txt")
 MAX_CONTEXT_BYTES = 16 * 1024
 
@@ -130,10 +135,19 @@ def read_context(environment: Mapping[str, str], checkout_sha: str) -> dict:
     return context
 
 
+def package_version() -> str:
+    """Use the Release Please version so Sonar's new-code period follows releases."""
+    manifest = json.loads(VERSION_MANIFEST_PATH.read_text(encoding="utf-8"))
+    version = manifest.get(".") if isinstance(manifest, dict) else None
+    if not isinstance(version, str) or re.fullmatch(_PACKAGE_VERSION, version) is None:
+        raise ValueError("Release Please manifest does not carry a valid package version")
+    return version
+
+
 def prepare(environment: Mapping[str, str]) -> None:
     context = select_context(environment, checkout_revision(), github_json)
     context["prepared_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    properties = {"sonar.scm.revision": context["revision"]}
+    properties = {"sonar.scm.revision": context["revision"], "sonar.projectVersion": package_version()}
     if context["kind"] == "branch":
         properties["sonar.branch.name"] = context["branch"]
     else:

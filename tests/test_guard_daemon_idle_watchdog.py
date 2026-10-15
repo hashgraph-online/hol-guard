@@ -16,11 +16,6 @@ from codex_plugin_scanner.guard.store import GuardStore
 def _started_daemon(tmp_path, monkeypatch: pytest.MonkeyPatch) -> GuardDaemonServer:
     store = GuardStore(tmp_path / "pytest-of-user" / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60.0)
-    monkeypatch.setattr(
-        daemon._server.hook_process_runner,
-        "enable_full_capacity",
-        lambda **_kwargs: None,
-    )
     daemon.start()
     return daemon
 

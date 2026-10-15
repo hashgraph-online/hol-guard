@@ -7,6 +7,8 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
@@ -149,27 +151,24 @@ fn run_git_blob(
 
 /// Python `_git_staged_blob`: size check via `git cat-file -s :<path>` then
 /// payload via `git cat-file blob :<path>` bounded by `max_file_bytes`.
-/// Returns `(Option<bytes>, blob_too_large)` — `too_large` only when the
-/// staged object itself exceeds `max_file_bytes`; every other failure
-/// mirrors the Python `except`/`returncode` early exits as `(None, false)`
-/// so the caller records `git_staged_blob_failed`.
+/// Returns `(Option<bytes>, incomplete)`. Every failure (spawn error, non-zero
+/// exit, unparsable size, oversized object) is `(None, true)`, so the caller
+/// marks the scan partial and records `git_staged_blob_unavailable_or_oversized`.
 fn git_staged_blob(root: &Path, path: &[u8], max_file_bytes: usize) -> (Option<Vec<u8>>, bool) {
-    let spec_args = staged_blob_args(path, "-s");
-    let Ok(size_result) = run_git_blob(root, &spec_args) else {
-        return (None, false);
+    let Ok(size_result) = run_git_blob(root, &staged_blob_args(path, "-s")) else {
+        return (None, true);
     };
-    // `int(size_result.stdout.strip())`; invalid output mirrors `ValueError`.
     let Some(size) = std::str::from_utf8(strip_bytes(&size_result.stdout))
         .ok()
         .and_then(|text| text.parse::<i64>().ok())
     else {
-        return (None, false);
+        return (None, true);
     };
     if size < 0 || size > max_file_bytes as i64 {
         return (None, true);
     }
     let Ok(blob_result) = run_git_blob(root, &staged_blob_args(path, "blob")) else {
-        return (None, false);
+        return (None, true);
     };
     if blob_result.stdout.len() > max_file_bytes {
         return (None, true);
@@ -228,22 +227,40 @@ fn dedup_findings(findings: Vec<SecretFinding>, max_findings: usize) -> (Vec<Sec
     (ordered, dropped)
 }
 
+/// Python raises `ValueError` before any Git call when the target is not an
+/// existing directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StagedTargetNotDirectory;
+
+impl fmt::Display for StagedTargetNotDirectory {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("staged secret scan target must be an existing directory")
+    }
+}
+
+impl Error for StagedTargetNotDirectory {}
+
 /// Scan only content currently staged in a Git index.
 /// Mirrors `scan_staged_secrets(root, *, max_files=..., max_file_bytes=...,
 /// max_total_bytes=..., max_findings=...)`.
-pub fn scan_staged_secrets(root: &Path, options: &StagedScanOptions) -> RepositorySecretScanResult {
-    // `Path(root).expanduser().resolve()`; Python's resolve is non-strict, so
-    // a missing root resolves to itself and falls into the git_root failure
-    // branch rather than raising.
-    let expanded_root = expand_tilde(root);
-    let resolved_root = expanded_root
+pub fn scan_staged_secrets(
+    root: &Path,
+    options: &StagedScanOptions,
+) -> Result<RepositorySecretScanResult, StagedTargetNotDirectory> {
+    // `target.expanduser().resolve()` followed by the `exists()`/`is_dir()`
+    // ValueError guard.
+    let resolved_root = expand_tilde(root)
         .canonicalize()
-        .unwrap_or_else(|_| expanded_root.clone());
+        .map_err(|_| StagedTargetNotDirectory)?;
+    if !resolved_root.is_dir() {
+        return Err(StagedTargetNotDirectory);
+    }
+    // Python reports a missing Git root with the enumeration error.
     let Some(git_root) = git_repository_root(&resolved_root) else {
-        return failed_result("git_repository_root_failed");
+        return Ok(failed_result("git_staged_enumeration_failed"));
     };
     let Some(staged_paths) = git_staged_paths(&git_root) else {
-        return failed_result("git_staged_enumeration_failed");
+        return Ok(failed_result("git_staged_enumeration_failed"));
     };
 
     let max_files = bounded_positive(options.max_files, DEFAULT_MAX_FILES, 100_000);
@@ -266,20 +283,26 @@ pub fn scan_staged_secrets(root: &Path, options: &StagedScanOptions) -> Reposito
     let mut truncated = false;
 
     for relative_path in &staged_paths {
-        if files_scanned >= max_files || bytes_scanned >= max_total_bytes {
+        if files_scanned >= max_files
+            || bytes_scanned >= max_total_bytes
+            || findings.len() >= max_findings
+        {
             truncated = true;
             break;
         }
         // Display/label strings use lossy UTF-8 (surrogateescape-parity);
         // the blob lookup itself still consumes the raw `relative_path` bytes.
         let normalized = String::from_utf8_lossy(relative_path).replace('\\', "/");
-        let (data, too_large) = git_staged_blob(&git_root, relative_path, max_file_bytes);
-        if too_large {
+        let (data, incomplete) = git_staged_blob(&git_root, relative_path, max_file_bytes);
+        if incomplete {
             truncated = true;
+            let error = "git_staged_blob_unavailable_or_oversized";
+            if !errors.iter().any(|existing| existing == error) {
+                errors.push(error.to_string());
+            }
             continue;
         }
         let Some(data) = data else {
-            errors.push("git_staged_blob_failed".to_string());
             continue;
         };
         if bytes_scanned + data.len() > max_total_bytes {
@@ -307,7 +330,7 @@ pub fn scan_staged_secrets(root: &Path, options: &StagedScanOptions) -> Reposito
         truncated = true;
     }
 
-    RepositorySecretScanResult {
+    Ok(RepositorySecretScanResult {
         findings: ordered,
         files_scanned,
         commits_scanned: 0,
@@ -319,7 +342,7 @@ pub fn scan_staged_secrets(root: &Path, options: &StagedScanOptions) -> Reposito
             errors
         },
         truncation_reasons: Vec::new(),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -363,32 +386,27 @@ mod tests {
     }
 
     #[test]
-    fn missing_root_fails_closed_like_python() {
-        // Python `resolve()` is non-strict: the path resolves to itself, the
-        // git root lookup fails, and the result carries
-        // `git_repository_root_failed`.
-        let result = scan_staged_secrets(
+    fn missing_root_is_rejected_like_python() {
+        // Python raises `ValueError` before any Git call.
+        let error = scan_staged_secrets(
             Path::new("/nonexistent/rtm032-staged-root"),
             &StagedScanOptions::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "staged secret scan target must be an existing directory"
         );
-        assert!(result.truncated);
-        assert_eq!(result.errors, ["git_repository_root_failed"]);
-        assert!(result.findings.is_empty());
-        assert_eq!(result.files_scanned, 0);
-        assert_eq!(result.commits_scanned, 0);
-        assert_eq!(result.bytes_scanned, 0);
-        assert!(!result.history_enabled);
-        assert!(result.truncation_reasons.is_empty());
     }
 
     #[test]
     fn non_git_directory_reports_no_staged_findings() {
         let dir = temp_root("nogit");
         fs::write(dir.join("staged.env"), SECRET_LINE).unwrap();
-        let result = scan_staged_secrets(&dir, &StagedScanOptions::default());
+        let result = scan_staged_secrets(&dir, &StagedScanOptions::default()).unwrap();
         // Working-tree files are never inspected; only index content counts.
         assert!(result.findings.is_empty());
-        assert_eq!(result.errors, ["git_repository_root_failed"]);
+        assert_eq!(result.errors, ["git_staged_enumeration_failed"]);
         assert!(result.truncated);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -463,7 +481,7 @@ mod tests {
         std::fs::write(dir.join(".env"), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\n").unwrap();
         run_git(&dir, &["add", ".env"], GIT_TIMEOUT_SECONDS).unwrap();
 
-        let result = scan_staged_secrets(&dir, &StagedScanOptions::default());
+        let result = scan_staged_secrets(&dir, &StagedScanOptions::default()).unwrap();
         assert!(
             result.errors.is_empty(),
             "unexpected errors: {:?}",
@@ -478,7 +496,7 @@ mod tests {
         // Sanity: the same content left unstaged after removal must vanish.
         run_git(&dir, &["reset", "-q"], GIT_TIMEOUT_SECONDS).unwrap();
         std::fs::remove_file(dir.join(".env")).unwrap();
-        let clean = scan_staged_secrets(&dir, &StagedScanOptions::default());
+        let clean = scan_staged_secrets(&dir, &StagedScanOptions::default()).unwrap();
         assert!(
             clean.findings.is_empty(),
             "unstaged file leaked: {:?}",

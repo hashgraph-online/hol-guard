@@ -16,13 +16,32 @@ inputs:
     # Publishing explicitly selects a separate trusted build cache.
     description: Shared native build cache family; keep the established namespace.
     default: native-wheel
+  cache-fallback-key:
+    description: Optional read-only cache family used to seed a new namespace.
+    default: ""
   save-main-cache:
     description: Also save this Windows producer's successful scheduled or manual main build.
     default: "false"
+  save-push-ref:
+    # Actions scopes a cache to the ref that saved it (readable there and by refs whose base it
+    # is), so this lets one trusted branch reuse its own dependency builds. Never a PR ref.
+    description: Also save on push events to exactly this full ref, such as refs/heads/<branch>.
+    default: ""
 
 runs:
   using: composite
   steps:
+    - name: Stage external contribution trust defaults
+      shell: bash
+      # Compile and package the same conservative defaults as builder CI.
+      # ubuntu-latest exposes python3. setup-python jobs expose python.
+      run: |
+        if command -v python3 >/dev/null 2>&1; then
+          py=python3
+        else
+          py=python
+        fi
+        "$py" scripts/refresh_extension_artifacts.py --trust-only
     - name: Install pinned Rust toolchain
       shell: bash
       env:
@@ -40,6 +59,7 @@ runs:
         rustup toolchain install "$RUST_TOOLCHAIN" "${args[@]}"
         rustup default "$RUST_TOOLCHAIN"
     - name: Cache Rust compilation
+      id: rust-cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
       with:
         # Keep the existing trusted host cache usable during this migration.
@@ -55,9 +75,36 @@ runs:
         # old path set so the trusted pre-migration cache can actually restore.
         cache-bin: true
         # Only the opted-in Windows release producer may warm main outside push.
+        # A caller may name one branch whose pushes save to that branch's own scope.
         # Other scheduled/manual jobs and all PR refs remain cache readers.
         save-if: >-
-          ${{ github.ref == 'refs/heads/main' &&
-              (github.event_name == 'push' ||
-               (inputs.save-main-cache == 'true' && runner.os == 'Windows' &&
-                (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'))) }}
+          ${{ (github.ref == 'refs/heads/main' &&
+               (github.event_name == 'push' ||
+                (inputs.save-main-cache == 'true' && runner.os == 'Windows' &&
+                 (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')))) ||
+              (inputs.save-push-ref != '' && github.event_name == 'push' &&
+               github.ref == inputs.save-push-ref) }}
+    - name: Check for restored Rust dependencies
+      id: rust-cache-state
+      if: inputs.cache-fallback-key != '' && steps.rust-cache.outputs.cache-hit != 'true'
+      shell: bash
+      # rust-cache reports false for both partial hits and complete misses.
+      # Do not unpack the old full-workspace archive over restored shard deps.
+      run: |
+        restored=false
+        if [ -d rust/target ] && [ -n "$(find rust/target -type f \( -name '*.rlib' -o -name '*.rmeta' \) -print -quit)" ]; then
+          restored=true
+        fi
+        echo "restored=$restored" >> "$GITHUB_OUTPUT"
+    - name: Seed a new cache namespace from compatible dependencies
+      if: inputs.cache-fallback-key != '' && steps.rust-cache.outputs.cache-hit != 'true' && steps.rust-cache-state.outputs.restored != 'true'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      with:
+        # Preserve the same toolchain/environment hash and archive path set.
+        # The primary cache above remains the only writer for this shard.
+        prefix-key: v0-rust
+        workspaces: rust
+        shared-key: ${{ inputs.targets && format('{0}-{1}', inputs.cache-fallback-key, inputs.targets) || inputs.cache-fallback-key }}
+        cache-workspace-crates: false
+        cache-bin: true
+        save-if: "false"

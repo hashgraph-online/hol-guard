@@ -6,12 +6,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import zipfile
 from pathlib import Path
 
 MIB = 1024 * 1024
 NATIVE = "codex_plugin_scanner/_native/"
 BUDGETS = Path(__file__).resolve().parents[2] / "ci/package_size/budgets.json"
+# Alpha prerelease native wheels (GitHub prerelease assets only, never PyPI) are built with
+# fast per-crate codegen and are larger by design. This ceiling never applies to stable.
+ALPHA_NATIVE_BUDGETS = Path(__file__).resolve().parents[2] / "ci/package_size/alpha-native-budgets.json"
+ALPHA_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+a[1-9][0-9]*$")
 
 
 def check_sizes(label: str, sizes: dict[str, int], budget: dict[str, int]) -> tuple[list[str], list[str]]:
@@ -29,15 +34,29 @@ def inspect_native(directory: Path, platform: str, budgets: dict[str, dict[str, 
     suffix = ".exe" if platform.startswith("win") else ""
     sizes = {
         "runtime": (directory / ("hol-guard-runtime" + suffix)).stat().st_size,
-        "compiler": (directory / ("guard-command-source" + suffix)).stat().st_size,
     }
     lines, failures = check_sizes(platform + " native binaries", sizes, budgets[platform])
     return "\n".join(lines) + "\n", failures
 
 
-def inspect_wheel(path: Path, budgets: dict[str, dict[str, int]]) -> tuple[str, list[str]]:
+def wheel_version(path: Path) -> str:
+    parts = path.stem.split("-")
+    if len(parts) < 5:
+        raise ValueError(f"Unrecognized wheel filename {path.name}")
+    return parts[1]
+
+
+def inspect_wheel(
+    path: Path,
+    budgets: dict[str, dict[str, int]],
+    alpha_native_budgets: dict[str, dict[str, int]] | None = None,
+) -> tuple[str, list[str]]:
     """Use ZIP metadata only; do not extract or execute wheel contents."""
     platform = path.stem.rsplit("-", 1)[-1]
+    if alpha_native_budgets is not None and platform != "any":
+        if not ALPHA_VERSION.fullmatch(wheel_version(path)):
+            raise ValueError(f"Alpha native size allowance cannot apply to {path.name}: not a canonical alpha")
+        budgets = alpha_native_budgets
     if platform not in budgets:
         raise ValueError(f"No package-size budget for platform {platform}")
     budget = budgets[platform]
@@ -55,17 +74,13 @@ def inspect_wheel(path: Path, budgets: dict[str, dict[str, int]]) -> tuple[str, 
                 NATIVE + "hol-guard-runtime.exe",
             }
         ),
-        "compiler": sum(
-            entry.file_size
-            for entry in files
-            if entry.filename
-            in {
-                NATIVE + "guard-command-source",
-                NATIVE + "guard-command-source.exe",
-            }
-        ),
     }
     lines, failures = check_sizes(path.name, sizes, budget)
+    # The packaged runtime hosts the source compiler; platform wheels must not
+    # ship a second native executable.
+    for member in (NATIVE + "guard-command-source", NATIVE + "guard-command-source.exe"):
+        if any(entry.filename == member for entry in files):
+            failures.append(f"{path.name}: platform wheel must not contain {member}")
     lines.extend(["", "Largest compressed members:", ""])
     for entry in sorted(files, key=lambda item: item.compress_size, reverse=True)[:10]:
         lines.append(
@@ -81,8 +96,15 @@ def main() -> int:
     inputs.add_argument("--dist-dir", type=Path)
     inputs.add_argument("--native-dir", type=Path)
     parser.add_argument("--platform")
+    parser.add_argument(
+        "--alpha-native-budgets",
+        action="store_true",
+        help="Apply the larger alpha-only ceiling to native wheels; refused for any non-alpha version.",
+    )
     arguments = parser.parse_args()
     budgets = json.loads(BUDGETS.read_text(encoding="utf-8"))
+    if arguments.alpha_native_budgets and arguments.native_dir:
+        parser.error("--alpha-native-budgets applies to wheels only")
     if arguments.native_dir:
         if arguments.platform not in budgets:
             parser.error("native binary inspection requires a supported --platform")
@@ -91,7 +113,8 @@ def main() -> int:
         wheels = sorted(arguments.dist_dir.glob("*.whl"))
         if not wheels:
             parser.error("distribution directory contains no wheels")
-        results = [inspect_wheel(wheel, budgets) for wheel in wheels]
+        alpha = json.loads(ALPHA_NATIVE_BUDGETS.read_text(encoding="utf-8")) if arguments.alpha_native_budgets else None
+        results = [inspect_wheel(wheel, budgets, alpha) for wheel in wheels]
     failed = False
     for report, failures in results:
         print(report)

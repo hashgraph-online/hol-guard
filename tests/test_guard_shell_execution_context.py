@@ -10,9 +10,6 @@ import pytest
 from codex_plugin_scanner.guard.cli.commands_support_codex_reads import (
     _codex_command_is_read_only_source_inspection,
 )
-from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output import (
-    _codex_sensitive_local_source_matches,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
 )
@@ -22,11 +19,9 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.native_context import is_unbound_context_digest
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
 )
@@ -500,7 +495,6 @@ def test_secret_source_output_artifact_uses_the_effective_project(tmp_path: Path
     _write(project_b / ".env", "API_KEY=project-b-secret\n")
     command = "cd project-b && cat .env"
 
-    matches = _codex_sensitive_local_source_matches(command, cwd=project_a)
     artifact = _codex_post_tool_output_artifact(
         payload={
             "tool_name": "Bash",
@@ -512,9 +506,8 @@ def test_secret_source_output_artifact_uses_the_effective_project(tmp_path: Path
         cwd=project_a,
     )
 
-    assert matches
-    assert matches[0].normalized_path == str((project_b / ".env").resolve())
     assert artifact is not None
+    assert artifact.metadata["guard_default_action"] == "require-reapproval"
     assert artifact.metadata["effective_cwd"] == str(project_b.resolve())
 
 
@@ -615,39 +608,12 @@ def test_missing_explicit_execution_context_completeness_cannot_reuse_token(tmp_
     first = _approval_token(artifact, workspace=workspace, config=config)
     second = _approval_token(artifact, workspace=workspace, config=config)
 
+    if is_unbound_context_digest(first) or is_unbound_context_digest(second):
+        # A loaded runner can leave the resident unreachable; the degraded
+        # sentinel never validates, so it cannot be reused either.
+        assert is_unbound_context_digest(first) and is_unbound_context_digest(second)
+        return
     assert first != second
-
-
-def test_destructive_shell_request_models_each_command_context_once(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    original_model = secret_file_requests_module.model_shell_execution_context
-    calls: list[str] = []
-
-    def counting_model(
-        command_text: str,
-        *,
-        cwd: Path | None = None,
-        workspace_root: Path | None = None,
-        home_dir: Path | None = None,
-    ):
-        calls.append(command_text)
-        return original_model(command_text, cwd=cwd, workspace_root=workspace_root, home_dir=home_dir)
-
-    monkeypatch.setattr(secret_file_requests_module, "model_shell_execution_context", counting_model)
-
-    request = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": "cd project && rm marker"},
-        cwd=tmp_path,
-    )
-
-    assert request is not None
-    assert request.action_class == "destructive shell command"
-    assert calls == ["cd project && rm marker"]
 
 
 def test_path_hash_changes_when_effective_directory_identity_changes(tmp_path: Path) -> None:

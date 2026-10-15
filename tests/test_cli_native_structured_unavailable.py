@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -223,10 +222,8 @@ def test_cli_native_success_projects_worker_structured_mediation_without_mutatin
 
     assert response["structured_content_mediation"] == {
         "schema": "guard-structured-content-mediation.v1",
-        "action": "forward",
-        "reason_code": "structured_clean_forward",
-        "native_decision_id": "b" * 64,
-        "content_sha256": hashlib.sha256(structured_output.encode()).hexdigest(),
+        "action": "withhold",
+        "reason_code": "structured_managed_authority_unavailable",
     }
     assert response["structured_content_mediation"] is not worker_result["structured_content_mediation"]
     assert native_result == original_native_result
@@ -283,7 +280,7 @@ def test_cli_native_success_projects_managed_structured_withhold_and_keeps_optio
     ("recording_only", "decision", "reason_code"),
     [
         (False, "block", "native_prompt_unavailable"),
-        (True, "allow", "native_prompt_deadline_exceeded"),
+        (True, "block", "native_prompt_unavailable"),
     ],
 )
 def test_cli_native_unavailable_preserves_native_recording_posture(

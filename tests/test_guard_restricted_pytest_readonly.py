@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import (
 )
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_readonly_evidence_does_not_claim_workspace_writes() -> None:
     plan = prepare_restricted_pytest(
         [sys.executable, "-m", "pytest", "-q"],
@@ -35,6 +36,7 @@ def test_readonly_evidence_does_not_claim_workspace_writes() -> None:
     assert "workspace-write" in evidence["denied_capabilities"]
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_readonly_rejects_backend_without_credential_filtering() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -47,6 +49,7 @@ def test_readonly_rejects_backend_without_credential_filtering() -> None:
     assert error.value.reason_code == PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_linux_readonly_preparation_requires_the_filtered_profile() -> None:
     plan = prepare_restricted_pytest(
         [sys.executable, "-m", "pytest", "-q"],
@@ -60,6 +63,7 @@ def test_linux_readonly_preparation_requires_the_filtered_profile() -> None:
     assert "workspace-credential-read" in plan.to_evidence()["denied_capabilities"]
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
 @pytest.mark.parametrize(
     "credential_name",
@@ -148,6 +152,7 @@ def test_private_output_cannot_be_a_source_hardlink(tmp_path):
         assert "test_normal_source_read" in source.read_text()
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
 def test_collection_can_stat_external_symlink_without_reading_its_contents() -> None:
     workspace = Path.cwd().resolve()

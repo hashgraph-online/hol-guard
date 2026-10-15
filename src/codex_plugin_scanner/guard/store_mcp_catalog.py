@@ -80,21 +80,6 @@ def read_mcp_skill_page(
     }
 
 
-def catalog_tool_authority_matches(catalog: object, name: str, live_authority_hash: object) -> bool:
-    if not isinstance(catalog, dict) or not isinstance(live_authority_hash, str):
-        return False
-    hashes = catalog.get("authority_hashes")
-    if isinstance(hashes, dict):
-        return hashes.get(name) == live_authority_hash
-    tools = catalog.get("tools")
-    if not isinstance(tools, list):
-        return False
-    cached = next((tool for tool in tools if isinstance(tool, dict) and tool.get("name") == name), None)
-    if cached is None:
-        return False
-    return tool_definition_authority_hash(cached) == live_authority_hash
-
-
 def read_mcp_tool_authority(
     connection: sqlite3.Connection,
     cli_id: str,

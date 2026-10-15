@@ -1,8 +1,7 @@
 //! Seeded generated-input checks for Content-Transfer-Encoding decoding in the
 //! plain MIME profile.
 
-#[path = "support/business_properties.rs"]
-mod business_properties;
+use crate::business_properties;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use business_properties::{plain, Rng, CASES};

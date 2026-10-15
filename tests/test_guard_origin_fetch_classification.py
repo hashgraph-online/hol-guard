@@ -5,14 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    is_explicitly_benign_tool_action_request,
-)
-from tests.git_execution_test_support import assert_host_git_proof_result
-from tests.native_command_test_support import (
-    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
-)
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
@@ -82,99 +74,6 @@ def _repository(tmp_path: Path, *, origin: str = "https://github.com/example/pro
     return home, repository
 
 
-def _is_benign(command: str, *, home: Path, repository: Path) -> bool:
-    return is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=repository,
-        home_dir=home,
-    )
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "git fetch origin",
-        "git fetch origin --quiet",
-        "git fetch --quiet origin",
-        "git fetch origin -q",
-        "git fetch -q origin",
-        "git fetch origin --no-tags",
-        "git fetch origin main",
-        "git fetch origin main release/3.0",
-        "git fetch origin -q main release/3.0",
-    ),
-)
-def test_origin_fetch_keeps_separate_host_and_native_repository_proof(tmp_path: Path, command: str) -> None:
-    home, repository = _repository(tmp_path)
-
-    assert_host_git_proof_result(_is_benign(command, home=home, repository=repository), cwd=repository)
-    # Native pre-tool requests do not carry the repository/configuration
-    # evidence used by this host recognizer. Retain their review ownership.
-    request = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": command},
-        cwd=repository,
-        home_dir=home,
-    )
-    assert request is not None
-    assert request.action_class == "git origin refresh"
-
-
-@pytest.mark.parametrize(
-    "origin",
-    (
-        "git@github.com:example/project.git",
-        "ssh://git@github.com/example/project.git",
-    ),
-)
-def test_repo_bound_github_ssh_origin_fetch_stays_owned(tmp_path: Path, origin: str) -> None:
-    home, repository = _repository(tmp_path, origin=origin)
-
-    assert not _is_benign("git fetch origin", home=home, repository=repository)
-    request = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": "git fetch origin --quiet"},
-        cwd=repository,
-        home_dir=home,
-    )
-    assert request is not None
-    assert request.action_class == "git origin refresh"
-
-
-def test_github_ssh_origin_fetch_rejects_configured_ssh_command(tmp_path: Path) -> None:
-    home, repository = _repository(tmp_path, origin="git@github.com:example/project.git")
-    _ = subprocess.run(
-        ["git", "-C", str(repository), "config", "core.sshCommand", "payload"],
-        check=True,
-    )
-
-    assert not _is_benign("git fetch origin", home=home, repository=repository)
-    request = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": "git fetch origin"},
-        cwd=repository,
-        home_dir=home,
-    )
-    assert request is not None
-    assert request.action_class == "git origin refresh"
-
-
-def test_unverified_fetch_is_owned_by_git_extension(tmp_path: Path) -> None:
-    payload = inspect_command("git fetch origin", cwd=tmp_path, home_dir=tmp_path)
-
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "git origin refresh"
-    assert payload["controlling_rule_id"] == "command.git.unverified-fetch"
-    assert payload["extensions"][0]["extension_id"] == "command.git"
-    assert payload["rules"][0]["rule_id"] == "command.git.unverified-fetch"
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("git origin refresh") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("git origin refresh") is not None
-    git = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.git")
-    assert git is not None
-    assert any(permission.permission_id == "command.git.permission.unverified-fetch" for permission in git.permissions)
-
-
 @pytest.mark.parametrize(
     "command",
     (
@@ -199,15 +98,4 @@ def test_url_remote_fetch_retains_unverified_diagnostic_and_native_floor(tmp_pat
     assert payload["status"] == "review"
     assert payload["minimum_action"] == "review"
     assert payload["classification"]["action_class"] == "unverified Git remote refresh"
-    assert payload["controlling_rule_id"] == "command.git.unverified-fetch"
-
-
-def test_native_origin_fetch_requires_repository_evidence(tmp_path: Path) -> None:
-    home, repository = _repository(tmp_path)
-    payload = inspect_command("git fetch origin", cwd=repository, home_dir=home)
-
-    assert_host_git_proof_result(_is_benign("git fetch origin", home=home, repository=repository), cwd=repository)
-    assert payload["classification"]["explicitly_benign"] is False
-    assert payload["status"] == "review"
-    assert payload["minimum_action"] == "review"
     assert payload["controlling_rule_id"] == "command.git.unverified-fetch"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 from dataclasses import replace
 from itertools import chain
@@ -38,16 +39,16 @@ def test_native_contract_keeps_complete_original_inputs_and_visible_stronger_dif
     metadata = contract.load_native_contract()
     assert len(groups) == 58
     assert sum(count for count, _ in groups.values()) == 51_000
-    assert sum(count for count, _ in original.values()) == 10_541
-    assert rejected["native_command_evaluation_failed"][0] == 27_084
+    assert sum(count for count, _ in original.values()) == 8_484
+    assert rejected["native_command_evaluation_failed"][0] == 25_002
     assert metadata["totals"] == {
         "cases": 51_000,
         "sources": 52,
         "groups": 58,
-        "equal_to_original_oracle": 40_459,
-        "stronger_than_original_oracle": 10_541,
+        "equal_to_original_oracle": 42_516,
+        "stronger_than_original_oracle": 8_484,
         "below_original_oracle": 0,
-        "native_evaluation_errors": 27_084,
+        "native_evaluation_errors": 25_002,
         "improved_upstream_benign_sources": 3,
         "improved_upstream_benign_cases": 75,
         "improved_bounded_git_sources": 2,
@@ -57,6 +58,7 @@ def test_native_contract_keeps_complete_original_inputs_and_visible_stronger_dif
 
 _GIT_CONTEXT_REVIEW_GROUPS = frozenset(
     {
+        "workflow:git-local:branches|all",
         "workflow:git-local:diff-check|all",
         "workflow:git-local:recent-log|all",
         "workflow:git-local:show-stat|all",
@@ -123,7 +125,10 @@ def test_native_contract_rejects_changed_immutable_source_identity(
 
 @pytest.fixture(scope="module")
 def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
-    from codex_plugin_scanner.guard.runtime import github_command_capabilities, package_protect_projection
+    from codex_plugin_scanner.guard.runtime import (
+        github_command_capabilities,
+        package_protect_projection,
+    )
     from tests.guard_command_corpus_native import evaluate_native_corpus_batch
     from tests.harness_attribution_env import HARNESS_ENV_MARKERS
     from tests.native_command_test_support import _native_binaries
@@ -140,6 +145,13 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
         for marker in HARNESS_ENV_MARKERS:
             attribution.delenv(marker, raising=False)
         attribution.setenv("__CFBundleIdentifier", "com.apple.Terminal")
+        # Command composition is resident-only; this module fixture runs before the
+        # function-scoped autouse native-mode fixture, so select the compiled
+        # authority the same way that fixture does for regression jobs.
+        attribution.setenv("HOL_GUARD_TEST_MODE", "1")
+        attribution.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+        if "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
+            attribution.setenv("HOL_GUARD_NATIVE", "force")
         attribution.setattr(package_protect_projection, "resolve_parent_process_harness", lambda: None)
         # GitHub CLI classification is resident-only; answer it from the same Rust classifier
         # without leaking the stub module or its memoized answers into other tests.
@@ -249,7 +261,6 @@ def test_contract_diagnostics_show_actionable_finite_facts(field: str, value: ob
 def test_non_inspection_git_contracts_do_not_claim_helper_reapproval() -> None:
     groups = contract._groups()
     for group_id in (
-        "workflow:git-local:branches|all",
         "workflow:navigation-public-read:repository-root|all",
         "workflow:workspace-patch-write:patch-check|all",
     ):

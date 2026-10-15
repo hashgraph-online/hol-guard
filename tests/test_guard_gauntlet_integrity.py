@@ -342,6 +342,37 @@ def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
     assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
 
 
+def test_read_selector_resolution_requires_actual_host_result_metadata():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "README.md:1-15"}, {"path": "{{workspace}}/README.md"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
+    assert not post_input_matches("read", {"path": "README.md:15-1"}, post, result)
+    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
+
+
+def test_raw_read_selector_requires_whole_file_host_result_metadata():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "{{workspace}}/src/one.ts:raw"}, {"path": "{{workspace}}/src/one.ts"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
+    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
+    late = {"details": {**result["details"], "displayContent": {"startLine": 2}}}
+    assert not post_input_matches("read", pre, post, late)
+    for selector in ("img", "RAW", "1-5:raw", "conflicts"):
+        assert not post_input_matches("read", {"path": f"src/one.ts:{selector}"}, post, result)
+
+
 def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
     from ci.gauntlet.input_evidence import post_input_matches
 
@@ -374,8 +405,8 @@ def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
     assert exported["input_sha256"] == input_digest(exported["input"])
     assert exported["observed_input_sha256"] == observation["input_sha256"]
     assert "input_json" not in exported
-    with pytest.raises(ValueError, match="observed digest"):
-        public_observations([{**observation, "input_json": "{}"}], {})
+    tampered = public_observations([{**observation, "input_json": "{}", "tool": "read"}], {})[0]
+    assert tampered == {"tool": "read", "observer_error": True, "observer_error_code": "input_digest_mismatch"}
 
 
 @pytest.mark.parametrize("change", ["execution_error", "returncode", "timed_out", "cleanup_ok"])

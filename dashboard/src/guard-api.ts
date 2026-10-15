@@ -73,6 +73,7 @@ import type {
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
+  GuardHarnessPosturePatch,
   GuardSettings,
   GuardUpdateScheduleResult,
   GuardDaemonReconnectAuthorization,
@@ -1012,7 +1013,7 @@ function withGuardAuthForToken(
   };
 }
 
-async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
@@ -1049,12 +1050,43 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchExtensionCatalogV2Api(input: string, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    /^\/v2\/extension-controls\/catalog\/(?:index|permissions|extensions\/command\.[a-z0-9.-]+(?:\/(?:permissions|rules|mcp-tools))?)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid extension catalog API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/** Partition key for in-memory read caches: one daemon origin and session. */
+export function guardApiCacheScope(): string {
+  return `${readGuardDaemonOrigin() ?? ""}|${readGuardToken() ?? ""}`;
+}
+
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
     /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|forget|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/**
+ * Sponsored extension discovery: authenticated daemon routes only. The
+ * browser never calls Guard Cloud directly (connect-src stays 'self'), and
+ * these fixed paths are the whole allowlist.
+ */
+export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid extension discovery API path");
   }
   return fetchWithGuardAuth(input, init);
 }
@@ -2255,6 +2287,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
 export type CloudReviewSettingsStatus = {
   enabled: boolean;
   connected: boolean;
+  reconnect_required: boolean;
   reason: string | null;
   expires_at: string | null;
   workspace_id: string | null;
@@ -2285,10 +2318,36 @@ export async function changeCloudReviewSettings(input: {
   });
 }
 
-export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {
+function applyHarnessPosturePatch(
+  current: GuardSettings["harness_postures"],
+  patch: GuardHarnessPosturePatch,
+): NonNullable<GuardSettings["harness_postures"]> {
+  const next = { ...(current ?? {}) };
+  for (const [harness, posture] of Object.entries(patch)) {
+    if (posture === null) delete next[harness];
+    else next[harness] = posture;
+  }
+  return next;
+}
+
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures"> & {
+  harness_postures?: GuardHarnessPosturePatch;
+};
+
+export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    return { ...current, settings: { ...current.settings, ...settings } };
+    const { harness_postures: posturePatch, ...rest } = settings;
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        ...rest,
+        ...(posturePatch === undefined
+          ? {}
+          : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+      },
+    };
   }
   return readJson<GuardSettingsPayload>("/v1/settings", {
     method: "POST",

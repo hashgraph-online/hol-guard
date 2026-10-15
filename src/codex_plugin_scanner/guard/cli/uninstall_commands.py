@@ -128,7 +128,7 @@ def run_guard_self_uninstall(
 
     try:
         profile_cleanup = remove_guard_profile_blocks(context)
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
         profile_cleanup = {"changed": False, "error": _clean_output(str(error))}
         notes.append(f"Could not remove Guard PATH entries from shell profiles: {error}")
 

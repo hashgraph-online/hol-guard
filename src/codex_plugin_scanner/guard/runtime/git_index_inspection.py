@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Final, Literal
 
 from .compound_git_inspection import (
+    _cached_diff_pathspecs_allowed,
     _git_show_has_execution_free_config,
-    _safe_repository_path,
     is_low_risk_git_inspection_segment,
     is_low_risk_standalone_git_routine,
 )
@@ -286,15 +286,6 @@ _SAFE_CACHED_DIFF_FLAGS: Final = frozenset(
 )
 
 
-def _safe_exclude_pathspec(value: str) -> bool:
-    if not value.startswith((":!", ":^")):
-        return False
-    remainder = value[2:]
-    if not remainder or remainder.startswith((":", "/", "~")):
-        return False
-    return _safe_repository_path(remainder)
-
-
 def _cached_diff_operands_are_safe(args: tuple[str, ...]) -> bool:
     if len(args) > 20:
         return False
@@ -311,7 +302,7 @@ def _cached_diff_operands_are_safe(args: tuple[str, ...]) -> bool:
         return False
     if any(arg not in _SAFE_CACHED_DIFF_FLAGS for arg in revisions):
         return False
-    return all(_safe_repository_path(path) or _safe_exclude_pathspec(path) for path in paths)
+    return _cached_diff_pathspecs_allowed(paths)
 
 
 def _proof_cached_diff_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:

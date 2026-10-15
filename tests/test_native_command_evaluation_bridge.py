@@ -111,7 +111,12 @@ def test_inspection_native_evaluation_failure_preserves_block_without_reparsing(
     def forbidden(*_args: object, **_kwargs: object) -> None:
         pytest.fail("failed native inspection reparsed or classified the command")
 
-    monkeypatch.setattr(command_inspection, "parse_shell_command", forbidden)
+    # The inspection module no longer owns a parser. A failed native evaluation
+    # must still not call the Python parser or rebuild a tool-action artifact.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.command_model.parse_shell_command",
+        forbidden,
+    )
     monkeypatch.setattr(command_inspection, "extract_sensitive_tool_action_request", forbidden)
     monkeypatch.setattr(command_inspection, "build_tool_action_request_artifact", forbidden)
     result = command_inspection.inspect_command(command, cwd=tmp_path, home_dir=tmp_path, guard_home=tmp_path)

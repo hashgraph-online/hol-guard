@@ -36,6 +36,8 @@ def main() -> int:
     if sys.platform == "win32" and not Path(args.compiler).suffix:
         args.compiler += ".exe"
     command = [sys.executable, "scripts/build_native_command_program.py", "--compiler", args.compiler]
+    # Check Git blobs first; scratch regeneration cannot repair missing PR inputs.
+    _run([*command, "--check-public-descriptors"])
     _run(command)
     _run([*command, "--check"])
     # Packaging uses the exact compiler just validated, including cross-target

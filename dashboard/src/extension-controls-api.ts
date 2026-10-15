@@ -137,6 +137,20 @@ export type ExtensionCatalogItem = {
   mcp_tools?: McpToolDefault[];
 };
 
+/**
+ * One row of the catalog index. A full ExtensionCatalogItem is also a valid
+ * summary, so list code accepts either; permissions, rules and MCP tools
+ * come only from the per-extension detail read.
+ */
+export type ExtensionCatalogSummary = Pick<
+  ExtensionCatalogItem,
+  | "extension_id" | "name" | "description" | "enabled" | "required" | "trust_class" | "activation"
+  | "publisher" | "icon" | "source" | "version" | "aliases" | "ecosystem_ids" | "executables"
+  | "action_classes" | "risk_classes" | "rule_count" | "permission_count" | "surface"
+> & {
+  content_revision?: string;
+};
+
 export type ExtensionControlLayer = {
   schema_version: string;
   kind: "local-admin" | "signed-cloud";

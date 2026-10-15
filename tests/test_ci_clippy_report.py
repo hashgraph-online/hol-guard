@@ -87,6 +87,31 @@ def test_missing_current_attempt_report_times_out_without_using_previous_attempt
         )
 
 
+def test_artifact_uploaded_during_the_last_sleep_is_found_at_the_deadline():
+    _, _, artifact, fetch = inventory()
+    name = artifact["name"]
+    now = [0.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+        artifact["name"] = name if now[0] >= 40 else "not-yet"
+
+    artifact["name"] = "not-yet"
+    selected = report.select(
+        "owner/repo",
+        12,
+        2,
+        fetch=fetch,
+        clock=lambda: now[0],
+        sleep=sleep,
+        timeout=40,
+    )
+    assert selected is artifact
+    assert sleeps == [30.0, 10.0]
+
+
 def test_diagnostics_survive_partial_json_and_exclude_non_diagnostic_records(tmp_path, capsys):
     (tmp_path / report.REPORT).write_text(
         "incomplete JSON\n"

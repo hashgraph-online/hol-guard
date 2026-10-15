@@ -9,8 +9,8 @@
 //!   - `GuardConfig` -> `config: Option<&Map<String, Value>>` on
 //!     `DetectorContext`; only `runtime_detector_timeout_ms` is read by the
 //!     Cisco seam detectors, via `runtime_detector_timeout_ms()`.
-//!   - `PromptRequest` -> `PromptRequestView` (borrowed record produced by
-//!     the `PromptInjectionApi` seam).
+//!   - `PromptRequest` -> `crate::prompt_analysis::GuardRunPromptRequest`
+//!     (the native prompt analysis is called directly).
 //!   - `PersistenceMatch` -> `PersistenceMatchView`.
 //!   - `DecodeResult` -> `DecodeResultView` / `DecodeLayerView`.
 //!   - `SecretPathMatch` -> `crate::shell_secret_read_support::SecretPathMatch`
@@ -31,6 +31,7 @@ use serde_json::{Map, Value};
 use guard_contracts::{
     confidence_label_from_score, severity_label_from_score, RiskConfidenceLabel,
     RiskRedactionLevel, RiskSeverityLabel, RiskSignalCategory, RiskSignalV2,
+    DATA_FLOW_ANALYZE_MAX_COMMAND_BYTES,
 };
 
 use crate::data_flow_rules::detect_data_flow_exfiltration;
@@ -39,7 +40,9 @@ use crate::false_positive_rules::{
     classify_docs_example_source, classify_health_endpoint_fetch, classify_package_metadata_access,
     classify_read_only_http_fetch, classify_source_search_command, classify_version_file_access,
 };
-use crate::shell_secret_read_support::classify_secret_path;
+use crate::hook_adapter_pytext::py_repr_str;
+use crate::prompt_analysis::{detect_prompt_injection_requests, GuardRunPromptRequest};
+use crate::shell_secret_read_support::classify_request_secret_path;
 use crate::shell_secret_read_support::SecretPathMatch;
 
 // ---------------------------------------------------------------------------
@@ -84,49 +87,34 @@ static SENSITIVE_DECODE_CONTEXT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     .expect("SENSITIVE_DECODE_CONTEXT_PATTERN")
 });
 
-/// Return whether the byte at `index` (if any) is `[A-Za-z0-9_-]` — used to
-/// enforce the negative lookarounds on the sensitive-context pattern.
+/// Apply the negative lookahead of a sensitive-context alternative to the text
+/// after a candidate match ending at `end`.
 fn sensitive_context_boundary_ok(
     text: &str,
-    start: usize,
     end: usize,
     forbid_underscore_dash: bool,
-    also_allow_pub_suffix: bool,
+    forbid_pub_suffix: bool,
 ) -> bool {
-    // `(?<![A-Za-z0-9])` — char immediately before `start` must not be
-    // alphanumeric. Only relevant for the credential/secret/token/password
-    // alternation and checked by the caller.
-    let _ = start;
-    let bytes = text.as_bytes();
-    if end < bytes.len() {
-        let next = bytes[end] as char;
-        let is_forbidden = if forbid_underscore_dash {
-            next.is_ascii_alphanumeric() || next == '_' || next == '-'
-        } else {
-            next.is_ascii_alphanumeric()
-        };
-        if is_forbidden && !also_allow_pub_suffix {
-            return false;
-        }
-        // `.pub\b` alternative for `id_*`: if the next bytes are `.pub`
-        // followed by a word boundary, the lookahead accepts it.
-        if also_allow_pub_suffix && next == '.' {
-            if text[end..].starts_with(".pub") {
-                let after = end + 4;
-                if after >= bytes.len()
-                    || !(bytes[after] as char).is_ascii_alphanumeric()
-                        && (bytes[after] as char) != '_'
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if is_forbidden {
-            return false;
-        }
+    let rest = &text[end..];
+    let Some(&next) = rest.as_bytes().first() else {
+        return true;
+    };
+    if next.is_ascii_alphanumeric() || (forbid_underscore_dash && matches!(next, b'_' | b'-')) {
+        return false;
     }
-    true
+    // `id_*` also rejects `\.pub\b` (case-insensitive): a public key file is
+    // not a secret.
+    !(forbid_pub_suffix && has_pub_suffix(rest))
+}
+
+/// Whether `rest` starts with `.pub` followed by a Unicode word boundary.
+fn has_pub_suffix(rest: &str) -> bool {
+    rest.get(..4)
+        .is_some_and(|head| head.eq_ignore_ascii_case(".pub"))
+        && !rest[4..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
 }
 
 // ---------------------------------------------------------------------------
@@ -183,19 +171,6 @@ impl DetectorContext<'_> {
     }
 }
 
-/// `PromptRequest` — borrowed view of the prompt-injection request record.
-#[derive(Debug, Clone, Copy)]
-pub struct PromptRequestView<'a> {
-    pub request_id: &'a str,
-    pub request_class: &'a str,
-    pub summary: &'a str,
-    pub matched_text: &'a str,
-    pub severity: i64,
-    pub confidence: f64,
-    /// `RemediationAction.detail` values (already filtered to `Some`).
-    pub remediation_details: &'a [String],
-}
-
 /// `PersistenceMatch` — borrowed view of a persistence mechanism match.
 #[derive(Debug, Clone, Copy)]
 pub struct PersistenceMatchView<'a> {
@@ -214,7 +189,7 @@ pub struct DecodeLayerView<'a> {
 #[derive(Debug, Clone)]
 pub struct DecodeResultView<'a> {
     pub layers: Vec<DecodeLayerView<'a>>,
-    pub final_text: &'a str,
+    pub final_text: std::borrow::Cow<'a, str>,
     pub eval_signals: Vec<String>,
     pub exec_signals: Vec<String>,
     pub marshal_signals: Vec<String>,
@@ -229,14 +204,8 @@ pub trait SafeDecodeApi {
     /// `SAFE_DECODE_DETECTOR_VERSION` module constant.
     fn safe_decode_detector_version(&self) -> &str;
     /// `decode_layers(content)` (:108).
-    fn decode_layers<'a>(&self, content: &'a str) -> DecodeResultView<'a>;
-}
-
-/// `.runtime.prompt_injection` seam (:33 import).
-pub trait PromptInjectionApi {
-    /// `detect_prompt_injection_requests(text)` -> sequence of
-    /// `PromptRequest` records.
-    fn detect_prompt_injection_requests<'a>(&self, text: &'a str) -> Vec<PromptRequestView<'a>>;
+    /// `Err` carries the Python exception class name (`EOFError`).
+    fn decode_layers<'a>(&self, content: &'a str) -> Result<DecodeResultView<'a>, String>;
 }
 
 /// `.runtime.skill_protection` seam (:34 import).
@@ -249,8 +218,24 @@ pub trait SkillProtectionApi {
 
 /// `.runtime.supply_chain` seam (:36 import).
 pub trait SupplyChainRiskApi {
-    /// `detect_supply_chain_risk(content)` -> `RiskSignalV2` sequence.
-    fn detect_supply_chain_risk(&self, content: &str) -> Vec<RiskSignalV2>;
+    /// `detect_supply_chain_risk(content)` -> `RiskSignalV2` sequence; `Err`
+    /// fails the detector run closed.
+    fn detect_supply_chain_risk(&self, content: &str) -> Result<Vec<RiskSignalV2>, String>;
+}
+
+/// `SupplyChainRiskApi` over the native supply-chain content rules that
+/// package evaluation already uses.
+pub struct NativeSupplyChainRisk;
+
+impl SupplyChainRiskApi for NativeSupplyChainRisk {
+    fn detect_supply_chain_risk(&self, content: &str) -> Result<Vec<RiskSignalV2>, String> {
+        let failed = || "native_supply_chain_risk_failed".to_owned();
+        crate::supply_chain_risk::detect_supply_chain_risk(content)
+            .map_err(|_| failed())?
+            .into_iter()
+            .map(|signal| RiskSignalV2::decode(&Value::Object(signal)).map_err(|_| failed()))
+            .collect()
+    }
 }
 
 /// `.runtime.persistence_rules` seam (:32 import).
@@ -284,6 +269,33 @@ pub trait GuardDetector {
         action: &DetectorActionView<'_>,
         context: &DetectorContext<'_>,
     ) -> Vec<RiskSignalV2>;
+    /// `detect` for the registry; see [`DetectFailure`] for how a failure
+    /// is recorded.
+    fn try_detect(
+        &self,
+        action: &DetectorActionView<'_>,
+        context: &DetectorContext<'_>,
+    ) -> Result<Vec<RiskSignalV2>, DetectFailure> {
+        Ok(self.detect(action, context))
+    }
+}
+
+/// Why a detector produced no answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DetectFailure {
+    /// Failure code that aborts the whole run (the Python registry re-raised
+    /// native prompt and data-flow failures instead of isolating them), so a
+    /// detector that cannot answer never reads as "no signals".
+    Abort(String),
+    /// Isolated failure recorded as `error` telemetry with this error type and
+    /// no signals (the Python registry's `except Exception` branch).
+    Errored(String),
+}
+
+impl From<String> for DetectFailure {
+    fn from(code: String) -> Self {
+        DetectFailure::Abort(code)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +348,8 @@ impl DetectorTelemetry {
 pub struct DetectorRunResult {
     pub signals: Vec<RiskSignalV2>,
     pub telemetry: Vec<DetectorTelemetry>,
+    /// Signals each `telemetry` entry contributed to `signals`, in order.
+    pub signal_counts: Vec<usize>,
 }
 
 impl DetectorRunResult {
@@ -384,62 +398,63 @@ impl DetectorRegistry {
         timeout_ms: i64,
         disabled_detector_ids: &[&str],
         enabled_categories: Option<&[RiskSignalCategory]>,
-    ) -> DetectorRunResult {
+    ) -> Result<DetectorRunResult, String> {
         let disabled: std::collections::HashSet<&str> =
             disabled_detector_ids.iter().copied().collect();
         let category_filter: Option<std::collections::HashSet<RiskSignalCategory>> =
             enabled_categories.map(|c| c.iter().copied().collect());
         let mut signals: Vec<RiskSignalV2> = Vec::new();
         let mut telemetry: Vec<DetectorTelemetry> = Vec::new();
+        let mut signal_counts: Vec<usize> = Vec::new();
         for detector in &self.detectors {
-            if disabled.contains(detector.detector_id()) {
-                telemetry.push(telemetry_entry(detector.as_ref(), STATUS_DISABLED, 0, None));
-                continue;
-            }
-            if let Some(filter) = &category_filter {
-                let intersects = detector.categories().iter().any(|c| filter.contains(c));
-                if !intersects {
-                    telemetry.push(telemetry_entry(detector.as_ref(), STATUS_FILTERED, 0, None));
-                    continue;
-                }
-            }
-            let started_at = (self.clock)();
-            // Detectors return `Vec`; a panicking detector is caught via
-            // `catch_unwind` so one failure cannot abort the run (mirrors the
-            // Python `except Exception` isolation).
-            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                detector.detect(action, context)
-            }));
-            let finished_at = (self.clock)();
-            let elapsed = elapsed_ms(started_at, finished_at);
-            match outcome {
-                Ok(detector_signals) => {
-                    signals.extend(filter_signals(&detector_signals, category_filter.as_ref()));
-                    if elapsed > timeout_ms {
-                        telemetry.push(telemetry_entry(
-                            detector.as_ref(),
-                            STATUS_TIMEOUT,
-                            elapsed,
-                            None,
-                        ));
-                        continue;
+            let before = signals.len();
+            let entry = if disabled.contains(detector.detector_id()) {
+                telemetry_entry(detector.as_ref(), STATUS_DISABLED, 0, None)
+            } else if category_filter
+                .as_ref()
+                .is_some_and(|filter| !detector.categories().iter().any(|c| filter.contains(c)))
+            {
+                telemetry_entry(detector.as_ref(), STATUS_FILTERED, 0, None)
+            } else {
+                let started_at = (self.clock)();
+                // A panicking or `Errored` detector is isolated (the Python
+                // `except Exception` branch); `Abort` fails the whole run.
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    detector.try_detect(action, context)
+                }));
+                let elapsed = elapsed_ms(started_at, (self.clock)());
+                match outcome {
+                    Ok(Err(DetectFailure::Abort(code))) => return Err(code),
+                    Ok(Err(DetectFailure::Errored(error_type))) => {
+                        telemetry_entry(detector.as_ref(), STATUS_ERROR, elapsed, Some(error_type))
                     }
-                    telemetry.push(telemetry_entry(detector.as_ref(), STATUS_OK, elapsed, None));
-                }
-                Err(_panic) => {
+                    Ok(Ok(detector_signals)) => {
+                        signals.extend(filter_signals(&detector_signals, category_filter.as_ref()));
+                        let status = if elapsed > timeout_ms {
+                            STATUS_TIMEOUT
+                        } else {
+                            STATUS_OK
+                        };
+                        telemetry_entry(detector.as_ref(), status, elapsed, None)
+                    }
                     // `type(error).__name__` — panic payloads do not carry a
                     // class name; record a stable marker.
-                    telemetry.push(telemetry_entry(
+                    Err(_panic) => telemetry_entry(
                         detector.as_ref(),
                         STATUS_ERROR,
                         elapsed,
                         Some("Panic".to_string()),
-                    ));
-                    continue;
+                    ),
                 }
-            }
+            };
+            telemetry.push(entry);
+            signal_counts.push(signals.len() - before);
         }
-        DetectorRunResult { signals, telemetry }
+        Ok(DetectorRunResult {
+            signals,
+            telemetry,
+            signal_counts,
+        })
     }
 }
 
@@ -489,17 +504,33 @@ impl GuardDetector for DataFlowExfiltrationDetector {
         action: &DetectorActionView<'_>,
         context: &DetectorContext<'_>,
     ) -> Vec<RiskSignalV2> {
-        detect_data_flow_exfiltration(&action.as_envelope_view(), context.workspace)
+        self.try_detect(action, context).unwrap_or_default()
+    }
+    fn try_detect(
+        &self,
+        action: &DetectorActionView<'_>,
+        context: &DetectorContext<'_>,
+    ) -> Result<Vec<RiskSignalV2>, DetectFailure> {
+        if action.action_type == "shell_command"
+            && action
+                .command
+                .is_some_and(|command| command.len() > DATA_FLOW_ANALYZE_MAX_COMMAND_BYTES)
+        {
+            return Err(DetectFailure::Abort(
+                "native_data_flow_analyze_command_too_large".to_owned(),
+            ));
+        }
+        Ok(detect_data_flow_exfiltration(
+            &action.as_envelope_view(),
+            context.workspace,
+        ))
     }
 }
 
-/// `PromptInjectionDetector` (:191-198) — wraps the injected
-/// `PromptInjectionApi`.
-pub struct PromptInjectionDetector<A: PromptInjectionApi> {
-    pub api: A,
-}
+/// `PromptInjectionDetector` (:191-198) — native prompt-injection analysis.
+pub struct PromptInjectionDetector;
 
-impl<A: PromptInjectionApi> GuardDetector for PromptInjectionDetector<A> {
+impl GuardDetector for PromptInjectionDetector {
     fn detector_id(&self) -> &str {
         "prompt.injection"
     }
@@ -516,15 +547,23 @@ impl<A: PromptInjectionApi> GuardDetector for PromptInjectionDetector<A> {
     fn detect(
         &self,
         action: &DetectorActionView<'_>,
-        _context: &DetectorContext<'_>,
+        context: &DetectorContext<'_>,
     ) -> Vec<RiskSignalV2> {
-        if action.action_type != "prompt" || action.prompt_excerpt.is_none() {
-            return Vec::new();
-        }
-        let requests = self
-            .api
-            .detect_prompt_injection_requests(action.prompt_excerpt.unwrap());
-        requests.iter().map(|r| prompt_request_signal(r)).collect()
+        self.try_detect(action, context).unwrap_or_default()
+    }
+    fn try_detect(
+        &self,
+        action: &DetectorActionView<'_>,
+        _context: &DetectorContext<'_>,
+    ) -> Result<Vec<RiskSignalV2>, DetectFailure> {
+        let Some(excerpt) = action
+            .prompt_excerpt
+            .filter(|_| action.action_type == "prompt")
+        else {
+            return Ok(Vec::new());
+        };
+        let requests = detect_prompt_injection_requests(excerpt)?;
+        Ok(requests.iter().map(prompt_request_signal).collect())
     }
 }
 
@@ -588,6 +627,13 @@ impl<A: SupplyChainRiskApi> GuardDetector for SupplyChainDetector<A> {
         action: &DetectorActionView<'_>,
         _context: &DetectorContext<'_>,
     ) -> Vec<RiskSignalV2> {
+        self.try_detect(action, _context).unwrap_or_default()
+    }
+    fn try_detect(
+        &self,
+        action: &DetectorActionView<'_>,
+        _context: &DetectorContext<'_>,
+    ) -> Result<Vec<RiskSignalV2>, DetectFailure> {
         let mut signals: Vec<RiskSignalV2> = Vec::new();
         // `filter(None, (action.prompt_text, action.command))` — skip None
         // and empty strings.
@@ -597,9 +643,9 @@ impl<A: SupplyChainRiskApi> GuardDetector for SupplyChainDetector<A> {
             .flatten()
             .filter(|s| !s.is_empty())
         {
-            signals.extend(self.api.detect_supply_chain_risk(content));
+            signals.extend(self.api.detect_supply_chain_risk(content)?);
         }
-        signals
+        Ok(signals)
     }
 }
 
@@ -623,10 +669,18 @@ impl<A: SafeDecodeApi> GuardDetector for SafeDecodeDetector<A> {
     fn detect(
         &self,
         action: &DetectorActionView<'_>,
-        _context: &DetectorContext<'_>,
+        context: &DetectorContext<'_>,
     ) -> Vec<RiskSignalV2> {
+        self.try_detect(action, context).unwrap_or_default()
+    }
+    fn try_detect(
+        &self,
+        action: &DetectorActionView<'_>,
+        _context: &DetectorContext<'_>,
+    ) -> Result<Vec<RiskSignalV2>, DetectFailure> {
         // `value for value in (prompt_text, command) if value` — truthy
-        // non-empty strings only.
+        // non-empty strings only. A decode error ends the scan, as the
+        // Python exception did.
         let candidates: Vec<&str> = [action.prompt_text, action.command]
             .iter()
             .copied()
@@ -634,7 +688,18 @@ impl<A: SafeDecodeApi> GuardDetector for SafeDecodeDetector<A> {
             .filter(|s| !s.is_empty())
             .collect();
         for content in candidates {
-            let result = self.api.decode_layers(content);
+            let result = match self.api.decode_layers(content) {
+                Ok(result) => result,
+                // A crafted fragment that stalls the candidate regexes must not
+                // hide an encoded payload, so it is reported as risk.
+                Err(error) if error == "RegexBudgetExceeded" => {
+                    return Ok(vec![decode_budget_signal(
+                        self.detector_id(),
+                        self.api.safe_decode_detector_version(),
+                    )]);
+                }
+                Err(error) => return Err(DetectFailure::Errored(error)),
+            };
             let signals = safe_decode_signals(
                 &result,
                 self.detector_id(),
@@ -642,10 +707,10 @@ impl<A: SafeDecodeApi> GuardDetector for SafeDecodeDetector<A> {
                 self.api.safe_decode_detector_version(),
             );
             if !signals.is_empty() {
-                return signals;
+                return Ok(signals);
             }
         }
-        Vec::new()
+        Ok(Vec::new())
     }
 }
 
@@ -843,22 +908,21 @@ static GUARD_UNINSTALL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 /// `GuardBypassDetector._CONFIG_DESTROY_PATTERN` (:560-565). Python's
 /// `(?<![a-zA-Z0-9_])`/`(?![a-zA-Z0-9_])` lookarounds on `guard.db` /
-/// `guard.lock` are ASCII word-boundary checks; `\b` in the `regex` crate
-/// is equivalent because the Python lookahead restricts the neighbour to
-/// exactly `[a-zA-Z0-9_]` (an ASCII word char).
+/// `guard.lock` are ASCII word-boundary checks, so they map to the ASCII
+/// `(?-u:\b)` (a Unicode `\b` would reject a non-ASCII letter neighbour).
 static GUARD_CONFIG_DESTROY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)(?:^|[\s;&|])(?:rm|rmdir)\b[^\r\n;&|]{0,100}(?:~?/?\.hol[_-]guard|guard[_-]home|\bguard\.(?:db|lock)\b)",
+        r"(?i)(?:^|[\s;&|])(?:rm|rmdir)\b[^\r\n;&|]{0,100}(?:~?/?\.hol[_-]guard|guard[_-]home|(?-u:\b)guard\.(?:db|lock)(?-u:\b))",
     )
     .expect("GUARD_CONFIG_DESTROY_PATTERN")
 });
 
 /// `GuardBypassDetector._DAEMON_KILL_PATTERN` (:567-573). The `pkill` arm's
-/// `(?<![a-zA-Z0-9_])`/`(?![a-zA-Z0-9_])` on `hol_guard` -> `\b` (same
-/// ASCII word-char class).
+/// `(?<![a-zA-Z0-9_])`/`(?![a-zA-Z0-9_])` on `hol_guard` -> ASCII
+/// `(?-u:\b)`.
 static GUARD_DAEMON_KILL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)(?:^|[\s;&|])(?:kill\b[^\r\n;&|]{0,80}hol[_-]guard|pkill\b[^\r\n;&|]{0,40}\bhol[_-]guard\b|launchctl\s+(?:unload|disable)\b[^\r\n;&|]{0,80}(?:hol[_-]guard|com\.hol\.guard))",
+        r"(?i)(?:^|[\s;&|])(?:kill\b[^\r\n;&|]{0,80}hol[_-]guard|pkill\b[^\r\n;&|]{0,40}(?-u:\b)hol[_-]guard(?-u:\b)|launchctl\s+(?:unload|disable)\b[^\r\n;&|]{0,80}(?:hol[_-]guard|com\.hol\.guard))",
     )
     .expect("GUARD_DAEMON_KILL_PATTERN")
 });
@@ -934,13 +998,13 @@ impl GuardDetector for GuardBypassDetector {
                 severity: RiskSeverityLabel::High,
                 confidence: RiskConfidenceLabel::Strong,
                 detector: self.detector_id().to_string(),
-                title: "Command kills or disables Guard daemon".to_string(),
-                plain_reason: "This command stops the Guard background daemon, leaving future AI actions unmonitored.".to_string(),
-                technical_detail: Some("matched guard daemon kill/disable pattern".to_string()),
+                title: "Command stops HOL Guard daemon".to_string(),
+                plain_reason: "This command stops the HOL Guard background service, which temporarily disables harness protection.".to_string(),
+                technical_detail: Some("matched guard daemon kill/unload pattern".to_string()),
                 evidence_ref: Some("command".to_string()),
                 redaction_level: RiskRedactionLevel::Summary,
                 false_positive_hint: Some(
-                    "Allow only if you intentionally need to pause Guard for maintenance."
+                    "Allow only if you intentionally want to pause Guard for maintenance."
                         .to_string(),
                 ),
                 advisory_id: None,
@@ -1011,9 +1075,8 @@ impl GuardDetector for McpToolSchemaRiskDetector {
     }
 }
 
-/// `_MCP_INJECTION_PATTERNS` (:688-697). The `https?://(?!localhost|127.0.0.1)`
-/// lookahead on pattern index 3 is enforced manually in
-/// `mcp_injection_match`.
+/// `_MCP_INJECTION_PATTERNS` (:688-697). Index 3 carries a lookahead, so it
+/// is compiled separately as `MCP_EXFIL_URL_PATTERN`; its slot here is unused.
 static MCP_INJECTION_PATTERNS: [LazyLock<Regex>; 5] = [
     LazyLock::new(|| {
         Regex::new(r"(?i)ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instruction")
@@ -1041,37 +1104,27 @@ static MCP_INJECTION_PATTERNS: [LazyLock<Regex>; 5] = [
     }),
 ];
 
-/// Pattern index 3 carries `(?!localhost|127.0.0.1)` after `https?://`;
-/// enforce it by rejecting matches whose URL host begins with those literals.
-fn mcp_injection_match(pattern_index: usize, text: &str) -> Option<regex::Match<'_>> {
-    let pattern = &MCP_INJECTION_PATTERNS[pattern_index];
-    let m = pattern.find(text)?;
+/// Pattern index 3 with its `(?!localhost|127\.0\.0\.1)` lookahead, run by
+/// the backtracking engine so `.*` retries earlier `to http(s)://` candidates
+/// exactly as Python `re.search` does.
+static MCP_EXFIL_URL_PATTERN: LazyLock<fancy_regex::Regex> = LazyLock::new(|| {
+    crate::hook_adapter_pytext::compile_fancy(
+        r"(?i)(?:send|post|upload|exfil(?:trate)?)\s+.*\bto\s+https?://(?!localhost|127\.0\.0\.1)",
+    )
+});
+
+/// The matched text for pattern `pattern_index`. A backtrack-limit error
+/// counts as a match so a crafted excerpt cannot hide an exfiltration line.
+fn mcp_injection_match(pattern_index: usize, text: &str) -> Option<String> {
     if pattern_index == 3 {
-        // The lookahead follows the `://` scheme separator; locate the
-        // host portion at the end of the match (the regex is greedy but the
-        // lookahead is evaluated at the position right after `https?://`).
-        // Re-check by scanning for `https?://localhost` / `://127.0.0.1` —
-        // if the only match is a localhost URL the lookahead rejects it and
-        // Python `search` would try the next candidate position; mirror by
-        // walking successive `find` offsets.
-        let mut offset = 0;
-        while let Some(candidate) = pattern.find_at(text, offset) {
-            let span = candidate.as_str();
-            // Find the `://` inside the matched span, then the host.
-            if let Some(scheme_end) = span.find("://") {
-                let host_start = scheme_end + 3;
-                let host = &span[host_start..];
-                if !(host.starts_with("localhost") || host.starts_with("127.0.0.1")) {
-                    return Some(candidate);
-                }
-            } else {
-                return Some(candidate);
-            }
-            offset = candidate.end();
-        }
-        return None;
+        return match MCP_EXFIL_URL_PATTERN.find(text) {
+            Ok(found) => found.map(|m| m.as_str().to_owned()),
+            Err(_) => Some(text.to_owned()),
+        };
     }
-    Some(m)
+    MCP_INJECTION_PATTERNS[pattern_index]
+        .find(text)
+        .map(|m| m.as_str().to_owned())
 }
 
 /// `McpDescriptionDeceptionDetector` (:699-739).
@@ -1113,7 +1166,7 @@ impl GuardDetector for McpDescriptionDeceptionDetector {
                     technical_detail: Some(format!(
                         "matched deception pattern {}: {}",
                         i,
-                        py_repr_str(truncate_chars(m.as_str(), 60).as_str())
+                        py_repr_str(truncate_chars(&m, 60).as_str())
                     )),
                     evidence_ref: Some("prompt_excerpt".to_string()),
                     redaction_level: RiskRedactionLevel::Summary,
@@ -1141,16 +1194,14 @@ impl GuardDetector for McpDescriptionDeceptionDetector {
 /// early to annotate benign patterns before risk detectors evaluate the
 /// same action.
 #[allow(clippy::too_many_arguments)]
-pub fn register_default_detectors<PI, SK, SC, SD, PE>(
+pub fn register_default_detectors<SK, SC, SD, PE>(
     cisco: &dyn CiscoPreflightApi,
-    prompt_injection: PI,
     skill_protection: SK,
     supply_chain: SC,
     safe_decode: SD,
     persistence: PE,
 ) -> Vec<Box<dyn GuardDetector>>
 where
-    PI: PromptInjectionApi + 'static,
     SK: SkillProtectionApi + 'static,
     SC: SupplyChainRiskApi + 'static,
     SD: SafeDecodeApi + 'static,
@@ -1165,9 +1216,7 @@ where
         Box::new(McpDescriptionDeceptionDetector),
         Box::new(McpToolSchemaRiskDetector),
         Box::new(PersistenceDetector { api: persistence }),
-        Box::new(PromptInjectionDetector {
-            api: prompt_injection,
-        }),
+        Box::new(PromptInjectionDetector),
         Box::new(SafeDecodeDetector { api: safe_decode }),
         Box::new(SecretPathDetector),
         Box::new(SkillRiskDetector {
@@ -1180,6 +1229,29 @@ where
 // ---------------------------------------------------------------------------
 // Free helper functions (:267-882).
 // ---------------------------------------------------------------------------
+
+/// Signal for content whose candidate scan exceeded the regex backtrack
+/// budget. Safe-decode could not inspect it, so it may hide an encoded payload.
+fn decode_budget_signal(detector_id: &str, detector_version: &str) -> RiskSignalV2 {
+    RiskSignalV2 {
+        signal_id: "encoded.decode-budget-exceeded".to_string(),
+        category: RiskSignalCategory::Encoded,
+        severity: severity_label_from_score(7.0),
+        confidence: confidence_label_from_score(0.60),
+        detector: detector_id.to_string(),
+        title: "Content could not be checked for encoded payloads".to_string(),
+        plain_reason: "Guard stopped scanning this content for encoded payloads because it matched a pattern built to stall the scanner.".to_string(),
+        technical_detail: Some(format!(
+            "Detector: {detector_version}; regex backtrack budget exceeded"
+        )),
+        evidence_ref: None,
+        redaction_level: RiskRedactionLevel::Summary,
+        false_positive_hint: Some(
+            "Long runs of backslashes inside an inline script can trigger this.".to_string(),
+        ),
+        advisory_id: None,
+    }
+}
 
 /// `_safe_decode_signals` (:267-349).
 pub fn safe_decode_signals(
@@ -1206,7 +1278,7 @@ pub fn safe_decode_signals(
         if let Some(first) = result.marshal_signals.first() {
             detail_parts.push(format!("marshal.loads(): {}", py_repr_str(first)));
         }
-        let layer_names: Vec<&str> = result.layers.iter().map(|l| l.encoding).collect();
+        let layer_names = py_repr_str_list(result.layers.iter().map(|l| l.encoding));
         signals.push(RiskSignalV2 {
             signal_id: "encoded.code-execution".to_string(),
             category: RiskSignalCategory::Execution,
@@ -1220,7 +1292,7 @@ pub fn safe_decode_signals(
                 detail_parts[..detail_parts.len().min(2)].join("; ")
             ),
             technical_detail: Some(format!(
-                "Detector: {}; Layers: {:?}; eval={} exec={} marshal={}",
+                "Detector: {}; Layers: {}; eval={} exec={} marshal={}",
                 detector_version,
                 layer_names,
                 result.eval_signals.len(),
@@ -1236,7 +1308,7 @@ pub fn safe_decode_signals(
         });
     } else {
         // `elif result.layers` is guaranteed by the early return above.
-        if looks_like_opaque_decoded_payload(result.final_text) {
+        if looks_like_opaque_decoded_payload(&result.final_text) {
             if has_sensitive_decode_context(source_text) {
                 signals.push(RiskSignalV2 {
                     signal_id: "encoded.opaque-sensitive".to_string(),
@@ -1247,13 +1319,9 @@ pub fn safe_decode_signals(
                     title: "Opaque encoded payload near sensitive context".to_string(),
                     plain_reason: "Guard decoded an opaque or encrypted-looking payload in a command that also references local secret material.".to_string(),
                     technical_detail: Some(format!(
-                        "Detector: {}; Layers: {:?}",
+                        "Detector: {}; Layers: {}",
                         detector_version,
-                        result
-                            .layers
-                            .iter()
-                            .map(|l| l.encoding)
-                            .collect::<Vec<_>>()
+                        py_repr_str_list(result.layers.iter().map(|l| l.encoding))
                     )),
                     evidence_ref: None,
                     redaction_level: RiskRedactionLevel::Summary,
@@ -1296,11 +1364,13 @@ pub fn safe_decode_signals(
 
 /// `_looks_like_opaque_decoded_payload` (:350-359).
 pub fn looks_like_opaque_decoded_payload(text: &str) -> bool {
-    if text.len() < 32 {
+    // Python `len(str)` counts code points, not UTF-8 bytes.
+    let length = text.chars().count();
+    if length < 32 {
         return false;
     }
     let replacement_count = text.matches('\u{fffd}').count() as f64;
-    let replacement_ratio = replacement_count / (text.len().max(1) as f64);
+    let replacement_ratio = replacement_count / (length.max(1) as f64);
     if replacement_ratio >= 0.10 {
         return true;
     }
@@ -1308,7 +1378,7 @@ pub fn looks_like_opaque_decoded_payload(text: &str) -> bool {
         .chars()
         .filter(|c| python_isprintable(*c) || c.is_whitespace())
         .count();
-    (printable_count as f64) / (text.len().max(1) as f64) < 0.75
+    (printable_count as f64) / (length.max(1) as f64) < 0.75
 }
 
 /// `_has_sensitive_decode_context` (:360-362). The Python pattern uses
@@ -1349,31 +1419,31 @@ fn sensitive_context_hit(text: &str, start: usize, end: usize) -> bool {
     }
     // Forward lookahead varies by alternative:
     //   - `.env*` / `.npmrc` / `.pem` / `.key` -> `(?![A-Za-z0-9_-])`
-    //   - `id_*` -> `(?![A-Za-z0-9]|\.pub\b)` (`.pub` suffix allowed)
+    //   - `id_*` -> `(?![A-Za-z0-9]|\.pub\b)` (a `.pub` suffix rejects)
     //   - `api_key` / `private_key` / `aws_*` / word-arm -> `(?![A-Za-z0-9])`
     if token.starts_with("id_") {
-        return sensitive_context_boundary_ok(text, start, end, false, true);
+        return sensitive_context_boundary_ok(text, end, false, true);
     }
     let forbid_dash_underscore =
         token.starts_with(".env") || token == ".npmrc" || token == ".pem" || token == ".key";
-    sensitive_context_boundary_ok(text, start, end, forbid_dash_underscore, false)
+    sensitive_context_boundary_ok(text, end, forbid_dash_underscore, false)
 }
 
 /// `_prompt_request_signal` (:771-788).
-pub fn prompt_request_signal(request: &PromptRequestView<'_>) -> RiskSignalV2 {
+pub fn prompt_request_signal(request: &GuardRunPromptRequest) -> RiskSignalV2 {
     let category = prompt_request_category(request);
     RiskSignalV2 {
         signal_id: format!(
             "prompt-injection:{}:{}",
             request.request_class,
-            truncate_chars(request.request_id, 16)
+            truncate_chars(&request.request_id, 16)
         ),
         category,
         severity: severity_label(request.severity),
         confidence: confidence_label(request.confidence),
         detector: "prompt.injection".to_string(),
-        title: prompt_request_title(request.request_class),
-        plain_reason: request.summary.to_string(),
+        title: prompt_request_title(&request.request_class),
+        plain_reason: request.summary.clone(),
         technical_detail: Some(format!(
             "matched prompt request class: {}",
             request.request_class
@@ -1386,8 +1456,8 @@ pub fn prompt_request_signal(request: &PromptRequestView<'_>) -> RiskSignalV2 {
 }
 
 /// `_prompt_request_category` (:789-799).
-pub fn prompt_request_category(request: &PromptRequestView<'_>) -> RiskSignalCategory {
-    match request.request_class {
+pub fn prompt_request_category(request: &GuardRunPromptRequest) -> RiskSignalCategory {
+    match request.request_class.as_str() {
         "secret_read" => RiskSignalCategory::Secret,
         "exfil_intent" => RiskSignalCategory::Network,
         "destructive_intent" => RiskSignalCategory::Filesystem,
@@ -1422,14 +1492,13 @@ pub fn prompt_request_title(request_class: &str) -> String {
 
 /// `_prompt_request_false_positive_hint` (:819-825).
 ///
-/// The Python iterates `request.remediation` and returns the first
-/// non-blank `remediation.detail`; `remediation_details` is already the
-/// `Option<detail>`-filtered list from `PromptRequestView`.
-pub fn prompt_request_false_positive_hint(request: &PromptRequestView<'_>) -> Option<String> {
+/// The first non-blank `remediation.detail`.
+pub fn prompt_request_false_positive_hint(request: &GuardRunPromptRequest) -> Option<String> {
     request
-        .remediation_details
+        .remediation
         .iter()
-        .find(|d| !d.trim().is_empty())
+        .filter_map(|remediation| remediation.detail.as_ref())
+        .find(|detail| !detail.trim().is_empty())
         .cloned()
 }
 
@@ -1461,7 +1530,9 @@ pub(crate) fn secret_path_matches(
 ) -> Vec<SecretPathMatch> {
     let mut matches: Vec<SecretPathMatch> = Vec::new();
     for path in paths {
-        if let Some(m) = classify_secret_path(path, workspace, None) {
+        // `secret_sensitivity.classify_secret_path`: bare key basenames are
+        // sensitive only below `.ssh` or after redaction.
+        if let Some(m) = classify_request_secret_path(path, workspace, None) {
             matches.push(m);
         }
     }
@@ -1522,27 +1593,14 @@ fn telemetry_entry(
 
 /// `text[:n]` — Python char-based prefix truncation (the Python source uses
 /// `[:40]` / `[:16]` / `[:60]` on `str`, which slices code points).
-fn truncate_chars(text: &str, n: usize) -> String {
-    text.chars().take(n).collect()
+/// Python `repr(list[str])`.
+fn py_repr_str_list<'a>(items: impl Iterator<Item = &'a str>) -> String {
+    let parts: Vec<String> = items.map(py_repr_str).collect();
+    format!("[{}]", parts.join(", "))
 }
 
-/// Python `repr(str)` — single-quoted with backslash escapes, matching
-/// `!r`/`repr()` in `technical_detail` strings.
-fn py_repr_str(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push('\'');
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\'' => out.push_str("\\'"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            other => out.push(other),
-        }
-    }
-    out.push('\'');
-    out
+fn truncate_chars(text: &str, n: usize) -> String {
+    text.chars().take(n).collect()
 }
 
 /// Python `str.isprintable()` — not in a "Other" (C*) or "Separator"
@@ -1589,4 +1647,56 @@ fn python_isprintable(c: char) -> bool {
         return false;
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Map;
+
+    use super::{
+        has_sensitive_decode_context, DetectorActionView, DetectorContext, GuardDetector,
+        SafeDecodeDetector,
+    };
+    use crate::safe_decode::NativeSafeDecode;
+
+    #[test]
+    fn regex_budget_stall_is_reported_as_an_encoded_signal() {
+        let stall = format!("python -c '{}", "\\".repeat(80));
+        let empty = Map::new();
+        let context = DetectorContext {
+            config: &empty,
+            workspace: None,
+            prior_decisions: &empty,
+            threat_intel: &empty,
+            redaction_settings: &empty,
+            approved_scan_roots: &[],
+        };
+        let action = DetectorActionView {
+            action_type: "shell_command",
+            command: Some("echo aGVsbG8gd29ybGQgZnJvbSBhIGhpZGRlbiBwYXlsb2Fk | base64 -d | sh"),
+            prompt_text: Some(&stall),
+            prompt_excerpt: None,
+            mcp_tool: None,
+            target_paths: &[],
+        };
+        let detector = SafeDecodeDetector {
+            api: NativeSafeDecode,
+        };
+        let signals = detector.try_detect(&action, &context).unwrap();
+        assert_eq!(signals.len(), 1);
+        assert_eq!(signals[0].signal_id, "encoded.decode-budget-exceeded");
+        assert_eq!(signals[0].detector, "safe-decode.content");
+    }
+
+    #[test]
+    fn ssh_public_key_paths_are_not_sensitive_decode_context() {
+        assert!(has_sensitive_decode_context("cat ~/.ssh/id_ed25519"));
+        assert!(has_sensitive_decode_context("cat ~/.ssh/id_rsa;"));
+        assert!(has_sensitive_decode_context("cat ~/.ssh/id_rsa.pubkey"));
+        assert!(!has_sensitive_decode_context(
+            "ssh-copy-id -i ~/.ssh/id_ed25519.pub host"
+        ));
+        assert!(!has_sensitive_decode_context("cat ~/.ssh/id_rsa.PUB"));
+        assert!(!has_sensitive_decode_context("cat ~/.ssh/id_rsa2"));
+    }
 }

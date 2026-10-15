@@ -19,7 +19,7 @@ const ERR_CATEGORY: &str = "native_mcp_tool_evidence_unknown_category";
 const ERR_SUMMARY: &str = "native_mcp_tool_evidence_unknown_summary_code";
 
 /// The value the risk classifier reads, shaped like the Python argument.
-fn risk_arguments(arguments: &McpToolArgumentsV1) -> Value {
+pub fn risk_arguments(arguments: &McpToolArgumentsV1) -> Value {
     match arguments {
         McpToolArgumentsV1::Mapping { entries } => {
             Value::Object(entries.iter().cloned().collect::<Map<String, Value>>())
@@ -29,7 +29,7 @@ fn risk_arguments(arguments: &McpToolArgumentsV1) -> Value {
     }
 }
 
-fn browser_arguments(arguments: &McpToolArgumentsV1) -> BrowserMcpArgumentsV1 {
+pub fn browser_arguments(arguments: &McpToolArgumentsV1) -> BrowserMcpArgumentsV1 {
     match arguments {
         McpToolArgumentsV1::Mapping { entries } => BrowserMcpArgumentsV1::Mapping {
             entries: entries.clone(),

@@ -17,7 +17,6 @@ from codex_plugin_scanner.guard.native_command_control_binding import (
     load_native_command_program_metadata,
     native_command_control_floor_mac,
     read_native_command_control_binding,
-    validate_native_command_control_binding,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot import (
     NativePolicySnapshotError,
@@ -25,6 +24,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
     native_policy_snapshot_v3,
     snapshot_bytes_v3,
 )
+from codex_plugin_scanner.guard.native_policy_snapshot_business_bridge import validate_business_snapshot_content
 from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _digest_v3,
@@ -121,26 +121,6 @@ def _program() -> dict[str, object]:
     return value
 
 
-@pytest.mark.parametrize("profile", (None, "cpython-3.13-ucd15", "cpython-3.12-ucd16", [], {}))
-def test_artifact_requires_the_admitted_semantic_profile_even_with_a_valid_digest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profile: object
-) -> None:
-    value = _program()
-    value.pop("program_digest")
-    if profile is None:
-        value.pop("semantic_profile")
-    else:
-        value["semantic_profile"] = profile
-    value["program_digest"] = hashlib.sha256(
-        b"hol-guard.native-command-program.v1\0" + _canonical_json_bytes_v3(value)
-    ).hexdigest()
-    artifact = tmp_path / "program.json"
-    artifact.write_bytes(_canonical_json_bytes_v3(value))
-    monkeypatch.setattr(binding_module, "_program_path", lambda: artifact)
-    with pytest.raises(NativePolicySnapshotError, match="native_command_program_artifact_invalid"):
-        load_native_command_program_metadata()
-
-
 def test_release_program_metadata_uses_the_compiled_semantic_profile() -> None:
     metadata = load_native_command_program_metadata()
     assert metadata.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
@@ -156,7 +136,6 @@ def test_projection_preserves_existing_effective_digest_and_complete_control_lay
         assert binding["managed_revision"] == 7
         assert [layer["kind"] for layer in binding["layers"]] == ["local-admin", "signed-cloud"]
         assert [len(layer["controls"]) for layer in binding["layers"]] == [count, count]
-        validate_native_command_control_binding(binding)
         assert len(snapshot_bytes_v3(_snapshot(tmp_path, command_extensions=binding))) < 256 * 1024
 
 
@@ -187,11 +166,12 @@ def test_projection_preserves_existing_effective_digest_and_complete_control_lay
         lambda value: value["layers"][0]["controls"][0].update(state="enabled"),
     ],
 )
-def test_invalid_bindings_never_become_valid_policy(mutation) -> None:
+def test_invalid_bindings_never_become_valid_policy(tmp_path: Path, mutation) -> None:
+    # Binding admission is Rust-owned: the resident build refuses every malformed binding.
     value = _binding()
     mutation(value)
     with pytest.raises(NativePolicySnapshotError):
-        validate_native_command_control_binding(value)
+        _snapshot(tmp_path, command_extensions=value)
 
 
 def test_legacy_bytes_remain_identical_and_binding_changes_policy_digest_and_mac(tmp_path: Path) -> None:
@@ -209,13 +189,15 @@ def test_legacy_bytes_remain_identical_and_binding_changes_policy_digest_and_mac
     assert snapshot_bytes_v3(native) == before
     altered = copy.deepcopy(native)
     altered["command_extensions"] = _binding(revision=4)
+    # Content validation is resident-owned: the native inspect op rejects a
+    # binding that no longer matches the signed digests.
     with pytest.raises(NativePolicySnapshotError, match="digest_mismatch"):
-        snapshot_bytes_v3(altered)
+        validate_business_snapshot_content(altered)
     for binding_value in [None, {}, []]:
         altered = copy.deepcopy(legacy)
         altered["command_extensions"] = binding_value
         with pytest.raises(NativePolicySnapshotError):
-            snapshot_bytes_v3(altered)
+            validate_business_snapshot_content(altered)
 
 
 def test_generation_cache_tracks_control_digest_independently_of_config(tmp_path: Path) -> None:

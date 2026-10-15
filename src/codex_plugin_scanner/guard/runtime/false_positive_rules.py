@@ -2,7 +2,7 @@
 
 The false-positive signal classifiers (source search, health endpoint, read-only
 HTTP probe, version, manifest and docs/example paths) are owned by the native
-resident; see ``native_false_positive_rules``.
+resident as part of the runtime detector run; see ``native_runtime_detectors``.
 """
 
 from __future__ import annotations

@@ -266,6 +266,23 @@ def test_bounded_server_times_out_incomplete_request(monkeypatch) -> None:
         thread.join(timeout=2)
 
 
+def test_release_stays_with_the_metrics_that_counted_the_request(monkeypatch) -> None:
+    window = bounded_http._Metrics()
+    with monkeypatch.context() as patched:
+        patched.setattr(bounded_http, "_METRICS", window)
+        server = BoundedThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    try:
+        before = daemon_admission_snapshot()["active"]
+        assert server._guard_slots.acquire(blocking=False)
+        window.acquired()
+        # A worker that outlives the patched window releases after it is undone.
+        server._guard_release_request()
+        assert window.snapshot().active == 0
+        assert daemon_admission_snapshot()["active"] == before
+    finally:
+        server.server_close()
+
+
 def test_daemon_admission_snapshot_is_aggregate_only() -> None:
     payload = daemon_admission_snapshot()
     assert set(payload) == {

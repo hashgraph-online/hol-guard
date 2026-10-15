@@ -24,6 +24,20 @@ from multiprocessing import freeze_support
 from pathlib import Path
 
 _FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
+# Kept byte-identical to START_HEARTBEAT_CODE in
+# codex_plugin_scanner/guard/daemon/start_heartbeat.py (a test pins equality);
+# this script cannot import Guard before the heartbeat is written.
+_START_HEARTBEAT_CODE = (
+    "with __import__('contextlib').suppress(BaseException): "
+    "import os,time; "
+    "p=os.environ.pop('HOL_GUARD_DAEMON_START_HEARTBEAT',''); "
+    "p[0]; "
+    "t='%s.%d.tmp'%(p,os.getpid()); "
+    "fd=os.open(t,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),384); "
+    "os.write(fd,('%d %d'%(os.getpid(),time.time_ns())).encode()); "
+    "os.close(fd); "
+    "os.replace(t,p)"
+)
 
 
 def _packaged_version() -> str:
@@ -403,6 +417,24 @@ def _codex_pager_default_equivalent(value: str | None) -> bool:
     return value is not None and _CODEX_DEFAULT_EQUIVALENT_PAGER.fullmatch(value) is not None
 
 
+_CODEX_LIBRARY_SEARCH_PATH_NAMES = (
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+    "DYLD_FALLBACK_LIBRARY_PATH",
+    "DYLD_FRAMEWORK_PATH",
+    "DYLD_FALLBACK_FRAMEWORK_PATH",
+)
+
+
+def _codex_loader_value_fits(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        return len(value.encode()) <= 32 * 1024
+    except UnicodeEncodeError:
+        return False
+
+
 def _codex_execution_environment() -> dict[str, object]:
     """Mirror hook_execution_environment.collect_hook_execution_environment without importing Guard.
 
@@ -421,6 +453,11 @@ def _codex_execution_environment() -> dict[str, object]:
         "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
         "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
         "git_config_no_system": no_system is not None and no_system.casefold() in _CODEX_GIT_TRUE_VALUES,
+        "library_search_paths": {
+            name: value
+            for name in _CODEX_LIBRARY_SEARCH_PATH_NAMES
+            if (value := os.environ.get(name)) and _codex_loader_value_fits(value)
+        },
         "environment_digest": hashlib.sha256(
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
@@ -954,12 +991,15 @@ if __name__ == "__main__":
     # Dispatch PyInstaller multiprocessing children before importing Guard.
     # Otherwise private resource-tracker argv is parsed as a public CLI command.
     freeze_support()
+    exec(_START_HEARTBEAT_CODE)
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print(f"{Path(sys.argv[0]).name} {_packaged_version()}")
         raise SystemExit(0)
+    # Stamp the extraction dir first: a launch killed by a harness timeout
+    # during the desktop proxy or bridge would otherwise leak an unmarked dir.
+    _record_extraction_owner()
     if _try_proxy_running_desktop_bootstrap():
         raise SystemExit(0)
-    _record_extraction_owner()
     if _try_codex_daemon_bridge():
         raise SystemExit(0)
 

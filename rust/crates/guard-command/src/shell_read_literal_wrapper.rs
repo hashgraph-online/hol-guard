@@ -1,8 +1,6 @@
 //! Separate a bounded literal shell payload from a mutable script-file launch
 //! (`runtime/shell_read_literal_wrapper.py`, 32 lines — verbatim).
 
-#![cfg(unix)]
-
 use crate::shell_tokens;
 
 /// Parser-supported transparent shells — not command permission grants.

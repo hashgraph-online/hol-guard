@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
-from typing import Final, Literal, Protocol, TypeVar, cast
+from typing import Final, Literal, cast
 
 from .extension_control_contract import (
     ControlLayerKind,
@@ -16,22 +16,6 @@ from .extension_control_contract import (
     ControlTargetKind,
     ExtensionControlLayer,
 )
-
-
-class _ExtensionLike(Protocol):
-    @property
-    def extension_id(self) -> str: ...
-
-    @property
-    def required(self) -> bool: ...
-
-
-class _ObservationLike(Protocol):
-    @property
-    def extension(self) -> _ExtensionLike: ...
-
-
-_ObservationT = TypeVar("_ObservationT", bound=_ObservationLike)
 
 TrustClass = Literal["first-party", "trusted-library", "external"]
 Activation = Literal["default-on", "opt-in"]
@@ -158,57 +142,8 @@ def trust_class_for(extension_id: str) -> TrustClass:
     return "first-party"
 
 
-def activation_for(extension_id: str) -> Activation:
-    return "opt-in" if trust_class_for(extension_id) == "external" else "default-on"
-
-
-def catalog_enabled(extension_id: str, *, required: bool) -> bool:
-    if required:
-        return True
-    return trust_class_for(extension_id) != "external"
-
-
-def publisher_for(extension_id: str) -> dict[str, str]:
-    trust = trust_class_for(extension_id)
-    if trust == "first-party":
-        return dict(_HOL_PUBLISHER)
-    if trust == "trusted-library":
-        return dict(_CURATED_PUBLISHER)
-    return {"id": "community", "displayName": "Community"}
-
-
-def catalog_trust_fields(extension_id: str, *, required: bool) -> dict[str, object]:
-    trust = trust_class_for(extension_id)
-    fields: dict[str, object] = {
-        "enabled": catalog_enabled(extension_id, required=required),
-        "trust_class": trust,
-        "activation": activation_for(extension_id),
-        "publisher": publisher_for(extension_id),
-        "icon": {"kind": "none"},
-    }
-    from .extension_contribution import contribution_catalog_overlay
-    from .mcp_server_contribution import mcp_payload_for_catalog_id
-
-    overlay = contribution_catalog_overlay(extension_id)
-    mcp_payload = mcp_payload_for_catalog_id(extension_id)
-    if overlay is not None and mcp_payload is not None:
-        raise ValueError(f"catalog overlay collision for {extension_id}")
-    if overlay is not None:
-        fields.update(overlay)
-    elif mcp_payload is not None:
-        publisher = mcp_payload.get("publisher")
-        icon = mcp_payload.get("icon")
-        if isinstance(publisher, dict) and isinstance(icon, dict):
-            fields.update({"publisher": dict(publisher), "icon": dict(icon)})
-    return fields
-
-
 def mapped_ids() -> frozenset[str]:
     return frozenset(_trust_map())
-
-
-def ids_for_class(trust_class: TrustClass) -> frozenset[str]:
-    return frozenset(extension_id for extension_id, item in _trust_map().items() if item == trust_class)
 
 
 def extension_is_active(
@@ -234,18 +169,4 @@ def extension_is_active(
             for control in layer.controls
         )
         for layer in layer_values
-    )
-
-
-def filter_inert_external_observations(
-    observations: Sequence[_ObservationT],
-    layers: Iterable[ExtensionControlLayer] | None,
-) -> tuple[_ObservationT, ...]:
-    """Drop external observations unless a local-admin enable is present."""
-
-    layer_values = tuple(layers or ())
-    return tuple(
-        item
-        for item in observations
-        if extension_is_active(item.extension.extension_id, layer_values, required=item.extension.required)
     )

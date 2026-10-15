@@ -921,10 +921,117 @@ fn path_is_high_signal(path: &str) -> bool {
 /// Mirrors `_character_class_count`: Python `str.islower`/`isupper`/`isdigit`/
 /// `isalnum` are Unicode-aware, so this deliberately uses the Unicode variants
 /// (unlike `rarity_score`, which mirrors ASCII regex classes).
+/// Non-ASCII code points for which Python 3.12 (Unicode 15.0) `str.isdigit()`
+/// is true: decimal digits plus digit-valued superscripts, subscripts and
+/// circled forms. Other numerics (Roman numerals, fractions) are excluded.
+const PYTHON_DIGIT_RANGES: &[(u32, u32)] = &[
+    (0xB2, 0xB3),
+    (0xB9, 0xB9),
+    (0x660, 0x669),
+    (0x6F0, 0x6F9),
+    (0x7C0, 0x7C9),
+    (0x966, 0x96F),
+    (0x9E6, 0x9EF),
+    (0xA66, 0xA6F),
+    (0xAE6, 0xAEF),
+    (0xB66, 0xB6F),
+    (0xBE6, 0xBEF),
+    (0xC66, 0xC6F),
+    (0xCE6, 0xCEF),
+    (0xD66, 0xD6F),
+    (0xDE6, 0xDEF),
+    (0xE50, 0xE59),
+    (0xED0, 0xED9),
+    (0xF20, 0xF29),
+    (0x1040, 0x1049),
+    (0x1090, 0x1099),
+    (0x1369, 0x1371),
+    (0x17E0, 0x17E9),
+    (0x1810, 0x1819),
+    (0x1946, 0x194F),
+    (0x19D0, 0x19DA),
+    (0x1A80, 0x1A89),
+    (0x1A90, 0x1A99),
+    (0x1B50, 0x1B59),
+    (0x1BB0, 0x1BB9),
+    (0x1C40, 0x1C49),
+    (0x1C50, 0x1C59),
+    (0x2070, 0x2070),
+    (0x2074, 0x2079),
+    (0x2080, 0x2089),
+    (0x2460, 0x2468),
+    (0x2474, 0x247C),
+    (0x2488, 0x2490),
+    (0x24EA, 0x24EA),
+    (0x24F5, 0x24FD),
+    (0x24FF, 0x24FF),
+    (0x2776, 0x277E),
+    (0x2780, 0x2788),
+    (0x278A, 0x2792),
+    (0xA620, 0xA629),
+    (0xA8D0, 0xA8D9),
+    (0xA900, 0xA909),
+    (0xA9D0, 0xA9D9),
+    (0xA9F0, 0xA9F9),
+    (0xAA50, 0xAA59),
+    (0xABF0, 0xABF9),
+    (0xFF10, 0xFF19),
+    (0x104A0, 0x104A9),
+    (0x10A40, 0x10A43),
+    (0x10D30, 0x10D39),
+    (0x10E60, 0x10E68),
+    (0x11052, 0x1105A),
+    (0x11066, 0x1106F),
+    (0x110F0, 0x110F9),
+    (0x11136, 0x1113F),
+    (0x111D0, 0x111D9),
+    (0x112F0, 0x112F9),
+    (0x11450, 0x11459),
+    (0x114D0, 0x114D9),
+    (0x11650, 0x11659),
+    (0x116C0, 0x116C9),
+    (0x11730, 0x11739),
+    (0x118E0, 0x118E9),
+    (0x11950, 0x11959),
+    (0x11C50, 0x11C59),
+    (0x11D50, 0x11D59),
+    (0x11DA0, 0x11DA9),
+    (0x11F50, 0x11F59),
+    (0x16A60, 0x16A69),
+    (0x16AC0, 0x16AC9),
+    (0x16B50, 0x16B59),
+    (0x1D7CE, 0x1D7FF),
+    (0x1E140, 0x1E149),
+    (0x1E2F0, 0x1E2F9),
+    (0x1E4F0, 0x1E4F9),
+    (0x1E950, 0x1E959),
+    (0x1F100, 0x1F10A),
+    (0x1FBF0, 0x1FBF9),
+];
+
+/// Python `str.isdigit()` for one character.
+fn python_isdigit(c: char) -> bool {
+    if c.is_ascii() {
+        return c.is_ascii_digit();
+    }
+    let code = u32::from(c);
+    PYTHON_DIGIT_RANGES
+        .binary_search_by(|&(low, high)| {
+            if high < code {
+                std::cmp::Ordering::Less
+            } else if low > code {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
 fn character_class_count(value: &str) -> usize {
     usize::from(value.chars().any(|c| c.is_lowercase()))
         + usize::from(value.chars().any(|c| c.is_uppercase()))
-        + usize::from(value.chars().any(|c| c.is_numeric()))
+        + usize::from(value.chars().any(python_isdigit))
         + usize::from(value.chars().any(|c| !c.is_alphanumeric()))
 }
 
@@ -1041,7 +1148,7 @@ fn candidate_is_indirect_reference(candidate: &str, quoted: bool, path: &str) ->
     if !CODE_SUFFIXES.contains(&suffix) || !CODE_IDENTIFIER_REFERENCE.is_match(value) {
         return false;
     }
-    let digit_count = value.chars().filter(|c| c.is_ascii_digit()).count();
+    let digit_count = value.chars().filter(|c| python_isdigit(*c)).count();
     value.chars().next().is_some_and(|c| c.is_lowercase()) && digit_count <= 1
 }
 
@@ -1087,19 +1194,59 @@ fn generic_candidate_is_plausible(
     value_len >= 16 && rarity_score(value) >= 0.58
 }
 
-fn surrounding_context(text: &str, match_start: usize) -> &str {
-    // Python slices characters; stay on UTF-8 boundaries.
-    let prefix = &text[..match_start];
-    let start = prefix
-        .char_indices()
-        .rev()
-        .nth(239)
-        .map_or(0, |(index, _)| index);
-    let end = text[match_start..]
-        .char_indices()
-        .nth(240)
-        .map_or(text.len(), |(index, _)| match_start + index);
-    &text[start..end]
+/// Python `str.splitlines()`: every Unicode line boundary ends a line, `\r\n`
+/// counts once, and a trailing boundary adds no empty line.
+fn python_splitlines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((index, ch)) = chars.next() {
+        if !matches!(
+            ch,
+            '\n' | '\r'
+                | '\u{0b}'
+                | '\u{0c}'
+                | '\u{1c}'
+                | '\u{1d}'
+                | '\u{1e}'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
+        ) {
+            continue;
+        }
+        lines.push(&text[start..index]);
+        start = index + ch.len_utf8();
+        if ch == '\r' && chars.peek().is_some_and(|(_, next)| *next == '\n') {
+            chars.next();
+            start += 1;
+        }
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    lines
+}
+
+/// Python `_surrounding_context`: the three lines on each side of the match
+/// line (counted by `\n`, sliced from `splitlines()`), capped at 4096 chars.
+fn surrounding_context(text: &str, match_start: usize) -> String {
+    let lines = python_splitlines(text);
+    let line_index = text.as_bytes()[..match_start]
+        .iter()
+        .filter(|byte| **byte == b'\n')
+        .count();
+    let start = line_index.saturating_sub(3);
+    let end = (line_index + 4).min(lines.len());
+    let joined = if start < end {
+        lines[start..end].join("\n")
+    } else {
+        String::new()
+    };
+    match joined.char_indices().nth(4096) {
+        Some((index, _)) => joined[..index].to_string(),
+        None => joined,
+    }
 }
 
 fn provider_match_is_fixture(
@@ -1113,6 +1260,7 @@ fn provider_match_is_fixture(
         return true;
     }
     let context = surrounding_context(text, match_start);
+    let context = context.as_str();
     let unwrapped = candidate.trim().trim_matches(|c| "<>[]{}()".contains(c));
     let explicit_placeholder =
         COMMON_PLACEHOLDER.is_match(unwrapped) || SAMPLE_WORDS.is_match(candidate);

@@ -17,7 +17,6 @@ from .constants_core import (
     _DOCKER_BUILDX_FLAG_OPTIONS,
     _DOCKER_BUILDX_OPTIONS_WITH_VALUES,
     _FILE_WRITE_TOOL_NAMES,
-    _SHELL_TOOL_NAMES,
     COMMAND_CANDIDATE_LIST_KEYS,
     COMMAND_SEQUENCE_KEYS,
 )
@@ -154,18 +153,6 @@ def build_file_write_request_artifact(
             "runtime_request_reason": request.reason,
         },
     )
-
-
-def _shell_normalized_tool_name(
-    *,
-    normalized_tool_name: str | None,
-    arguments: object,
-) -> str | None:
-    if normalized_tool_name in _SHELL_TOOL_NAMES:
-        return normalized_tool_name
-    if _candidate_command_texts(arguments):
-        return "shell"
-    return normalized_tool_name
 
 
 def _candidate_command_texts(value: object) -> list[str]:
@@ -359,7 +346,6 @@ __all__ = [
     "_file_read_request_fingerprint",
     "_normalized_shell_command_name",
     "_shell_braced_variable_name",
-    "_shell_normalized_tool_name",
     "_shell_unbraced_variable_name",
     "_shell_variable_names",
     "build_file_read_request_artifact",

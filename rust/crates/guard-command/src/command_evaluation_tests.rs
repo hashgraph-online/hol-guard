@@ -11,7 +11,7 @@
 use serde::Deserialize;
 
 use crate::canonical_command::CanonicalCommand;
-use crate::command_evaluation::evaluate_command;
+use crate::command_evaluation_compose::{evaluate_command, CommandEvaluationInput};
 use crate::native_command_catalog::{packaged_command_catalog, CatalogExtension};
 use crate::{CanonicalCommandV1, CommandSegmentV1, CommandSpanV1};
 use guard_contracts::NativeCommandControlBindingV1;
@@ -209,7 +209,7 @@ fn evaluate_command_matches_python_oracle() {
         program_digest: catalog.program_digest.clone(),
         catalog_digest: catalog.catalog_digest.clone(),
         trust_digest: catalog.catalog_digest.clone(),
-        health: fixture.snapshot.health.clone(),
+        health: fixture.snapshot.health.to_lowercase().replace('_', "-"),
         revision: fixture.snapshot.revision,
         managed_revision: fixture.snapshot.managed_revision,
         effective_digest: fixture.snapshot.effective_digest.clone(),
@@ -221,19 +221,17 @@ fn evaluate_command_matches_python_oracle() {
     for row in &fixture.cases {
         let command = CanonicalCommand::from_v1(&to_v1(&row.v1));
         let read_factors: Vec<_> = row.read_factors.iter().map(to_read_factor).collect();
-        let evaluation = evaluate_command(
-            &command,
-            &row.native,
-            &catalog,
-            &snapshot,
-            &[],
-            None,
-            None,
-            None,
-            &read_factors,
-            false,
-        );
-        let payload = match evaluation {
+        let evaluation = evaluate_command(CommandEvaluationInput {
+            command: &command,
+            native_extension_evidence: &row.native,
+            registry: &catalog,
+            binding: &snapshot,
+            compatibility_action_class: None,
+            compatibility_reason: None,
+            workflow_authorization: None,
+            read_factors,
+        });
+        let mut payload = match evaluation {
             Ok(evaluation) => evaluation.to_payload(),
             Err(error) => {
                 mismatches.push(format!(
@@ -243,6 +241,19 @@ fn evaluate_command_matches_python_oracle() {
                 continue;
             }
         };
+        // The Python oracle predates `baseline_decision`: it must be present and
+        // well-formed, and every other field must still match the oracle.
+        let baseline = payload
+            .as_object_mut()
+            .and_then(|object| object.remove("baseline_decision"));
+        assert!(
+            baseline
+                .as_ref()
+                .and_then(|decision| decision.get("action"))
+                .is_some_and(serde_json::Value::is_string),
+            "{} -> missing baseline_decision",
+            row.command
+        );
         if payload != row.evaluation {
             let expected = serde_json::to_string_pretty(&row.evaluation).unwrap_or_default();
             let got = serde_json::to_string_pretty(&payload).unwrap_or_default();

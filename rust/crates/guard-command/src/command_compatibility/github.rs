@@ -8,13 +8,24 @@ mod options;
 
 type Capabilities = Option<Vec<&'static str>>;
 
+/// `probe` is where native proofs run the segment (after a verified leading
+/// `cd`), with the deadline and the environment the command inherits.
 pub(super) fn observe(
     segment: &CommandSegmentV1,
     index: usize,
     result: &mut CompatibilityObservations,
+    probe: crate::pretool::github_conversation::ProbeContext<'_>,
 ) {
-    match classify(&segment.arguments) {
-        Some(capabilities) => {
+    match classify(&segment.arguments, &segment.text) {
+        Some(mut capabilities) => {
+            // One secret-free comment or review reply on the work tree's own
+            // repository is review conversation, owned like a routine
+            // review-thread resolution instead of a content mutation.
+            if capabilities == ["content_remote"]
+                && crate::pretool::github_conversation::current_repository_write(segment, probe)
+            {
+                capabilities = vec!["routine_review_thread_remote"];
+            }
             for capability in capabilities {
                 let (owner, permission_only) = github_owner(capability);
                 if permission_only {
@@ -32,7 +43,7 @@ fn one(capability: &'static str) -> Capabilities {
     Some(vec![capability])
 }
 
-pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
+pub(super) fn arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     // A glued `-Rowner/repo` selector is an unproven content read and stays
     // on the review path. A separate `--repo` read keeps the benign floor.
     !arguments.iter().any(|argument| {
@@ -48,7 +59,7 @@ pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
                     .split('=')
                     .next()
                     .is_some_and(|flags| flags.contains('w')))
-    }) && classify(arguments).is_some_and(|capabilities| {
+    }) && classify(arguments, text).is_some_and(|capabilities| {
         !capabilities.is_empty()
             && capabilities
                 .iter()
@@ -56,13 +67,63 @@ pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
     })
 }
 
-fn classify(original: &[String]) -> Capabilities {
+/// True when every `target` in the raw segment text is literal: inside single
+/// quotes, or escaped with a backslash, so the shell passes it through instead
+/// of expanding a variable or running a command substitution.
+fn literal_everywhere(text: &str, target: char) -> bool {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for character in text.chars() {
+        match quote {
+            Some('\'') => {
+                if character == '\'' {
+                    quote = None;
+                }
+            }
+            _ if escaped => escaped = false,
+            _ if character == '\\' => escaped = true,
+            _ if character == target => return false,
+            Some(_) if character == '"' => quote = None,
+            None if matches!(character, '\'' | '"') => quote = Some(character),
+            _ => {}
+        }
+    }
+    true
+}
+
+fn classify(original: &[String], text: &str) -> Capabilities {
     // Quoted dynamic-looking values are deliberately outside this small native
     // grammar too. Distinguishing their expansion provenance needs literal proof.
-    if original
-        .iter()
-        .any(|value| value.contains(['$', '`', '\0']) || value.starts_with('@'))
-    {
+    // The one exception is a single-quoted `gh api graphql` document whose
+    // `$variables` it declares itself: the shell never expands those.
+    // A backtick the raw text escapes or single-quotes is Markdown code
+    // formatting in a body, never a command substitution.
+    let graphql = original.len() > 1 && original[0] == "api" && original[1] == "graphql";
+    if original.iter().any(|value| {
+        value.contains('\0')
+            || (value.contains('`') && !literal_everywhere(text, '`'))
+            || value.starts_with('@')
+            || (value.contains('$')
+                && !(graphql
+                    && literal_everywhere(text, '$')
+                    && value
+                        .strip_prefix("query=")
+                        .is_some_and(api::graphql_text_is_static)))
+    }) {
+        return None;
+    }
+    // Every `gh` read accepts a `--jq`/`-q` response filter; none may read the
+    // environment or load jq modules.
+    let mut filters = original.iter().enumerate().filter_map(|(index, value)| {
+        value
+            .strip_prefix("--jq=")
+            .or_else(|| (value.starts_with("-q") && value.len() > 2).then(|| &value[2..]))
+            .or_else(|| {
+                matches!(value.as_str(), "--jq" | "-q")
+                    .then(|| original.get(index + 1).map_or("", String::as_str))
+            })
+    });
+    if filters.any(|filter| !api::jq_is_static(filter)) {
         return None;
     }
     options::validate_selectors(original)?;
@@ -177,6 +238,9 @@ fn classify(original: &[String]) -> Capabilities {
             "edit" => return one("access_remote"),
             "set-default" => return one("write_local"),
             "sync" if options::has_option(tail, "--force") => return one("force_remote"),
+            "create" if crate::github_command_capabilities::private_repo_create(tail) => {
+                return one("create_private_remote")
+            }
             _ => {}
         }
     }

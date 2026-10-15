@@ -8,16 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _unmodeled_shell_runtime_artifact,
-)
 from codex_plugin_scanner.guard.runtime.github_actions_read_workflow import (
     is_nonexecuting_github_actions_read_workflow,
     shell_read_execution_environment_is_safe,
-)
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
 
 
@@ -56,84 +49,6 @@ def _trust_pipeline_executables_for_parser_test(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.github_actions_read_workflow._trusted_pipeline_executables",
         lambda _names, *, cwd: bool(cwd),
-    )
-
-
-def test_typed_github_actions_read_workflow_is_explicitly_benign(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _clear_execution_injection_environment(monkeypatch)
-    _trust_pipeline_executables_for_parser_test(monkeypatch)
-    command = _workflow()
-
-    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
-    assert is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-    assert (
-        extract_sensitive_tool_action_request(
-            "bash",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-    assert (
-        _unmodeled_shell_runtime_artifact(
-            harness="pi",
-            command_text=command,
-            config_path="<config>",
-            source_scope="workspace",
-            workspace=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-
-
-def test_bounded_github_actions_log_metadata_read_is_explicitly_benign(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _clear_execution_injection_environment(monkeypatch)
-    _trust_pipeline_executables_for_parser_test(monkeypatch)
-    command = (
-        "gh -R example/project run view 30542570393 --log 2>&1 "
-        '| grep -iE "UV_PYTHON_INSTALL_DIR|toolcache|pythonLoc|hostedtoolcache" '
-        "| sort -u | head -6"
-    )
-
-    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
-    assert is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-
-def test_bounded_failed_log_filter_is_explicitly_benign(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _clear_execution_injection_environment(monkeypatch)
-    monkeypatch.delenv("RIPGREP_CONFIG_PATH", raising=False)
-    _trust_pipeline_executables_for_parser_test(monkeypatch)
-    command = (
-        "gh run view 123 --repo example/project --log-failed | rg -n 'FAILURES|FAILED |AssertionError' | tail -120"
-    )
-
-    assert is_nonexecuting_github_actions_read_workflow(command, cwd=tmp_path)
-    assert is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
     )
 
 

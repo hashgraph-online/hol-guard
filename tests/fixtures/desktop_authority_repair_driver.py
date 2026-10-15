@@ -15,6 +15,8 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
+from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
+
 
 def fixture_home() -> Path:
     home = Path(os.environ["HOL_GUARD_AUTHORITY_REPAIR_TEST_HOME"]).resolve(strict=True)
@@ -64,7 +66,7 @@ def seed(home: Path, *, inverse: bool = False) -> int:
         setattr(server.GuardDaemonServer, name, lambda _self: None)
     server.start_command_queue_worker = lambda _store, existing: existing
     server.start_cloud_sync_sync_worker = lambda _store, existing, **_kwargs: existing
-    server._queue_headless_cloud_sync = lambda **_kwargs: {"status": "not_configured"}
+    _ctl_cloud_sync._queue_headless_cloud_sync = lambda **_kwargs: {"status": "not_configured"}
     daemon = server.GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=home)
     try:
         if not inverse:

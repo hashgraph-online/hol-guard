@@ -7,7 +7,6 @@ Covers:
 - approval_source field preserved in store roundtrip
 - approval_source values: policy, inline, approval_center, cli_command, None
 - build_receipt helper passes diff_summary / approval_source through to GuardReceipt
-- _build_diff_summary helper in consumer.service produces correct prose
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.consumer.service import _build_diff_summary
 from codex_plugin_scanner.guard.mcp_tool_calls import _map_approval_source
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.receipts.manager import _auto_diff_summary, build_receipt
@@ -77,29 +75,6 @@ class TestAutoDiffSummary:
     def test_two_changes(self) -> None:
         result = _auto_diff_summary(["removed", "hash_changed"])
         assert result == "2 change(s): removed, hash_changed"
-
-
-class TestBuildDiffSummary:
-    def test_unchanged_artifact_returns_none(self) -> None:
-        diff: dict[str, object] = {"changed": False, "changed_fields": [], "current_hash": "abc"}
-        assert _build_diff_summary(diff) is None
-
-    def test_changed_no_fields_returns_generic(self) -> None:
-        diff: dict[str, object] = {"changed": True, "changed_fields": [], "current_hash": "abc"}
-        assert _build_diff_summary(diff) == "artifact changed"
-
-    def test_changed_with_fields(self) -> None:
-        diff: dict[str, object] = {
-            "changed": True,
-            "changed_fields": ["hash", "capability_delta"],
-            "current_hash": "abc",
-        }
-        result = _build_diff_summary(diff)
-        assert result == "2 change(s): hash, capability_delta"
-
-    def test_changed_fields_not_list_returns_generic(self) -> None:
-        diff: dict[str, object] = {"changed": True, "changed_fields": "not-a-list", "current_hash": "abc"}
-        assert _build_diff_summary(diff) == "artifact changed"
 
 
 class TestBuildReceiptDiffSummary:

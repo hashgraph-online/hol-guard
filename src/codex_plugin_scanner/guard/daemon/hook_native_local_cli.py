@@ -10,9 +10,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_local_cli_identity import LocalCliIdentityUnavailableError
-from .hook_native_saved_approval import _launch_cwd, _native_review_is_overridable, _saved_block_response
+from .hook_fail_closed import render_accepted_allow
+from .hook_native_exact_action import launch_cwd as _launch_cwd
+from .hook_native_saved_approval import _native_review_is_overridable, _saved_block_response, store_guard_home
 from .hook_request_parsing import pre_tool_command
-from .hook_worker_responses import harness_json_from_native_pre_tool
 
 if TYPE_CHECKING:
     from ..models import GuardAction
@@ -50,10 +51,11 @@ def native_local_cli_block_response(
             native_result,
             reason_code="local_cli_extension_unverified",
             reason="Guard could not check this command against your custom extension rules.",
+            guard_home=store_guard_home(store),
         )
     if match is None or match[1] != "blocked":
         return None
-    return _custom_block_response(harness, native_result, match[0].name)
+    return _custom_block_response(harness, native_result, match[0].name, store_guard_home(store))
 
 
 def _has_block_rules(store: object) -> bool:
@@ -103,14 +105,12 @@ def native_local_cli_grant_response(
         return None
     identity, state = match
     if state == "blocked":
-        return True, _custom_block_response(harness, native_result, identity.name)
+        return True, _custom_block_response(harness, native_result, identity.name, store_guard_home(store))
     if not _native_review_is_overridable(native_result):
         return None
     allowed = dict(native_result)
     allowed.update(decision="allow", minimum_action="allow", policy_action="allow")
-    response = harness_json_from_native_pre_tool(harness, allowed)
-    response["approval_reuse_status"] = "accepted"
-    return False, response
+    return False, render_accepted_allow(harness, allowed, guard_home=store_guard_home(store))
 
 
 def _matching_grant(
@@ -142,12 +142,15 @@ def _matching_grant(
         return None
 
 
-def _custom_block_response(harness: str, native_result: Mapping[str, object], name: str) -> dict[str, object]:
+def _custom_block_response(
+    harness: str, native_result: Mapping[str, object], name: str, guard_home: Path | None = None
+) -> dict[str, object]:
     return _saved_block_response(
         harness,
         native_result,
         reason_code="local_cli_extension_blocked",
         reason=f"Your custom extension rules block this {name} command.",
+        guard_home=guard_home,
     )
 
 
