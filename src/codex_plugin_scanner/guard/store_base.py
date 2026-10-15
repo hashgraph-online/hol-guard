@@ -1118,6 +1118,10 @@ def _set_private_mode(path: Path, mode: int) -> None:
             _set_windows_private_directory(path)
         return
     try:
+        # A chmod to the current mode still moves ctime, which the policy
+        # snapshot publisher watches, so every store close would wake it.
+        if os.stat(path).st_mode & 0o7777 == mode:
+            return
         os.chmod(path, mode)
     except OSError as exc:
         _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
