@@ -112,6 +112,8 @@ fn a_workspace_the_lane_did_not_settle_is_not_ready() {
     let (fixture, _workspace) = bound("other", json!({}));
     let other = fixture.root.join("other");
     fs::create_dir_all(&other).unwrap();
+    // An overlay keeps the unbound directory waiting for its own publish.
+    fs::write(fixture.root.join(".hol-guard.toml"), b"").unwrap();
     assert_eq!(
         ask(&fixture, other.to_str().unwrap(), "codex"),
         not_ready("direct_lane_workspace_unknown")

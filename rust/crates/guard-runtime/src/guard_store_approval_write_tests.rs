@@ -12,15 +12,19 @@ use crate::guard_store_cmd_vectors_tests::{dump, insert_rows, temp_home};
 use crate::guard_store_op::evaluate_guard_store_request;
 
 const VECTORS: &str = include_str!("../testdata/guard_store/approval_request_write_vectors.json");
-const TABLES: [(&str, &str); 2] = [
+const TABLES: [(&str, &str); 3] = [
     ("approval_requests", "request_id"),
     ("guard_review_outbox_events", "stream_sequence"),
+    ("guard_events", "event_id"),
 ];
 
 fn write(home: &std::path::Path, source: &str, scenario: &Value, method: &str) -> Value {
     let mut args = Map::new();
     args.insert("request".to_owned(), scenario["request"].clone());
     args.insert("now".to_owned(), scenario["now"].clone());
+    if let Some(prompt_shown) = scenario.get("prompt_shown") {
+        args.insert("prompt_shown".to_owned(), prompt_shown.clone());
+    }
     let request = GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "vector".to_owned(),
@@ -106,6 +110,10 @@ fn replays_every_recorded_approval_request_write() {
     let mut replayed = 0;
     for scenario in vectors["scenarios"].as_array().unwrap() {
         let name = scenario["name"].as_str().unwrap();
+        if scenario.get("prompt_shown").is_some() {
+            // Only `queue_blocked_approvals` records creation events.
+            continue;
+        }
         let home = temp_home(name);
         let db = home.join("guard.db");
         seed(&db, &vectors, scenario);
@@ -145,12 +153,14 @@ fn replays_every_recorded_approval_request_write() {
 }
 
 /// `add_approval_request` backfills legacy rows itself and so reproduces
-/// every Python outcome, the deferred scenarios included.
+/// every Python outcome, the deferred scenarios included, and writes the
+/// creation events `queue_blocked_approvals` recorded.
 #[test]
 fn general_write_replays_every_recorded_outcome() {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
     let source = vectors["source"].as_str().unwrap();
     let mut backfilled = 0;
+    let mut created = 0;
     for scenario in vectors["scenarios"].as_array().unwrap() {
         let name = scenario["name"].as_str().unwrap();
         let label = format!("{name}-general");
@@ -175,7 +185,9 @@ fn general_write_replays_every_recorded_outcome() {
             assert_eq!(after, expected(&scenario["after"], name), "{label}: rows");
         }
         backfilled += usize::from(scenario["native_defers"] == true);
+        created += usize::from(scenario.get("prompt_shown").is_some());
         let _ = std::fs::remove_dir_all(&home);
     }
     assert!(backfilled >= 2, "only {backfilled} legacy scenarios");
+    assert!(created >= 6, "only {created} creation event scenarios");
 }

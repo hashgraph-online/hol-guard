@@ -45,9 +45,9 @@ def prepare_workspace_policy(
             isinstance(last_error, str) and last_error in owner._TRANSIENT_RESIDENT_PUBLICATION_ERRORS
         )
         no_publication_error = last_error is None or (isinstance(last_error, str) and not last_error.strip())
-        # A file-less subdirectory of a compiled workspace adds no overlay,
-        # so the current ACK already carries its policy. Hooks right after
-        # `cd` into it need not wait for the next publish.
+        # A file-less directory adds no overlay, so the current ACK already
+        # carries its policy unless an unsettled ancestor overlay is about to
+        # join it. Hooks right after `cd` into it need not wait for a publish.
         covered = callable(admissible_without_overlay) and admissible_without_overlay(workspace)
         if callable(wait_until_ready) and (transient_publication_error or no_publication_error):
             readiness_deadline = now + owner._NATIVE_POLICY_READY_TIMEOUT_SECONDS
