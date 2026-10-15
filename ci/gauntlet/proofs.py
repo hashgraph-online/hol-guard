@@ -10,6 +10,7 @@ from .catalog import Scenario
 from .clone_fixtures import LONG_LIVED_CLONE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
 from .input_evidence import input_digest, input_matches, post_input_matches
+from .remote_code import REMOTE_CODE_CASES
 from .review_fixtures import GITHUB_REVIEW_CASE, WORKTREE_CASE
 from .supply_chain import PACKAGE_BLOCK_REASONS, supply_chain_required_checks
 
@@ -33,8 +34,10 @@ BLOCK_REASONS = frozenset(
 
 
 def block_reasons(scenario: Scenario) -> frozenset[str]:
-    """A package case passes only on its own evaluator verdict, never a generic stop."""
-    return PACKAGE_BLOCK_REASONS[scenario.id] if scenario.oracle == "blocked-package" else BLOCK_REASONS
+    """A package or remote-code case passes only on its own verdict, never a generic stop."""
+    if scenario.oracle == "blocked-package":
+        return PACKAGE_BLOCK_REASONS[scenario.id]
+    return REMOTE_CODE_CASES.get(scenario.id, BLOCK_REASONS)
 
 
 def required_checks(scenario: Scenario) -> set[str]:
