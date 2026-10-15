@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.xahau-mcp",
-  "tagline": "Reviews Xahau MCP tools that read public Xahau JSON-RPC endpoints or emit unsigned transactions and Hook source a user could sign or deploy\u2026",
+  "tagline": "Reviews Xahau MCP tools that read public JSON-RPC endpoints or emit unsigned transactions and Hook source.",
   "summary": "Reviews Xahau MCP tools that read public Xahau JSON-RPC endpoints or emit unsigned transactions and Hook source a user could sign or deploy. Offline codec, Hook WASM analysis, and local VM tools are allowed. The server never signs, submits, or holds keys. Off until you turn it on.",
   "category": "other",
   "limitations": [

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.kranz",
-  "tagline": "Reviews Kranz MCP action execution, runtime and service lifecycle changes, configuration reloads, and retained log or completed-run deletio\u2026",
+  "tagline": "Reviews Kranz MCP action execution, lifecycle changes, configuration reloads, and log or run deletions.",
   "summary": "Reviews Kranz MCP action execution, runtime and service lifecycle changes, configuration reloads, and retained log or completed-run deletion. Read-only tools inherit Guard policy; unknown tools require review. Off until enabled locally.",
   "category": "other",
   "limitations": [

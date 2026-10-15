@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.loomdesk",
-  "tagline": "Reviews LoomDesk's planning tools, which return unsigned Robinhood Chain transactions (open, add to, change or close a liquidity position,\u2026",
+  "tagline": "Reviews LoomDesk planning tools that return unsigned Robinhood Chain transactions for liquidity positions.",
   "summary": "Reviews LoomDesk's planning tools, which return unsigned Robinhood Chain transactions (open, add to, change or close a liquidity position, a limit order, a swap, a new pool) for the caller's own wallet to sign. LoomDesk holds no keys and signs nothing. Read tools keep Guard's usual handling. Off until you turn it on.",
   "category": "other",
   "limitations": [

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.fablecut",
-  "tagline": "Reviews the FableCut video-editor tools that change the user's timeline or write files: replacing or patching the project, importing media,\u2026",
+  "tagline": "Reviews FableCut video-editor tools that change the timeline or write files: project edits, media imports, and exports.",
   "summary": "Reviews the FableCut video-editor tools that change the user's timeline or write files: replacing or patching the project, importing media, loudness, ducking and noise reduction, reference analysis and export. Reading the project, the manual, scopes and export presets is allowed. Off until you turn it on.",
   "category": "other",
   "limitations": [

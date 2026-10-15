@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.evernode-mcp",
-  "tagline": "Reviews Evernode MCP tools that look up live hosts on api.onledger.net or generate contract files, deploy commands, and an unsigned Hook in\u2026",
+  "tagline": "Reviews Evernode MCP tools that query live hosts or generate contract files, deploy commands, and unsigned Hooks.",
   "summary": "Reviews Evernode MCP tools that look up live hosts on api.onledger.net or generate contract files, deploy commands, and an unsigned Hook install command. Offline linting, pattern advice, and lease math are allowed. The server never signs, submits, or holds keys. Off until you turn it on.",
   "category": "other",
   "limitations": [

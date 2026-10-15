@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.vome-home-assistant",
-  "tagline": "Reviews Home Assistant, ESPHome and Node-RED tools that control devices, change configuration, install third-party code, manage users, read\u2026",
+  "tagline": "Reviews Home Assistant, ESPHome and Node-RED tools that control devices, change configuration, or manage users.",
   "summary": "Reviews Home Assistant, ESPHome and Node-RED tools that control devices, change configuration, install third-party code, manage users, read cameras, flash firmware or switch a hosted home's failover. Off until you turn it on.",
   "category": "other",
   "limitations": [

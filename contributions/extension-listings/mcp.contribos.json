@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.contribos",
-  "tagline": "Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until\u2026",
+  "tagline": "Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records.",
   "summary": "Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until you turn it on.",
   "category": "other",
   "limitations": [

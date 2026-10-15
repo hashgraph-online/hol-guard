@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.reaper",
-  "tagline": "Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-ste\u2026",
+  "tagline": "Reviews destructive REAPER project-editing tools: batch track deletion, template deletion, and tempo or marker clears.",
   "summary": "Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-step undo. Off until you turn it on.",
   "category": "other",
   "limitations": [

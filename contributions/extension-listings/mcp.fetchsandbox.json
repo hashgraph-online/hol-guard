@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.fetchsandbox",
-  "tagline": "Reviews the FetchSandbox tools that upload a workspace for remote analysis or publish evidence to a shareable receipt, and leaves catalog a\u2026",
+  "tagline": "Reviews FetchSandbox tools that upload a workspace for remote analysis or publish evidence to a shareable receipt.",
   "summary": "Reviews the FetchSandbox tools that upload a workspace for remote analysis or publish evidence to a shareable receipt, and leaves catalog and run listing automatic.",
   "category": "other",
   "limitations": [
