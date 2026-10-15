@@ -142,8 +142,7 @@ class StoreApprovalQueriesMixin:
             raise
 
     def get_approval_extension_allow_hint(self, request_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return get_approval_extension_allow_hint(connection, request_id)
+        return self._native_approval_read("get_approval_extension_allow_hint", {"request_id": request_id})
 
     def get_raw_approval_request_snapshot(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
@@ -154,31 +153,12 @@ class StoreApprovalQueriesMixin:
         return dict(row) if row is not None else None
 
     def approval_desktop_notified_at(self, request_id: str) -> str | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select desktop_notified_at
-                from approval_requests
-                where request_id = ?
-                """,
-                (request_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        value = row["desktop_notified_at"]
-        return str(value) if isinstance(value, str) and value else None
+        return self._native_approval_read("approval_desktop_notified_at", {"request_id": request_id})
 
     def mark_approval_desktop_notified(self, request_id: str, notified_at: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                update approval_requests
-                set desktop_notified_at = ?
-                where request_id = ?
-                  and desktop_notified_at is null
-                """,
-                (notified_at, request_id),
-            )
+        self._native_approval_read(
+            "mark_approval_desktop_notified", {"request_id": request_id, "notified_at": notified_at}
+        )
 
     def get_next_pending_request(self, *, exclude_ids: set[str] | None = None) -> dict[str, object] | None:
         return self._native_approval_read("get_next_pending_request", {"exclude_ids": sorted(exclude_ids or ())})
@@ -208,15 +188,7 @@ class StoreApprovalQueriesMixin:
         )
 
     def oldest_approval_request_created_at(self, *, status: str = "pending") -> str | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select min(created_at) as oldest_created_at from approval_requests where status = ?",
-                (status,),
-            ).fetchone()
-        if row is None:
-            return None
-        value = row["oldest_created_at"]
-        return str(value) if isinstance(value, str) and value else None
+        return self._native_approval_read("oldest_approval_request_created_at", {"status": status})
 
     def clear_approval_requests(self, *, harness: str | None = None, status: str | None = None) -> int:
         conditions: list[str] = []
