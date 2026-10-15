@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.xrpl-muse-skill",
+  "tagline": "Guards the xrpl-muse-skill ceremony: xrpl-trade builds unsigned transaction proposals and never signs; xrpl-sign --approve is the sole hash\u2026",
+  "summary": "Guards the xrpl-muse-skill ceremony: xrpl-trade builds unsigned transaction proposals and never signs; xrpl-sign --approve is the sole hash-bound, policy-gated signer; fresh installs stay read-only until the typed xrpl-trade live ceremony. Proposal, signing, and gate-transition commands review; read-only queries stay inert.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "83885625",
+      "githubLogin": "terramike",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3482"
+    }
+  ],
+  "upstream": null,
+  "maintainerGithubIds": [
+    "83885625"
+  ]
+}

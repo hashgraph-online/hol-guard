@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.xencode",
+  "tagline": "Reviews Xencode state-changing CLI operations that can mutate Git worktrees or the local Xencode plugin environment. This community coverag\u2026",
+  "summary": "Reviews Xencode state-changing CLI operations that can mutate Git worktrees or the local Xencode plugin environment. This community coverage does not certify Xencode or every future CLI feature.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "178558691",
+      "githubLogin": "sreevarshan-xenoz",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3058"
+    }
+  ],
+  "upstream": null,
+  "maintainerGithubIds": [
+    "178558691"
+  ]
+}

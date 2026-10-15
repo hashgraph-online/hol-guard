@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.storage-clearer",
+  "tagline": "Reviews Storage Clearer's run and app-run cleanup entry points while leaving audit, explain, reason, and plan read-only.",
+  "summary": "Reviews Storage Clearer's run and app-run cleanup entry points while leaving audit, explain, reason, and plan read-only.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "488071",
+      "githubLogin": "khiemnd777",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2706"
+    }
+  ],
+  "upstream": {
+    "name": "Storage Clearer command protection",
+    "url": "https://github.com/khiemnd777/storage-clearer"
+  },
+  "maintainerGithubIds": [
+    "488071"
+  ],
+  "documentationUrl": "https://github.com/khiemnd777/storage-clearer"
+}

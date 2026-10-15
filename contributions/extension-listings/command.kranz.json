@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.kranz",
+  "tagline": "Reviews Kranz action execution, runtime lifecycle changes, configuration replacement, and retained evidence deletion.",
+  "summary": "Reviews Kranz action execution, runtime lifecycle changes, configuration replacement, and retained evidence deletion.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "1148860",
+      "githubLogin": "justanorange",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3188"
+    }
+  ],
+  "upstream": {
+    "name": "Kranz command protection",
+    "url": "https://github.com/kranz-org/kranz"
+  },
+  "maintainerGithubIds": [
+    "1148860"
+  ],
+  "documentationUrl": "https://github.com/kranz-org/kranz"
+}

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.cs",
+  "tagline": "Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a mode\u2026",
+  "summary": "Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a model for a recap. Read-only commands (ls, show) are not matched.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "64867381",
+      "githubLogin": "AryaKesharwani",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3511"
+    }
+  ],
+  "upstream": {
+    "name": "cs (Claude Sessions) command protection",
+    "url": "https://github.com/AryaKesharwani/claude-sessions"
+  },
+  "maintainerGithubIds": [
+    "64867381"
+  ],
+  "documentationUrl": "https://github.com/AryaKesharwani/claude-sessions"
+}

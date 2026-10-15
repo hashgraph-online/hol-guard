@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.showtime",
+  "tagline": "Reviews the showtime video-studio CLI's commands that reach beyond the video project: installing tools and models (setup), writing other co\u2026",
+  "summary": "Reviews the showtime video-studio CLI's commands that reach beyond the video project: installing tools and models (setup), writing other coding agents' configuration (install), deleting files (setup --prune, clean, voice cache --clear), explicit network downloads (audio music|lib|packs fetch, assets media fetch, reference <URL>) and driving a headless browser against a site or a walkthrough script (site capture|component|record, demo record). Project-local commands (new, check, render, qa, export, look, snap, receipt, doctor, guide, status) and --help are not matched and remain automatic. Components that ordinary commands fetch on first use (for example a speech model on the first transcription) are outside this extension; `showtime setup --plan` lists them.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "10162068",
+      "githubLogin": "FavioVazquez",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3302"
+    }
+  ],
+  "upstream": {
+    "name": "showtime command protection",
+    "url": "https://github.com/FavioVazquez/showtime"
+  },
+  "maintainerGithubIds": [
+    "10162068"
+  ],
+  "documentationUrl": "https://github.com/FavioVazquez/showtime"
+}

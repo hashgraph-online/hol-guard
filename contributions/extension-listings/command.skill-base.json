@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.skill-base",
+  "tagline": "Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version.",
+  "summary": "Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "497432",
+      "githubLogin": "ginuim",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3152"
+    }
+  ],
+  "upstream": {
+    "name": "Skill Base CLI",
+    "url": "https://github.com/ginuim/skill-base"
+  },
+  "maintainerGithubIds": [
+    "497432"
+  ],
+  "documentationUrl": "https://github.com/ginuim/skill-base"
+}

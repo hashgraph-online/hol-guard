@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.repopy",
+  "tagline": "Reviews repopy CLI operations across repository cloning, dependency installation, remote Git linkage, and non-interactive workspace cleanup.",
+  "summary": "Reviews repopy CLI operations across repository cloning, dependency installation, remote Git linkage, and non-interactive workspace cleanup.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "200405648",
+      "githubLogin": "manatunga",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2988"
+    }
+  ],
+  "upstream": {
+    "name": "Repopy CLI protection",
+    "url": "https://github.com/manatunga/repopy"
+  },
+  "maintainerGithubIds": [
+    "200405648"
+  ],
+  "documentationUrl": "https://github.com/manatunga/repopy"
+}

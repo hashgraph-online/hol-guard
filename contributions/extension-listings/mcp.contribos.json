@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.contribos",
+  "tagline": "Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until\u2026",
+  "summary": "Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until you turn it on.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "180501347",
+      "githubLogin": "adityatiwari101104",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3472"
+    }
+  ],
+  "upstream": {
+    "name": "ContribOS",
+    "url": "https://github.com/adityatiwari101104/contribos"
+  },
+  "maintainerGithubIds": [
+    "180501347"
+  ],
+  "documentationUrl": "https://github.com/adityatiwari101104/contribos"
+}

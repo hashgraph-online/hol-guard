@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.vttforge",
+  "tagline": "Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place. The audit, the lint r\u2026",
+  "summary": "Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place. The audit, the lint report and the migration preview stay unreviewed.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "7094035",
+      "githubLogin": "fcsouza",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2876"
+    }
+  ],
+  "upstream": {
+    "name": "VTTForge command protection",
+    "url": "https://vttforge.dev"
+  },
+  "maintainerGithubIds": [
+    "7094035"
+  ],
+  "documentationUrl": "https://vttforge.dev"
+}

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.snoboard",
+  "tagline": "Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and ar\u2026",
+  "summary": "Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and are not matched. fix --dry-run, --help, and --version exit without writing. Upstream CLI 0.1.0.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "326432",
+      "githubLogin": "serrnovik",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3468"
+    }
+  ],
+  "upstream": {
+    "name": "Snoboard CLI",
+    "url": "https://github.com/serrnovik/snoboard"
+  },
+  "maintainerGithubIds": [
+    "326432"
+  ],
+  "documentationUrl": "https://github.com/serrnovik/snoboard"
+}

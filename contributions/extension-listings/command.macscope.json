@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.macscope",
+  "tagline": "Reviews MacScopeMCPServer launches that opt into established feature writes, separately gated experimental feature writes, or allowlisted u\u2026",
+  "summary": "Reviews MacScopeMCPServer launches that opt into established feature writes, separately gated experimental feature writes, or allowlisted utility execution.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "2084708",
+      "githubLogin": "rsm23",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2673"
+    }
+  ],
+  "upstream": {
+    "name": "MacScope MCP command protection",
+    "url": "https://github.com/rsm23/macscope"
+  },
+  "maintainerGithubIds": [
+    "2084708"
+  ],
+  "documentationUrl": "https://github.com/rsm23/macscope"
+}

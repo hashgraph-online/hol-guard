@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.vaultsync",
+  "tagline": "Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping in\u2026",
+  "summary": "Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping inspection-oriented commands outside the extension review boundary.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "38221678",
+      "githubLogin": "ATAC-Helicopter",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"
+    }
+  ],
+  "upstream": {
+    "name": "VaultSync command protection",
+    "url": "https://fglabs.dev/vaultsync"
+  },
+  "maintainerGithubIds": [
+    "38221678"
+  ],
+  "documentationUrl": "https://fglabs.dev/vaultsync"
+}

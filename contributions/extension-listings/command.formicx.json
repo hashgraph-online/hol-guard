@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.formicx",
+  "tagline": "Reviews Formicx mutation lifecycle commands (register, start, stop, restart) while leaving read-only queries (list, status, resources) auto\u2026",
+  "summary": "Reviews Formicx mutation lifecycle commands (register, start, stop, restart) while leaving read-only queries (list, status, resources) automatic. exec and xargs launches are already blocked outright by Guard.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "78356376",
+      "githubLogin": "Abbilaash",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2914"
+    }
+  ],
+  "upstream": {
+    "name": "formicx agent command protection",
+    "url": "https://github.com/Abbilaash/Formicx"
+  },
+  "maintainerGithubIds": [
+    "78356376"
+  ],
+  "documentationUrl": "https://github.com/Abbilaash/Formicx"
+}

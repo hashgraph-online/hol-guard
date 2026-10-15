@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.tui-runner",
+  "tagline": "Reviews TUI Runner --reconfigure invocations, which overwrite a project's saved process configuration. Port cleanup, process spawning, and\u2026",
+  "summary": "Reviews TUI Runner --reconfigure invocations, which overwrite a project's saved process configuration. Port cleanup, process spawning, and project scaffolding happen through TUI Runner's interactive menu after launch and are not observable command-line events, so this extension does not cover them.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "184955509",
+      "githubLogin": "Krishmal2004",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2986"
+    }
+  ],
+  "upstream": null,
+  "maintainerGithubIds": [
+    "184955509"
+  ]
+}

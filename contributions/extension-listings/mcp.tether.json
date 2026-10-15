@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.tether",
+  "tagline": "Adds the tether memory server: remember, recall, link and forget. Each tool keeps your existing approval policy until you change it. Off un\u2026",
+  "summary": "Adds the tether memory server: remember, recall, link and forget. Each tool keeps your existing approval policy until you change it. Off until you turn it on.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "20009719",
+      "githubLogin": "sidyellur",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2843"
+    }
+  ],
+  "upstream": {
+    "name": "tether memory MCP",
+    "url": "https://github.com/sidyellur/tether"
+  },
+  "maintainerGithubIds": [
+    "20009719"
+  ],
+  "documentationUrl": "https://github.com/sidyellur/tether"
+}

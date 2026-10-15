@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.keibidrop",
+  "tagline": "Reviews kd commands that share a local file with a peer, write a peer's file to local disk, or set which peer identity the session accepts.",
+  "summary": "Reviews kd commands that share a local file with a peer, write a peer's file to local disk, or set which peer identity the session accepts.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "11766613",
+      "githubLogin": "marius-cristian",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2936"
+    }
+  ],
+  "upstream": {
+    "name": "KeibiDrop command protection",
+    "url": "https://keibidrop.com/"
+  },
+  "maintainerGithubIds": [
+    "11766613"
+  ],
+  "documentationUrl": "https://keibidrop.com/"
+}

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.asdecided",
+  "tagline": "Read-only repository requirements, decisions, designs, roadmaps, and prompts for coding agents. Off until you turn it on.",
+  "summary": "Read-only repository requirements, decisions, designs, roadmaps, and prompts for coding agents. Off until you turn it on.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "213978628",
+      "githubLogin": "tcballard",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3579"
+    }
+  ],
+  "upstream": {
+    "name": "AsDecided MCP",
+    "url": "https://github.com/asdecided/core"
+  },
+  "maintainerGithubIds": [
+    "213978628"
+  ],
+  "documentationUrl": "https://github.com/asdecided/core"
+}

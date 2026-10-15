@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.agi-memory",
+  "tagline": "Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, attach a remo\u2026",
+  "summary": "Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, attach a remote that will receive the whole store, bulk-seed it from git history, or change the invariants injected into later sessions. Reads such as recall, log, inspect, blocks and sync status stay unreviewed.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "20184673",
+      "githubLogin": "kdbhalala",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2921"
+    }
+  ],
+  "upstream": {
+    "name": "agi-memory command protection",
+    "url": "https://pypi.org/project/agi-memory/"
+  },
+  "maintainerGithubIds": [
+    "20184673"
+  ],
+  "documentationUrl": "https://pypi.org/project/agi-memory/"
+}

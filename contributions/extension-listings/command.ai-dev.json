@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.ai-dev",
+  "tagline": "Detects sensitive ai-dev CLI operations and provides structured evidence for policy review.",
+  "summary": "Detects sensitive ai-dev CLI operations and provides structured evidence for policy review.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "contributors": [
+    {
+      "githubId": "30658029",
+      "githubLogin": "MatthiasLew",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2943"
+    }
+  ],
+  "upstream": {
+    "name": "ai-dev",
+    "url": "https://github.com/MatthiasLew/ai-dev-cli-tools"
+  },
+  "maintainerGithubIds": [
+    "30658029"
+  ],
+  "documentationUrl": "https://github.com/MatthiasLew/ai-dev-cli-tools"
+}
