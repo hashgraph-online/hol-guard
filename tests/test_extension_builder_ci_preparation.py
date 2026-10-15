@@ -13,6 +13,7 @@ import yaml
 
 from scripts import refresh_extension_artifacts as refresh
 from scripts.ci import detect_pending_extension_regen as detector
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -350,7 +351,7 @@ def test_shared_rust_setup_prepares_source_only_mcp_without_product_imports(chec
     ],
 )
 def test_native_builds_stage_shared_trust_before_compilation(workflow_name, job_name):
-    workflow = yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text()))
     steps = workflow["jobs"][job_name]["steps"]
     setup = next(i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/setup-rust")
     build = next(

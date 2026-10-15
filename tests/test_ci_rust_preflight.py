@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def workflow(name: str) -> dict:
     """Load declarative workflow metadata without executing repository runtime code."""
-    return yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"))
+    return expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8")))
 
 
 @pytest.mark.skipif(os.name == "nt", reason="The required aggregate executes on Ubuntu with Bash")

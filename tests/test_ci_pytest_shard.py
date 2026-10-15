@@ -250,7 +250,7 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
 
 
 def test_native_contract_preflight_is_required_without_delaying_artifact_fanout() -> None:
-    document = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    document = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     producer = document["jobs"]["native-command-evaluators"]
     steps = producer["steps"]
     rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
