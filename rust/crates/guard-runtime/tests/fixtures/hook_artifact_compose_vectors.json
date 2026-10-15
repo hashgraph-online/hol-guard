@@ -4,6 +4,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": true,
@@ -23,16 +24,28 @@
     },
     "name": "stack_defaults",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -46,6 +59,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -55,6 +93,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -74,16 +113,28 @@
     },
     "name": "stack_cli_block_wins",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": "block",
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -97,6 +148,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -106,6 +182,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "require-reapproval",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -134,16 +211,28 @@
     },
     "name": "stack_cli_unknown_requires_reapproval",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": "nonsense",
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -157,6 +246,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -166,6 +280,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "review",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -185,16 +300,28 @@
     },
     "name": "stack_cli_ask_aliases_review",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": "ask",
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -208,6 +335,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -217,6 +369,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "block",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -236,16 +389,28 @@
     },
     "name": "stack_payload_cannot_lower",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "block",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -259,6 +424,31 @@
       "package_risk_summary": null,
       "payload_action": "allow",
       "payload_action_present": true,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "block",
+        "explicit_permission_allow": false,
+        "guard_default_action": "block",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -268,6 +458,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "require-reapproval",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -296,16 +487,28 @@
     },
     "name": "stack_payload_unknown",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -319,6 +522,31 @@
       "package_risk_summary": null,
       "payload_action": 7,
       "payload_action_present": true,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -328,6 +556,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -347,16 +576,28 @@
     },
     "name": "stack_cli_wins_requested_over_payload",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": "warn",
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -370,6 +611,31 @@
       "package_risk_summary": null,
       "payload_action": "block",
       "payload_action_present": true,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -379,13 +645,14 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
-      "current_config_action": "warn",
+      "auto_stop_events": [],
+      "current_config_action": "review",
       "data_flow_action": null,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
       "package_policy_action": null,
-      "policy_action": "warn",
+      "policy_action": "review",
       "requested_policy_action": null,
       "risk_signals": [
         "a1"
@@ -396,18 +663,30 @@
       "trusted_cli_action": null,
       "untrusted_payload_action": null
     },
-    "name": "stack_unknown_config_warns",
+    "name": "stack_unknown_config_reviews",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "???",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -421,6 +700,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "???",
+        "explicit_permission_allow": false,
+        "guard_default_action": "review",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -430,6 +734,7 @@
       "approval_context_config_action": "allow",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": true,
@@ -449,16 +754,28 @@
     },
     "name": "stack_native_floor_and_edge",
     "query": {
-      "approval_context_config_action": "allow",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "allow",
+        "explicit_permission_allow": false,
+        "guard_default_action": "allow",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": "block",
       "has_compound_findings": false,
@@ -472,6 +789,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -481,6 +823,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -500,16 +843,28 @@
     },
     "name": "stack_override_blocks_local_grants",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": true,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -523,6 +878,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -532,6 +912,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -551,16 +932,28 @@
     },
     "name": "stack_package_block",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -576,6 +969,31 @@
       "package_risk_summary": "pkg summary",
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -585,6 +1003,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "review",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": true,
@@ -604,16 +1023,28 @@
     },
     "name": "stack_package_review_controls_summary",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -629,6 +1060,31 @@
       "package_risk_summary": "pkg summary",
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -638,6 +1094,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "review",
       "data_flow_action": null,
       "local_grants_allowed": true,
@@ -657,16 +1114,28 @@
     },
     "name": "stack_package_weaker_than_floor",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "review",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -682,6 +1151,31 @@
       "package_risk_summary": "pkg summary",
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "review",
+        "explicit_permission_allow": false,
+        "guard_default_action": "review",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -691,6 +1185,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": "block",
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": "block",
       "local_grants_allowed": false,
@@ -710,20 +1205,32 @@
       "trusted_cli_action": null,
       "untrusted_payload_action": null
     },
-    "name": "stack_compound_package_controls",
+    "name": "stack_compound_package_unrecognised_data_flow_controls",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [
         "d1"
       ],
+      "data_flow_strong": false,
       "data_flow_summary": "df summary",
       "edge_floor": null,
       "has_compound_findings": true,
@@ -739,6 +1246,35 @@
       "package_risk_summary": "pkg summary",
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {
+          "codex": {
+            "data_flow_exfiltration": "???"
+          }
+        },
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -748,6 +1284,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "block",
       "data_flow_action": null,
       "local_grants_allowed": true,
@@ -768,16 +1305,28 @@
     },
     "name": "stack_compound_package_weaker",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "block",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": true,
@@ -793,6 +1342,31 @@
       "package_risk_summary": "pkg summary",
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "block",
+        "explicit_permission_allow": false,
+        "guard_default_action": "block",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -802,6 +1376,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": "block",
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": "block",
       "local_grants_allowed": false,
@@ -822,19 +1397,31 @@
     },
     "name": "stack_data_flow_configured",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": "block",
       "data_flow_reasons": [
         "d1",
         "a1"
       ],
+      "data_flow_strong": false,
       "data_flow_summary": "df summary",
       "edge_floor": null,
       "has_compound_findings": false,
@@ -848,6 +1435,35 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {
+          "codex": {
+            "data_flow_exfiltration": "block"
+          }
+        },
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -857,6 +1473,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": "warn",
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "review",
       "data_flow_action": "review",
       "local_grants_allowed": false,
@@ -875,20 +1492,32 @@
       "trusted_cli_action": null,
       "untrusted_payload_action": null
     },
-    "name": "stack_data_flow_unconfigured_uses_current",
+    "name": "stack_data_flow_unrecognised_action_uses_current",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "review",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [
         "d1"
       ],
+      "data_flow_strong": false,
       "data_flow_summary": "df summary",
       "edge_floor": null,
       "has_compound_findings": false,
@@ -902,6 +1531,35 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {
+          "codex": {
+            "data_flow_exfiltration": "???"
+          }
+        },
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "review",
+        "explicit_permission_allow": false,
+        "guard_default_action": "review",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": null,
       "scanner_risk_signals": []
     }
@@ -911,6 +1569,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -932,16 +1591,28 @@
     },
     "name": "stack_scanner_raises_to_block",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -955,6 +1626,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": "block",
       "scanner_risk_signals": [
         "scan primary",
@@ -967,6 +1663,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -987,16 +1684,28 @@
     },
     "name": "stack_scanner_raises_compound",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": true,
@@ -1010,6 +1719,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": "block",
       "scanner_risk_signals": [
         "scan primary"
@@ -1021,6 +1755,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "block",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -1041,16 +1776,28 @@
     },
     "name": "stack_scanner_already_blocked",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": "block",
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -1064,6 +1811,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": "block",
       "scanner_risk_signals": [
         "scan primary"
@@ -1075,6 +1847,7 @@
       "approval_context_config_action": "warn",
       "approval_context_data_flow_action": null,
       "approval_context_policy_action": "warn",
+      "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
       "local_grants_allowed": false,
@@ -1095,16 +1868,28 @@
     },
     "name": "stack_scanner_warn_keeps_summary",
     "query": {
-      "approval_context_config_action": "warn",
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
       "cli_action": null,
-      "config_action": "warn",
       "current_action_override_present": false,
-      "data_flow_configured_action": null,
       "data_flow_reasons": [],
+      "data_flow_strong": false,
       "data_flow_summary": null,
       "edge_floor": null,
       "has_compound_findings": false,
@@ -1118,6 +1903,31 @@
       "package_risk_summary": null,
       "payload_action": null,
       "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "balanced",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
       "scanner_action": "warn",
       "scanner_risk_signals": [
         "scan primary"
@@ -3006,6 +3816,199 @@
       "risk_summary": "risk text",
       "scanner_primary_signal": null,
       "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": "block",
+      "approval_context_policy_action": "block",
+      "auto_stop_events": [],
+      "current_config_action": "warn",
+      "data_flow_action": "block",
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "d1"
+      ],
+      "risk_summary": "art summary df summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_data_flow_strong_stops_under_protected",
+    "query": {
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "current_action_override_present": false,
+      "data_flow_reasons": [
+        "d1",
+        "a1"
+      ],
+      "data_flow_strong": true,
+      "data_flow_summary": "df summary",
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": true,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {
+          "codex": {
+            "data_flow_exfiltration": "warn"
+          }
+        },
+        "managed_locks_level": false,
+        "protection_posture": "protected",
+        "protection_posture_explicit": false,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "auto_stop_events": [
+        {
+          "confidence": "strong",
+          "risk_class": "credential_exfiltration"
+        }
+      ],
+      "current_config_action": "block",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_posture_auto_stop_event",
+    "query": {
+      "approval_context": {
+        "command_action_floor": null,
+        "confidence_strong": false,
+        "confidence_text": "",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "current_action_override_present": false,
+      "data_flow_reasons": [],
+      "data_flow_strong": false,
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "policy_config": {
+        "default_action": "review",
+        "harness": "codex",
+        "harness_posture_override": null,
+        "harness_risk_actions": {},
+        "managed_locks_level": false,
+        "protection_posture": "protected",
+        "protection_posture_explicit": true,
+        "risk_actions": {},
+        "security_level": "balanced"
+      },
+      "runtime": {
+        "command_action_floor": null,
+        "confidence_strong": true,
+        "confidence_text": "strong",
+        "configured_override": "warn",
+        "explicit_permission_allow": false,
+        "guard_default_action": "warn",
+        "hard_block": false,
+        "pytest_restricted_sandbox": false,
+        "risk_classes": [
+          "credential_exfiltration"
+        ],
+        "shell_local_script_review": false,
+        "skill_is_known_bad": false,
+        "writes_launch_agent": false
+      },
+      "scanner_action": null,
+      "scanner_risk_signals": []
     }
   }
 ]

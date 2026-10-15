@@ -12,6 +12,7 @@ from typing import TextIO, cast
 from ..approval_gate import ApprovalGateError, public_config, recent_totp_satisfied, require_high_risk
 from ..config import resolve_guard_home_for_user_home
 from ..harness_disconnect_gate import disconnect_requires_fresh_authenticator
+from ..native_resident_revival import revive_native_resident
 from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
 
@@ -22,11 +23,13 @@ _ENROLLMENT_NOTICE = (
     "code replaces the `Approval password` for every protected action and disables cooldown. This notice is "
     "advisory and does not block the current command."
 )
+_REPAIR_ACTION = "doctor.repair"
 _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "apps.",
     "bootstrap.",
     "disconnect",
     "doctor.",
+    "hooks.",
     "init.",
     "install",
     "runtime.",
@@ -91,6 +94,11 @@ def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequire
         return LifecycleGateRequirement(f"trust.{trust_command}", "local-trust")
     if command == "doctor" and _bool_attribute(args, "repair"):
         return LifecycleGateRequirement("doctor.repair", _string_attribute(args, "harness") or "all")
+    if command == "repair":
+        # `repair` is the same operation as `doctor --repair` (dry-run exempt above).
+        return LifecycleGateRequirement("doctor.repair", "all")
+    if command == "hooks" and _string_attribute(args, "hooks_command") == "remove":
+        return LifecycleGateRequirement("hooks.remove", "all")
     return None
 
 
@@ -103,7 +111,14 @@ def enforce_lifecycle_gate(
     requirement = lifecycle_gate_requirement(args)
     if requirement is None:
         return
+    if requirement.action == _REPAIR_ACTION:
+        # A repair has to work when the native runtime is down: lift the respawn
+        # pacing first so the gate check below starts the resident instead of
+        # being refused by a crash-loop backoff. The gate itself is unchanged.
+        revive_native_resident(guard_home)
     authority_home = lifecycle_authority_home(guard_home, requirement=requirement)
+    if requirement.action == _REPAIR_ACTION and authority_home != guard_home:
+        revive_native_resident(authority_home)
     gate = public_config(authority_home)
     desktop_proof = consume_desktop_lifecycle_env(
         totp_enabled=gate.totp_enabled,

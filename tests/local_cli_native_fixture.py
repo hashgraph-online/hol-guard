@@ -43,28 +43,36 @@ def native_test_guard_home() -> Path:
     return _TEST_GUARD_HOME[0] if _TEST_GUARD_HOME else _scratch_guard_home()
 
 
+_KEYED_HOMES: set[Path] = set()
+
+
+def ensure_keyed_home(guard_home: Path) -> None:
+    """Enrol the home's own verifier key before its first native decision."""
+
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    if guard_home not in _KEYED_HOMES:
+        provision_native_verifier_key_for_store(GuardStore(guard_home))
+        _KEYED_HOMES.add(guard_home)
+
+
 @pytest.fixture(autouse=True)
 def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
-    from codex_plugin_scanner.guard import local_cli_grant_decision, local_mcp_grant_decision
-    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
-        provision_native_verifier_key_for_store,
-    )
+    from codex_plugin_scanner.guard import local_cli_grant_decision
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
-    from codex_plugin_scanner.guard.runtime import mcp_server_grants
-    from codex_plugin_scanner.guard.store import GuardStore
 
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(_resolve_native_hook_runtime()))
-    homes: set[Path] = set()
+    homes = _KEYED_HOMES
+    homes.clear()
     _TEST_GUARD_HOME[:] = [tmp_path / "native-guard-home"]
 
     def keyed(native: Callable[..., Any]) -> Callable[..., Any]:
         """Wrap a native grant call so its home holds a verifier key first."""
 
         def call(*, guard_home: Path, **kwargs: Any) -> Any:
-            if guard_home not in homes:
-                provision_native_verifier_key_for_store(GuardStore(guard_home))
-                homes.add(guard_home)
+            ensure_keyed_home(guard_home)
             return native(guard_home=guard_home, **kwargs)
 
         return call
@@ -72,15 +80,8 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.setattr(
         local_cli_grant_decision, "native_local_cli_grant", keyed(local_cli_grant_decision.native_local_cli_grant)
     )
-    monkeypatch.setattr(
-        local_mcp_grant_decision, "native_local_mcp_grant", keyed(local_mcp_grant_decision.native_local_mcp_grant)
-    )
-    monkeypatch.setattr(
-        mcp_server_grants,
-        "native_contributed_mcp_decision",
-        keyed(mcp_server_grants.native_contributed_mcp_decision),
-    )
     yield
-    for home in homes:
+    for home in tuple(homes):
         close_native_residents(home)
+    homes.clear()
     _TEST_GUARD_HOME.clear()

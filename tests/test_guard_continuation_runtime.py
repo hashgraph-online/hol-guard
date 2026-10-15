@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_continuation import continuation_store_call
 
 NOW = "2026-08-24T12:00:00+00:00"
 
@@ -292,7 +293,11 @@ def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, m
     assert len(store.list_events(event_name="review.continuation.terminal")) == 1
 
 
-def test_codex_app_server_result_is_bounded_and_opaque(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_codex_app_server_result_is_bounded_and_opaque(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
+) -> None:
     store = GuardStore(tmp_path / "codex-app-server")
     request = _seed_request(
         store,
@@ -431,7 +436,9 @@ def test_stale_claimant_cannot_commit_after_lease_recovery(tmp_path: Path) -> No
     assert recovered is not None
 
     with pytest.raises(RuntimeError, match="claim ownership changed"):
-        store.finalize_continuation_attempt(
+        continuation_store_call(
+            store,
+            "store_finalize",
             request_id="request-owner",
             offer_hash="offer-owner",
             action="allow_once",

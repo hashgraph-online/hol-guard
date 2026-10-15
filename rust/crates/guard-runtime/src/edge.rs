@@ -275,6 +275,7 @@ fn evaluate_validated_envelope(
         "PreToolUse" | "UserPromptSubmit" => {
             let unavailable_environment =
                 guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+            crate::edge_git_push::install();
             let native = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
                 &harness,
                 &event_name,
@@ -290,6 +291,10 @@ fn evaluate_validated_envelope(
                     home_dir: Some(envelope.source.home_dir.as_str()),
                     cwd: envelope.source.cwd.as_deref(),
                     cdpath_unset: false,
+                    rustup_override_absent: false,
+                    npm_config_inert: false,
+                    shell_home_matches: false,
+                    ripgrep_config_absent: false,
                 },
                 Some(
                     envelope
@@ -299,6 +304,11 @@ fn evaluate_validated_envelope(
                         .unwrap_or(&unavailable_environment),
                 ),
             );
+            let native = crate::omp_yield_input_scan::scan(
+                &envelope.raw_payload,
+                envelope.deadline_budget_ms,
+                native,
+            )?;
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(
                     snapshot,
@@ -370,6 +380,13 @@ fn evaluate_validated_envelope(
     if let Some(store) = origin_store {
         crate::policy_store::native_review_origin::authenticate(store, &mut receipt)?;
     }
+    let harness_response = guard_command::hook_responses::render_edge_response(
+        &harness,
+        &event_name,
+        &result,
+        envelope.recording_only,
+    )
+    .map(Value::Object);
     crate::encode_response(&GuardHookEdgeResultV2 {
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
@@ -378,6 +395,7 @@ fn evaluate_validated_envelope(
         event_name,
         payload_kind: kind,
         result,
+        harness_response,
         receipt,
     })
 }

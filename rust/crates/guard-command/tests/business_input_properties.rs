@@ -1,7 +1,6 @@
 //! Seeded generated-input checks for the owned business input commitment.
 
-#[path = "support/business_properties.rs"]
-mod business_properties;
+use crate::business_properties;
 
 use business_properties::{Rng, CASES};
 use guard_command::business_input::{

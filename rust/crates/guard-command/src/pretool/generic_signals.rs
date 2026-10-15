@@ -139,6 +139,7 @@ pub(crate) fn extract_generic_signals(
         package_values,
         path_values,
         url_values,
+        request_body_or_method: request_body_or_method(&maps),
         prompt_present: !prompt_values.is_empty(),
         env_reference,
         benign_prompt,
@@ -151,5 +152,22 @@ pub(crate) fn extract_generic_signals(
         sensitive_target,
         independent_sensitive_target: guard_bypass_intent || independent_sensitive_target,
         event_hint,
+    })
+}
+
+/// A tool that exposes a request body, headers or a non-GET method is not a
+/// plain read of public content.
+fn request_body_or_method(maps: &[&serde_json::Map<String, Value>]) -> bool {
+    maps.iter().any(|record| {
+        record
+            .iter()
+            .any(|(key, value)| match key.to_ascii_lowercase().as_str() {
+                "method" | "http_method" | "httpmethod" => value
+                    .as_str()
+                    .is_none_or(|method| !method.trim().eq_ignore_ascii_case("get")),
+                "body" | "data" | "json" | "form" | "headers" | "header" | "cookies"
+                | "request_body" | "requestbody" => !value.is_null(),
+                _ => false,
+            })
     })
 }

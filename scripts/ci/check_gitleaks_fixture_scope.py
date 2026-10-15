@@ -25,6 +25,19 @@ def verify_fixture_scope(root: Path, executable: str) -> None:
         ("additional value on fixture line", relative, fixture + " " + unexpected, True),
         ("additional value in fixture file", relative, fixture + "\n" + unexpected, True),
     )
+    pem_relative = Path("rust/crates/guard-contained-process/src/runtime_resources/resource_tests.rs")
+    pem_lines = (root / pem_relative).read_text(encoding="utf-8").splitlines()
+    framing = [index for index, line in enumerate(pem_lines) if "PRIVATE KEY" in line]
+    if len(framing) != 2:
+        raise RuntimeError("private-key framing fixture changed; re-audit its exception")
+    pem_fixture = "\n".join(pem_lines[framing[0] : framing[1] + 1])
+    cases += (
+        ("audited private-key framing", pem_relative, pem_fixture, False),
+        ("private-key framing outside fixture", Path("src/production.rs"), pem_fixture, True),
+        ("changed private-key fixture payload", pem_relative, pem_fixture.replace("YWJjZA==", "ZWZnaA=="), True),
+        ("extra credential on private-key fixture line", pem_relative, pem_fixture + " " + unexpected, True),
+        ("extra credential in private-key fixture file", pem_relative, pem_fixture + "\n" + unexpected, True),
+    )
     with tempfile.TemporaryDirectory(prefix="gitleaks-fixture-scope-") as temporary:
         base = Path(temporary)
         for index, (name, path, content, expect_leak) in enumerate(cases):

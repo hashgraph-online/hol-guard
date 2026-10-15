@@ -487,7 +487,6 @@ def test_runtime_summary_carries_validated_manifest_provenance(
     status = NativeRuntimeStatus("auto", True, True, "native_ready", identity, capabilities, manifest)
     monkeypatch.setattr(runtime_checks, "native_runtime_status", lambda: status)
     monkeypatch.setattr(runtime_checks, "native_mode", lambda: "auto")
-    monkeypatch.setattr(runtime_checks, "hook_fast_path_enabled", lambda: True)
     monkeypatch.setattr(
         runtime_checks.codex_plugin_scanner,
         "__file__",

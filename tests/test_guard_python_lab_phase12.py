@@ -16,8 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_python_phase12_support import (
@@ -110,7 +111,7 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(

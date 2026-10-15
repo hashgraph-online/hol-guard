@@ -15,13 +15,15 @@ request is repeated. A supplier receives the resident's ``need`` reply. Anything
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_execution import _resident_request
+from .native_resident_prerequisite_reason import prerequisite_unavailable_code
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
@@ -55,7 +57,7 @@ def _round_trip(query: Mapping[str, object], guard_home: Path) -> tuple[dict[str
     except (TypeError, ValueError) as error:
         raise _fail("native_mcp_proxy_decision_request_invalid") from error
     if not ensure_resident_prerequisite(guard_home):
-        raise _fail("native_mcp_proxy_decision_prerequisite_unavailable")
+        raise _fail(prerequisite_unavailable_code("native_mcp_proxy_decision_prerequisite_unavailable", guard_home))
     response = _resident_request(
         operation=_OPERATION,
         request=request,
@@ -155,3 +157,55 @@ def cursor_fact(cursor: object) -> dict[str, object]:
     if isinstance(cursor, str):
         return {"kind": "string", "value": cursor}
     return {"kind": "other"}
+
+
+def native_external_archive_bind(
+    params: Mapping[str, Any],
+    replacements: Mapping[str, str],
+    *,
+    requires_binding: bool,
+    guard_home: Path,
+) -> dict[str, Any] | None:
+    """The request ``params`` rebound to verified local archives, or ``None``.
+
+    ``None`` means the resident refused the binding (fail closed). Only the
+    resident's edits are applied, so key order and number formatting of the
+    forwarded request stay what the client sent.
+    """
+
+    payload = native_mcp_proxy_decide(
+        {
+            "check": "external_archive_bind",
+            "params": params,
+            "replacements": [[source, local] for source, local in replacements.items()],
+            "requires_binding": requires_binding,
+        },
+        guard_home=guard_home,
+    )
+    kind = payload.get("kind")
+    if kind == "unchanged":
+        return dict(params)
+    edits = payload.get("edits")
+    if kind != "bound" or not isinstance(edits, list):
+        return None
+    bound = deepcopy(dict(params))
+    for edit in edits:
+        slot: Any = bound
+        *parents, last = edit["path"]
+        for step in parents:
+            slot = slot[step]
+        slot[last] = edit["value"]
+    return bound
+
+
+def native_package_reason_signals(reasons: Sequence[object], *, guard_home: Path) -> tuple[dict[str, Any], ...]:
+    """The risk signals the resident projects from a package evaluation's reasons."""
+
+    payload = native_mcp_proxy_decide(
+        {"check": "package_reason_signals", "reasons": list(reasons)},
+        guard_home=guard_home,
+    )
+    signals = payload.get("signals")
+    if not isinstance(signals, list):
+        raise _fail("native_mcp_proxy_decision_payload_invalid")
+    return tuple(signals)

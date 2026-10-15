@@ -75,6 +75,22 @@ def test_proxied_http_error_preserves_response_body(monkeypatch: pytest.MonkeyPa
     assert response.closed is True
 
 
+def test_proxied_http_error_body_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = _FakeHTTPResponse(b"x" * (1024 * 1024))
+
+    def request_impl(*_args: object, **_kwargs: object) -> _FakeHTTPResponse:
+        return response
+
+    opener = _proxied_opener(monkeypatch, request_impl)
+
+    with pytest.raises(urllib.error.HTTPError) as error:
+        opener.open("https://guard.example")
+
+    assert error.value.code == 401
+    assert len(error.value.read()) == 64 * 1024
+    assert response.closed is True
+
+
 def test_proxy_response_date_header_drives_clock_diagnostic(monkeypatch: pytest.MonkeyPatch) -> None:
     date_header = format_datetime(datetime.now(timezone.utc), usegmt=True)
     response = _FakeManagedResponse({"date": date_header})

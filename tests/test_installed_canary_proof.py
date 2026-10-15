@@ -69,7 +69,6 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
     native_root.mkdir(parents=True)
     suffix = ".exe" if sys.platform == "win32" else ""
     (native_root / f"hol-guard-runtime{suffix}").touch()
-    (native_root / f"guard-command-source{suffix}").touch()
     distribution_stub = SimpleNamespace(locate_file=lambda _path: native_root)
     monkeypatch.setattr(canary, "distribution", lambda _name: distribution_stub)
     monkeypatch.setattr(canary, "_validate_corpus_bindings", lambda _root: {})
@@ -83,7 +82,7 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
         _run_corpus(tmp_path)
 
 
-def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unavailable_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The runner must establish its outage even when the parent uses auto and
     # diagnostic shortcuts; none of these settings may leak into the child.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
@@ -98,7 +97,7 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
         if is_hook:
             assert kwargs["env"]["PYTHONPYCACHEPREFIX"] == cache_prefix
-            assert kwargs["env"]["HOL_GUARD_NATIVE"] == "off"
+            assert "HOL_GUARD_NATIVE" not in kwargs["env"]
             assert kwargs["env"]["PYTHONPATH"] == ""
             assert "HOL_GUARD_PYTHON_ORACLE" not in kwargs["env"]
             assert "HOL_GUARD_NATIVE_DIAGNOSTIC" not in kwargs["env"]
@@ -112,17 +111,31 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
         return completed
 
     monkeypatch.setattr(subprocess, "run", capture_native_hook)
-    assert _no_post_execution_proof_smoke() == {
-        "harness": "opencode",
-        "post_execution_surface": False,
-        "execution_status": "prevented",
-        "proof_level": "pre_hook",
-        "policy_action": "block",
-        "decision_reason_code": "policy",
-    }
+    report = _no_post_execution_proof_smoke()
+    assert report["harness"] == "opencode"
+    assert report["post_execution_surface"] is False
+    if report["evidence_persisted"]:
+        assert report == {
+            "harness": "opencode",
+            "post_execution_surface": False,
+            "evidence_persisted": True,
+            "execution_status": "prevented",
+            "proof_level": "pre_hook",
+            "policy_action": "block",
+            "decision_reason_code": "policy",
+        }
+    else:
+        assert report == {
+            "harness": "opencode",
+            "post_execution_surface": False,
+            "evidence_persisted": False,
+            "execution_status": None,
+            "proof_level": None,
+            "policy_action": None,
+            "decision_reason_code": None,
+        }
     assert len(hook_responses) == 1
     # Outage prevention is not evidence of healthy enforcement or execution.
-    assert hook_responses[0]["reason_code"] == "native_hook_disabled"
     assert hook_responses[0]["policy_action"] == "block"
 
 

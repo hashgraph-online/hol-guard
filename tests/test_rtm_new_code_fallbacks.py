@@ -211,17 +211,9 @@ def test_supply_chain_native_bridge_rejects_bad_call_shapes(monkeypatch: pytest.
     )
 
 
-def test_package_evaluation_without_resident_blocks_and_never_runs_python_evaluator(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_package_evaluation_without_resident_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import native_supply_chain_eval
-    from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
 
-    monkeypatch.setattr(
-        evaluator,
-        "evaluate_package_request_artifact",
-        lambda **_: pytest.fail("Python must not evaluate a non-retaining package request"),
-    )
     monkeypatch.setattr(native_supply_chain_eval, "ensure_resident_prerequisite", lambda _home: False)
     result = local_supply_chain.evaluate_package_request_artifact(
         artifact=SimpleNamespace(
@@ -236,32 +228,20 @@ def test_package_evaluation_without_resident_blocks_and_never_runs_python_evalua
     assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
 
 
-def test_retained_archive_evaluation_is_the_only_python_evaluator_path(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_retained_archive_evaluation_without_resident_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import native_supply_chain_eval
-    from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
 
-    sentinel = object()
-    seen: dict[str, object] = {}
-
-    def python_evaluator(**kwargs: object) -> object:
-        seen.update(kwargs)
-        return sentinel
-
-    monkeypatch.setattr(evaluator, "evaluate_package_request_artifact", python_evaluator)
-    monkeypatch.setattr(
-        native_supply_chain_eval,
-        "evaluate_package_request_native",
-        lambda **_: pytest.fail("a retained-blob request needs the live archive handle"),
-    )
+    monkeypatch.setattr(native_supply_chain_eval, "ensure_resident_prerequisite", lambda _home: False)
     result = local_supply_chain.evaluate_package_request_artifact(
-        artifact=SimpleNamespace(),
-        store=SimpleNamespace(),
+        artifact=SimpleNamespace(
+            artifact_id="package:npm:left-pad",
+            to_dict=lambda: {"artifact_id": "package:npm:left-pad"},
+        ),
+        store=SimpleNamespace(guard_home=tmp_path, path=tmp_path / "guard.db", get_cloud_workspace_id=lambda: None),
         workspace_dir=tmp_path,
         external_archive_network_authorized=True,
         retain_external_archive_blob=True,
     )
-    assert result is sentinel
-    assert seen["retain_external_archive_blob"] is True
-    assert seen["external_archive_network_authorized"] is True
+    assert result.decision == "block"
+    assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
+    assert result.external_archive_downloads == ()

@@ -319,7 +319,7 @@ export function ProtectionCenterWorkspace(props: {
   }, [refreshApprovalGate, refreshProtection, recoveryCommand, recoveryTerminal]);
 
   const handleOpenApprovalSettings = useCallback(() => {
-    props.onNavigate("/settings?section=approval");
+    props.onNavigate("/settings?section=approval&returnTo=extensions");
   }, [props.onNavigate]);
 
   const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";

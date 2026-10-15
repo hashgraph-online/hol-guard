@@ -8,8 +8,9 @@ import pytest
 import yaml
 
 from scripts.ci import select_pytest_coverage as selection
+from tests.test_ci_wait_for_pytest_shards import _TEST_SHARD_COUNT, _pin_shard_count  # noqa: F401
 
-SHARDS = selection.barrier.SHARD_COUNT
+SHARDS = _TEST_SHARD_COUNT
 
 REPOSITORY = "owner/repo"
 RUN = 123456
@@ -329,6 +330,7 @@ def test_cli_publishes_only_the_selected_numeric_artifact_ids(tmp_path, monkeypa
         == "artifact-ids=" + ",".join(str(s["artifact_id"]) for s in expected["shards"]) + "\n"
     )
     assert f"reused {SHARDS - 1}" in capsys.readouterr().out
+
 
 @pytest.mark.parametrize("event,expected", [("pull_request", False), ("push", True), ("merge_group", True)])
 def test_cli_marks_change_planner_skippable_only_off_pull_request(tmp_path, monkeypatch, event, expected):

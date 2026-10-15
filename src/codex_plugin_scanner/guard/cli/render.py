@@ -10,12 +10,15 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, TypeAlias
 
+from ..harness_posture import harness_posture_line
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
 from .render_doctor_readiness import build_doctor_harness_table, readiness_text
+from .render_skill_scan import skill_scan_rows, skill_scan_title
 from .render_uninstall import render_self_uninstall
+from .update_repair_notes import render_protection_repair_failures
 
 try:
     from ..redaction import redact_local_path
@@ -838,6 +841,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
     protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+    protection_line += harness_posture_line(payload)
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
@@ -986,6 +990,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if name:
             value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
             summary.add_row("Protection", value)
+            per_app = harness_posture_line(payload).strip()
+            if per_app:
+                summary.add_row("Per app", per_app.removeprefix("per app: "))
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(
@@ -1615,18 +1622,9 @@ def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, obje
     table.add_column("Risks", justify="right", no_wrap=True)
     table.add_column("Severities", no_wrap=True)
     table.add_column("Signals", overflow="fold")
-    for entry in skill_scan:
-        severity_text = ", ".join(_coerce_string_list(entry.get("severities")))
-        signal_text = " ".join(_coerce_string_list(entry.get("signal_ids")))
-        risk_count = str(entry.get("risk_count", 0))
-        table.add_row(str(entry.get("skill_path", "?")), risk_count, severity_text, signal_text)
-    console.print(
-        Panel(
-            table,
-            title=f"[bold red]Skill security scan — {len(skill_scan)} file(s) with risks[/bold red]",
-            border_style="red",
-        )
-    )
+    for row in skill_scan_rows(skill_scan):
+        table.add_row(*row)
+    console.print(Panel(table, title=f"[bold red]{skill_scan_title(skill_scan)}[/bold red]", border_style="red"))
 
 
 def _managed_install_workspace_label(workspace: object) -> str:
@@ -1943,6 +1941,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     error = str(payload.get("error") or "").strip()
     if notes:
         console.print(Panel("\n".join(f"{_bullet()} {note}" for note in notes), title="Notes", border_style="blue"))
+    render_protection_repair_failures(console, payload, _bullet(), Panel)
     if status in {"updated", "failed"} and stdout and stdout != str(payload.get("message") or "").strip():
         console.print(Panel(stdout, title="stdout", border_style="green"))
     if status == "failed" and stderr:
@@ -2277,11 +2276,22 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
     if isinstance(request, dict):
         body.add_row("Command", _command_text(request.get("command")))
         body.add_row("Kind", str(request.get("install_kind") or "unknown"))
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
     if isinstance(verdict, dict):
         action = str(verdict.get("action") or "review")
         body.add_row("Action", _action_text(action))
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
+        if action == "block" and isinstance(supply_chain_evaluation, dict):
+            reasons = _coerce_dict_list(supply_chain_evaluation.get("reasons"))
+            user_copy = supply_chain_evaluation.get("user_copy")
+            if (
+                isinstance(user_copy, dict)
+                and user_copy.get("next_step") == "hol-guard connect"
+                and any(item.get("code") == "cloud_auth_error" for item in reasons)
+                and not any(item.get("code") == "saved_package_block" for item in reasons)
+            ):
+                body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
     guidance = _protect_guidance_lines(payload)
     if guidance:

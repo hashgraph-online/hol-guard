@@ -31,13 +31,6 @@ def _segments_allowed(
     ).allowed
 
 
-def canonical_home_git_c_path(command_text: str) -> str | None:
-    """Return an unquoted canonical current-user Git ``-C`` operand."""
-
-    answer = compound_git_inspection_native("home_git_c_path", command_text=command_text)
-    return answer.value if answer.allowed else None
-
-
 def is_low_risk_compound_git_inspection(context: ShellExecutionContext) -> bool:
     """Recognize a deterministic leading-cd Git routine."""
 
@@ -59,12 +52,6 @@ def is_low_risk_git_inspection_segment(
     return _segments_allowed("segment", (segment,), home_dir=home_dir)
 
 
-def is_low_risk_git_push_segment(segment: ShellExecutionSegment) -> bool:
-    """Recognize one current-branch push to a verified GitHub origin."""
-
-    return _segments_allowed("push_segment", (segment,))
-
-
 def is_low_risk_standalone_git_routine(
     context: ShellExecutionContext,
     *,
@@ -75,46 +62,12 @@ def is_low_risk_standalone_git_routine(
     return _segments_allowed("standalone", context.segments, complete=context.complete, home_dir=home_dir)
 
 
-def is_safe_standalone_git_object_existence_query(
-    command_text: str,
-    *,
-    cwd: Path,
-) -> bool:
-    """Recognize an exact, output-free Git object existence query."""
-
-    return compound_git_inspection_native(
-        "object_existence_query",
-        command_text=command_text,
-        cwd=cwd,
-    ).allowed
-
-
-def git_log_has_execution_free_config(
-    cwd: Path,
-    *,
-    git_binary: Path,
-    pager_key: str = "pager.log",
-) -> bool:
-    """Return whether Git log-family output cannot invoke an executable pager."""
-
-    return compound_git_inspection_native(
-        "log_config",
-        cwd=cwd,
-        git_binary=git_binary,
-        pager_key=pager_key,
-    ).allowed
-
-
 def _git_show_has_execution_free_config(
     segment: ShellExecutionSegment,
     *,
     repository_path: str | None,
 ) -> bool:
     return _segments_allowed("show_config", (segment,), repository_path=repository_path)
-
-
-def _safe_repository_path(value: str) -> bool:
-    return compound_git_inspection_native("repository_path", value=value).allowed
 
 
 def _cached_diff_pathspecs_allowed(values: Sequence[str]) -> bool:
@@ -126,11 +79,7 @@ def _cached_diff_pathspecs_allowed(values: Sequence[str]) -> bool:
 
 
 __all__ = (
-    "canonical_home_git_c_path",
-    "git_log_has_execution_free_config",
     "is_low_risk_compound_git_inspection",
     "is_low_risk_git_inspection_segment",
-    "is_low_risk_git_push_segment",
     "is_low_risk_standalone_git_routine",
-    "is_safe_standalone_git_object_existence_query",
 )

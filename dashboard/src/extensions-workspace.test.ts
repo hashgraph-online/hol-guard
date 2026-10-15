@@ -91,7 +91,7 @@ const unenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityN
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(unenrolledMarkup, /Finish setting up protection/);
+assert.match(unenrolledMarkup, /Finish extension setup/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
@@ -121,12 +121,10 @@ const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthori
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(approvalSetupMarkup, /Set up local approval before enrollment/);
-assert.match(approvalSetupMarkup, /Set up approval/);
-assert.match(approvalSetupMarkup, /Guard Cloud sign-in and account MFA are separate and do not enable this gate/);
-assert.match(approvalSetupMarkup, /Settings &gt; Approval gate/);
-assert.match(approvalSetupMarkup, /Ask for proof on allow decisions/);
-assert.match(approvalSetupMarkup, /Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown/);
+assert.match(approvalSetupMarkup, /Set up local approval/);
+assert.match(approvalSetupMarkup, /Open approval settings/);
+assert.match(approvalSetupMarkup, /Guard Cloud is not required/);
+assert.doesNotMatch(approvalSetupMarkup, /enrollment|account MFA|Authenticator app|Check again/);
 assert.doesNotMatch(approvalSetupMarkup, /Authy/);
 assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
 assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);
@@ -138,7 +136,7 @@ const disabledApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuth
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(disabledApprovalMarkup, /Set up local approval before enrollment/);
+assert.match(disabledApprovalMarkup, /Local approval is off/);
 assert.doesNotMatch(disabledApprovalMarkup, /command controls enroll/);
 
 const pendingApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {

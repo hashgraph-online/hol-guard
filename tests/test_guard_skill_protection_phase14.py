@@ -8,8 +8,11 @@ import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SkillRiskDetector
+from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
 from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk
+from tests.native_detector_support import NativeDetector
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
 _PACKAGE_INSTALL_SKILL = """\
 ---
@@ -40,8 +43,9 @@ def test_phase14_skill_content_flags_common_install_aliases(command: str) -> Non
     assert any(signal.signal_id == "skill.package-install" for signal in signals)
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 def test_phase14_skill_detector_emits_package_install_signal(tmp_path: Path) -> None:
-    detector = SkillRiskDetector()
+    detector = NativeDetector("skill.content")
     action = GuardActionEnvelope(
         schema_version=1,
         action_id="",

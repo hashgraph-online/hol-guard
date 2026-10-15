@@ -772,7 +772,7 @@ def test_package_manager_protection_scopes_health_to_detected_managers(
     monkeypatch.setattr(
         local_supply_chain_module,
         "package_shim_supported_managers",
-        lambda: supported,
+        lambda _guard_home=None: supported,
     )
     monkeypatch.setattr(
         local_supply_chain_module,

@@ -36,19 +36,40 @@ const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
 #[cfg(not(guard_source_bootstrap))]
-static EMBEDDED_PROGRAM: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/native-command-program.v1.json"));
-// Only the host build dependency has no packaged default. It compiles supplied
-// sources; attempts to evaluate a default fail closed through normal admission.
+static EMBEDDED_PROGRAM: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/native-command-program.v1.json.zst"
+));
+/// SHA-256 hex of the exact packaged program bytes (with trailing newline).
+#[cfg(not(guard_source_bootstrap))]
+pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = env!("GUARD_PACKAGED_PROGRAM_SHA256");
 #[cfg(guard_source_bootstrap)]
-static EMBEDDED_PROGRAM: &[u8] = &[];
+pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = "";
 
 /// The exact program admitted by the runtime, also used for rule attestation.
 // One shared allocation and accessor keep multi-megabyte data out of caller
 // codegen units. Constant propagation otherwise emits redundant binary copies.
+// Only the host build dependency has no packaged default. It compiles supplied
+// sources; attempts to evaluate a default fail closed through normal admission.
 #[inline(never)]
 pub fn packaged_command_program_bytes() -> &'static [u8] {
-    EMBEDDED_PROGRAM
+    #[cfg(not(guard_source_bootstrap))]
+    {
+        static DECODED: OnceLock<Box<[u8]>> = OnceLock::new();
+        DECODED
+            .get_or_init(|| {
+                crate::packaged_blob::decode(
+                    EMBEDDED_PROGRAM,
+                    env!("GUARD_PACKAGED_PROGRAM_LEN"),
+                    env!("GUARD_PACKAGED_PROGRAM_SHA256"),
+                )
+            })
+            .as_ref()
+    }
+    #[cfg(guard_source_bootstrap)]
+    {
+        &[]
+    }
 }
 
 #[path = "native_command_program_admission.rs"]
@@ -319,6 +340,65 @@ impl NativeCommandProgram {
             .iter()
             .map(|node| node.operation.as_str())
             .collect()
+    }
+
+    /// Program names one of which every command matching this extension must
+    /// run: declared executables and, per rule, the executables its matcher
+    /// requires. Compatibility-only rules are attributed by `compatibility`.
+    /// `None` means some rule can match without naming a known program.
+    pub(crate) fn extension_names(
+        &self,
+        extension_index: usize,
+        compatibility: Option<&[&str]>,
+    ) -> Option<BTreeSet<String>> {
+        let mut names: BTreeSet<String> = self.extensions[extension_index]
+            .executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        for rule in self
+            .rules
+            .iter()
+            .filter(|rule| rule.extension_index == extension_index)
+        {
+            match rule.matcher {
+                Some(node) => names.extend(self.required_executables(node, 0)?),
+                None => names.extend(compatibility?.iter().map(|name| (*name).to_owned())),
+            }
+        }
+        Some(names)
+    }
+
+    /// Executables one of which a match of `node` must run. Alternatives need
+    /// all of theirs; a conjunction needs any one child's. Matchers without a
+    /// declared executable gate have no such set.
+    fn required_executables(&self, node: usize, depth: usize) -> Option<BTreeSet<String>> {
+        let executables = match &self.nodes.get(node)?.matcher {
+            Matcher::Executable(node) => node.contract.executables.clone(),
+            Matcher::Arguments(node) => node.executables.clone(),
+            Matcher::VersionedPackageSubcommand(node) => node.executables.clone(),
+            Matcher::Any(children) if depth < MAX_DEPTH && !children.is_empty() => {
+                let mut union = BTreeSet::new();
+                for child in children {
+                    union.extend(self.required_executables(*child, depth + 1)?);
+                }
+                union
+            }
+            Matcher::All(children) if depth < MAX_DEPTH => children
+                .iter()
+                .filter_map(|child| self.required_executables(*child, depth + 1))
+                .min_by_key(BTreeSet::len)?,
+            Matcher::Pipeline(producer, consumer) if depth < MAX_DEPTH => [producer, consumer]
+                .into_iter()
+                .filter_map(|child| self.required_executables(*child, depth + 1))
+                .min_by_key(BTreeSet::len)?,
+            _ => return None,
+        };
+        let executables: BTreeSet<String> = executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        (!executables.is_empty()).then_some(executables)
     }
 }
 

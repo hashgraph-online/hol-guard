@@ -10,7 +10,11 @@ import pytest
 import yaml
 
 _ROOT = Path(__file__).resolve().parents[1]
-_POLICIES = ("scripts/ci/check_wheel_size.py", "ci/package_size/budgets.json")
+_POLICIES = (
+    "scripts/ci/check_wheel_size.py",
+    "ci/package_size/budgets.json",
+    "ci/package_size/alpha-native-budgets.json",
+)
 
 
 def _fixture_env(**values: str) -> dict[str, str]:

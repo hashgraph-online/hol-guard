@@ -1,9 +1,11 @@
 // Telemetry only. Probe metadata is diagnostic-only; Guard decisions and responses are unchanged.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
 const logPath = process.env.GUARD_GAUNTLET_OBSERVER_LOG;
 const guardPort = process.env.GUARD_GAUNTLET_DAEMON_PORT;
+const hostLogPath = process.env.GUARD_GAUNTLET_HOST_OBSERVER_LOG;
 const actualFetch = globalThis.fetch.bind(globalThis);
 
 type JsonRecord = Record<string, unknown>;
@@ -51,6 +53,28 @@ function publicNativeObservation(body: unknown): JsonRecord | undefined {
       command_extensions: receipt.command_extensions,
     },
   };
+}
+
+const TEXT_KEYS = ["systemMessage", "message", "stopReason", "additionalContext", "permissionDecisionReason"];
+
+// Names of response fields that carry text the harness would render; mirrors interruptions.py.
+// Only names are recorded, never the text. Text counts from either level, so an empty top-level
+// string never shadows a non-empty hookSpecificOutput one; other keys prefer the nested value.
+function renderedFields(body: unknown): string[] {
+  if (!body || typeof body !== "object") return [];
+  const response = body as JsonRecord;
+  const nested = response.hookSpecificOutput;
+  const specific: JsonRecord = nested && typeof nested === "object" ? (nested as JsonRecord) : {};
+  const hasText = (key: string): boolean =>
+    [response, specific].some(source => typeof source[key] === "string" && (source[key] as string).trim() !== "");
+  const present = (value: unknown): boolean => value != null && !(typeof value === "string" && value.trim() === "");
+  const flat: JsonRecord = { ...response };
+  for (const [key, value] of Object.entries(specific)) if (present(value) || !(key in flat)) flat[key] = value;
+  const fields = TEXT_KEYS.filter(hasText);
+  const loud = flat.notice === "warning" || flat.notice === "excerpt";
+  if (loud) fields.push("notice");
+  if (hasText("reason") && (loud || flat.policy_action === "warn")) fields.push("reason");
+  return fields.sort();
 }
 
 function record(value: Record<string, unknown>): void {
@@ -112,6 +136,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
       decision: body.decision,
       policy_action: body.policy_action,
       reason_code: body.reason_code,
+      rendered_fields: renderedFields(body),
       model_output_action: body.model_output_action,
       reviewed_output_sha256: body.reviewed_output_sha256,
       response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
@@ -125,4 +150,79 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   return response;
 }) as typeof fetch;
 
-export default function (): void {}
+// Each argument is single-quoted with embedded apostrophes written as '\'' (canonical shell argv).
+const QUOTED = String.raw`'(?:[^']|'\\'')+'`;
+const CONTAINED_WRAPPER = new RegExp(
+  `^${QUOTED} 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
+    `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}'(?: '--home' ${QUOTED})?$`,
+);
+
+// Guard's adapter deletes its contained-test request once the wrapper runs. Read only the exact
+// owner-only file the executing wrapper names, before it runs; the judge binds the bytes by digest.
+function containedRequest(event: JsonRecord): JsonRecord | undefined {
+  const command = (event.args as JsonRecord | undefined)?.command;
+  if (event.toolName !== "bash" || typeof command !== "string") return undefined;
+  const path = CONTAINED_WRAPPER.exec(command)?.[1]?.slice(1, -1).replaceAll("'\\''", "'");
+  if (!path || basename(path) !== "request.json" || !basename(dirname(path)).startsWith("hol-guard-contained-test-")) {
+    return undefined;
+  }
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const info = fstatSync(descriptor);
+    if (!info.isFile() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600 || info.size > 1_048_576) {
+      return undefined;
+    }
+    const request = readFileSync(descriptor);
+    if (request.length > 1_048_576) return undefined;
+    return { type: "contained_request_capture", toolCallId: event.toolCallId, request: request.toString("base64") };
+  } catch {
+    return undefined;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+export default function (api: {
+  on(event: string, handler: (event: JsonRecord) => void): void;
+}): void {
+  const observe = (event: JsonRecord): void => {
+    if (!hostLogPath) throw new Error("Gauntlet host observer log is not configured");
+    appendFileSync(hostLogPath, JSON.stringify(event) + "\n", { mode: 0o600 });
+  };
+  // SDK extension events include delegated sessions; print mode's stdout only
+  // carries the primary session. Observe actual events without rewriting them.
+  api.on("message_end", event => {
+    if ((event.message as JsonRecord | undefined)?.role === "assistant") observe(event);
+  });
+  const evals = new Set<string>();
+  const bridges = new Map<string, string[]>();
+  api.on("tool_execution_start", event => {
+    if (event.toolName === "eval" && typeof event.toolCallId === "string") evals.add(event.toolCallId);
+    const request = containedRequest(event);
+    observe(event);
+    if (request) observe(request);
+  });
+  api.on("tool_execution_end", event => {
+    observe(event);
+    if (typeof event.toolCallId === "string") evals.delete(event.toolCallId);
+  });
+  // The pinned SDK invokes eval bridge tools directly: they emit extension
+  // tool_call/tool_result hooks, but no agent-core execution events.
+  api.on("tool_call", event => {
+    if (typeof event.toolCallId !== "string" || !event.toolCallId.startsWith("js-")) return;
+    // These SDK hooks expose no parent identity. Record the actual candidates
+    // without guessing or interrupting overlapping executions.
+    const parents = [...evals];
+    bridges.set(event.toolCallId, parents);
+    observe({ type: "eval_bridge_start", parentToolCallId: parents.length === 1 ? parents[0] : null,
+      parentToolCallIds: parents, event });
+  });
+  api.on("tool_result", event => {
+    if (typeof event.toolCallId !== "string" || !event.toolCallId.startsWith("js-")) return;
+    const parents = bridges.get(event.toolCallId) ?? [];
+    observe({ type: "eval_bridge_end", parentToolCallId: parents.length === 1 ? parents[0] : null,
+      parentToolCallIds: parents, event });
+    bridges.delete(event.toolCallId);
+  });
+}

@@ -1,0 +1,1322 @@
+{
+  "client_key": [
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {},
+      "workspace": null
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {},
+      "workspace": ""
+    },
+    {
+      "digest": "9bfff9907d9594875cd0a1c09c0fae3d",
+      "payload": {},
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "e54f19a10136292296cf0f365f9ce901",
+      "payload": {},
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "e4098525c95396d35263a052f9a6a24b",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "e4098525c95396d35263a052f9a6a24b",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "66886ed456feb0ec4d451c62ba18e8af",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "885b3f58ae649c0e0ad954566593e851",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "cd86360e178934308c1b723623d03b7e",
+      "payload": {
+        "conversation_id": "c9",
+        "hook_event_name": "pre_tool_use"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "cd86360e178934308c1b723623d03b7e",
+      "payload": {
+        "conversation_id": "c9",
+        "hook_event_name": "pre_tool_use"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "9a0bd89662126e55fde820b019868e37",
+      "payload": {
+        "conversation_id": "c9",
+        "hook_event_name": "pre_tool_use"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "4f5719390d4c156296e8676e49819da9",
+      "payload": {
+        "conversation_id": "c9",
+        "hook_event_name": "pre_tool_use"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "c15007fbfbc17a79e767f5111c2ecd87",
+      "payload": {
+        "hook_event_name": "PermissionRequest",
+        "thread_id": "t3"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "c15007fbfbc17a79e767f5111c2ecd87",
+      "payload": {
+        "hook_event_name": "PermissionRequest",
+        "thread_id": "t3"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "3b712aed422555892dfead123b955f21",
+      "payload": {
+        "hook_event_name": "PermissionRequest",
+        "thread_id": "t3"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "5c95230b2162aff12db060046fc71a69",
+      "payload": {
+        "hook_event_name": "PermissionRequest",
+        "thread_id": "t3"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "e4098525c95396d35263a052f9a6a24b",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "hi",
+        "session_id": "s1"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "e4098525c95396d35263a052f9a6a24b",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "hi",
+        "session_id": "s1"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "66886ed456feb0ec4d451c62ba18e8af",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "hi",
+        "session_id": "s1"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "885b3f58ae649c0e0ad954566593e851",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "hi",
+        "session_id": "s1"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {
+        "hook_event_name": "user-prompt-submitted"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {
+        "hook_event_name": "user-prompt-submitted"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "9bfff9907d9594875cd0a1c09c0fae3d",
+      "payload": {
+        "hook_event_name": "user-prompt-submitted"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "e54f19a10136292296cf0f365f9ce901",
+      "payload": {
+        "hook_event_name": "user-prompt-submitted"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "b3e0c1657e118b59cee014c1aa7211b6",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "s2",
+        "tool_response": {
+          "ok": true
+        }
+      },
+      "workspace": null
+    },
+    {
+      "digest": "b3e0c1657e118b59cee014c1aa7211b6",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "s2",
+        "tool_response": {
+          "ok": true
+        }
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "ffc4868d0cac14defe7f2c37af8852b6",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "s2",
+        "tool_response": {
+          "ok": true
+        }
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "012b56ade36f7cc685c0d693d747daa0",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "s2",
+        "tool_response": {
+          "ok": true
+        }
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {
+        "event": "SessionStart"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {
+        "event": "SessionStart"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "9bfff9907d9594875cd0a1c09c0fae3d",
+      "payload": {
+        "event": "SessionStart"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "e54f19a10136292296cf0f365f9ce901",
+      "payload": {
+        "event": "SessionStart"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "2f125dbbf456d3eb13b398d879103738",
+      "payload": {
+        "conversation_id": "c1",
+        "hook_event_name": "PreToolUse",
+        "session_id": "",
+        "thread_id": "t1"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "2f125dbbf456d3eb13b398d879103738",
+      "payload": {
+        "conversation_id": "c1",
+        "hook_event_name": "PreToolUse",
+        "session_id": "",
+        "thread_id": "t1"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "48bc1cc2044b1bf1b8e0d6f7c4967589",
+      "payload": {
+        "conversation_id": "c1",
+        "hook_event_name": "PreToolUse",
+        "session_id": "",
+        "thread_id": "t1"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "773d20c4c15370f44639c3bf632ea718",
+      "payload": {
+        "conversation_id": "c1",
+        "hook_event_name": "PreToolUse",
+        "session_id": "",
+        "thread_id": "t1"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "12db7da678f7ab7a154369a8fe7ccad7",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": 7,
+        "thread_id": "t2"
+      },
+      "workspace": null
+    },
+    {
+      "digest": "12db7da678f7ab7a154369a8fe7ccad7",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": 7,
+        "thread_id": "t2"
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "ab0031497e9ddf6340b78204e0861bba",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": 7,
+        "thread_id": "t2"
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "50c1dd654f480b1c218a378d433c3ab2",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": 7,
+        "thread_id": "t2"
+      },
+      "workspace": "/work/spaceé"
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "tool_input": {
+          "text": "café ☃ 😀"
+        }
+      },
+      "workspace": null
+    },
+    {
+      "digest": "6e340b9cffb37a989ca544e6bb780a2c",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "tool_input": {
+          "text": "café ☃ 😀"
+        }
+      },
+      "workspace": ""
+    },
+    {
+      "digest": "9bfff9907d9594875cd0a1c09c0fae3d",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "tool_input": {
+          "text": "café ☃ 😀"
+        }
+      },
+      "workspace": "/work/space"
+    },
+    {
+      "digest": "e54f19a10136292296cf0f365f9ce901",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "tool_input": {
+          "text": "café ☃ 😀"
+        }
+      },
+      "workspace": "/work/spaceé"
+    }
+  ],
+  "deadline": [
+    {
+      "admission": 3.0,
+      "expires_offset": 1.0,
+      "hint": 3.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 2.75,
+      "hint": 3.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 2.75,
+      "hint": 3.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 0.75,
+      "hint": 3.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 3.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 10.75,
+      "hint": 3.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 1.0,
+      "hint": 3.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 2.75,
+      "hint": 3.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 2.75,
+      "hint": 3.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -6.25,
+      "hint": 3.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -3.25,
+      "hint": 3.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 3.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.1,
+      "hint": 0.05,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.1,
+      "hint": 0.05,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.1,
+      "hint": 0.05,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 0.75,
+      "hint": 0.05,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 0.05,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 10.75,
+      "hint": 0.05,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.1,
+      "hint": 0.05,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.1,
+      "hint": 0.05,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.1,
+      "hint": 0.05,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -8.9,
+      "hint": 0.05,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -5.9,
+      "hint": 0.05,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 1.1,
+      "hint": 0.05,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 1.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 10.75,
+      "hint": 1.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 0.75,
+      "hint": 1.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -8.25,
+      "hint": 1.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -5.25,
+      "hint": 1.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 1.75,
+      "hint": 1.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 1.0,
+      "hint": 12.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 12.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 12.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 0.75,
+      "hint": 12.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 12.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 10.75,
+      "hint": 12.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 1.0,
+      "hint": 12.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 12.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 12.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 0.75,
+      "hint": 12.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 12.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 10.75,
+      "hint": 12.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 1.0,
+      "hint": 4.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 4.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 4.0,
+      "hint_missing": true,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 0.75,
+      "hint": 4.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 3.75,
+      "hint": 4.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 10.75,
+      "hint": 4.0,
+      "hint_missing": true,
+      "prompt": true,
+      "transport": 11.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 1.0,
+      "hint": 4.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 1.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 4.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 4.0
+    },
+    {
+      "admission": 3.0,
+      "expires_offset": 3.75,
+      "hint": 4.0,
+      "hint_missing": false,
+      "prompt": false,
+      "transport": 11.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -5.25,
+      "hint": 4.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 1.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": -2.25,
+      "hint": 4.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 4.0
+    },
+    {
+      "admission": 10.0,
+      "expires_offset": 4.75,
+      "hint": 4.0,
+      "hint_missing": false,
+      "prompt": true,
+      "transport": 11.0
+    }
+  ],
+  "directory_authority": [
+    {
+      "candidate": "",
+      "rejected": "relative_path"
+    },
+    {
+      "candidate": "relative/dir",
+      "rejected": "relative_path"
+    },
+    {
+      "candidate": "~no-such-user-for-parity",
+      "rejected": "relative_path"
+    },
+    {
+      "accepted": ".",
+      "candidate": "{root}"
+    },
+    {
+      "accepted": ".",
+      "candidate": "{root}/"
+    },
+    {
+      "accepted": "a",
+      "candidate": "{root}/a"
+    },
+    {
+      "accepted": "a/b",
+      "candidate": "{root}/a/./b"
+    },
+    {
+      "accepted": "b",
+      "candidate": "{root}/a/../b"
+    },
+    {
+      "candidate": "{root}/../escape",
+      "rejected": "unexpected_root"
+    },
+    {
+      "candidate": "{root}-sibling",
+      "rejected": "unexpected_root"
+    },
+    {
+      "accepted": ".",
+      "candidate": "{root}/a/.."
+    }
+  ],
+  "exec_command_workdir": [
+    {
+      "payload": {},
+      "provided": false,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": "/w"
+        },
+        "tool_name": "Bash"
+      },
+      "provided": false,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_name": "exec_command"
+      },
+      "provided": false,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": {},
+        "tool_name": "exec_command"
+      },
+      "provided": false,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": [],
+        "tool_name": "exec_command"
+      },
+      "provided": false,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": "/w/x"
+        },
+        "tool_name": "Exec_Command"
+      },
+      "provided": true,
+      "workdir": "/w/x"
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": "/w/./x/"
+        },
+        "tool_name": " exec_command "
+      },
+      "provided": true,
+      "workdir": "/w/x"
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": 5
+        },
+        "tool_name": "exec_command"
+      },
+      "provided": true,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": ""
+        },
+        "tool_name": "exec_command"
+      },
+      "provided": true,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": "none"
+        },
+        "tool_name": "exec_command"
+      },
+      "provided": true,
+      "workdir": null
+    },
+    {
+      "payload": {
+        "tool_input": {
+          "workdir": " NULL "
+        },
+        "tool_name": "exec_command"
+      },
+      "provided": true,
+      "workdir": null
+    }
+  ],
+  "lane": [
+    {
+      "event_name": "PreToolUse",
+      "lane": "decision",
+      "payload": {}
+    },
+    {
+      "event_name": "PreToolUse",
+      "lane": "decision",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash"
+      }
+    },
+    {
+      "event_name": "PreToolUse",
+      "lane": "decision",
+      "payload": {
+        "conversation_id": "c9",
+        "hook_event_name": "pre_tool_use"
+      }
+    },
+    {
+      "event_name": "PermissionRequest",
+      "lane": "decision",
+      "payload": {
+        "hook_event_name": "PermissionRequest",
+        "thread_id": "t3"
+      }
+    },
+    {
+      "event_name": "UserPromptSubmit",
+      "lane": "decision",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "hi",
+        "session_id": "s1"
+      }
+    },
+    {
+      "event_name": "UserPromptSubmit",
+      "lane": "decision",
+      "payload": {
+        "hook_event_name": "user-prompt-submitted"
+      }
+    },
+    {
+      "event_name": "PostToolUse",
+      "lane": "content-security",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "s2",
+        "tool_response": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "event_name": "SessionStart",
+      "lane": "content-security",
+      "payload": {
+        "event": "SessionStart"
+      }
+    },
+    {
+      "event_name": "PreToolUse",
+      "lane": "decision",
+      "payload": {
+        "conversation_id": "c1",
+        "hook_event_name": "PreToolUse",
+        "session_id": "",
+        "thread_id": "t1"
+      }
+    },
+    {
+      "event_name": "PreToolUse",
+      "lane": "decision",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": 7,
+        "thread_id": "t2"
+      }
+    },
+    {
+      "event_name": "PostToolUse",
+      "lane": "content-security",
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "tool_input": {
+          "text": "café ☃ 😀"
+        }
+      }
+    }
+  ],
+  "payload_size": [
+    {
+      "bytes": 2,
+      "payload": {}
+    },
+    {
+      "bytes": 69,
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "s1",
+        "tool_name": "Bash"
+      }
+    },
+    {
+      "bytes": 57,
+      "payload": {
+        "conversation_id": "c9",
+        "hook_event_name": "pre_tool_use"
+      }
+    },
+    {
+      "bytes": 56,
+      "payload": {
+        "hook_event_name": "PermissionRequest",
+        "thread_id": "t3"
+      }
+    },
+    {
+      "bytes": 70,
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "hi",
+        "session_id": "s1"
+      }
+    },
+    {
+      "bytes": 43,
+      "payload": {
+        "hook_event_name": "user-prompt-submitted"
+      }
+    },
+    {
+      "bytes": 79,
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "s2",
+        "tool_response": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "bytes": 24,
+      "payload": {
+        "event": "SessionStart"
+      }
+    },
+    {
+      "bytes": 88,
+      "payload": {
+        "conversation_id": "c1",
+        "hook_event_name": "PreToolUse",
+        "session_id": "",
+        "thread_id": "t1"
+      }
+    },
+    {
+      "bytes": 64,
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "session_id": 7,
+        "thread_id": "t2"
+      }
+    },
+    {
+      "bytes": 72,
+      "payload": {
+        "hook_event_name": "PostToolUse",
+        "tool_input": {
+          "text": "café ☃ 😀"
+        }
+      }
+    }
+  ],
+  "remaining_hint": [
+    {
+      "payload": {},
+      "remaining_payload_keys": [],
+      "remaining_seconds": 3.0
+    },
+    {
+      "payload": {
+        "guard_remaining_seconds": 2.5
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 2.5
+    },
+    {
+      "payload": {
+        "guard_remaining_seconds": 7
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 7.0
+    },
+    {
+      "payload": {
+        "guard_remaining_ms": 1500
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 1.5
+    },
+    {
+      "payload": {
+        "guard_remaining_ms": 900,
+        "guard_remaining_seconds": true
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 0.9
+    },
+    {
+      "payload": {
+        "guard_remaining_seconds": "3"
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 3.0
+    },
+    {
+      "payload": {
+        "guard_remaining_ms": 2000,
+        "guard_remaining_seconds": "inf"
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 2.0
+    },
+    {
+      "payload": {
+        "guard_remaining_seconds": "nan"
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 3.0
+    },
+    {
+      "payload": {
+        "guard_remaining_ms": 0
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 0.0
+    },
+    {
+      "payload": {
+        "guard_remaining_seconds": -1
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": -1.0
+    },
+    {
+      "payload": {
+        "guard_remaining_ms": 9000,
+        "guard_remaining_seconds": 3
+      },
+      "remaining_payload_keys": [],
+      "remaining_seconds": 3.0
+    }
+  ],
+  "schema": "hook-admission-parity.v1",
+  "workspace_string": [
+    {
+      "normalized": null,
+      "value": null
+    },
+    {
+      "normalized": null,
+      "value": 7
+    },
+    {
+      "normalized": null,
+      "value": ""
+    },
+    {
+      "normalized": null,
+      "value": "   "
+    },
+    {
+      "normalized": null,
+      "value": "None"
+    },
+    {
+      "normalized": null,
+      "value": "null"
+    },
+    {
+      "normalized": null,
+      "value": "NULL"
+    },
+    {
+      "normalized": "/work/space",
+      "value": "/work/space"
+    },
+    {
+      "normalized": "/work/space",
+      "value": "/work/space/"
+    },
+    {
+      "normalized": "/work/space",
+      "value": "/work/./space/../space"
+    },
+    {
+      "normalized": "/work",
+      "value": "/work/None"
+    },
+    {
+      "normalized": "/",
+      "value": "/None"
+    },
+    {
+      "normalized": "/work/space",
+      "value": " /work/space "
+    },
+    {
+      "normalized": "/work/space",
+      "value": "/work//space"
+    }
+  ]
+}

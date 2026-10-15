@@ -340,7 +340,7 @@ def test_grok_pretool_posts_to_daemon(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
+    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon
 
     posted: list[str] = []
 
@@ -367,18 +367,20 @@ def test_grok_pretool_posts_to_daemon(
             return FakeResponse()
 
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_daemon,
         "_daemon_hook_endpoint",
         lambda *_args, **_kwargs: "http://127.0.0.1:4781/v1/hooks/grok",
     )
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_daemon_auth_token", lambda *_args, **_kwargs: "token")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_build_loopback_opener", lambda: FakeOpener())
-    stdout, _stderr, code = bounded_cli_hook_bridge._try_daemon_hook(
+    monkeypatch.setattr(bounded_cli_hook_daemon, "_read_daemon_auth_token", lambda *_args, **_kwargs: "token")
+    monkeypatch.setattr(bounded_cli_hook_daemon, "_build_loopback_opener", lambda: FakeOpener())
+    result = bounded_cli_hook_daemon.try_daemon_hook(
         guard_home=tmp_path / "guard-home",
         harness="grok",
         input_text=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
         timeout_seconds=5.0,
     )
+    assert result is not None
+    stdout, _stderr, code = result
     assert posted
     assert code == 0
     assert json.loads(stdout)["decision"] == "allow"

@@ -5,7 +5,6 @@ from __future__ import annotations
 import functools
 import json
 import os
-import shlex
 import stat
 import subprocess
 import sys
@@ -13,14 +12,17 @@ from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 
+from ..codex_hook_command_line import hook_token_name, render_hook_command
 from ..models import GuardArtifact
 from .base import HarnessContext
+from .cursor_hook_command_line import cursor_hook_command_tokens, split_cursor_hook_command
 from .cursor_hook_events import (
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
     cursor_entry_guards_file_mutations,
     unsupported_cursor_hook_events,
 )
 from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
+from .cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, client_hook_tokens, native_cursor_hook_bridge
 from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
 
@@ -102,11 +104,11 @@ def _managed_hook_command(
     script = str(script_path.resolve())
     event_args = ["--cursor-hook-event", event_name]
     interpreter = str(python_executable) if python_executable is not None else isolated_cursor_hook_python()
-    if interpreter:
-        return shlex.join([interpreter, "-I", script, *event_args])
-    if bool(getattr(sys, "frozen", False)):
-        return shlex.join([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
-    return shlex.join([sys.executable, "-I", script, *event_args])
+    if not interpreter and bool(getattr(sys, "frozen", False)):
+        return render_hook_command([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
+    native_bridge = native_cursor_hook_bridge()
+    prefix = [] if native_bridge is None else [str(native_bridge), NATIVE_CURSOR_HOOK_COMMAND]
+    return render_hook_command([*prefix, interpreter or sys.executable, "-I", script, *event_args])
 
 
 def _is_managed_cursor_hook_script(path: Path) -> bool:
@@ -238,17 +240,16 @@ def _is_managed_hook_command(command: object) -> bool:
         return True
     if HOOK_SCRIPT_NAME.lower() in lowered:
         return True
+    if _is_structured_managed_cursor_hook_command(command):
+        return True
     if "hol_guard_hook_argv" not in lowered.replace("-", "_"):
         return False
     if "--harness" not in lowered or "cursor" not in lowered:
         return False
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        tokens = command.split()
-    if tokens and Path(tokens[0]).name == HOOK_SCRIPT_NAME:
+    tokens = cursor_hook_command_tokens(command)
+    if tokens and hook_token_name(tokens[0]) == HOOK_SCRIPT_NAME:
         return True
-    return Path(tokens[0]).name.lower().startswith("python") if tokens else False
+    return hook_token_name(tokens[0]).lower().startswith("python") if tokens else False
 
 
 _MANAGED_CURSOR_HOOK_DOCSTRING = (
@@ -334,13 +335,10 @@ def _accepted_live_cursor_hook_script(path: Path) -> Path | None:
 
 
 def _live_cursor_hook_script_path(command: str) -> Path | None:
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        tokens = command.split()
+    tokens = client_hook_tokens(cursor_hook_command_tokens(command))
     if not tokens:
         return None
-    first = Path(tokens[0]).name
+    first = hook_token_name(tokens[0])
     if first == HOOK_SCRIPT_NAME:
         return _accepted_live_cursor_hook_script(Path(tokens[0]))
     if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
@@ -398,20 +396,17 @@ _FROZEN_CURSOR_LAUNCHERS = {
 
 
 def _is_structured_managed_cursor_hook_command(command: str) -> bool:
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        tokens = command.split()
+    tokens = client_hook_tokens(cursor_hook_command_tokens(command))
     if not tokens:
         return False
-    first = Path(tokens[0]).name.lower()
+    first = hook_token_name(tokens[0]).lower()
     if first == HOOK_SCRIPT_NAME.lower():
         return True
     if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
-        return first in _FROZEN_CURSOR_LAUNCHERS and Path(tokens[2]).name.lower() == HOOK_SCRIPT_NAME.lower()
+        return first in _FROZEN_CURSOR_LAUNCHERS and hook_token_name(tokens[2]).lower() == HOOK_SCRIPT_NAME.lower()
     if first.startswith("python"):
         payload = _skip_leading_flags(tokens[1:])
-        return bool(payload) and Path(payload[0]).name.lower() == HOOK_SCRIPT_NAME.lower()
+        return bool(payload) and hook_token_name(payload[0]).lower() == HOOK_SCRIPT_NAME.lower()
     return False
 
 
@@ -419,11 +414,8 @@ def live_cursor_hooks_use_frozen_control_plane(hooks: object) -> bool:
     """Return whether live Cursor config still boots the frozen control plane."""
 
     for command in managed_cursor_hook_commands(hooks):
-        try:
-            tokens = shlex.split(command)
-        except ValueError:
-            continue
-        if len(tokens) >= 2 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+        tokens = split_cursor_hook_command(command)
+        if tokens is not None and len(tokens) >= 2 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
             return True
     return False
 

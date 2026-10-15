@@ -18,18 +18,32 @@ use serde::Deserialize;
 use crate::native_command_program::packaged_command_program;
 
 #[cfg(not(guard_source_bootstrap))]
-const EMBEDDED_CATALOG: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json"));
-// The bootstrap shadow lib (guard-command-build) produces no packaged output;
-// an empty slice keeps `include_bytes!` valid and `from_embedded` fails closed
-// exactly like the `EMBEDDED_PROGRAM` bootstrap path.
-#[cfg(guard_source_bootstrap)]
-const EMBEDDED_CATALOG: &[u8] = &[];
+static EMBEDDED_CATALOG: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json.zst"));
 
 /// The verified-at-build catalog bytes, for read-only projections such as
 /// [`crate::catalog_read_model`] that need fields this module does not type.
+// The bootstrap shadow lib (guard-command-build) produces no packaged output;
+// an empty slice keeps `include_bytes!` valid and `from_embedded` fails closed
+// exactly like the `EMBEDDED_PROGRAM` bootstrap path.
 pub(crate) fn embedded_catalog_bytes() -> &'static [u8] {
-    EMBEDDED_CATALOG
+    #[cfg(not(guard_source_bootstrap))]
+    {
+        static DECODED: OnceLock<Box<[u8]>> = OnceLock::new();
+        DECODED
+            .get_or_init(|| {
+                crate::packaged_blob::decode(
+                    EMBEDDED_CATALOG,
+                    env!("GUARD_PACKAGED_CATALOG_LEN"),
+                    env!("GUARD_PACKAGED_CATALOG_SHA256"),
+                )
+            })
+            .as_ref()
+    }
+    #[cfg(guard_source_bootstrap)]
+    {
+        &[]
+    }
 }
 
 /// One rule's metadata — the fields `GeneratedCommandRule` exposes that the
@@ -138,7 +152,7 @@ impl CommandCatalog {
             catalog_digest: String,
             program_digest: String,
         }
-        let wrapper: Wrapper = serde_json::from_slice(EMBEDDED_CATALOG)
+        let wrapper: Wrapper = serde_json::from_slice(embedded_catalog_bytes())
             .map_err(|_| "command_catalog_decode_failed")?;
         let mut extensions = wrapper.catalog;
         extensions.sort_by(|a, b| a.extension_id.cmp(&b.extension_id));

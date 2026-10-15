@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import stat
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -55,6 +57,13 @@ def snapshot(tmp_path, monkeypatch):
             (directory / "command.example.json").write_text('{"id":"command.example"}')
     (root / "contracts/extensions/trust-class-map.v1.json").unlink()
     monkeypatch.setattr(bundle.subprocess, "check_output", lambda *args, **kwargs: SHA + "\n")
+    committed = {path.relative_to(root).as_posix(): path.read_bytes() for path in bundle.selected_files(root)}
+
+    def git_show(command, **kwargs):
+        data = committed.get(command[-1].split(":", 1)[1])
+        return subprocess.CompletedProcess(command, int(data is None), data or b"", b"")
+
+    monkeypatch.setattr(bundle.subprocess, "run", git_show)
     output = tmp_path / "snapshot"
     bundle.create_bundle(root, output, SHA)
     return root, output
@@ -77,6 +86,17 @@ def test_snapshot_is_deterministic_and_source_bound(snapshot, tmp_path):
         bundle.verify_bundle(output, "c" * 40)
     with pytest.raises(ValueError, match="checkout"):
         bundle.create_bundle(root, second, "c" * 40)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_snapshot_rejects_public_records_not_matching_committed_git(snapshot, tmp_path, missing):
+    root, _ = snapshot
+    path = root / "contributions/extensions/command.example.json"
+    if missing:
+        path = root / "contributions/extensions/command.new.json"
+    path.write_text('{"id":"command.changed"}')
+    with pytest.raises(ValueError, match="committed source"):
+        bundle.create_bundle(root, tmp_path / "unreviewed", SHA)
 
 
 def test_snapshot_ignores_a_leftover_unreviewed_repository_map(snapshot, tmp_path):
@@ -428,7 +448,21 @@ def test_publication_is_postmerge_and_never_writes_a_branch():
     assert "scripts/publish_extension_snapshot.py" in commands
 
 
-def test_legacy_directory_changes_are_accepted_by_existing_path_gate():
+def test_contribution_gate_accepts_public_records_and_rejects_shared_catalogs():
     workflow = (ROOT / ".github/workflows/generated-artifacts-guard.yml").read_text()
-    assert "owned+='|^docs/guard/extensions/" not in workflow
-    assert "native-command-program|command-catalog" in workflow
+    patterns = re.findall(r"^\s*owned\+?='([^']*)'$", workflow, flags=re.MULTILINE)
+    assert patterns
+    owned = re.compile("".join(patterns))
+    for path in (
+        "contributions/extensions/command.example.json",
+        "contributions/command-sources/command.example.json",
+        "contracts/extensions/trust/command.example.v1.json",
+    ):
+        assert not owned.search(path), path
+    for path in (
+        "docs/guard/extensions/catalog.v1.json",
+        "docs/guard/extensions/catalog.v2.json",
+        "contracts/extensions/command-catalog.v1.json",
+        "contracts/extensions/build-descriptors/command.example.json",
+    ):
+        assert owned.search(path), path

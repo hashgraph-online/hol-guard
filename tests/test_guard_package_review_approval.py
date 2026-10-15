@@ -7,9 +7,6 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
-from codex_plugin_scanner.guard.local_supply_chain import (
-    recompute_package_protect_artifact_hash,
-)
 from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
@@ -304,13 +301,16 @@ def test_recomputed_package_protect_hash_includes_the_same_final_launch_identity
     receipt = payload["receipt"]
     assert isinstance(receipt, dict)
 
-    recomputed = recompute_package_protect_artifact_hash(
-        ["npm", "install", "guard-proof"],
+    authority = local_supply_chain_module._build_package_protect_authority(
+        command=["npm", "install", "guard-proof"],
         store=store,
         workspace_dir=workspace_dir,
         now="2026-07-17T00:00:00Z",
         config=config,
+        additional_current_action=None,
+        additional_policy_context=None,
     )
+    recomputed = authority.artifact_hash if authority is not None else None
 
     assert returncode == 2
     assert recomputed == receipt["artifact_hash"]

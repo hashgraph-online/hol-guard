@@ -100,21 +100,19 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name
 
 
-from ..action_lattice import guard_action_severity
+from ..harness_posture import harness_is_recording_only
 from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_hook_approval_context import generic_hook_approval_context_inputs, native_hook_approval_context_token
 from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_reuse
 from ..retry_lineage import capture_retry_lineage
 from ..runtime.actions import _command_detail
-from ..runtime.approval_context import (
-    approval_context_tokens_validation_reason,
-    build_approval_context_token,
-    build_runtime_launch_identity,
-)
+from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    _decision_from_native_payload,
     approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
     with_saved_artifact_hash_provenance,
@@ -139,8 +137,6 @@ from .commands_support_runtime_policy import _runtime_hook_effective_policy_conf
 
 # Bump when generic-hook classification or action-composition semantics change.
 _GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v3"
-
-_GENERIC_HOOK_EXPLICIT_POSIX_SHELL_TOOLS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 
 _GENERIC_HOOK_NON_CONTENT_FIELDS = frozenset(
     {
@@ -206,14 +202,6 @@ def _generic_hook_content_key(key: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", key).replace("-", "_").lower()
 
 
-def _generic_hook_workspace_identity(runtime_workspace: Path | None) -> str:
-    workspace = runtime_workspace or Path.cwd()
-    try:
-        return str(workspace.expanduser().resolve(strict=False))
-    except (OSError, RuntimeError):
-        return str(workspace.expanduser().absolute())
-
-
 def _generic_hook_memory_command(payload: Mapping[str, object]) -> str:
     command = command_text_from_tool_payload(
         payload.get("tool_name"),
@@ -222,94 +210,7 @@ def _generic_hook_memory_command(payload: Mapping[str, object]) -> str:
     return _coalesce_string(command, payload.get("command"), payload.get("tool_name"))
 
 
-def _generic_hook_action_capabilities(
-    action_envelope: GuardActionEnvelope | None,
-) -> dict[str, object] | None:
-    if action_envelope is None:
-        return None
-    return {
-        "action_type": action_envelope.action_type,
-        "event_name": action_envelope.event_name,
-        "mcp_server": action_envelope.mcp_server,
-        "mcp_tool": action_envelope.mcp_tool,
-        "network_hosts": list(action_envelope.network_hosts),
-        "package_intent_kind": action_envelope.package_intent_kind,
-        "package_manager": action_envelope.package_manager,
-        "package_targets": list(action_envelope.package_targets),
-        "target_paths": list(action_envelope.target_paths),
-        "tool_name": action_envelope.tool_name,
-    }
-
-
-def _generic_hook_runtime_launch_identity(
-    action_envelope: GuardActionEnvelope | None,
-    payload: Mapping[str, object],
-    *,
-    home_dir: Path | None,
-    launch_cwd: Path,
-) -> dict[str, object]:
-    """Content-bind the complete launch represented by a generic hook action.
-
-    The normalized action envelope is preferred because it has already
-    removed transparent shell wrappers.  Payload fallbacks cover harnesses
-    that do not produce an action envelope.  The shared launch identity binds
-    the executable, argv, launch cwd, and any supported local interpreted
-    entrypoint.  Malformed or unresolved launch vectors receive a nonce so
-    saved approval reuse fails closed.
-    """
-
-    command_source: str | None = None
-    command: str | None = None
-    tool_command = command_text_from_tool_payload(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-    )
-    if action_envelope is not None and isinstance(action_envelope.command, str) and action_envelope.command.strip():
-        command_source = "action_envelope"
-        command = action_envelope.command.strip()
-    else:
-        payload_command = payload.get("command")
-        if isinstance(payload_command, str) and payload_command.strip():
-            command_source = "payload"
-            command = payload_command.strip()
-        else:
-            if isinstance(tool_command, str) and tool_command.strip():
-                command_source = "payload_tool_input"
-                command = tool_command.strip()
-
-    tool_name = payload.get("tool_name")
-    normalized_tool_name = tool_name.strip().lower() if isinstance(tool_name, str) else None
-    if (
-        normalized_tool_name in _GENERIC_HOOK_EXPLICIT_POSIX_SHELL_TOOLS
-        and isinstance(tool_command, str)
-        and tool_command.strip()
-    ):
-        command_source = "payload_tool_input_shell"
-        command = tool_command.strip()
-        resolved_launch = build_runtime_launch_identity(
-            normalized_tool_name,
-            args=("-c", command),
-            structured_command=True,
-            cwd=launch_cwd,
-            home_dir=home_dir,
-            launch_env=os.environ,
-        )
-    else:
-        resolved_launch = build_runtime_launch_identity(
-            command,
-            cwd=launch_cwd,
-            home_dir=home_dir,
-            launch_env=os.environ,
-        )
-
-    return {
-        "command": command,
-        "command_source": command_source,
-        "resolved_launch": resolved_launch,
-    }
-
-
-def _generic_hook_approval_context_token(
+def _generic_hook_approval_context_inputs(
     *,
     action_envelope: GuardActionEnvelope | None,
     artifact_id: str,
@@ -324,75 +225,66 @@ def _generic_hook_approval_context_token(
     publisher: str | None,
     runtime_workspace: Path | None,
     token: Mapping[str, object],
-) -> str:
-    """Bind a generic fallback approval to its exact recomputed context.
+) -> dict[str, object]:
+    """Inputs that bind a generic fallback approval to its exact recomputed context.
 
     ``token`` carries the composition values the resident decided.
     """
 
-    launch_cwd = runtime_workspace or Path.cwd()
-    return build_approval_context_token(
-        identity={
-            "artifact_id": artifact_id,
-            "artifact_name": artifact_name,
-            "canonical_harness": _canonical_harness_name(harness),
-            "harness": harness,
-            "publisher": publisher,
-            "runtime_launch": _generic_hook_runtime_launch_identity(
-                action_envelope,
-                payload,
-                home_dir=home_dir,
-                launch_cwd=launch_cwd,
-            ),
-            "source_scope": _coalesce_string(payload.get("source_scope"), "project"),
-            "workspace": _generic_hook_workspace_identity(runtime_workspace),
+    return generic_hook_approval_context_inputs(
+        action_envelope=action_envelope,
+        artifact_id=artifact_id,
+        artifact_name=artifact_name,
+        canonical_harness=_canonical_harness_name(harness),
+        harness=harness,
+        publisher=publisher,
+        home_dir=home_dir,
+        runtime_workspace=runtime_workspace,
+        payload=payload,
+        payload_digest=_generic_hook_payload_digest(payload),
+        tool_command=command_text_from_tool_payload(
+            payload.get("tool_name"),
+            payload.get("tool_input", payload.get("arguments")),
+        ),
+        config=config,
+        policy_config=_runtime_hook_effective_policy_config(config),
+        evaluator_policy_version=_GENERIC_HOOK_EVALUATOR_POLICY_VERSION,
+        composition={
+            "current_action": current_action,
+            "current_config_action": token["current_config_action"],
+            "daemon_hint_disposition": token["daemon_hint_disposition"],
+            "daemon_hint_reason_code": token["daemon_hint_reason_code"],
+            "daemon_status": daemon_status,
+            "fail_mode": fail_mode,
+            "trusted_cli_action": token["trusted_cli_action"],
+            "untrusted_payload_action": token["untrusted_payload_action"],
+            "untrusted_payload_action_disposition": token["untrusted_payload_action_disposition"],
+            "untrusted_payload_action_reason": token["untrusted_payload_action_reason"],
         },
-        content={
-            "payload_digest": _generic_hook_payload_digest(payload),
-            "provided_artifact_hash": _optional_string(payload.get("artifact_hash")),
-        },
-        capabilities={
-            "action_envelope": _generic_hook_action_capabilities(action_envelope),
-            "changed_capabilities": _string_list(payload.get("changed_capabilities")),
-            "event_name": _hook_event_name(dict(payload)) or "PreToolUse",
-            "tool_name": _optional_string(payload.get("tool_name")),
-        },
-        policy={
-            "config": _runtime_hook_effective_policy_config(config),
-            "evaluator_policy_version": _GENERIC_HOOK_EVALUATOR_POLICY_VERSION,
-            "composition": {
-                "current_action": current_action,
-                "current_config_action": token["current_config_action"],
-                "daemon_hint_disposition": token["daemon_hint_disposition"],
-                "daemon_hint_reason_code": token["daemon_hint_reason_code"],
-                "daemon_status": daemon_status,
-                "fail_mode": fail_mode,
-                "trusted_cli_action": token["trusted_cli_action"],
-                "untrusted_payload_action": token["untrusted_payload_action"],
-                "untrusted_payload_action_disposition": token["untrusted_payload_action_disposition"],
-                "untrusted_payload_action_reason": token["untrusted_payload_action_reason"],
-            },
-        },
-        sandbox={
-            "analysis": config.sandbox_analysis,
-            "required": current_action == "sandbox-required",
-        },
+        current_action=current_action,
     )
 
 
 def _generic_hook_saved_decision(
     *,
-    artifact_hash: str,
+    approval_context_inputs: dict[str, object],
     artifact_id: str,
     artifact_name: str,
+    current_action: GuardAction,
     harness: str,
     legacy_artifact_hash: str | None,
     payload: Mapping[str, object],
     publisher: str | None,
     runtime_workspace: Path | None,
     store: GuardStore,
-) -> tuple[dict[str, object] | None, dict[str, object] | None]:
-    """Peek saved evidence, retaining legacy blocks without trusting legacy allows."""
+) -> tuple[str, dict[str, object] | None, dict[str, object] | None, ApprovalReuseDecision, bool]:
+    """Build the approval context token, peek saved evidence and compose its reuse verdict in one resident call.
+
+    Legacy blocks are retained without trusting legacy allows. Returns the
+    current approval context token, the saved decision, the ignored
+    local-integrity evidence, the reuse verdict and whether saved evidence was
+    present.
+    """
 
     workspace = str(runtime_workspace) if runtime_workspace is not None else None
     from ..store import runtime_tool_action_exact_match_context, runtime_tool_action_policy_artifact_id
@@ -405,133 +297,58 @@ def _generic_hook_saved_decision(
         permission_mode=_optional_string(payload.get("permission_mode"))
         or _optional_string(payload.get("permissionMode")),
     )
-    lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
+    # ``None`` is the current token; a legacy hash equal to it is dropped by the resident.
+    probes: list[tuple[str, str | None]] = [(artifact_id, None)]
+    policy_artifact_id = runtime_tool_action_policy_artifact_id(artifact_id)
+    if policy_artifact_id is not None and policy_artifact_id != artifact_id:
+        probes.append((policy_artifact_id, None))
+    if legacy_artifact_hash is not None:
+        probes.append((artifact_id, legacy_artifact_hash))
+    saved = store.peek_saved_decision_groups(
         harness,
-        artifact_id,
-        artifact_hash=artifact_hash,
+        probes,
         workspace=workspace,
         publisher=publisher,
         runtime_exact_match_context=runtime_exact_match_context,
         memory_command=memory_command,
         memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
         memory_artifact_name=artifact_name,
-        consume_one_shot=False,
+        current_action=current_action,
+        approval_context_inputs=approval_context_inputs,
     )
-    selected_decision = lookup["decision"]
-    ignored_integrity = lookup.get("ignored_local_integrity")
-    policy_artifact_id = runtime_tool_action_policy_artifact_id(artifact_id)
-    if policy_artifact_id is not None and policy_artifact_id != artifact_id:
-        exact_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-            harness,
-            policy_artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
-            runtime_exact_match_context=runtime_exact_match_context,
-            memory_command=memory_command,
-            memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
-            memory_artifact_name=artifact_name,
-            consume_one_shot=False,
-        )
-        exact_decision = exact_lookup["decision"]
-        if ignored_integrity is None:
-            ignored_integrity = exact_lookup.get("ignored_local_integrity")
-        if exact_decision is not None and (
-            selected_decision is None
-            or guard_action_severity(exact_decision.get("action"), unknown_action="block")
-            > guard_action_severity(selected_decision.get("action"), unknown_action="block")
-        ):
-            selected_decision = exact_decision
-            ignored_integrity = exact_lookup.get("ignored_local_integrity")
-    if legacy_artifact_hash is not None and legacy_artifact_hash != artifact_hash:
-        legacy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-            harness,
-            artifact_id,
-            artifact_hash=legacy_artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
-            runtime_exact_match_context=runtime_exact_match_context,
-            memory_command=memory_command,
-            memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
-            memory_artifact_name=artifact_name,
-            consume_one_shot=False,
-        )
-        legacy_decision = legacy_lookup["decision"]
-        if ignored_integrity is None:
-            ignored_integrity = legacy_lookup.get("ignored_local_integrity")
-        if legacy_decision is not None and (
-            selected_decision is None
-            or guard_action_severity(legacy_decision.get("action"), unknown_action="block")
-            > guard_action_severity(selected_decision.get("action"), unknown_action="block")
-        ):
-            selected_decision = legacy_decision
-            ignored_integrity = legacy_lookup.get("ignored_local_integrity")
-    return selected_decision, ignored_integrity
-
-
-def _generic_hook_approval_reuse(
-    *,
-    artifact_hash: str,
-    artifact_id: str,
-    current_action: GuardAction,
-    decision: dict[str, object] | None,
-    harness: str,
-    ignored_integrity: dict[str, object] | None,
-    publisher: str | None,
-    runtime_workspace: Path | None,
-    store: GuardStore,
-) -> tuple[ApprovalReuseDecision, bool]:
-    saved_action: object | None = decision.get("action") if decision is not None else None
-    saved_present = decision is not None or ignored_integrity is not None
-    validation_reason: ApprovalReuseValidationFailure | None = None
-    if ignored_integrity is not None:
-        if decision is None:
-            saved_action = "require-reapproval"
-        validation_reason = "approval_reuse_integrity_failure"
-    elif decision is not None and decision.get("action") == "allow":
-        from ..store import _is_runtime_scoped_exact_match_key
-
-        saved_artifact_hash = decision.get("artifact_hash")
-        if not _is_runtime_scoped_exact_match_key(
-            saved_artifact_hash if isinstance(saved_artifact_hash, str) else None
-        ):
-            validation_reason = cast(
-                ApprovalReuseValidationFailure | None,
-                approval_context_tokens_validation_reason(saved_artifact_hash, artifact_hash),
-            )
-    diagnosed_stored_hash: str | None = None
-    if not saved_present:
+    if saved is None:
+        # No saved authority to read: a near match can still explain the miss.
+        artifact_hash = native_hook_approval_context_token("generic_hook_approval_context", approval_context_inputs)
         diagnosed_reason, diagnosed_stored_hash = store.approval_reuse_diagnostic(
-            harness,
-            artifact_id,
-            artifact_hash,
-            str(runtime_workspace) if runtime_workspace is not None else None,
-            publisher,
+            harness, artifact_id, artifact_hash, workspace, publisher
         )
-        if diagnosed_reason is not None:
-            saved_action = "allow"
-            saved_present = True
-            validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
-    # Qualification is produced by native authenticated store lookup.
-    fresh_local_approval = decision is not None and decision.get("fresh_local_approval") is True
-    durable_exact_approval = decision is not None and decision.get("durable_exact_approval") is True
-    reuse_native = evaluate_approval_reuse(
-        current_action,
-        saved_action,
-        saved_decision_present=saved_present,
-        validation_reason=validation_reason,
-        fresh_local_approval=fresh_local_approval,
-        durable_exact_approval=durable_exact_approval,
-    )
+        saved_present = diagnosed_reason is not None
+        verdict = evaluate_approval_reuse(
+            current_action,
+            "allow" if saved_present else None,
+            saved_decision_present=saved_present,
+            validation_reason=cast(ApprovalReuseValidationFailure | None, diagnosed_reason),
+        )
+        reuse = with_saved_artifact_hash_provenance(
+            # Resident unreachable: preserve the recomputed action unchanged;
+            # the saved decision is not claimed.
+            verdict if verdict is not None else approval_reuse_authority_unavailable(current_action),
+            diagnosed_stored_hash,
+        )
+        return artifact_hash, None, None, reuse, saved_present
+    current_token = saved.get("current_token")
+    if not isinstance(current_token, str):
+        raise ValueError("native_policy_decision_lookup_invalid")
     reuse = with_saved_artifact_hash_provenance(
-        reuse_native
-        if reuse_native is not None
-        # Resident unreachable: preserve the recomputed action unchanged; the
-        # saved decision is not claimed.
-        else approval_reuse_authority_unavailable(current_action),
-        decision.get("artifact_hash") if decision is not None else diagnosed_stored_hash,
+        _decision_from_native_payload(saved.get("reuse")), saved.get("saved_artifact_hash")
     )
-    return reuse, saved_present
+    return (
+        current_token,
+        saved.get("decision"),
+        saved.get("ignored_local_integrity"),
+        reuse,
+        saved.get("saved_present") is True,
+    )
 
 
 def _generic_hook_changed_capabilities(payload_map: Mapping[str, object]) -> list[str]:
@@ -743,9 +560,11 @@ def _generic_hook_composition_inputs(
     configured_narrow_override: object,
     configured_override: object,
     command_text: str | None,
+    home_dir: Path | None,
     native_edge_result: Mapping[str, object] | None,
     payload_map: Mapping[str, object],
     runtime_artifact_checked: bool,
+    runtime_workspace: Path | None,
 ) -> dict[str, object]:
     return composition_inputs(
         cli_action=getattr(args, "policy_action", None),
@@ -755,9 +574,11 @@ def _generic_hook_composition_inputs(
         has_command_text=isinstance(command_text, str) and bool(command_text.strip()),
         has_configured_override=configured_override is not None,
         has_narrow_override=configured_narrow_override is not None,
+        home_dir=home_dir,
         native_edge_result=native_edge_result,
         payload=payload_map,
         runtime_artifact_checked=runtime_artifact_checked,
+        runtime_workspace=runtime_workspace,
     )
 
 
@@ -817,9 +638,11 @@ def run_native_generic_payload(
         configured_narrow_override=configured_narrow_override,
         configured_override=configured_override,
         command_text=command_text,
+        home_dir=home_dir,
         native_edge_result=native_edge_result,
         payload_map=payload_map,
         runtime_artifact_checked=runtime_artifact_checked,
+        runtime_workspace=runtime_workspace,
     )
     classifiers = hook_classifiers(
         canonical_harness=_canonical_harness_name(args.harness),
@@ -859,7 +682,7 @@ def run_native_generic_payload(
                 home_dir=home_dir,
                 current_action=current_policy_action,
             )
-    runtime_artifact_hash = _generic_hook_approval_context_token(
+    approval_context_inputs = _generic_hook_approval_context_inputs(
         action_envelope=action_envelope,
         artifact_id=artifact_id,
         artifact_name=artifact_name,
@@ -874,24 +697,20 @@ def run_native_generic_payload(
         runtime_workspace=runtime_workspace,
         token=composition["token"],
     )
-    stored_policy_decision, ignored_integrity = _generic_hook_saved_decision(
-        artifact_hash=runtime_artifact_hash,
+    (
+        runtime_artifact_hash,
+        stored_policy_decision,
+        ignored_integrity,
+        approval_reuse,
+        saved_decision_present,
+    ) = _generic_hook_saved_decision(
+        approval_context_inputs=approval_context_inputs,
         artifact_id=artifact_id,
         artifact_name=artifact_name,
+        current_action=current_policy_action,
         harness=args.harness,
         legacy_artifact_hash=_optional_string(payload_map.get("artifact_hash")),
         payload=payload_map,
-        publisher=publisher,
-        runtime_workspace=runtime_workspace,
-        store=store,
-    )
-    approval_reuse, saved_decision_present = _generic_hook_approval_reuse(
-        artifact_hash=runtime_artifact_hash,
-        artifact_id=artifact_id,
-        current_action=current_policy_action,
-        decision=stored_policy_decision,
-        harness=args.harness,
-        ignored_integrity=ignored_integrity,
         publisher=publisher,
         runtime_workspace=runtime_workspace,
         store=store,
@@ -1008,7 +827,7 @@ def run_native_generic_payload(
             ),
             "claimed_context": _claimed_saved_allow_hash is not None,
             "asks_for_approval": asks_for_approval(config),
-            "observe_mode": config.mode == "observe",
+            "observe_mode": harness_is_recording_only(config, args.harness),
             "has_approval_requests_list": isinstance(payload_map.get("approval_requests"), list),
             "json_requested": bool(getattr(args, "json", False)),
             "output_stream_present": output_stream is not None,
@@ -1201,7 +1020,7 @@ def run_native_generic_payload(
         payload=payload_map,
         policy_action=policy_action,
         remediation=lambda: _embedded_script_remediation(command_text),
-        verified_benign=lambda: hook_event_name == "PreToolUse" and classifiers["benign_tool_action"](hook_event_name),
+        verified_benign=lambda: hook_event_name == "PreToolUse" and bool(composition["verified_benign"]),
     )
 
 

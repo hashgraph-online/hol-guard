@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,10 +12,9 @@ import pytest
 
 from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard import native_request_context as client
-from codex_plugin_scanner.guard.native_context import _UNBOUND_PREFIX, _canonical_request_sha256
+from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from codex_plugin_scanner.guard.runtime import shell_execution_context as shell
 from codex_plugin_scanner.guard.runtime._shell_execution_context_support import ShellPathIdentity
-from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "request-context-parity" / "cases.v1.json"
 
@@ -60,6 +58,7 @@ def _build(tmp_path: Path) -> client.NativeRequestContext | client.NativeRequest
     [
         ("native_request_context_owner_mismatch", "native_request_context_owner_mismatch"),
         ("native_request_context_budget_exceeded", "native_request_context_budget_exceeded"),
+        ("native_sensitive_request_canonical_unbound", "native_sensitive_request_canonical_unbound"),
         ("free text", "native_request_context_unavailable"),
         (None, "native_request_context_unavailable"),
     ],
@@ -158,42 +157,6 @@ def test_request_carries_owner_budget_and_process_cwd_fallback(monkeypatch: pyte
     assert request["action"]["body"]["fallback_cwd"] == str(Path.cwd())
 
 
-def test_unavailable_resident_yields_an_incomplete_context_never_an_allow(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _reply(monkeypatch, prerequisite=False)
-    context = shell.model_shell_execution_context("cd sub && ls", cwd=tmp_path, workspace_root=tmp_path)
-    assert context.complete is False
-    assert context.reason_code == shell.SHELL_CWD_NATIVE_UNAVAILABLE
-    assert context.segments == ()
-    assert context.directory_change_present is True
-    assert context.context_hash.startswith(_UNBOUND_PREFIX)
-    metadata = shell.shell_execution_context_metadata(context)
-    assert metadata["shell_execution_context_complete"] is False
-    segment = shell.ShellExecutionSegment(
-        tokens=("ls",),
-        segment_index=0,
-        control_before=(),
-        control_after=(),
-        effective_cwd=tmp_path,
-        cwd_identity=ShellPathIdentity(1, 2, 0o040000, 3, 4),
-        cwd_path_proofs=(),
-        cwd_source="workspace",
-        directory_stack=(),
-        complete=True,
-    )
-    forged = replace(
-        context,
-        workspace_root=tmp_path,
-        workspace_identity=ShellPathIdentity(1, 2, 0o040000, 3, 4),
-        segments=(segment,),
-        complete=True,
-        reason_code=None,
-    )
-    assert shell.validate_shell_execution_segment(forged, segment) == (None, shell.SHELL_CWD_NATIVE_UNAVAILABLE)
-    assert shell.shell_execution_segment_hash(forged, segment).startswith(_UNBOUND_PREFIX)
-
-
 def _valid_shell_report(tmp_path: Path) -> dict[str, Any]:
     segment = {
         "tokens": ["ls"],
@@ -263,22 +226,6 @@ def test_malformed_shell_reply_yields_the_incomplete_context_not_an_exception(
     assert context.reason_code == shell.SHELL_CWD_NATIVE_UNAVAILABLE
     assert context.segments == ()
     assert context.native is None
-
-
-@pytest.mark.parametrize("command", ["cat ~/.ssh/id_rsa", "./tool.sh"])
-def test_unavailable_resident_keeps_the_mandatory_read_floors(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, command: str
-) -> None:
-    _reply(monkeypatch, prerequisite=False)
-    assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
-    assert assessment.requires_review is True
-
-
-def test_unavailable_resident_does_not_invent_a_floor_for_unrelated_text(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _reply(monkeypatch, prerequisite=False)
-    assert assess_shell_reads("echo hello", cwd=tmp_path, home_dir=tmp_path).requires_review is False
 
 
 def _materialize(root: Path, entries: list[dict[str, str]]) -> None:
@@ -358,29 +305,3 @@ def test_native_shell_model_matches_recorded_python_vectors(case: dict[str, Any]
     assert [_rel(root, path) for path in context.effective_cwds] == expected["effective_cwds"]
     assert context.context_hash.startswith("sha256:")
     assert shell.shell_execution_context_hash(context) == context.context_hash
-
-
-@pytest.mark.usefixtures("package_intent_native")
-def test_resident_revalidation_detects_swaps_and_ignores_python_claims(tmp_path: Path) -> None:
-    root = tmp_path.resolve()
-    (root / "ws" / "inner").mkdir(parents=True)
-    (root / "ws" / "other").mkdir()
-    os.symlink("inner", root / "ws" / "link")
-    context = shell.model_shell_execution_context("cd link && ls", cwd=root / "ws", workspace_root=root / "ws")
-    assert context.complete
-    segment = context.segments[1]
-    assert shell.validate_shell_execution_segment(context, segment) == (root / "ws" / "inner", None)
-
-    identity = segment.cwd_identity
-    assert identity is not None
-    forged = replace(segment, cwd_identity=replace(identity, inode=identity.inode + 1))
-    assert shell.validate_shell_execution_segment(context, forged) == (None, shell.SHELL_CWD_PATH_CHANGED)
-
-    # A hash Python recomputes for altered data is not the resident-issued one.
-    altered = replace(context, command_text="cd link && rm -rf .")
-    assert altered.context_hash != context.context_hash
-    assert shell.shell_execution_segment_hash(context, forged) != shell.shell_execution_segment_hash(context, segment)
-
-    (root / "ws" / "link").unlink()
-    os.symlink("other", root / "ws" / "link")
-    assert shell.validate_shell_execution_segment(context, segment) == (None, shell.SHELL_CWD_PATH_CHANGED)

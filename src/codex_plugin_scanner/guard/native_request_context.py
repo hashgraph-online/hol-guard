@@ -26,13 +26,14 @@ from .native_context import (
     ensure_resident_prerequisite,
 )
 from .native_execution import _resident_request
+from .native_resident_prerequisite_reason import prerequisite_unavailable_code
 
 REQUEST_CONTEXT_FEATURE = "request-context-v1"
 _REQUEST_SCHEMA = "guard-request-context-request.v1"
 _RESULT_SCHEMA = "guard-request-context-result.v1"
 _CONTEXT_SCHEMA = "guard-request-context.v1"
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
-_RESIDENT_CODE = re.compile(r"^native_request_context_[a-z_]{1,64}$")
+_RESIDENT_CODE = re.compile(r"^native_(?:request_context|sensitive_request)_[a-z_]{1,64}$")
 _UNAVAILABLE = "native_request_context_unavailable"
 _DEFAULT_BUDGET_MS = 9_000
 _TIMEOUT_SECONDS = 10.0
@@ -49,6 +50,7 @@ class NativeRequestContext:
     shell: Mapping[str, Any] | None
     launch: Mapping[str, Any] | None
     target: str | None
+    environment_secret_dump: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,12 +58,6 @@ class NativeRequestContextFailure:
     """No authoritative answer; ``code`` says why, for diagnostics only."""
 
     code: str
-
-
-def request_context_guard_home(guard_home: Path | None = None) -> Path:
-    """Resolve the resident home the same way the digest transport does."""
-
-    return _resolve_digest_home(guard_home)
 
 
 def _owner_uid() -> int | None:
@@ -122,7 +118,9 @@ def _call(
     except (TypeError, ValueError):
         return NativeRequestContextFailure("native_request_context_request_invalid")
     if not ensure_resident_prerequisite(home):
-        return NativeRequestContextFailure("native_request_context_prerequisite_unavailable")
+        return NativeRequestContextFailure(
+            prerequisite_unavailable_code("native_request_context_prerequisite_unavailable", home)
+        )
     response = _resident_request(
         operation="request_context_build",
         request=request,
@@ -154,6 +152,7 @@ def native_request_context_build(
     guard_home: Path | None = None,
     budget_ms: int = _DEFAULT_BUDGET_MS,
     script: str | None = None,
+    classify_environment_secrets: bool = False,
     cwd: Path | str | None = None,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
@@ -174,6 +173,8 @@ def native_request_context_build(
             "target": target,
             "executable": _executable_wire(executable),
         }
+        if classify_environment_secrets:
+            body["classify_environment_secrets"] = classify_environment_secrets
     except OSError:
         return NativeRequestContextFailure("native_request_context_request_invalid")
     payload = _call({"kind": "build", "body": body}, source=source, guard_home=guard_home, budget_ms=budget_ms)
@@ -256,7 +257,10 @@ _SHELL_KEYS = frozenset({"context", "context_hash", "segment_hashes", "metadata"
 
 
 def _decode_build(payload: Mapping[str, Any]) -> NativeRequestContext | None:
-    if set(payload) != _BUILD_KEYS or payload["schema"] != _CONTEXT_SCHEMA:
+    if (
+        set(payload) not in (_BUILD_KEYS, _BUILD_KEYS | {"environment_secret_dump"})
+        or payload["schema"] != _CONTEXT_SCHEMA
+    ):
         return None
     digest, admission, shell, launch, target = (
         payload["context_sha256"],
@@ -275,7 +279,10 @@ def _decode_build(payload: Mapping[str, Any]) -> NativeRequestContext | None:
         return None
     if target is not None and not isinstance(target, str):
         return None
-    return NativeRequestContext(digest, admission, shell, launch, target)
+    environment_secret_dump = payload.get("environment_secret_dump")
+    if environment_secret_dump is not None and type(environment_secret_dump) is not bool:
+        return None
+    return NativeRequestContext(digest, admission, shell, launch, target, environment_secret_dump)
 
 
 def _shell_hashes_valid(shell: Mapping[str, Any]) -> bool:
@@ -302,5 +309,4 @@ __all__ = [
     "native_request_context_build",
     "native_shell_hashes",
     "native_shell_validate_segment",
-    "request_context_guard_home",
 ]

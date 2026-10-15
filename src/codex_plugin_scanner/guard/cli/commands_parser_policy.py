@@ -5,15 +5,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ._commands_shared import _guard_risk_action_key
-
-
 import argparse
 
-from ._commands_shared import *
+from ...argparse_utils import FriendlyArgumentParser
+from ..config_constants import VALID_GUARD_ACTIONS, VALID_SECURITY_LEVELS
+from .commands_parser_constants import _guard_risk_action_key
 from .commands_parser_helpers import *
 
 def _configure_guard_policy_parsers(
@@ -192,7 +188,17 @@ def _configure_guard_policy_parsers(
     )
     settings_protection_parser.add_argument(
         "protection_posture",
+        nargs="?",
         choices=("protected", "extra-careful", "extra_careful", "watch"),
+    )
+    settings_protection_parser.add_argument(
+        "--harness",
+        help="Apply the posture to one app (harness id) instead of every app.",
+    )
+    settings_protection_parser.add_argument(
+        "--inherit",
+        action="store_true",
+        help="With --harness, clear that app's own posture so it follows the global one.",
     )
     _add_guard_common_args(settings_protection_parser, suppress_defaults=True)
     settings_protection_parser.add_argument("--json", action="store_true")

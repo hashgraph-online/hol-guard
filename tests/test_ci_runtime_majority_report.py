@@ -198,6 +198,8 @@ def test_shipped_scope_is_valid_and_has_no_stale_entries(shipped_report: dict) -
     assert result["metric"]["rust_runtime_loc"] > 0
     assert 0 < result["metric"]["share"] < 1
     assert len(result["retirement_worklist"]) == 40
+    assert result["python"]["pending_unclassified_loc"] == 0
+    assert result["python"]["pending_unclassified_modules"] == []
     assert result["exclusions"], "every exclusion must be reported"
 
 
@@ -397,17 +399,19 @@ def test_shipped_scope_keeps_synchronous_hook_path_modules_in_scope(shipped_repo
     result = shipped_report
     in_scope = {item["path"] for item in result["python"]["files"]}
     guard = "src/codex_plugin_scanner/guard/"
+    # evaluation_json left with the Python capture modules; duplicate keys are
+    # rejected in the native capture parser. inventory_contract_fingerprints left
+    # when AIBOM hashing moved into the resident.
     required = [
         "runtime/package_json_scripts.py",
         "runtime/custom_extension_suggestion.py",
-        "runtime/mcp_server_contribution.py",
         "cli/render.py",
         "aibom_detection.py",
-        "inventory_contract.py",
-        "evaluation_json.py",
-        "store_command_activity_rollups.py",
-        "store_receipt_rollups.py",
-        "store_review_event_outbox_writes.py",
+        "store_receipt_rollup_schema.py",
         "store_storage_maintenance.py",
     ]
     assert [name for name in required if guard + name not in in_scope] == []
+    # Synchronous continuation outbox writes moved into the native transaction.
+    wired = {item["path"] for item in result["rust"]["files"]}
+    assert "rust/crates/guard-runtime/src/continuation_store.rs" in wired
+    assert "rust/crates/guard-runtime/src/guard_store_outbox_append.rs" in wired

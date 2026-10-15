@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +95,10 @@ class ShellExecutionContext:
     reason_code: str | None
     directory_change_present: bool
     native: _NativeBinding | None = field(default=None, compare=False, repr=False)
+    environment_secret_dump: bool | None = field(default=None, compare=False, repr=False)
+    environment_secret_scope: tuple[str, Path | None, Path | None] | None = field(
+        default=None, compare=False, repr=False
+    )
 
     @property
     def effective_cwds(self) -> tuple[Path, ...]:
@@ -268,12 +272,14 @@ def model_shell_execution_context(
     workspace_root: Path | None = None,
     home_dir: Path | None = None,
     source: RequestContextSource = "hook",
+    classify_environment_secrets: bool = False,
 ) -> ShellExecutionContext:
     """Ask the resident to model literal shell directory changes."""
 
     result = native_request_context_build(
         source=source,
         script=command_text,
+        classify_environment_secrets=classify_environment_secrets,
         cwd=cwd,
         workspace=workspace_root,
         home_dir=home_dir,
@@ -281,7 +287,11 @@ def model_shell_execution_context(
     if isinstance(result, NativeRequestContextFailure) or result.shell is None:
         return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)
     try:
-        return _context_from_report(result.shell)
+        return replace(
+            _context_from_report(result.shell),
+            environment_secret_dump=result.environment_secret_dump,
+            environment_secret_scope=(command_text, cwd, home_dir),
+        )
     except (KeyError, TypeError, ValueError, AttributeError):
         # A reply that decodes badly is not a context: stay incomplete.
         return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)
@@ -313,26 +323,6 @@ def _single_segment_wire(context: ShellExecutionContext, segment: ShellExecution
 
 def _unbound_hash(label: str) -> str:
     return f"{_UNBOUND_PREFIX}{label}"
-
-
-def shell_execution_segment_hash(
-    context: ShellExecutionContext,
-    segment: ShellExecutionSegment,
-) -> str:
-    """Return an approval-safe identity for one segment and its full command."""
-
-    wire = _single_segment_wire(context, segment)
-    binding = context.native
-    index = segment.segment_index
-    if binding is not None and 0 <= index < len(binding.segment_hashes):
-        issued = dict(binding.wire)
-        shared = ("command_text", "workspace_root", "workspace_identity")
-        if all(issued[key] == wire[key] for key in shared) and issued["segments"][index] == wire["segments"][0]:
-            return binding.segment_hashes[index]
-    result = native_shell_hashes(wire, 0)
-    if isinstance(result, NativeRequestContextFailure) or result[1] is None:
-        return _unbound_hash("shell-segment")
-    return result[1]
 
 
 def shell_execution_context_hash(context: ShellExecutionContext) -> str:
@@ -386,6 +376,5 @@ __all__ = [
     "model_shell_execution_context",
     "shell_execution_context_hash",
     "shell_execution_context_metadata",
-    "shell_execution_segment_hash",
     "validate_shell_execution_segment",
 ]

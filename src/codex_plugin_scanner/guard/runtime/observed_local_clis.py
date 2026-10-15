@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from ..native_local_cli_identity import track_local_cli_identity_failures
 from ..store_local_cli_retention import later_timestamp
 from .custom_extension_suggestion import observation_path_class
-from .local_cli_compound import identify_unlisted_cli_identities
+from .local_cli_identity import identify_unlisted_cli_identities
 from .time_support import parse_utc_timestamp
 
 if TYPE_CHECKING:

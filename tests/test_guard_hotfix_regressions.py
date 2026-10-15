@@ -15,31 +15,14 @@ from codex_plugin_scanner.guard.cli import commands_preflight, commands_router
 from codex_plugin_scanner.guard.cli.commands_preflight import _unsafe_broad_preflight_target
 from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
 from codex_plugin_scanner.guard.package_firewall_entitlement import package_firewall_operation_allowed
-from codex_plugin_scanner.guard.package_shim_status import enrich_package_shim_status_payload
+from codex_plugin_scanner.guard.shims import package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _orphaned_shim_status(shim_dir: Path) -> dict[str, object]:
-    return {
-        "active_managers": [],
-        "detected_managers": ["npm"],
-        "installed_managers": [],
-        "last_test_at": {},
-        "protected_managers": [],
-        "path_active": False,
-        "path_contains_shim_dir": True,
-        "path_status": "missing_from_path",
-        "bypasses": [],
-        "manager_details": [],
-        "missing_managers": [],
-        "restart_shell_required": False,
-        "process_path_status": "active",
-        "process_restart_required": False,
-        "shell_profile_configured": True,
-        "shim_dir": str(shim_dir),
-        "supported_managers": ["npm"],
-        "undetected_managers": [],
-    }
+def _shim_context(tmp_path: Path) -> HarnessContext:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir(exist_ok=True)
+    return HarnessContext(home_dir=home_dir, guard_home=tmp_path / "guard-home", workspace_dir=tmp_path / "work")
 
 
 def _guard_generated_shim_source(manager: str) -> str:
@@ -56,12 +39,13 @@ def _guard_generated_shim_source(manager: str) -> str:
 
 
 def test_orphaned_guard_package_shim_is_recovered_for_repair(tmp_path: Path) -> None:
-    shim_dir = tmp_path / "package-shims" / "bin"
+    context = _shim_context(tmp_path)
+    shim_dir = context.guard_home / "package-shims" / "bin"
     shim_dir.mkdir(parents=True)
     shim = shim_dir / "npm"
     shim.write_text(_guard_generated_shim_source("npm"), encoding="utf-8")
 
-    status = enrich_package_shim_status_payload(_orphaned_shim_status(shim_dir), {})
+    status = package_shim_status(context, path_env=str(shim_dir))
 
     assert status["installed_managers"] == ["npm"]
     assert status["active_managers"] == ["npm"]
@@ -75,13 +59,14 @@ def test_orphaned_guard_package_shim_is_recovered_for_repair(tmp_path: Path) -> 
 
 
 def test_orphaned_package_shim_symlink_is_not_recovered(tmp_path: Path) -> None:
-    shim_dir = tmp_path / "package-shims" / "bin"
+    context = _shim_context(tmp_path)
+    shim_dir = context.guard_home / "package-shims" / "bin"
     shim_dir.mkdir(parents=True)
     outside = tmp_path / "outside-npm"
     outside.write_text(_guard_generated_shim_source("npm"), encoding="utf-8")
     (shim_dir / "npm").symlink_to(outside)
 
-    status = enrich_package_shim_status_payload(_orphaned_shim_status(shim_dir), {})
+    status = package_shim_status(context, path_env=str(shim_dir))
 
     assert status["installed_managers"] == []
     assert status["recovered_managers"] == []

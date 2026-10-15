@@ -45,6 +45,8 @@ fn decide(request: &McpToolPolicyDecideRequestV1) -> Flow<Decision> {
     }
     let ctx = Ctx {
         observations: &request.observations,
+        lookup: request.lookup.as_ref(),
+        memo: None,
     };
     match evaluate_pass(
         &ctx,
@@ -84,7 +86,16 @@ pub(crate) fn evaluate_mcp_tool_policy_decide_request(
         Err(code) => return result(request, String::new(), "error", code, None),
     };
     match decide(request) {
-        Ok(decision) => result(request, digest, "ok", "ok", Some(decision.to_value())),
+        Ok(decision) => {
+            let mut payload = decision.to_value();
+            if let (Some(input), Some(object)) = (&request.proxy, payload.as_object_mut()) {
+                object.insert(
+                    "proxy".to_owned(),
+                    crate::mcp_tool_policy_proxy::proxy_payload(input, &decision),
+                );
+            }
+            result(request, digest, "ok", "ok", Some(payload))
+        }
         Err(Stop::Need(need)) => result(request, digest, "need", "need", Some(need)),
         Err(Stop::Fail(code)) => result(request, digest, "error", code, None),
     }

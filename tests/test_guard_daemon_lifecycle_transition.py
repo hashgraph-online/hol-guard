@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_stop_during_capacity_activation_prevents_successful_start(
+def test_stop_during_post_listen_startup_prevents_successful_start(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -21,17 +21,16 @@ def test_stop_during_capacity_activation_prevents_successful_start(
         port=0,
         idle_timeout_seconds=0,
     )
-    runner = daemon._server.hook_process_runner
-    original_enable_full_capacity = runner.enable_full_capacity
+    original_persist_context = daemon._persist_aibom_inventory_context
     activation_entered = threading.Event()
     release_activation = threading.Event()
     start_errors: list[BaseException] = []
     stop_errors: list[BaseException] = []
 
-    def delayed_enable_full_capacity() -> None:
+    def delayed_persist_context() -> None:
         activation_entered.set()
         assert release_activation.wait(timeout=10)
-        original_enable_full_capacity()
+        original_persist_context()
 
     def start_daemon() -> None:
         try:
@@ -45,7 +44,7 @@ def test_stop_during_capacity_activation_prevents_successful_start(
         except BaseException as error:
             stop_errors.append(error)
 
-    monkeypatch.setattr(runner, "enable_full_capacity", delayed_enable_full_capacity)
+    monkeypatch.setattr(daemon, "_persist_aibom_inventory_context", delayed_persist_context)
     starter = threading.Thread(target=start_daemon)
     stopper = threading.Thread(target=stop_daemon)
     try:
@@ -64,7 +63,6 @@ def test_stop_during_capacity_activation_prevents_successful_start(
         assert str(start_errors[0]) == "Guard daemon stopped during startup"
         assert daemon._thread is None
         assert daemon._owner_lock is None
-        assert runner.stats()["workers"] == 0
     finally:
         release_activation.set()
         daemon.stop()
@@ -124,7 +122,6 @@ def test_serve_base_exception_is_contained_when_stop_races_serve_loop(
         )
         assert daemon._thread is None
         assert daemon._owner_lock is None
-        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve.set()
         daemon.stop()

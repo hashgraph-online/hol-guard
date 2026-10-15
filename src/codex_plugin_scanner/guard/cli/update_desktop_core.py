@@ -113,8 +113,6 @@ def desktop_core_updates_supported() -> bool:
 
 def desktop_core_uses_alpha_channel(current_version: str, *, requested_alpha: bool) -> bool:
     _ = current_version
-    if platform_target() == "x86_64-unknown-linux-gnu":
-        return False
     return requested_alpha
 
 

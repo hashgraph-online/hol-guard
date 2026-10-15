@@ -6,20 +6,19 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Protocol
 
+from ..native_github_workflow import GitHubWorkflowDescriptor, github_workflow_persisted_command_matches
 from ..workflow_capabilities import (
     SignedWorkflowCapability,
     WorkflowCapabilityError,
     canonical_framed_payload,
     format_utc_timestamp,
 )
-from .command_model import parse_shell_command
 from .github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
@@ -27,17 +26,14 @@ from .github_workflow_authorization import (
     claim_github_workflow_authorization,
     issue_github_workflow_capability_binding,
 )
-from .github_workflow_context import GitHubWorkflowDescriptor
-from .github_workflow_operations import parse_github_workflow_operation
 
 _ISSUER_ID = "guard.local"
 _CAPABILITY_TTL = timedelta(minutes=10)
 _CAPABILITY_MAX_USES = 10
-_GRAPHQL_REPOSITORY_PARSE_PLACEHOLDER: Final = "guard/locator"
 
 
 class GitHubWorkflowRuntimeStore(WorkflowCapabilityStore, Protocol):
-    def get_approval_request(self, request_id: str) -> dict[str, object] | None: ...
+    def get_approval_request(self, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None: ...
 
     def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None: ...
 
@@ -108,14 +104,14 @@ def claim_resolved_github_workflow_authorization(
         if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
             return None
         persisted_id, record, operation, session = _validated_lineage(store, request)
-        if persisted_id != request_id or not record.matches_descriptor(descriptor):
+        if persisted_id != request_id or record != descriptor.record:
             return None
         capability_id = _capability_id(request_id)
         return claim_github_workflow_authorization(
             store,
             capability_id,
-            descriptor.operation,
-            descriptor.binding_context,
+            descriptor.record.binding,
+            descriptor.command_identity,
             invocation_id=f"github-invocation-{secrets.token_hex(16)}",
             subject_id=_required_string(session, "session_id"),
             task_id=_required_string(operation, "operation_id"),
@@ -138,7 +134,7 @@ def resolved_github_workflow_capability_preflight(
         if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
             return False
         persisted_id, record, operation, session = _validated_lineage(store, request)
-        if persisted_id != request_id or not record.matches_descriptor(descriptor):
+        if persisted_id != request_id or record != descriptor.record:
             return False
         signed = store.lookup_workflow_capability(_capability_id(request_id))
         return signed is not None and _existing_matches(signed, request_id, operation, session, record)
@@ -196,7 +192,7 @@ def issue_github_workflow_capability_for_resolution(
     """Issue when eligible while keeping ordinary approvals unchanged."""
 
     try:
-        request = store.get_approval_request(request_id)
+        request = store.get_approval_request(request_id, derive_scope=False)
         if request is not None:
             _ = issue_resolved_github_workflow_capability(store, request, resolved_at=resolved_at)
     except Exception:
@@ -248,7 +244,7 @@ def _validated_lineage(
     command_text = metadata.get("command_text")
     if not isinstance(command_text, str) or not command_text:
         raise ValueError("Guard operation command mismatch")
-    if not _persisted_command_matches_record(command_text, record):
+    if not github_workflow_persisted_command_matches(command_text, record):
         raise ValueError("Guard operation command mismatch")
     operation_workspace = _required_string(metadata, "workspace")
     session_workspace = _required_string(session, "workspace")
@@ -278,56 +274,6 @@ def _existing_matches(
         and claim.binding == record.binding
         and claim.max_uses == _CAPABILITY_MAX_USES
     )
-
-
-def _persisted_command_matches_record(command_text: str, record: GitHubWorkflowApprovalRecord) -> bool:
-    try:
-        command = parse_shell_command(command_text)
-        if len(command.segments) != 1:
-            return False
-        executable = command.segments[0].executable
-        if not isinstance(executable, str) or not executable:
-            return False
-        path = Path(executable)
-        canonical = path.resolve(strict=True)
-        if (
-            not path.is_absolute()
-            or path != canonical
-            or not path.is_file()
-            or not os.access(path, os.X_OK)
-            or _file_sha256(path) != record.binding.executable_sha256
-        ):
-            return False
-        candidate = parse_github_workflow_operation(command, expected_executable=executable)
-        if candidate is None:
-            # Review-thread GraphQL commands intentionally contain no repository.
-            # This parser-only placeholder recovers their kind and globally unique
-            # node ID; it is never accepted as repository authority. The signed
-            # approval record independently binds the real repository digest.
-            candidate = parse_github_workflow_operation(
-                command,
-                repository=_GRAPHQL_REPOSITORY_PARSE_PLACEHOLDER,
-                expected_executable=executable,
-            )
-            if candidate is not None and candidate.resource_type != "github-review-thread":
-                return False
-        return (
-            candidate is not None
-            and candidate.kind == record.operation_kind
-            and candidate.resource_type == record.resource_type
-            and _digest("github-workflow-resource", candidate.resource_id) == record.binding.resource_sha256
-            and _digest("github-workflow-command-identity", command.security_identity) == record.command_identity_sha256
-        )
-    except (OSError, TypeError, ValueError):
-        return False
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _capability_id(request_id: str) -> str:

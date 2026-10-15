@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import shutil
 import sys
@@ -14,6 +15,23 @@ assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
+
+
+@pytest.mark.parametrize(
+    ("path", "operation", "category"),
+    [
+        ("src/codex_plugin_scanner/guard/native_rich_command_model.py", "compress", "transport_encode"),
+        ("src/codex_plugin_scanner/guard/native_rich_command_model.py", "open", "unclassified_python_content_io"),
+        ("src/codex_plugin_scanner/guard/other_client.py", "compress", "unclassified_python_content_io"),
+    ],
+)
+def test_request_codec_classification_does_not_allow_archive_io(path, operation, category):
+    node = ast.parse(f"def request():\n    return gzip.{operation}(b'wire')\n").body[0]
+    assert isinstance(node, ast.FunctionDef)
+    record = MODULE.FunctionRecord(path, "request", "request", node)
+    observations = list(MODULE._observations(record))
+    assert len(observations) == 1
+    assert observations[0].category == category
 
 
 def _copy_gate_sources(root: Path) -> None:

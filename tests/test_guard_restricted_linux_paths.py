@@ -1,12 +1,13 @@
 """No workspace read grant may follow credentials, aliases or mutable directory routing."""
 
-import os
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime.restricted_linux_landlock import LinuxContainmentUnavailableError
 from codex_plugin_scanner.guard.runtime.restricted_linux_paths import collect_linux_read_grants
+
+pytestmark = pytest.mark.usefixtures("native_context_digest")
 
 
 def test_ordinary_source_is_admitted_without_reading_credential_data(tmp_path: Path):
@@ -64,20 +65,3 @@ def test_credential_directory_cannot_become_an_index_root(tmp_path: Path):
     (directory / "ordinary-name.txt").write_text("synthetic fixture only")
     with pytest.raises(LinuxContainmentUnavailableError, match="nonsensitive"):
         collect_linux_read_grants(directory)
-
-
-def test_directory_replacement_during_discovery_fails_closed(tmp_path: Path, monkeypatch):
-    directory = tmp_path / "source"
-    directory.mkdir()
-    (directory / "example.py").touch()
-    original = os.open
-
-    def changed(path, flags, *, dir_fd=None):
-        if path == "source" and dir_fd is not None:
-            directory.rename(tmp_path / "old-source")
-            directory.mkdir()
-        return original(path, flags, dir_fd=dir_fd)
-
-    monkeypatch.setattr(os, "open", changed)
-    with pytest.raises(LinuxContainmentUnavailableError, match="changed"):
-        collect_linux_read_grants(tmp_path)

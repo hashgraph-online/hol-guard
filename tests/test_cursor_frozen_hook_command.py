@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.cursor_hook_command_line import cursor_hook_command_tokens
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     FROZEN_CURSOR_HOOK_COMMAND,
     HOOK_SCRIPT_NAME,
@@ -83,7 +84,7 @@ def test_frozen_cursor_hook_command_prefers_isolated_python(monkeypatch, tmp_pat
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[:3] == ["/usr/bin/python3", "-I", str(script.resolve())]
     assert FROZEN_CURSOR_HOOK_COMMAND not in command
     assert tokens[-2:] == ["--cursor-hook-event", "beforeReadFile"]
@@ -102,7 +103,7 @@ def test_frozen_cursor_hook_command_uses_supported_launcher(monkeypatch, tmp_pat
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == "/Applications/HOL Guard.app/Contents/MacOS/hol-guard"
     assert tokens[1] == FROZEN_CURSOR_HOOK_COMMAND
     assert tokens[2].endswith(HOOK_SCRIPT_NAME)
@@ -126,7 +127,7 @@ def test_frozen_cursor_hook_command_prefers_current_hol_guard_shim(monkeypatch, 
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == str(shim)
     assert tokens[1] == FROZEN_CURSOR_HOOK_COMMAND
 
@@ -157,7 +158,7 @@ def test_frozen_cursor_hook_command_prefers_macos_bundle_without_shim(monkeypatc
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == str(bundle)
 
 
@@ -183,7 +184,7 @@ def test_frozen_cursor_hook_command_keeps_versioned_executable_without_shim(monk
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == str(versioned)
 
 
@@ -198,7 +199,7 @@ def test_unfrozen_cursor_hook_command_uses_current_interpreter(monkeypatch, tmp_
         event_name="beforeReadFile",
     )
     assert FROZEN_CURSOR_HOOK_COMMAND not in command
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[:2] == ["/usr/bin/python3", "-I"]
 
 
@@ -209,7 +210,7 @@ def test_managed_python_executable_runs_isolated(tmp_path: Path) -> None:
         script_path=script,
         event_name="preToolUse",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[:3] == ["/opt/guard/bin/python", "-I", str(script.resolve())]
     assert tokens[-2:] == ["--cursor-hook-event", "preToolUse"]
 

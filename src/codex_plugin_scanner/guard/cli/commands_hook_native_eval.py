@@ -21,10 +21,9 @@ if TYPE_CHECKING:
     )
     from .commands_support_prompts import _runtime_artifact_native_reason
     from .commands_support_runtime_policy import (
-        _runtime_artifact_policy_action,
         _runtime_data_flow_summary,
         _runtime_saved_allow_validation_reason,
-        _runtime_stored_policy_decision,
+        _runtime_saved_policy_decision,
     )
     from .commands_support_runtime_resolution import (
         _canonical_harness_name,
@@ -35,8 +34,9 @@ if TYPE_CHECKING:
     )
 
 
-from ..action_lattice import coerce_guard_action, guard_action_severity, most_restrictive_guard_action
+from ..action_lattice import coerce_guard_action, most_restrictive_guard_action
 from ..approval_scope_support import package_request_runtime_workspace_scope
+from ..harness_posture import harness_is_recording_only
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
     package_external_archive_override,
@@ -44,6 +44,7 @@ from ..local_supply_chain import (
 from ..models import GuardAction
 from ..native_hook_artifact_compose import NativeHookComposeError, native_hook_compose
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
+from ..protection_posture import is_high_confidence
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
@@ -63,6 +64,7 @@ from ..trusted_local_tools import (
     matching_local_tool_grant,
 )
 from ._commands_shared import *
+from .commands_hook_decision_copy import native_hook_decision_copy
 from .commands_hook_github_workflow import (
     claimed_approval_request_id,
     github_workflow_approval_evidence,
@@ -78,14 +80,18 @@ from .commands_hook_native_floor import (
 from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
-from .commands_support_runtime_artifact_policy import _runtime_artifact_has_explicit_permission_allow
+from .commands_support_runtime_artifact_policy import (
+    _runtime_artifact_has_explicit_permission_allow,
+    record_policy_auto_stops,
+    runtime_policy_artifact_facts,
+    runtime_policy_config_facts,
+)
 from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
 from .commands_support_runtime_policy import (
     _remembered_rule_rejection_reason,
-    _runtime_artifact_exact_match_context,
     _runtime_hook_approval_context_token,
     _runtime_saved_allow_validation_reason,
-    _runtime_stored_policy_decision,
+    _runtime_saved_policy_decision,
 )
 
 
@@ -426,37 +432,17 @@ def evaluate_native_artifact_hook(
         runtime_workspace,
         _runtime_cisco_scanner_evidence,
     )
-    configured_data_flow_action = None
-    if data_flow_signals:
-        configured_data_flow_action = resolve_risk_action(
-            config,
-            "data_flow_exfiltration",
-            harness=policy_harness,
-        )
-        from ..protection_posture import apply_posture_confidence, is_high_confidence
-
-        if configured_data_flow_action is not None:
-            configured_data_flow_action = apply_posture_confidence(
-                posture=config.protection_posture,
-                explicit=config.protection_posture_explicit,
-                risk_class="data_flow_exfiltration",
-                action=configured_data_flow_action,
-                confidence=(
-                    "strong"
-                    if any(is_high_confidence(getattr(signal, "confidence", None)) for signal in data_flow_signals)
-                    else None
-                ),
-            )
+    data_flow_strong = any(is_high_confidence(getattr(signal, "confidence", None)) for signal in data_flow_signals)
     compound_finding_count = artifact_metadata.get("compound_finding_count")
     has_compound_findings = isinstance(compound_finding_count, int) and compound_finding_count > 1
     scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
     stack = native_hook_compose(
         "policy_stack",
         {
-            "config_action": _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
-            "approval_context_config_action": _runtime_artifact_policy_action(
-                config, approval_context_artifact, policy_harness
-            ),
+            "policy_config": runtime_policy_config_facts(config, args.harness),
+            "runtime": runtime_policy_artifact_facts(config, runtime_artifact, args.harness),
+            "approval_context": runtime_policy_artifact_facts(config, approval_context_artifact, policy_harness),
+            "data_flow_strong": data_flow_strong,
             "cli_action": cli_action,
             "payload_action_present": "policy_action" in payload_map,
             "payload_action": payload_map.get("policy_action"),
@@ -471,7 +457,6 @@ def evaluate_native_artifact_hook(
             "has_package": package_evaluation is not None,
             "package_policy_action": package_evaluation.policy_action if package_evaluation is not None else None,
             "has_data_flow": bool(data_flow_signals),
-            "data_flow_configured_action": configured_data_flow_action,
             "has_scanner": bool(scanner_evidence),
             "scanner_action": (
                 policy_action_for_cisco_signals(scanner_evidence, config=config, harness=policy_harness)
@@ -493,6 +478,7 @@ def evaluate_native_artifact_hook(
         },
         guard_home=guard_home,
     )
+    record_policy_auto_stops(config, stack["auto_stop_events"])
     policy_action = cast(GuardAction, stack["policy_action"])
     approval_context_policy_action = cast(GuardAction, stack["approval_context_policy_action"])
     approval_context_config_action = cast(GuardAction, stack["approval_context_config_action"])
@@ -649,29 +635,6 @@ def evaluate_native_artifact_hook(
 
     # Resolve saved evidence only after all current policy, package, data-flow,
     # scanner, configuration, workspace, and sandbox inputs are frozen above.
-    runtime_exact_match_context = _runtime_artifact_exact_match_context(runtime_artifact)
-    policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-        policy_harness,
-        artifact_id,
-        artifact_hash=runtime_artifact_hash,
-        workspace=policy_workspace,
-        publisher=runtime_artifact.publisher,
-        runtime_exact_match_context=runtime_exact_match_context,
-        memory_command=runtime_artifact.command,
-        memory_artifact_type=runtime_artifact.artifact_type,
-        memory_artifact_name=runtime_artifact.name,
-        consume_one_shot=False,
-    )
-    stored_policy_decision = _runtime_stored_policy_decision(
-        store=store,
-        harness=policy_harness,
-        artifact=runtime_artifact,
-        artifact_id=artifact_id,
-        artifact_hash=runtime_artifact_hash,
-        workspace=policy_workspace,
-        decision_lookup=policy_lookup,
-        consume_one_shot=False,
-    )
     # Legacy exact hashes cannot authorize an allow, but they must still be
     # inspected even when a v1 decision exists: a new exact allow must never
     # hide an intentionally retained pre-v1 block during migration.
@@ -683,60 +646,29 @@ def evaluate_native_artifact_hook(
             artifact_type=runtime_artifact.artifact_type,
             execution_context=package_execution_context,
         )
-    legacy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-        policy_harness,
-        artifact_id,
-        artifact_hash=artifact_content_hash,
-        workspace=legacy_policy_workspace,
-        publisher=runtime_artifact.publisher,
-        runtime_exact_match_context=runtime_exact_match_context,
-        memory_command=runtime_artifact.command,
-        memory_artifact_type=runtime_artifact.artifact_type,
-        memory_artifact_name=runtime_artifact.name,
-        consume_one_shot=False,
-    )
-    legacy_decision = _runtime_stored_policy_decision(
-        store=store,
-        harness=policy_harness,
-        artifact=runtime_artifact,
-        artifact_id=artifact_id,
-        artifact_hash=artifact_content_hash,
-        workspace=legacy_policy_workspace,
-        decision_lookup=legacy_lookup,
-        consume_one_shot=False,
-    )
-    if legacy_lookup.get("ignored_local_integrity") is not None:
-        policy_lookup = {
-            **policy_lookup,
-            "ignored_local_integrity": legacy_lookup["ignored_local_integrity"],
-        }
-    if legacy_decision is not None and (
-        stored_policy_decision is None
-        or guard_action_severity(legacy_decision.get("action"), unknown_action="block")
-        > guard_action_severity(stored_policy_decision.get("action"), unknown_action="block")
-    ):
-        merged_integrity = policy_lookup.get("ignored_local_integrity")
-        policy_lookup = dict(legacy_lookup)
-        if merged_integrity is not None:
-            policy_lookup["ignored_local_integrity"] = merged_integrity
-        stored_policy_decision = legacy_decision
-    if stored_policy_decision is None and runtime_artifact.artifact_type != "package_request":
-        legacy_artifact = _legacy_claude_alias_runtime_artifact(
+    legacy_artifact = (
+        None
+        if runtime_artifact.artifact_type == "package_request"
+        else _legacy_claude_alias_runtime_artifact(
             artifact=runtime_artifact,
             requested_harness=args.harness,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
         )
-        if legacy_artifact is not None:
-            stored_policy_decision = _runtime_stored_policy_decision(
-                store=store,
-                harness=args.harness,
-                artifact=legacy_artifact,
-                artifact_id=legacy_artifact.artifact_id,
-                artifact_hash=artifact_hash(legacy_artifact),
-                workspace=str(runtime_workspace) if runtime_workspace else None,
-                consume_one_shot=False,
-            )
+    )
+    policy_lookup, stored_policy_decision = _runtime_saved_policy_decision(
+        store=store,
+        harness=policy_harness,
+        artifact=runtime_artifact,
+        artifact_hash=runtime_artifact_hash,
+        workspace=policy_workspace,
+        legacy_artifact_hash=artifact_content_hash,
+        legacy_workspace=legacy_policy_workspace,
+        alias_harness=args.harness,
+        alias_artifact=legacy_artifact,
+        alias_artifact_hash=artifact_hash(legacy_artifact) if legacy_artifact is not None else None,
+        alias_workspace=str(runtime_workspace) if runtime_workspace else None,
+    )
     stored_policy_action = (
         _optional_string(stored_policy_decision.get("action")) if stored_policy_decision is not None else None
     )
@@ -1033,48 +965,29 @@ def evaluate_native_artifact_hook(
     )
     if action_envelope is not None:
         action_envelope = action_envelope.with_pre_execution_result(policy_action)
-    decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
-    decision_v2_payload = decision_v2.to_dict()
-    copy_answer = native_hook_compose(
-        "decision_copy",
-        {
-            "policy_action": policy_action,
-            "package": (
-                {
-                    "reason_codes": [
-                        _optional_string(reason.get("code")) or ""
-                        for reason in package_evaluation.reasons
-                        if isinstance(reason, Mapping)
-                    ],
-                    "user_title": package_evaluation.user_copy.title,
-                    "user_summary": package_evaluation.user_copy.summary,
-                    "user_harness_message": package_evaluation.user_copy.harness_message,
-                }
-                if package_evaluation is not None
-                else None
-            ),
-            "package_policy_action": package_policy_action,
-            "has_compound_findings": has_compound_findings,
-            "compound_finding_count": compound_finding_count if has_compound_findings else None,
-            "risk_summary": risk_summary,
-            "scanner_raised_to_block": scanner_raised_to_block,
-            "has_scanner_evidence": bool(scanner_evidence),
-            "scanner_primary_signal": scanner_risk_signals[0] if scanner_risk_signals else None,
-            "base_user_body": decision_v2_payload.get("user_body"),
-            "base_harness_message": decision_v2_payload.get("harness_message"),
-            "base_dashboard_primary_detail": decision_v2_payload.get("dashboard_primary_detail"),
-            "remembered_rule_reason": (
-                _remembered_rule_rejection_reason(
-                    response_payload={"remembered_rule_rejection": remembered_rule_rejection},
-                    artifact=runtime_artifact,
-                )
-                if remembered_rule_rejection is not None
-                else None
-            ),
-        },
+    copy_answer = native_hook_decision_copy(
+        composer=native_hook_compose,
         guard_home=guard_home,
+        policy_action=policy_action,
+        decision_signals=decision_signals,
+        package_evaluation=package_evaluation,
+        package_policy_action=package_policy_action,
+        has_compound_findings=has_compound_findings,
+        compound_finding_count=compound_finding_count,
+        risk_summary=risk_summary,
+        scanner_raised_to_block=scanner_raised_to_block,
+        has_scanner_evidence=bool(scanner_evidence),
+        scanner_risk_signals=scanner_risk_signals,
+        remembered_rule_reason=(
+            _remembered_rule_rejection_reason(
+                response_payload={"remembered_rule_rejection": remembered_rule_rejection},
+                artifact=runtime_artifact,
+            )
+            if remembered_rule_rejection is not None
+            else None
+        ),
     )
-    decision_v2_payload.update(cast("dict[str, object]", copy_answer["decision_overrides"]))
+    decision_v2_payload = cast("dict[str, object]", copy_answer["decision_v2"])
     incident = build_incident_context(
         harness=args.harness,
         artifact=runtime_artifact,
@@ -1087,6 +1000,7 @@ def evaluate_native_artifact_hook(
         policy_action=policy_action,  # type: ignore[arg-type]
         launch_target=_runtime_request_summary(runtime_artifact),
         risk_summary=risk_summary,
+        guard_home=guard_home,
     )
     receipt = build_receipt(
         harness=args.harness,
@@ -1156,7 +1070,7 @@ def evaluate_native_artifact_hook(
         )
     if (
         _canonical_harness_name(args.harness) == "cursor"
-        and config.mode != "observe"
+        and not harness_is_recording_only(config, args.harness)
         and event_name == "PreToolUse"
         and runtime_artifact.artifact_type == "tool_action_request"
     ):

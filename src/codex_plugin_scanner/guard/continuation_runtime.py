@@ -6,24 +6,17 @@ import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from hashlib import sha256
-from typing import Final
+from typing import Final, cast
 
 from .adapters.contracts import contract_for
 from .codex_app_server_target import codex_app_server_target_reachable
 from .codex_live_hook_target import codex_live_hook_process_is_unavailable, codex_live_hook_wait_deadline
 from .continuation_contract import (
-    CAPABILITY_CONTRACT_VERSION,
     ContinuationAction,
     ContinuationCoordinator,
     ContinuationOffer,
     ContinuationResult,
     capability_offer,
-)
-from .continuation_payload import (
-    attempt_count as _attempt_count,
-)
-from .continuation_payload import (
-    continuation_events as _continuation_events,
 )
 from .continuation_payload import (
     continuation_payload as _payload,
@@ -32,22 +25,13 @@ from .continuation_payload import (
     continuation_result as _result,
 )
 from .continuation_payload import (
-    continuation_strategy as _strategy,
-)
-from .continuation_payload import (
     mapping_value as _mapping,
 )
 from .continuation_payload import (
     offer_hash as _offer_hash,
 )
 from .continuation_payload import (
-    operation_update_payload as _operation_update_payload,
-)
-from .continuation_payload import (
     parse_aware_timestamp as _parse_aware_timestamp,
-)
-from .continuation_payload import (
-    persisted_resume_status as _persisted_resume_status,
 )
 from .continuation_payload import (
     previous_result as _previous_result,
@@ -61,7 +45,9 @@ from .continuation_worker import (
     run_store_continuation_plan,
 )
 from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
+from .native_continuation_authority import offer_wire, result_wire
 from .store import GuardStore
+from .store_continuation import continuation_store_call
 
 _SESSION_KEYS = (
     "codex_thread_id",
@@ -98,8 +84,9 @@ def continue_request_after_application(
         observed_at=observed_at,
         headless=headless,
     )
+    offer_hash = _offer_hash(offer)
     existing = store.get_request_resume(request_id)
-    previous = _previous_result(existing, offer=offer, action=normalized_action)
+    previous = _replayable_result(existing, offer=offer, offer_hash=offer_hash, action=normalized_action)
     if previous is not None:
         _persist_attempt(
             store,
@@ -110,7 +97,6 @@ def continue_request_after_application(
             now=now,
         )
         return _payload(offer, previous, replayed=True)
-    offer_hash = _offer_hash(offer)
     claim_id = store.claim_continuation_attempt(
         request_id=request_id,
         offer_hash=offer_hash,
@@ -122,7 +108,7 @@ def continue_request_after_application(
         wait_deadline = time.monotonic() + min(timeout_seconds, 0.5)
         while True:
             existing = store.get_request_resume(request_id)
-            previous = _previous_result(existing, offer=offer, action=normalized_action)
+            previous = _replayable_result(existing, offer=offer, offer_hash=offer_hash, action=normalized_action)
             if previous is not None:
                 _persist_attempt(
                     store,
@@ -297,71 +283,43 @@ def _finalize_persist_attempt(
     claim_id: str | None = None,
     approval_decision: Mapping[str, object] | None = None,
 ) -> bool:
-    operation = store.get_guard_operation_for_approval_request(request_id)
-    operation_id = _text(operation.get("operation_id")) if isinstance(operation, Mapping) else None
-    raw_session_id = _operation_session_id(operation)
-    prior = store.get_request_resume(request_id)
-    attempt_count = _attempt_count(prior)
-    # `retry_request_resume` already records the actual Codex app-server send.
-    # The contract evidence enriches that same attempt instead of double-counting it.
-    if offer.harness == "codex" and offer.capability == "session-resume" and isinstance(prior, Mapping):
-        existing_attempt_count = prior.get("attempt_count")
-        if isinstance(existing_attempt_count, int) and not isinstance(existing_attempt_count, bool):
-            attempt_count = existing_attempt_count
-    events = _continuation_events(
+    finalized = continuation_store_call(
+        store,
+        "store_finalize_projected",
         request_id=request_id,
-        operation_id=operation_id,
         action=action,
-        offer=offer,
-        result=result,
-    )
-    operation_update = _operation_update_payload(operation, result=result, action=action, now=now)
-    return store.finalize_continuation_attempt(
-        request_id=request_id,
-        offer_hash=_offer_hash(offer),
-        action=action,
-        claim_id=claim_id,
-        evidence_id=result.evidence_id,
-        terminal=result.status != "waiting",
-        resume_seed={
-            "operation_id": operation_id,
-            "harness": offer.harness,
-            "strategy": _strategy(offer, result),
-            "supported": offer.capability in {"suspended-response", "session-resume"},
-            "thread_id": raw_session_id,
-        },
-        resume_update={
-            "resolution_action": "allow" if action == "allow_once" else "block",
-            "strategy": _strategy(offer, result),
-            "supported": offer.capability in {"suspended-response", "session-resume"},
-            "status": _persisted_resume_status(offer, result),
-            "reason": result.reason,
-            "message": None,
-            "last_error": result.reason if result.status == "failed" else None,
-            "attempt_count": attempt_count,
-            "last_attempt_at": now,
-            "sent_at": now if result.status in {"resumed", "already_resumed"} else None,
-            "continuation_contract_version": CAPABILITY_CONTRACT_VERSION,
-            "continuation_capability": offer.capability,
-            "continuation_status": result.status,
-            "continuation_reason": result.reason,
-            "continuation_evidence": [
-                {
-                    "correlationId": offer.correlation_id,
-                    "evidenceId": result.evidence_id,
-                    "status": result.status,
-                }
-            ],
-            "continuation_offer_hash": _offer_hash(offer),
-            "continuation_action": action,
-            "continuation_completed_at": result.completed_at.isoformat(),
-            "continuation_cancelled_at": now if result.reason == "continuation_cancelled" else None,
-        },
-        operation_update=operation_update,
-        events=events,
+        offer=offer_wire(offer),
+        result=result_wire(result),
+        operation=store.get_guard_operation_for_approval_request(request_id),
+        prior=store.get_request_resume(request_id),
         now=now,
+        claim_id=claim_id,
         approval_decision=approval_decision,
     )
+    return cast(bool, finalized["finalized"])
+
+
+def _replayable_result(
+    existing: Mapping[str, object] | None,
+    *,
+    offer: ContinuationOffer,
+    offer_hash: str,
+    action: ContinuationAction,
+) -> ContinuationResult | None:
+    """Ask the native replay only for a row bound to this offer and action.
+
+    Replay can only succeed for a row carrying this offer hash, this action and
+    a persisted status, so the claim-wait loop skips the native round trip for
+    every other row.
+    """
+    if (
+        not isinstance(existing, Mapping)
+        or existing.get("continuation_offer_hash") != offer_hash
+        or existing.get("continuation_action") != action
+        or not isinstance(existing.get("continuation_status"), str)
+    ):
+        return None
+    return _previous_result(existing, offer=offer, action=action)
 
 
 def _persist_attempt(
@@ -422,12 +380,6 @@ def _canonical_harness(value: object) -> str:
         return "unknown"
     contract = contract_for(text)
     return contract.harness if contract is not None else text.lower()
-
-
-def _operation_session_id(operation: Mapping[str, object] | None) -> str | None:
-    if not isinstance(operation, Mapping):
-        return None
-    return _first_text(_mapping(operation.get("metadata")), _SESSION_KEYS) or _text(operation.get("session_id"))
 
 
 def _opaque_target_id(harness: str, raw_target: str | None) -> str | None:

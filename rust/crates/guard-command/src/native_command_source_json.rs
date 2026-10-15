@@ -11,8 +11,20 @@ const MAX_VALUES: usize = 1_000_000;
 // Inline matcher trees add object/array syntax levels around each matcher.
 // Matcher depth itself is independently limited to 32 during lowering.
 const MAX_JSON_DEPTH: usize = 96;
+const MAX_OBJECT_MEMBERS: usize = 4_096;
+// A compiled program keys every lowered matcher node in one object, and
+// program admission accepts up to 16,384 nodes. Requests that embed a whole
+// packaged program (offline parity) must decode that same envelope.
+pub(super) const MAX_PROGRAM_OBJECT_MEMBERS: usize = 16_384;
 
 pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
+    decode_with_object_members(bytes, MAX_OBJECT_MEMBERS)
+}
+
+pub(super) fn decode_with_object_members(
+    bytes: &[u8],
+    max_object_members: usize,
+) -> Result<Value, &'static str> {
     if bytes.is_empty() || bytes.len() > MAX_SOURCE_BYTES {
         return Err("command_source_bytes_invalid");
     }
@@ -21,6 +33,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
     let value = Seed {
         remaining: &mut remaining,
         depth: 0,
+        max_object_members,
     }
     .deserialize(&mut decoder)
     .map_err(|_| "command_source_json_invalid")?;
@@ -43,6 +56,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
 struct Seed<'a> {
     remaining: &'a mut usize,
     depth: usize,
+    max_object_members: usize,
 }
 
 impl<'de> DeserializeSeed<'de> for Seed<'_> {
@@ -97,6 +111,7 @@ impl<'de> Visitor<'de> for Seed<'_> {
         while let Some(value) = sequence.next_element_seed(Seed {
             remaining: self.remaining,
             depth: self.depth + 1,
+            max_object_members: self.max_object_members,
         })? {
             if values.len() >= 4_096 {
                 return Err(A::Error::custom("source_items_limit"));
@@ -114,12 +129,16 @@ impl<'de> Visitor<'de> for Seed<'_> {
             if key == "$serde_json::private::Number" {
                 return Err(A::Error::custom("source_integer_limit"));
             }
-            if key.len() > 4_096 || values.len() >= 4_096 || values.contains_key(&key) {
+            if key.len() > 4_096
+                || values.len() >= self.max_object_members
+                || values.contains_key(&key)
+            {
                 return Err(A::Error::custom("source_duplicate_key_or_items_limit"));
             }
             let value = mapping.next_value_seed(Seed {
                 remaining: self.remaining,
                 depth: self.depth + 1,
+                max_object_members: self.max_object_members,
             })?;
             values.insert(key, value);
         }
@@ -151,6 +170,21 @@ mod tests {
         assert!(decode(deep.as_bytes()).is_err());
         let wide = format!("[{}]", vec!["0"; 4097].join(","));
         assert!(decode(wide.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn program_envelopes_admit_wide_node_maps_but_sources_do_not() {
+        let members = |count: usize| {
+            let fields: Vec<String> = (0..count).map(|index| format!("\"n{index}\":0")).collect();
+            format!("{{\"nodes\":{{{}}}}}", fields.join(","))
+        };
+        let wide = members(MAX_OBJECT_MEMBERS + 1);
+        assert!(decode(wide.as_bytes()).is_err());
+        assert!(decode_with_object_members(wide.as_bytes(), MAX_PROGRAM_OBJECT_MEMBERS).is_ok());
+        let too_wide = members(MAX_PROGRAM_OBJECT_MEMBERS + 1);
+        assert!(
+            decode_with_object_members(too_wide.as_bytes(), MAX_PROGRAM_OBJECT_MEMBERS).is_err()
+        );
     }
 
     #[test]

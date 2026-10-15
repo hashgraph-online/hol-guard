@@ -130,31 +130,6 @@ def approval_reuse_claim_disposition(
         return None
 
 
-def fresh_lookup_preserves_claim(reason_code: str | None, *, guard_home: Path | None = None) -> bool:
-    return _accepted({"kind": "lookup_preserves_claim", "reason_code": reason_code}, guard_home)
-
-
-def fresh_local_tool_approval_matches(
-    decision: Mapping[str, object] | None,
-    *,
-    artifact: _ToolArtifact,
-    artifact_hash: str,
-    guard_home: Path | None = None,
-) -> bool:
-    """Exact fresh local proof for this tool call; not integrity or launch authority."""
-
-    return _accepted(
-        {
-            "kind": "fresh_tool_approval",
-            "decision": None if decision is None else dict(decision),
-            "harness": artifact.harness,
-            "artifact_id": artifact.artifact_id,
-            "artifact_hash": artifact_hash,
-        },
-        guard_home,
-    )
-
-
 def fresh_claim_allows_reapproval(
     *,
     claim_disposition: str | None,
@@ -206,7 +181,5 @@ __all__ = [
     "approval_reuse_claim_disposition",
     "claimed_approval_authorizes_postclaim_review",
     "fresh_claim_allows_reapproval",
-    "fresh_local_tool_approval_matches",
-    "fresh_lookup_preserves_claim",
     "native_approval_proof",
 ]

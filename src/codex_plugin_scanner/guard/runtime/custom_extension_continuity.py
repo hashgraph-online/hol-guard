@@ -1,17 +1,22 @@
-"""Apply signed Cloud custom-Extension settings to exact local identities only."""
+"""Apply signed Cloud custom-Extension settings to exact local identities only.
+
+The native runtime validates the signed observation (v1 or the device-bound
+v2), checks it is monotonic, and plans every authority update, receipt and
+continuity state. Python only reads the store snapshot the plan needs and
+commits the plan in one store transaction. When the resident cannot answer,
+nothing is applied: preparing and local mutations raise
+``CustomExtensionContinuityError`` and the public state reads as empty.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
+from ..native_context import _resolve_digest_home, native_context_digest
 from ..store_custom_extension_continuity import CustomExtensionContinuityMutation
-from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand, LocalCliCommandState, is_local_cli_command_id
-from .local_cli_identity import LocalCliKind, UnlistedCliIdentity, is_local_cli_id
+from .local_cli_commands import LocalCliCommand, LocalCliCommandState
+from .local_cli_identity import LocalCliKind, UnlistedCliIdentity
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -23,35 +28,27 @@ CUSTOM_EXTENSION_CONTINUITY_STATE_KEY = "custom_extension_continuity"
 CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY = "custom_extension_continuity_last_good"
 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY = "custom_extension_continuity_local_removals"
 
-_MAX_ITEMS = 100
-_ITEM_FIELDS = frozenset({"cliId", "identityHash", "settings"})
-_SETTINGS_FIELDS = frozenset({"state", "commands"})
-_TOP_LEVEL_FIELDS = frozenset({"schemaVersion", "revision", "observedAt", "expiresAt", "items"})
-_HEX = frozenset("0123456789abcdef")
+_V2_CAPABILITY = "custom-extension-continuity.v2"
+_LOCAL_KEYS = ("identity_hash", "kind", "name", "example_label", "interpreter_name", "observed_count", "surface")
+_PLAN_KEYS = frozenset(
+    {
+        "error",
+        "authority_updates",
+        "events",
+        "observation_preconditions",
+        "state",
+        "state_item_order",
+        "write_last_good",
+        "removals",
+        "v2",
+    }
+)
+_LOCAL_MUTATION_KEYS = frozenset({"removals", "active", "active_item_order", "event", "observation_precondition"})
+_IDENTITY_KEYS = ("cli_id", "name", "kind", "identity_hash", "example_label", "interpreter_name")
 
 
 class CustomExtensionContinuityError(ValueError):
     """The signed continuity observation cannot be applied safely."""
-
-
-@dataclass(frozen=True, slots=True)
-class _AuthorityUpdate:
-    identity: UnlistedCliIdentity
-    state: str
-    commands: Mapping[str, LocalCliCommandState]
-
-
-@dataclass(frozen=True, slots=True)
-class _ContinuityPreflight:
-    authority_revision: int
-    observation: dict[str, object]
-    observation_digest: str
-    previous: object
-    stale: bool
-    local_items: Mapping[str, dict[str, object]]
-    removals_raw: object
-    removals: Mapping[str, object]
-    revision: int
 
 
 def apply_verified_custom_extension_continuity(
@@ -93,7 +90,7 @@ def prepare_verified_custom_extension_continuity(
     device_id: str | None = None,
     now: str,
 ) -> tuple[CustomExtensionContinuityMutation | None, dict[str, object]]:
-    """Validate and plan continuity without mutating persistent authority."""
+    """Plan continuity natively without mutating persistent authority."""
 
     payload = validated_policy_bundle.get("payload")
     if not isinstance(payload, Mapping):
@@ -101,65 +98,64 @@ def prepare_verified_custom_extension_continuity(
     if payload.get(CUSTOM_EXTENSION_CONTINUITY_FIELD) is None:
         previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
         return None, dict(previous) if isinstance(previous, dict) else {}
-    continuity = payload[CUSTOM_EXTENSION_CONTINUITY_FIELD]
-    if isinstance(continuity, dict) and continuity.get("schemaVersion") == CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2:
-        workspace_id = validated_policy_bundle.get("workspaceId")
-        if not isinstance(workspace_id, str) or not workspace_id or device_id is None:
-            raise CustomExtensionContinuityError("v2 continuity requires workspace and device binding")
-        from .custom_extension_continuity_v2 import prepare_v2_continuity
-
-        return prepare_v2_continuity(
-            store,
-            continuity,
-            device_id=device_id,
-            workspace_id=workspace_id,
-            now=now,
-        )
-    from .custom_extension_continuity_v1 import prepare_v1_continuity
-
-    return prepare_v1_continuity(store, payload=payload, now=now)
-
-
-def _preflight(
-    store: GuardStore,
-    *,
-    payload: Mapping[str, object],
-    now: str,
-) -> _ContinuityPreflight:
     authority_revision = store.read_local_cli_revision()
-    observation = _parse_observation(payload[CUSTOM_EXTENSION_CONTINUITY_FIELD])
-    digest = hashlib.sha256(
-        json.dumps(observation, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    ).hexdigest()
     previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
-    revision = cast(int, observation["revision"])
-    _require_monotonic_observation(previous, revision=revision, digest=digest)
-    local_items = {
-        str(item["cli_id"]): item for item in store.list_local_cli_items() if isinstance(item.get("cli_id"), str)
+    locals_ = [item for item in store.list_local_cli_items() if isinstance(item.get("cli_id"), str)]
+    removals = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
+    request: dict[str, object] = {
+        "operation": "plan",
+        "continuity": payload[CUSTOM_EXTENSION_CONTINUITY_FIELD],
+        "workspace_id": validated_policy_bundle.get("workspaceId"),
+        "device_id": device_id,
+        "now": now,
+        "previous": previous,
+        "previous_item_order": _item_order(previous),
+        "removals": removals,
+        "locals": [_local_request(item) for item in locals_],
     }
-    removals_raw = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
-    return _ContinuityPreflight(
-        authority_revision=authority_revision,
-        observation=observation,
-        observation_digest=digest,
-        previous=previous,
-        stale=_timestamp(cast(str, observation["expiresAt"]), "expiry") <= _timestamp(now, "current time"),
-        local_items=local_items,
-        removals_raw=removals_raw,
-        removals=dict(removals_raw) if isinstance(removals_raw, dict) else {},
-        revision=revision,
+    answer = _plan_with_details(store, request, {str(item["cli_id"]) for item in locals_})
+    state = answer["state"]
+    updates = answer["authority_updates"]
+    events = answer["events"]
+    observation_preconditions = answer["observation_preconditions"]
+    v2 = answer["v2"]
+    if (
+        not isinstance(state, dict)
+        or not isinstance(updates, list)
+        or not isinstance(events, list)
+        or not isinstance(observation_preconditions, dict)
+        or not isinstance(v2, bool)
+        or not isinstance(answer["write_last_good"], bool)
+    ):
+        raise _malformed()
+    for update in updates:
+        cli_id = update.get("cli_id") if isinstance(update, dict) else None
+        if not isinstance(cli_id, str) or observation_preconditions.get(cli_id) is None:
+            raise _malformed()
+    state = _ordered_items(state, answer["state_item_order"])
+    sync_payloads: dict[str, Mapping[str, object]] = {CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state}
+    if answer["write_last_good"]:
+        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY] = state
+    planned_removals = answer["removals"]
+    if planned_removals is not None:
+        if not isinstance(planned_removals, dict):
+            raise _malformed()
+        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY] = planned_removals
+    mutation = CustomExtensionContinuityMutation(
+        expected_revision=authority_revision,
+        authority_updates=tuple(_authority_update(update) for update in updates),
+        sync_payloads=sync_payloads,
+        events=tuple(_event(event) for event in events),
+        updated_at=now,
+        sync_preconditions={
+            CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: previous,
+            CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: removals,
+        },
+        observation_preconditions=observation_preconditions,
+        requires_protected_extension_authority=v2,
+        required_negotiated_capability=_V2_CAPABILITY if v2 else None,
     )
-
-
-def _require_monotonic_observation(previous: object, *, revision: int, digest: str) -> None:
-    if not isinstance(previous, dict) or type(previous.get("cloud_revision")) is not int:
-        return
-    previous_revision = cast(int, previous["cloud_revision"])
-    if revision < previous_revision:
-        raise CustomExtensionContinuityError("continuity revision cannot move backwards")
-    previous_digest = previous.get("observation_digest")
-    if revision == previous_revision and isinstance(previous_digest, str) and previous_digest != digest:
-        raise CustomExtensionContinuityError("continuity revision payload changed")
+    return mutation, state
 
 
 def continuity_state_for_local_items(store: GuardStore, *, now: str) -> dict[str, dict[str, object]]:
@@ -168,24 +164,16 @@ def continuity_state_for_local_items(store: GuardStore, *, now: str) -> dict[str
     stored = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
     if not isinstance(stored, dict):
         return {}
-    raw_items = stored.get("items")
-    expires_at = stored.get("expires_at")
-    if not isinstance(raw_items, dict) or not isinstance(expires_at, str):
-        return {}
     try:
-        stale = _timestamp(expires_at, "expiry") <= _timestamp(now, "current time")
+        answer = _native_continuity(
+            store, {"operation": "public_state", "stored": stored, "now": now}, frozenset({"states"})
+        )
     except CustomExtensionContinuityError:
         return {}
-    states: dict[str, dict[str, object]] = {}
-    for cli_id, raw in raw_items.items():
-        if not isinstance(cli_id, str) or not isinstance(raw, dict):
-            continue
-        public = {key: value for key, value in raw.items() if key in {"status", "reason", "cloud_revision", "surface"}}
-        if stale and public.get("status") not in {"removed", "changed_identity"}:
-            public["status"] = "stale"
-            public["reason"] = "cloud_observation_expired"
-        states[cli_id] = public
-    return states
+    states = answer["states"]
+    if not isinstance(states, dict) or not all(isinstance(value, dict) for value in states.values()):
+        return {}
+    return cast(dict[str, dict[str, object]], states)
 
 
 def record_local_custom_extension_mutation(
@@ -203,59 +191,33 @@ def record_local_custom_extension_mutation(
 
     raw = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
     active = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
-    removals = dict(raw) if isinstance(raw, dict) else {}
     local = next(
         (item for item in store.list_local_cli_items() if item.get("cli_id") == identity.cli_id),
         None,
     )
+    answer = _native_continuity(
+        store,
+        {
+            "operation": "local_mutation",
+            "cli_id": identity.cli_id,
+            "identity_hash": identity.identity_hash,
+            "state": state,
+            "now": now,
+            "active": active,
+            "active_item_order": _item_order(active),
+            "removals": raw,
+            "local": None if local is None else _local_request(local),
+        },
+        _LOCAL_MUTATION_KEYS,
+    )
+    removals = answer["removals"]
+    updated_active = answer["active"]
+    if not isinstance(removals, dict) or (updated_active is not None and not isinstance(updated_active, dict)):
+        raise _malformed()
     sync_payloads: dict[str, Mapping[str, object]] = {}
-    events: list[tuple[str, Mapping[str, object]]] = []
-    revision = active.get("cloud_revision") if isinstance(active, dict) else 0
-    removals[identity.cli_id] = {
-        "identity_hash": identity.identity_hash,
-        "cloud_revision": revision if type(revision) is int else 0,
-        "state": state,
-        "updated_at": now,
-    }
-    if state == "unset":
-        updated_active = _updated_item_status(
-            active,
-            cli_id=identity.cli_id,
-            status="removed",
-            reason="removed_locally",
-        )
-        if updated_active is not None:
-            sync_payloads[CUSTOM_EXTENSION_CONTINUITY_STATE_KEY] = updated_active
-        events.append(
-            (
-                "custom_extension_continuity/removed",
-                {
-                    "cli_id": identity.cli_id,
-                    "identity_hash": identity.identity_hash,
-                    "status": "removed",
-                    "reason": "removed_locally",
-                },
-            )
-        )
-    else:
-        updated_active = _updated_item_status(
-            active,
-            cli_id=identity.cli_id,
-            status="locally_overridden",
-            reason="local_authority_preserved",
-        )
-        if updated_active is not None:
-            sync_payloads[CUSTOM_EXTENSION_CONTINUITY_STATE_KEY] = updated_active
-        events.append(
-            (
-                "custom_extension_continuity/locally_overridden",
-                {
-                    "cli_id": identity.cli_id,
-                    "identity_hash": identity.identity_hash,
-                    "status": "locally_overridden",
-                    "reason": "local_authority_preserved",
-                },
-            )
+    if updated_active is not None:
+        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_STATE_KEY] = _ordered_items(
+            updated_active, answer["active_item_order"]
         )
     sync_payloads[CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY] = removals
     try:
@@ -263,13 +225,13 @@ def record_local_custom_extension_mutation(
             expected_revision=expected_revision,
             authority_updates=[(identity, state, command_states)],
             sync_payloads=sync_payloads,
-            events=events,
+            events=[_event(answer["event"])],
             updated_at=now,
             sync_preconditions={
                 CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: active,
                 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: raw,
             },
-            observation_preconditions={identity.cli_id: _observation_precondition(local)},
+            observation_preconditions={identity.cli_id: answer["observation_precondition"]},
             provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
             catalog_seeds={identity.cli_id: catalog_seed} if catalog_seed else None,
         )
@@ -279,165 +241,123 @@ def record_local_custom_extension_mutation(
         raise CustomExtensionContinuityError("local continuity state changed during local mutation") from error
 
 
-def _validated_observation_frame(value: object, *, schema_version: str) -> tuple[dict[str, object], list[object]]:
-    """Validate the shared observation frame and return (payload, raw items)."""
-
-    if not isinstance(value, dict) or set(value) != _TOP_LEVEL_FIELDS:
-        raise CustomExtensionContinuityError("continuity observation contains unsupported fields")
-    if value.get("schemaVersion") != schema_version:
-        raise CustomExtensionContinuityError("unsupported continuity observation schema")
-    revision = value.get("revision")
-    if type(revision) is not int or cast(int, revision) < 1:
-        raise CustomExtensionContinuityError("continuity revision must be positive")
-    observed_at = value.get("observedAt")
-    expires_at = value.get("expiresAt")
-    if not isinstance(observed_at, str) or not isinstance(expires_at, str):
-        raise CustomExtensionContinuityError("continuity timestamps are required")
-    if _timestamp(expires_at, "expiry") <= _timestamp(observed_at, "observation"):
-        raise CustomExtensionContinuityError("continuity expiry must follow observation")
-    raw_items = value.get("items")
-    if not isinstance(raw_items, list) or len(raw_items) > _MAX_ITEMS:
-        raise CustomExtensionContinuityError("continuity item limit exceeded")
-    return value, cast(list[object], raw_items)
-
-
-def _parse_observation(value: object) -> dict[str, object]:
-    payload, raw_items = _validated_observation_frame(value, schema_version=CUSTOM_EXTENSION_CONTINUITY_SCHEMA)
-    items: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for raw_item in raw_items:
-        if not isinstance(raw_item, dict) or set(raw_item) != _ITEM_FIELDS:
-            raise CustomExtensionContinuityError("continuity item contains unsupported fields")
-        cli_id = raw_item.get("cliId")
-        identity_hash = raw_item.get("identityHash")
-        if not isinstance(cli_id, str) or not is_local_cli_id(cli_id) or cli_id in seen:
-            raise CustomExtensionContinuityError("invalid or duplicate continuity identity")
-        if not isinstance(identity_hash, str) or len(identity_hash) != 64 or any(c not in _HEX for c in identity_hash):
-            raise CustomExtensionContinuityError("invalid continuity identity hash")
-        seen.add(cli_id)
-        items.append({"cliId": cli_id, "identityHash": identity_hash, "settings": _settings(raw_item.get("settings"))})
-    return {**payload, "items": items}
-
-
-def _identity_from_local(local: dict[str, object]) -> UnlistedCliIdentity:
-    kind = local.get("kind")
-    if kind not in {"executable", "script"}:
-        raise CustomExtensionContinuityError("local continuity identity kind is invalid")
-    return UnlistedCliIdentity(
-        cli_id=cast(str, local["cli_id"]),
-        name=cast(str, local["name"]),
-        kind=cast(LocalCliKind, kind),
-        identity_hash=cast(str, local["identity_hash"]),
-        example_label=cast(str, local["example_label"]),
-        interpreter_name=cast(str | None, local.get("interpreter_name")),
-    )
-
-
-def _settings(value: object) -> dict[str, object]:
-    if not isinstance(value, dict) or set(value) != _SETTINGS_FIELDS:
-        raise CustomExtensionContinuityError("continuity settings contain unsupported fields")
-    state = value.get("state")
-    if state not in {"allowed", "blocked"}:
-        raise CustomExtensionContinuityError("invalid continuity setting")
-    commands = value.get("commands")
-    if not isinstance(commands, dict) or len(commands) > MAX_LOCAL_CLI_COMMANDS:
-        raise CustomExtensionContinuityError("invalid continuity command settings")
-    parsed: dict[str, LocalCliCommandState] = {}
-    for command_id, command_state in commands.items():
-        if not isinstance(command_id, str) or not is_local_cli_command_id(command_id):
-            raise CustomExtensionContinuityError("invalid continuity command identity")
-        if command_state not in {"inherit", "allow", "block"}:
-            raise CustomExtensionContinuityError("invalid continuity command setting")
-        parsed[command_id] = cast(LocalCliCommandState, command_state)
-    return {"state": state, "commands": parsed}
-
-
-def _plan_exact_settings(
+def _native_continuity(
     store: GuardStore,
+    request: dict[str, object],
+    keys: frozenset[str],
     *,
-    local: dict[str, object],
-    settings: dict[str, object],
-) -> _AuthorityUpdate | None:
-    cli_id = cast(str, local["cli_id"])
-    catalog_ids = {command.command_id for command in store.read_local_cli_command_catalog(cli_id)}
-    commands = cast(dict[str, LocalCliCommandState], settings["commands"])
-    if not set(commands) <= catalog_ids:
-        raise CustomExtensionContinuityError("continuity settings reference an unobserved command")
-    kind = local.get("kind")
-    if kind not in {"executable", "script"}:
-        raise CustomExtensionContinuityError("local continuity identity kind is invalid")
-    identity = UnlistedCliIdentity(
-        cli_id=cli_id,
-        name=cast(str, local["name"]),
-        kind=cast(LocalCliKind, kind),
-        identity_hash=cast(str, local["identity_hash"]),
-        example_label=cast(str, local["example_label"]),
-        interpreter_name=cast(str | None, local.get("interpreter_name")),
+    allow_need_details: bool = False,
+) -> dict[str, object]:
+    result = native_context_digest(
+        "custom_extension_continuity",
+        {"request": request},
+        guard_home=_resolve_digest_home(store.guard_home),
     )
-    current = store.read_local_cli_grant(cli_id)
-    current_commands = store.read_local_cli_command_states(cli_id)
-    if (
-        current is not None
-        and current.get("identity_hash") == identity.identity_hash
-        and current.get("state") == settings["state"]
-        and current_commands == commands
-    ):
-        return None
-    return _AuthorityUpdate(identity, cast(str, settings["state"]), commands)
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        raise CustomExtensionContinuityError("native custom extension continuity unavailable")
+    answer = result.get("custom_extension_continuity")
+    if not isinstance(answer, dict):
+        raise _malformed()
+    refusal = answer.get("error")
+    if refusal is not None:
+        raise CustomExtensionContinuityError(refusal if isinstance(refusal, str) else "continuity refused")
+    if allow_need_details and set(answer) == {"need_details"}:
+        return answer
+    if set(answer) != keys:
+        raise _malformed()
+    return answer
 
 
-def _updated_item_status(
-    active: object,
-    *,
-    cli_id: str,
-    status: str,
-    reason: str,
-) -> dict[str, object] | None:
-    if not isinstance(active, dict) or not isinstance(active.get("items"), dict):
-        return None
-    items = dict(cast(dict[str, object], active["items"]))
-    current = items.get(cli_id)
-    if isinstance(current, dict):
-        items[cli_id] = {**current, "status": status, "reason": reason}
-        return {**active, "items": items}
-    return None
+def _malformed() -> CustomExtensionContinuityError:
+    return CustomExtensionContinuityError("native custom extension continuity answer is malformed")
 
 
-def _local_override_matches(value: object, *, identity_hash: str, cloud_revision: int) -> bool:
-    return (
-        isinstance(value, dict)
-        and value.get("identity_hash") == identity_hash
-        and type(value.get("cloud_revision")) is int
-        and cast(int, value["cloud_revision"]) >= cloud_revision
-    )
-
-
-def _observation_precondition(local: dict[str, object] | None) -> dict[str, object] | None:
-    if local is None or type(local.get("observed_count")) is not int or cast(int, local["observed_count"]) < 1:
-        return None
-    raw_commands = local.get("commands")
-    command_ids: list[str] = []
-    if isinstance(raw_commands, list):
-        for command in raw_commands:
-            if isinstance(command, dict) and isinstance(command.get("command_id"), str):
-                command_ids.append(cast(str, command["command_id"]))
+def _local_request(item: Mapping[str, object]) -> dict[str, object]:
+    commands = item.get("commands")
     return {
-        "identity_hash": local.get("identity_hash"),
-        "kind": local.get("kind"),
-        "name": local.get("name"),
-        "interpreter_name": local.get("interpreter_name"),
-        "example_label": local.get("example_label"),
-        "observed_count": local.get("observed_count"),
-        "surface": local.get("surface"),
-        "command_ids": command_ids,
+        "cli_id": item["cli_id"],
+        **{key: item.get(key) for key in _LOCAL_KEYS},
+        "command_ids": [command.get("command_id") for command in commands if isinstance(command, dict)]
+        if isinstance(commands, list)
+        else [],
     }
 
 
-def _timestamp(value: str, label: str) -> datetime:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise CustomExtensionContinuityError(f"invalid continuity {label}") from error
-    if parsed.tzinfo is None:
-        raise CustomExtensionContinuityError(f"continuity {label} must include a timezone")
-    return parsed.astimezone(timezone.utc)
+def _plan_with_details(store: GuardStore, request: dict[str, object], local_ids: set[str]) -> dict[str, object]:
+    """Ask for a plan, loading grant and command details only for the locals it reads."""
+
+    details: dict[str, object] = {}
+    for _ in range(len(local_ids) + 1):
+        answer = _native_continuity(store, {**request, "details": details}, _PLAN_KEYS, allow_need_details=True)
+        wanted = answer.get("need_details")
+        if wanted is None:
+            return answer
+        if (
+            not isinstance(wanted, list)
+            or not wanted
+            or not all(isinstance(cli_id, str) and cli_id in local_ids and cli_id not in details for cli_id in wanted)
+        ):
+            raise _malformed()
+        details.update({cli_id: _detail_request(store, cli_id) for cli_id in wanted})
+    raise _malformed()
+
+
+def _detail_request(store: GuardStore, cli_id: str) -> dict[str, object]:
+    grant = store.read_local_cli_grant(cli_id)
+    return {
+        "grant": None if grant is None else {"identity_hash": grant["identity_hash"], "state": grant["state"]},
+        "command_states": store.read_local_cli_command_states(cli_id),
+        "catalog_ids": [command.command_id for command in store.read_local_cli_command_catalog(cli_id)],
+    }
+
+
+def _item_order(payload: object) -> list[str]:
+    if isinstance(payload, dict) and isinstance(payload.get("items"), dict):
+        return [key for key in payload["items"] if isinstance(key, str)]
+    return []
+
+
+def _ordered_items(state: dict[str, object], order: object) -> dict[str, object]:
+    """Restore the item order the native answer reports; its maps arrive sorted."""
+
+    items = state.get("items")
+    if (
+        not isinstance(items, dict)
+        or not isinstance(order, list)
+        or not all(isinstance(key, str) for key in order)
+        or len(order) != len(items)
+        or set(order) != set(items)
+    ):
+        raise _malformed()
+    return {**state, "items": {key: items[key] for key in order}}
+
+
+def _authority_update(update: object) -> tuple[UnlistedCliIdentity, str, Mapping[str, LocalCliCommandState]]:
+    if not isinstance(update, dict) or set(update) != {*_IDENTITY_KEYS, "state", "commands"}:
+        raise _malformed()
+    strings = ("cli_id", "name", "kind", "identity_hash", "example_label", "state")
+    interpreter = update["interpreter_name"]
+    if any(not isinstance(update[key], str) for key in strings) or not isinstance(update["commands"], dict):
+        raise _malformed()
+    if interpreter is not None and not isinstance(interpreter, str):
+        raise _malformed()
+    identity = UnlistedCliIdentity(
+        cli_id=update["cli_id"],
+        name=update["name"],
+        kind=cast(LocalCliKind, update["kind"]),
+        identity_hash=update["identity_hash"],
+        example_label=update["example_label"],
+        interpreter_name=interpreter,
+    )
+    return identity, update["state"], cast(Mapping[str, LocalCliCommandState], update["commands"])
+
+
+def _event(event: object) -> tuple[str, Mapping[str, object]]:
+    if (
+        not isinstance(event, list)
+        or len(event) != 2
+        or not isinstance(event[0], str)
+        or not isinstance(event[1], dict)
+    ):
+        raise _malformed()
+    return event[0], event[1]

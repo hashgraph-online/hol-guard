@@ -10,6 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// Schema discriminator for the request.
 pub const HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA: &str = "guard-hook-artifact-compose-request.v1";
@@ -31,6 +32,8 @@ pub struct HookArtifactComposeRequestV1 {
 pub enum HookArtifactComposeQueryV1 {
     /// Current action composition, local-grant eligibility, and risk copy.
     PolicyStack(Box<PolicyStackQueryV1>),
+    /// Configured policy action of one artifact (no lattice composition).
+    ConfigAction(Box<ConfigActionQueryV1>),
     /// A matched local tool grant settles the current review as an allow.
     ToolGrantApply,
     /// Settle a local CLI grant result and the native floor.
@@ -49,13 +52,69 @@ pub enum HookArtifactComposeQueryV1 {
     ClaimedReuse(Box<ClaimedReuseQueryV1>),
     /// Decision copy overlay for the composed action.
     DecisionCopy(Box<DecisionCopyQueryV1>),
+    /// Build the canonical decision and its copy in the same resident request.
+    DecisionBuildCopy(Box<DecisionBuildCopyQueryV1>),
+}
+
+/// Guard configuration facts the native policy-config action reads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyConfigFactsV1 {
+    pub default_action: String,
+    pub risk_actions: BTreeMap<String, String>,
+    pub harness_risk_actions: BTreeMap<String, BTreeMap<String, String>>,
+    pub security_level: String,
+    pub protection_posture: String,
+    pub protection_posture_explicit: bool,
+    /// Managed policy locks `security_level`.
+    pub managed_locks_level: bool,
+    /// Canonical harness every action is resolved for.
+    pub harness: String,
+    /// Per-harness posture override for `harness`, `null` when none.
+    pub harness_posture_override: Option<String>,
+}
+
+/// Facts of one artifact the native policy-config action reads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyArtifactFactsV1 {
+    /// The prompt asks to bypass Guard.
+    pub hard_block: bool,
+    /// Artifact, publisher, or harness action override.
+    pub configured_override: Option<String>,
+    /// Normalized command-action floor.
+    pub command_action_floor: Option<String>,
+    /// A verified explicit catalog-permission allow.
+    pub explicit_permission_allow: bool,
+    pub risk_classes: Vec<String>,
+    /// A restricted pytest sandbox profile is already in force.
+    pub pytest_restricted_sandbox: bool,
+    /// The shell local-script execution review detector fired.
+    pub shell_local_script_review: bool,
+    /// `guard_default_action` metadata; non-strings arrive as `""`.
+    pub guard_default_action: Option<String>,
+    /// `str(confidence or "")` of the artifact risk confidence.
+    pub confidence_text: String,
+    pub confidence_strong: bool,
+    pub writes_launch_agent: bool,
+    pub skill_is_known_bad: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigActionQueryV1 {
+    pub policy_config: PolicyConfigFactsV1,
+    pub artifact: PolicyArtifactFactsV1,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyStackQueryV1 {
-    pub config_action: Value,
-    pub approval_context_config_action: Value,
+    pub policy_config: PolicyConfigFactsV1,
+    pub runtime: PolicyArtifactFactsV1,
+    pub approval_context: PolicyArtifactFactsV1,
+    /// A data-flow signal carries strong confidence.
+    pub data_flow_strong: bool,
     /// Trusted CLI action; `null` means none was supplied.
     pub cli_action: Value,
     pub payload_action_present: bool,
@@ -66,7 +125,6 @@ pub struct PolicyStackQueryV1 {
     pub has_package: bool,
     pub package_policy_action: Value,
     pub has_data_flow: bool,
-    pub data_flow_configured_action: Value,
     pub has_scanner: bool,
     pub scanner_action: Value,
     pub has_compound_findings: bool,
@@ -169,6 +227,14 @@ pub struct DecisionCopyQueryV1 {
     pub base_harness_message: Value,
     pub base_dashboard_primary_detail: Value,
     pub remembered_rule_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionBuildCopyQueryV1 {
+    pub copy: DecisionCopyQueryV1,
+    pub reason: String,
+    pub signals: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -19,17 +19,14 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_scope_support import package_request_runtime_workspace_scope
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact, package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, RuntimeMcpGuardProxy
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    extract_package_intent_request,
-)
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = [
@@ -44,7 +41,7 @@ def _native_package_proxy_home(tmp_path: Path, native_mcp_probe) -> None:
     native_mcp_probe(tmp_path / "guard-home")
 
 
-def test_package_decision_v2_ignores_malformed_reason_items() -> None:
+def test_package_decision_v2_ignores_malformed_reason_items(tmp_path: Path) -> None:
     evaluation = SimpleNamespace(
         reasons=("malformed", {"code": "cloud_timeout", "message": "Cloud timed out."}),
         user_copy=SimpleNamespace(
@@ -54,7 +51,9 @@ def test_package_decision_v2_ignores_malformed_reason_items() -> None:
         ),
     )
 
-    decision = RuntimeMcpGuardProxy._package_decision_v2(evaluation, "require-reapproval")
+    decision = RuntimeMcpGuardProxy._package_decision_v2(
+        evaluation, "require-reapproval", guard_home=tmp_path / "guard-home"
+    )
 
     assert [signal["signal_id"] for signal in decision["signals"]] == ["supply-chain.cloud_timeout"]
 

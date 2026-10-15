@@ -207,7 +207,6 @@ pub fn run_git(root: &Path, args: &[&str], timeout_secs: u64) -> Result<Complete
 /// Byte-exact argument variant for staged/path specs: `git` accepts arbitrary
 /// non-NUL bytes in argv on POSIX, which preserves `surrogateescape` parity
 /// for non-UTF-8 staged paths that `&str` cannot represent.
-#[cfg(unix)]
 pub fn run_git_os(
     root: &Path,
     args: &[std::ffi::OsString],

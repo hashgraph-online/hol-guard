@@ -13,11 +13,11 @@ from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
+from .commands_parser_constants import DEFAULT_ALIAS_NAME
 from .install_commands import apply_managed_install
 from .product import build_guard_start_payload
 
 GUARD_COMMAND = "hol-guard"
-DEFAULT_ALIAS_NAME = "guardp"
 
 
 def build_guard_bootstrap_payload(

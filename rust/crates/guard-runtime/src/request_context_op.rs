@@ -29,6 +29,12 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
+    pub(crate) fn bounded_milliseconds(milliseconds: u64) -> Self {
+        Self {
+            started: Instant::now(),
+            limit: Duration::from_millis(milliseconds.min(9_000)),
+        }
+    }
     pub(crate) fn check(&self) -> Result<(), &'static str> {
         if self.started.elapsed() >= self.limit {
             return Err(BUDGET_EXCEEDED);
@@ -47,14 +53,22 @@ impl Budget {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_request_context_request(
     request: &RequestContextRequestV1,
+) -> Result<Vec<u8>, String> {
+    evaluate_request_context_request_with_store(request, None)
+}
+
+pub(crate) fn evaluate_request_context_request_with_store(
+    request: &RequestContextRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
     if request.schema != REQUEST_CONTEXT_REQUEST_SCHEMA {
         return Err("native_request_context_schema_mismatch".to_owned());
     }
-    let (status, code, payload) = match decide(request) {
+    let (status, code, payload) = match decide(request, store) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
@@ -205,7 +219,6 @@ fn build(
     budget: &Budget,
 ) -> Result<Value, &'static str> {
     admit_build(body)?;
-    let policy = admit_policy(body)?;
     budget.check()?;
     let shell_report = match &body.script {
         None => Value::Null,
@@ -221,8 +234,35 @@ fn build(
             shell::context_report(&context, budget)?
         }
     };
+    build_with_shell_report(request, body, shell_report, budget)
+}
+
+/// Bind a context already derived by a native recognizer without modeling it again.
+pub(crate) fn build_with_shell_report(
+    request: &RequestContextRequestV1,
+    body: &RequestContextBuildV1,
+    shell_report: Value,
+    budget: &Budget,
+) -> Result<Value, &'static str> {
+    admit_build(body)?;
+    let policy = admit_policy(body)?;
     budget.check()?;
     let launch_cwd = body.cwd.as_deref().or(body.fallback_cwd.as_deref());
+    let environment_secret_dump = if body.classify_environment_secrets {
+        body.script.as_deref().map(|command| {
+            guard_command::environment_secret_dump::command_reads_environment_secrets_with_caller_cwd(
+                command,
+                body.cwd.as_deref().map(Path::new),
+                body.home_dir.as_deref().map(Path::new),
+                body.fallback_cwd.as_deref().map(Path::new),
+            )
+        })
+        .transpose()
+        .map_err(|_| "native_request_context_environment_secret_invalid")?
+    } else {
+        None
+    };
+    budget.check()?;
     let launch = match &body.executable {
         None => Value::Null,
         Some(executable) => launch_identity(executable, launch_cwd, body.home_dir.as_deref()),
@@ -252,13 +292,41 @@ fn build(
         "launch": launch,
         "target": body.target,
         "context_sha256": context_sha256,
+        "environment_secret_dump": environment_secret_dump,
     }))
 }
 
-fn decide(request: &RequestContextRequestV1) -> Result<Value, &'static str> {
+fn decide(
+    request: &RequestContextRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Value, &'static str> {
     let budget = admit(request)?;
     let payload = match &request.action {
+        RequestContextKindV1::PolicyDocument(body) => {
+            crate::policy_document_op::evaluate(body, &budget, &request.guard_home)?
+        }
+        RequestContextKindV1::ContentSensitivity(body) => crate::content_sensitivity_op::evaluate(
+            body,
+            &budget,
+            store,
+            Path::new(&request.guard_home),
+        )?,
+        RequestContextKindV1::RestrictedPytest { operation, input } => {
+            crate::restricted_pytest_op::evaluate(operation, input, &budget)?
+        }
+        RequestContextKindV1::CriticalFloor(body) => {
+            crate::critical_floor_op::evaluate(body, &budget)?
+        }
         RequestContextKindV1::Build(body) => build(request, body, &budget)?,
+        RequestContextKindV1::DirectTool(body) => {
+            crate::direct_tool_context_op::direct(request, body, &budget)?
+        }
+        RequestContextKindV1::TrustedTool(body) => {
+            crate::direct_tool_context_op::trusted(body, &budget)?
+        }
+        RequestContextKindV1::SensitiveRequest(body) => {
+            crate::sensitive_request_op::evaluate(request, body, &budget)?
+        }
         RequestContextKindV1::ValidateSegment {
             context,
             segment_index,

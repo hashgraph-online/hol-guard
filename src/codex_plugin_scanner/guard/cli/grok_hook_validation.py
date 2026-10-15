@@ -26,6 +26,25 @@ def _arguments(command: str) -> tuple[str, ...]:
     return args if args and _shell_command(args) == command.strip() else ()
 
 
+def _native_client(args: tuple[str, ...], *, trusted: bool) -> tuple[str, ...] | None:
+    """The generated client argv inside a native runtime prefix.
+
+    Returns ``args`` unchanged without a prefix and None for a prefix that is
+    not this host's validated native runtime when ``trusted`` is required.
+    """
+    from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, native_bridge_executable
+
+    if len(args) < 2 or args[1] != NATIVE_BOUNDED_HOOK_COMMAND:
+        return args
+    if len(args) != 6 or args[3] != "-I" or not Path(args[0]).is_absolute():
+        return None
+    if trusted:
+        runtime = native_bridge_executable("grok")
+        if runtime is None or Path(args[0]).resolve() != runtime.resolve():
+            return None
+    return args[2:]
+
+
 def _config(text: str, executable: str, *, frozen: bool, context: HarnessContext | None) -> dict[str, object] | None:
     """Bind the bridge configuration to its executable and Grok hook invocation."""
     config = json.loads(text)
@@ -101,7 +120,9 @@ def _desktop_proxy(args: tuple[str, ...], context: HarnessContext | None) -> boo
 def is_grok_hook_command(command: str, context: HarnessContext | None = None) -> bool:
     """Reject marker-only commands without executing untrusted hook text or code."""
     try:
-        args = _arguments(command)
+        args = _native_client(_arguments(command), trusted=True)
+        if args is None:
+            return False
         if len(args) == 9:
             return _desktop_proxy(args, context)
         if len(args) in {3, 4} and args[1] == "-I":
@@ -145,7 +166,7 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
     """
 
     def binding(text: str, *, old_client: bool) -> tuple[Path | None, dict[str, str]] | None:
-        args = _arguments(text)
+        args = _native_client(_arguments(text), trusted=False)
         if not args or not Path(args[0]).is_absolute():
             return None
         script = None

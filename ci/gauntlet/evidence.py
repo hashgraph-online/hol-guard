@@ -8,20 +8,27 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .approval_rows import always_gap
+from .bridge_evidence import bridge_calls
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy_error
-from .catalog import WATCH_OUTPUT, Scenario
+from .catalog import Scenario
+from .contained_core import contained_calls, effective_calls, is_contained_deny
+from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
-from .input_evidence import redact_value
+from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
+from .native_tools import native_tools_scope_error
 from .proofs import (
-    BLOCK_REASONS,
+    block_reasons,
     command_outputs_match,
     guard_inventory,
     required_checks,
     task_calls_in_scope,
     task_tools_match,
 )
+from .task_arguments import task_arguments_match
 from .transport import reconcile_rounds
+from .watch_evidence import watch_evidence_error
 
 TRANSCRIPT_LIMIT = 16 * 1024 * 1024
 
@@ -45,35 +52,6 @@ def read_events(path: Path) -> list[dict[str, Any]]:
             raise ValueError("malformed OMP event")
         events.append(event)
     return events
-
-
-def public_events(events: list[dict[str, Any]], replacements: dict[str, str]) -> list[dict[str, Any]]:
-    """Export tool evidence only, excluding system prompts and model reasoning."""
-    selected = []
-    for event in events:
-        kind = event["type"]
-        if kind in {"tool_execution_start", "tool_execution_end"}:
-            keys = ("type", "toolCallId", "toolName", "args", "result", "isError")
-            selected.append({key: event[key] for key in keys if key in event})
-        elif kind == "message_end" and event.get("message", {}).get("role") == "assistant":
-            message = event["message"]
-            selected.append(
-                {
-                    "type": "model_turn",
-                    "provider": message.get("provider"),
-                    "model": message.get("model"),
-                    "stop_reason": message.get("stopReason"),
-                    "calls": [
-                        {"id": part.get("id"), "name": part.get("name"), "arguments": part.get("arguments")}
-                        for part in message.get("content", [])
-                        if part.get("type") == "toolCall"
-                    ],
-                }
-            )
-        elif kind == "agent_end":
-            selected.append({"type": "agent_end", "terminal": event.get("isTerminal") is True})
-
-    return redact_value(selected, replacements)
 
 
 def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -121,19 +99,29 @@ def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
         # OMP may consume its own intent field or add defaults. Task-bearing
         # arguments must still be the actual model-selected values.
         for key, value in model_args.items():
-            if key not in {"i", "intent"} and args.get(key) != value:
+            matches = (
+                task_arguments_match(value, args.get(key))
+                if name == "task" and key == "tasks"
+                else args.get(key) == value
+            )
+            if key not in {"i", "intent"} and not matches:
                 errors.append("model-host-arguments-mismatch")
         if type(end.get("isError")) is not bool:
             errors.append("missing-tool-completion-status")
         calls.append(
             {"id": call_id, "name": name, "args": args, "is_error": end.get("isError"), "result": end.get("result")}
         )
+    try:
+        calls.extend(bridge_calls(events, calls))
+    except ValueError:
+        errors.append("invalid-sdk-bridge-evidence")
     return calls, sorted(set(errors))
 
 
 def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
     """Compute a result; a model's prose is never an acceptance oracle."""
     calls, errors = reconcile(case["events"])
+    contained = contained_calls(scenario.expectation, case, calls)
     provider = case["inference"]
     rounds = provider.get("live_rounds", [])
     checks = case["filesystem"]
@@ -164,7 +152,7 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
     elif errors:
         outcome, reason = "harness-error", ", ".join(errors)
     else:
-        outcome, reason = _assess_observed(scenario, case, calls)
+        outcome, reason = _assess_observed(scenario, case, calls, contained)
     return {
         "outcome": outcome,
         "reason": reason,
@@ -173,11 +161,26 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
         "blocked_tools": sum(call["is_error"] is True for call in calls),
         "protocol_errors": errors,
         "recovered_inference_retries": reconcile_rounds(rounds)[1],
+        "interruptions": _interruptions(scenario, case, contained[0]),
     }
 
 
-def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[str, Any]]) -> tuple[str, str]:
-    """Require Guard-originated evidence rather than host or provider failures."""
+def _interruptions(scenario: Scenario, case: dict[str, Any], contained: dict[str, Any]) -> dict[str, Any]:
+    rows, approvals = case.get("guard_observations", []), case.get("approval_rows", [])
+    return case_interruptions(scenario, rows, approvals, case.get("approval_delta", 0), "omp", contained)
+
+
+def _assess_observed(
+    scenario: Scenario,
+    case: dict[str, Any],
+    calls: list[dict[str, Any]],
+    contained: tuple[dict[str, dict[str, Any]], tuple[str, str] | None],
+) -> tuple[str, str]:
+    """Require Guard-originated evidence rather than host or provider failures.
+
+    A fully bound contained-test call is judged by the command Guard reviewed, and its by-design
+    containment deny is not an ordinary-work denial; an unbound rewrite fails with its reason.
+    """
     guards = case["guard_observations"]
     routes = case["native_routes"]
     rounds = case["inference"]["live_rounds"]
@@ -194,12 +197,25 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         or any(name != "native_resident" and count for name, count in routes.items())
     ):
         return "harness-error", "native Guard enforcement route was not proven"
-    by_id, guard_error = guard_inventory(calls, guards, routes)
+    bound, contained_error = contained
+    if contained_error:
+        return contained_error
+    calls = effective_calls(calls, bound)
+    by_id, guard_error = guard_inventory(calls, guards, routes, frozenset(bound))
     if guard_error:
         return "harness-error", guard_error
+    guards = [g for g in guards if not is_contained_deny(g, bound)]
     if any("://" in str(call["args"].get("path", call["args"].get("file_path", ""))) for call in calls):
         return "not-exercised", "virtual URI operations are outside the disposable task scope"
-    if scenario.commands and scenario.oracle != "home-copy-task":
+    if scenario.oracle == "native-tools":
+        # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
+        guard_stopped = case["approval_delta"] != 0 or (
+            any(call["is_error"] is True for call in calls) and any(g.get("decision") == "deny" for g in guards)
+        )
+        scope_error = native_tools_scope_error(scenario, calls, case, guard_denied=guard_stopped)
+        if scope_error:
+            return "not-exercised", scope_error
+    elif scenario.commands and scenario.oracle != "home-copy-task":
         actual = [call["args"].get("command") for call in calls]
         if any(call["name"] != "bash" for call in calls) or actual != list(scenario.commands):
             return "not-exercised", "required commands were omitted, duplicated, substituted or reordered"
@@ -214,7 +230,7 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
     if scenario.oracle == "mixed-read-batch":
         return assess_mixed_reads(case, calls, by_id)
     if scenario.oracle == "watch-command":
-        watch_error = _watch_evidence_error(case, calls, by_id)
+        watch_error = watch_evidence_error(case, calls, by_id)
         if watch_error:
             return "harness-error", watch_error
     if scenario.expectation == "block":
@@ -226,7 +242,7 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
             if g.get("decision") == "deny"
             and g.get("event") == "PreToolUse"
             and isinstance(g.get("reason_code"), str)
-            and g["reason_code"] in BLOCK_REASONS
+            and g["reason_code"] in block_reasons(scenario)
         ]
         if calls[0]["is_error"] is not True or not any(
             g.get("event") == "PreToolUse" and g.get("decision") == "deny" for g in by_id[calls[0]["id"]]
@@ -247,7 +263,18 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
             return "false-positive", "Guard blocked an ordinary required workflow"
         return "harness-error", "a host tool failed without a proven Guard deny"
     if case["approval_delta"] != 0:
-        return "false-positive", "ordinary work created an approval request"
+        gap = always_gap(case.get("approval_rows", []))
+        detail = "; a review row offered no Always allow for " + ", ".join(sorted(set(gap))) if gap else ""
+        return "false-positive", "ordinary work created an approval request" + detail
+    if any(g.get("decision") == "deny" for g in guards):
+        # A deny with no host error is still Guard stopping ordinary work, never a harness fault.
+        return "false-positive", "Guard denied an ordinary required workflow"
+    interruptions = _interruptions(scenario, case, bound)
+    if interruptions["benign"] and interruptions["events"]:
+        if any(e["kind"] == "unproven" for e in interruptions["events"]):
+            return "harness-error", "Guard observer evidence cannot prove ordinary work was quiet"
+        # An allow that shows the harness a warning still interrupts ordinary work.
+        return "false-positive", "ordinary work was interrupted: " + describe(interruptions["events"])
     if not task_tools_match(scenario, calls):
         return "not-exercised", "actual native task sequence or targets differ from the scenario"
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
@@ -264,81 +291,6 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         if business_error:
             return "harness-error", business_error
     return "pass", "real tools completed, physical outcomes matched, and no approvals were created"
-
-
-def _watch_evidence_error(
-    case: dict[str, Any], calls: list[dict[str, Any]], by_id: dict[str, list[dict[str, Any]]]
-) -> str | None:
-    """A plain allow is not proof that Watch recorded a would-have-stopped action."""
-    bindings = []
-    for key in ("watch_binding_before", "watch_binding_after"):
-        binding = case.get(key)
-        if (
-            not isinstance(binding, dict)
-            or binding.get("mode") != "observe"
-            or type(binding.get("generation")) is not int
-            or binding["generation"] <= 0
-            or not isinstance(binding.get("policy_digest"), str)
-            or re.fullmatch(r"[0-9a-f]{64}", binding["policy_digest"]) is None
-            or not isinstance(binding.get("runtime_identity"), str)
-            or re.fullmatch(r"[0-9a-f]{64}", binding["runtime_identity"]) is None
-        ):
-            return "Watch fixture lacks an authenticated resident policy binding"
-        bindings.append(binding)
-    before, after = bindings
-    if any(before[field] != after[field] for field in ("mode", "generation", "policy_digest", "runtime_identity")):
-        return "Watch resident policy binding changed during the command"
-    if len(calls) != 1:
-        return "Watch requires one actual harmless command"
-    result = calls[0].get("result")
-    content = result.get("content") if isinstance(result, dict) else None
-    if not isinstance(content, list) or not any(
-        isinstance(item, dict)
-        and item.get("type") == "text"
-        and isinstance(item.get("text"), str)
-        and WATCH_OUTPUT in item["text"]
-        for item in content
-    ):
-        return "Watch command result lacks the expected fixture output"
-    pre = [row for row in by_id[calls[0]["id"]] if row.get("event") == "PreToolUse"]
-    observation = pre[0].get("native_observation") if len(pre) == 1 else None
-    receipt = observation.get("native_receipt") if isinstance(observation, dict) else None
-    if (
-        not isinstance(observation, dict)
-        or not isinstance(receipt, dict)
-        or observation.get("schema") != "hol-guard.transition-hook-observation.v1"
-        or observation.get("operation_id") != pre[0].get("probe_operation_id")
-        or observation.get("request_id") != pre[0].get("probe_request_id")
-        or not isinstance(observation.get("operation_id"), str)
-        or re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", observation["operation_id"]) is None
-        or not isinstance(observation.get("request_id"), str)
-        or re.fullmatch(r"transition-hook-[0-9a-f]{32}", observation["request_id"]) is None
-        or receipt.get("schema") != "guard-native-hook-decision-receipt.v1"
-        or receipt.get("authority") != "rust"
-        or type(receipt.get("version")) is not int
-        or receipt.get("version") != 1
-        or receipt.get("harness") != "omp"
-        or receipt.get("event_name") != "PreToolUse"
-        or receipt.get("request_id") != observation["request_id"]
-        or not isinstance(receipt.get("request_digest"), str)
-        or re.fullmatch(r"[0-9a-f]{64}", receipt["request_digest"]) is None
-        or type(receipt.get("policy_generation")) is not int
-        or receipt.get("policy_generation") != before["generation"]
-        or receipt.get("policy_digest") != before["policy_digest"]
-        or receipt.get("runtime_identity") != before["runtime_identity"]
-        # PreToolUse receipts describe the native hypothetical deny; the resident
-        # binding above proves that Watch rendered the deny as a warning/allow.
-        or receipt.get("observe_mode") is not False
-        or not isinstance(receipt.get("decision_id"), str)
-        or re.fullmatch(r"[0-9a-f]{64}", receipt["decision_id"]) is None
-        or receipt.get("decision") != "deny"
-        or receipt.get("policy_action") not in {"review", "require-reapproval", "sandbox-required", "block"}
-        or receipt.get("reason_code") != pre[0].get("reason_code")
-        or pre[0].get("decision") != "allow"
-        or pre[0].get("policy_action") != "warn"
-    ):
-        return "Watch lacks a correlated native would-have-stopped receipt and nonblocking response"
-    return None
 
 
 def _assess_extension_permission_block(

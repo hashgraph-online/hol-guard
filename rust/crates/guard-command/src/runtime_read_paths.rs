@@ -18,7 +18,7 @@ pub(crate) const MAX_DECODED_PAYLOAD_BYTES: u64 = 32 * 1024;
 /// `os.path.realpath`-shaped canonicalization: on Windows the verbatim
 /// `\\?\` prefix `std::fs::canonicalize` adds is removed so the text
 /// compares with `normalize_path` output.
-fn canonicalize_text(path: &Path) -> std::io::Result<PathBuf> {
+pub(crate) fn canonicalize_text(path: &Path) -> std::io::Result<PathBuf> {
     std::fs::canonicalize(path).map(strip_verbatim_prefix)
 }
 
@@ -291,18 +291,17 @@ pub(crate) fn resolved_runtime_path(
         Some(r) => r.to_vec(),
         None => runtime_read_roots(cwd, home_dir),
     };
-    if !roots
-        .iter()
-        .any(|root| path_is_relative_to(&candidate, root))
-    {
+    if roots.is_empty() {
         return None;
     }
-    for root_text in runtime_read_root_texts(&roots) {
-        if let Some(entry) = runtime_file_entry_under_root(&normalized, &root_text) {
-            return Some(entry);
-        }
-    }
-    None
+    // `os.path.realpath`, then the containment check on the resolved text.
+    let path_text = weak_canonicalize(&candidate)?
+        .to_string_lossy()
+        .into_owned();
+    runtime_read_root_texts(&roots)
+        .iter()
+        .any(|root_text| path_text_is_within_root_text(&path_text, root_text))
+        .then(|| PathBuf::from(path_text))
 }
 
 /// `_read_small_runtime_text_file` (credential_exfiltration :286-333).
@@ -349,7 +348,7 @@ fn open_runtime_file(path: &Path) -> Option<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt;
     std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc_o_nofollow())
+        .custom_flags(libc::O_NOFOLLOW)
         .open(path)
         .ok()
 }
@@ -357,21 +356,4 @@ fn open_runtime_file(path: &Path) -> Option<std::fs::File> {
 #[cfg(not(unix))]
 fn open_runtime_file(path: &Path) -> Option<std::fs::File> {
     std::fs::File::open(path).ok()
-}
-
-#[cfg(unix)]
-fn libc_o_nofollow() -> i32 {
-    // O_NOFOLLOW = 0o200000 on Linux, 0x0100 on macOS (O_NOFOLLOW=0x00000100).
-    #[cfg(target_os = "macos")]
-    {
-        0x0000_0100
-    }
-    #[cfg(target_os = "linux")]
-    {
-        0o200000
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        0
-    }
 }

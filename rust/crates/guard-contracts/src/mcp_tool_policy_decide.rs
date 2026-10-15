@@ -11,7 +11,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::{BrowserMcpArtifactV1, McpToolArgumentsV1};
+use crate::{
+    BrowserMcpArtifactV1, ContributedMcpLayerV1, LocalMcpServerMaterialV1, McpToolArgumentsV1,
+};
 
 /// Schema discriminator for the request.
 pub const MCP_TOOL_POLICY_DECIDE_REQUEST_SCHEMA: &str = "guard-mcp-tool-policy-decide-request.v1";
@@ -23,6 +25,44 @@ pub const MCP_TOOL_POLICY_DECIDE_FEATURE: &str = "mcp-tool-policy-decide-v1";
 pub const MCP_TOOL_POLICY_DECIDE_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// Most effect observations one request may carry.
 pub const MCP_TOOL_POLICY_DECIDE_MAX_OBSERVATIONS: usize = 96;
+
+/// Non-authoritative inputs for the this-device grant and catalog-contribution
+/// decision. When present, the resident reads the store and decides in-process
+/// instead of asking the caller for an `extension_decision` observation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpExtensionInputV1 {
+    /// Absolute path of `guard.db`; must sit directly under `guard_home`.
+    pub store_path: String,
+    pub guard_home: String,
+    pub harness: String,
+    pub tool_name: String,
+    pub server: LocalMcpServerMaterialV1,
+    #[serde(default)]
+    pub connection_identity_hash: Option<String>,
+    #[serde(default)]
+    pub tool_authority_hash: Option<String>,
+    #[serde(default)]
+    pub launcher_path: Option<String>,
+    #[serde(default)]
+    pub launcher_home: Option<String>,
+    /// The caller could not build the grant inputs; the call is held for review.
+    #[serde(default)]
+    pub local_unavailable: bool,
+    #[serde(default)]
+    pub server_identity: Option<Map<String, Value>>,
+    #[serde(default)]
+    pub artifact_transport: Option<Value>,
+    #[serde(default)]
+    pub server_name: Option<Value>,
+    #[serde(default)]
+    pub contributed_tool_name: Option<Value>,
+    pub layers: Vec<ContributedMcpLayerV1>,
+    /// The caller could not read the extension-control layers; the contributed
+    /// decision has no answer and the call is held for review.
+    #[serde(default)]
+    pub layers_unavailable: bool,
+}
 
 /// One tool call: everything the policy composition reads, in DTO form.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -38,6 +78,8 @@ pub struct McpToolPolicySubjectV1 {
     pub publisher: Option<String>,
     pub artifact_hash: String,
     pub arguments: McpToolArgumentsV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension: Option<McpExtensionInputV1>,
 }
 
 /// An effect the resident asked for and the result Python observed.
@@ -46,6 +88,62 @@ pub struct McpToolPolicySubjectV1 {
 pub struct McpToolPolicyObservationV1 {
     pub need: Value,
     pub result: Value,
+}
+
+/// Route inputs the resident folds into the `ok` payload so the caller does not
+/// need separate saved-allow-gate and route-selection round trips. The payload
+/// carries `proxy: {gate, route}`; a route that still needs a caller-supplied
+/// fact is repeated by the caller through `mcp_proxy_decide`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpToolPolicyProxyInputV1 {
+    pub catalog_state: String,
+    pub mode: String,
+    pub package_present: bool,
+    pub asks_for_approval: bool,
+    pub inline_available: bool,
+    pub tool_name: String,
+}
+
+/// Evidence for the saved-policy lookup, so the resident reads the store in
+/// the same call instead of naming a `policy_lookup` effect.
+///
+/// The keyring-facing integrity material and the integrity state are
+/// caller-shipped exactly as for the `policy_decision_lookup` op; the resident
+/// owns everything else: the per-call request fields, the portable-workspace
+/// composition and the most-restrictive choice over `candidate_artifact_ids`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpPolicyLookupInputV1 {
+    pub store_path: String,
+    pub guard_home: String,
+    /// Canonical lookup timestamp, shared by every candidate probe.
+    pub now: String,
+    /// Direct artifact id first, then exact-command and memory-pattern ids.
+    pub candidate_artifact_ids: Vec<String>,
+    /// Git-derived portable workspace, when the workspace has one.
+    #[serde(default)]
+    pub portable_workspace: Option<String>,
+    #[serde(default)]
+    pub integrity_state: Option<Value>,
+    #[serde(default)]
+    pub integrity_key_b64: Option<String>,
+    #[serde(default)]
+    pub integrity_key_id: Option<String>,
+    #[serde(default)]
+    pub local_once_integrity_key_b64: Option<String>,
+    #[serde(default)]
+    pub local_once_integrity_key_id: Option<String>,
+    #[serde(default)]
+    pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
+    /// The caller could not establish integrity authority for this home; every
+    /// probe is an empty degraded lookup carrying this trust status.
+    #[serde(default)]
+    pub degraded_trust_status: Option<Value>,
+    /// The store holds no saved policy or local-once rows, so a miss has
+    /// nothing to diagnose and needs no `reuse_diagnostic` effect.
+    #[serde(default)]
+    pub diagnostic_empty: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -57,6 +155,10 @@ pub struct McpToolPolicyDecideRequestV1 {
     pub claim_saved_approval: bool,
     pub subject: McpToolPolicySubjectV1,
     pub observations: Vec<McpToolPolicyObservationV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<McpToolPolicyProxyInputV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup: Option<McpPolicyLookupInputV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

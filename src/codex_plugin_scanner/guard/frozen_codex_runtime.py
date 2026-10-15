@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .daemon.manager import GuardDaemonHookFailureKind
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
+from .codex_hook_compatibility import python_bridge_argv
 from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
@@ -108,12 +109,17 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
         # Reuse the established config builder after replacing only its child
         # launch contracts. This keeps query, timeout, home, manifest, and
         # workspace semantics identical to source installs.
-        source_argv = source_hook_command(
-            context,
-            home_is_current=home_is_current,
-            python_executable=python_executable,
+        # A frozen runtime is its own bridge; it never launches the native one.
+        source_argv = python_bridge_argv(
+            list(
+                source_hook_command(
+                    context,
+                    home_is_current=home_is_current,
+                    python_executable=python_executable,
+                )
+            )
         )
-        if len(source_argv) != 4:
+        if len(source_argv) != 4 or not isinstance(source_argv[3], str):
             raise RuntimeError("Guard's source Codex bridge contract is not canonical")
         config_json = source_argv[3]
         payload = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")

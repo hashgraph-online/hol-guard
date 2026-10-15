@@ -5,7 +5,8 @@
       "Kubernetes remote execution command",
       "Kubernetes network tunnel command",
       "Kubernetes remote file transfer command",
-      "Kubernetes security administration command"
+      "Kubernetes security administration command",
+      "Kubernetes read-only command"
     ],
     "aliases": [],
     "conflicts": [],
@@ -565,6 +566,32 @@
         "risk_tier": "high",
         "safer_guidance": [
           "Bind only to loopback, forward the minimum required port, and verify the exact target first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Kubernetes read-only command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reads Kubernetes resources with kubectl get or describe without changing cluster state, streaming, or loading a kubeconfig.",
+        "example_command": "kubectl --context example -n example-namespace get deploy example-app -o jsonpath='{.status.readyReplicas}'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Kubernetes resource reads",
+        "permission_id": "command.kubernetes-operations.permission.read-resources",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Listing and describing resources does not change cluster state; secrets stay under their own review."
         ],
         "typed_capabilities": []
       },
@@ -6217,6 +6244,165 @@
         ],
         "severity": "high",
         "title": "Helm release rollback"
+      },
+      {
+        "action_classes": [
+          "Kubernetes read-only command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies kubectl get and describe reads that cannot stream, impersonate, override the server, or load a kubeconfig.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kubectl",
+                  "kubectl.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [
+                  "--as",
+                  "--as-group",
+                  "--as-uid",
+                  "--kubeconfig",
+                  "--raw",
+                  "--server",
+                  "--token",
+                  "--watch",
+                  "--watch-only",
+                  "-f",
+                  "--filename",
+                  "-w",
+                  "-s"
+                ],
+                "interspersed_flags": [
+                  "--all-namespaces",
+                  "--ignore-not-found",
+                  "--no-headers",
+                  "--show-kind",
+                  "--show-labels",
+                  "--show-managed-fields",
+                  "-A"
+                ],
+                "interspersed_options_with_values": [
+                  "--cluster",
+                  "--context",
+                  "--namespace",
+                  "--request-timeout",
+                  "-n",
+                  "--chunk-size",
+                  "--field-selector",
+                  "--label-columns",
+                  "--output",
+                  "--selector",
+                  "--sort-by",
+                  "-L",
+                  "-l",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--cluster",
+                  "--context",
+                  "--namespace",
+                  "--request-timeout",
+                  "-n"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "get"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kubectl",
+                  "kubectl.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [
+                  "--as",
+                  "--as-group",
+                  "--as-uid",
+                  "--kubeconfig",
+                  "--raw",
+                  "--server",
+                  "--token",
+                  "--watch",
+                  "--watch-only",
+                  "-f",
+                  "--filename",
+                  "-w",
+                  "-s"
+                ],
+                "interspersed_flags": [
+                  "--all-namespaces",
+                  "--ignore-not-found",
+                  "--no-headers",
+                  "--show-kind",
+                  "--show-labels",
+                  "--show-managed-fields",
+                  "-A"
+                ],
+                "interspersed_options_with_values": [
+                  "--cluster",
+                  "--context",
+                  "--namespace",
+                  "--request-timeout",
+                  "-n",
+                  "--chunk-size",
+                  "--field-selector",
+                  "--label-columns",
+                  "--output",
+                  "--selector",
+                  "--sort-by",
+                  "-L",
+                  "-l",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--cluster",
+                  "--context",
+                  "--namespace",
+                  "--request-timeout",
+                  "-n"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "describe"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.kubernetes-operations.permission.read-resources",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.kubernetes-operations.read-resources",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Listing and describing resources does not change cluster state; secrets stay under their own review."
+        ],
+        "severity": "low",
+        "title": "Kubernetes resource reads"
       }
     ],
     "safer_alternatives": [

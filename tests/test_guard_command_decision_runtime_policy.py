@@ -18,6 +18,7 @@ from tests.native_command_test_support import native_test_guard_home, real_nativ
 
 def test_ordinary_central_review_reaches_final_runtime_policy_and_rejects_private_detail(
     tmp_path: Path,
+    native_approval_reuse_runtime,
 ) -> None:
     reviewed = real_native_command_evaluation("aws apigateway delete-rest-api --rest-api-id abc")
     snapshot, payload, evaluation = reviewed.snapshot, reviewed.payload, reviewed.evaluation
@@ -44,17 +45,30 @@ def test_ordinary_central_review_reaches_final_runtime_policy_and_rejects_privat
     decision = cast(dict[str, object], artifact.metadata["command_decision_plane"])
     assert decision["action"] == "review"
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path, default_action="allow")
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "require-reapproval"
+    )
     assert "private matcher detail" not in repr(artifact.metadata)
 
     floor = artifact.metadata.pop("command_action_floor")
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "require-reapproval"
+    )
     artifact.metadata["command_action_floor"] = None
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
+    )
     artifact.metadata["command_action_floor"] = "invalid"
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
+    )
     artifact.metadata["command_action_floor"] = floor
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "require-reapproval"
+    )
 
     # Only the typed native failure reaches policy. Private matcher diagnostics
     # must be rejected even when the observation digest is internally valid.
@@ -80,11 +94,11 @@ def test_ordinary_central_review_reaches_final_runtime_policy_and_rejects_privat
     assert "private matcher detail" not in str(error.value)
 
 
-def test_resident_matcher_failure_reaches_final_runtime_policy(tmp_path: Path) -> None:
+def test_resident_matcher_failure_reaches_final_runtime_policy(tmp_path: Path, native_approval_reuse_runtime) -> None:
     # An uncertain Git attribution is a real matcher failure the resident
     # reports as typed evidence; it must hold the command for review and stay
     # fail-closed at the final runtime policy without leaking matcher detail.
-    reviewed = real_native_command_evaluation("git cat-file -p HEAD")
+    reviewed = real_native_command_evaluation("git cat-file --batch-check")
     snapshot, payload, evaluation = reviewed.snapshot, reviewed.payload, reviewed.evaluation
     command = evaluation.command
     observations = payload["command_extensions"]["observations"]
@@ -116,13 +130,20 @@ def test_resident_matcher_failure_reaches_final_runtime_policy(tmp_path: Path) -
     decision = cast(dict[str, object], artifact.metadata["command_decision_plane"])
     assert decision["action"] == "review"
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path, default_action="allow")
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "require-reapproval"
+    )
     assert "private matcher detail" not in repr(artifact.metadata)
     artifact.metadata["command_action_floor"] = None
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
+    )
 
 
-def test_verified_pytest_restricted_profile_overrides_generic_execution_floor(tmp_path: Path) -> None:
+def test_verified_pytest_restricted_profile_overrides_generic_execution_floor(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     artifact = GuardArtifact(
         artifact_id="codex:test:tool-action:pytest",
         name="Bash pytest repository-code execution",
@@ -140,7 +161,12 @@ def test_verified_pytest_restricted_profile_overrides_generic_execution_floor(tm
     )
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path, default_action="allow")
 
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "sandbox-required"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "sandbox-required"
+    )
 
     artifact.metadata.pop("restricted_profile_version")
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
+    )

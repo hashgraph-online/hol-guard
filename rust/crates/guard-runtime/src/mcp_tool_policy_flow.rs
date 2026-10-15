@@ -13,8 +13,8 @@ use guard_command::effect_decision::GuardAction;
 use guard_command::mcp_tool_policy::evaluate_tool_policy;
 use guard_command::mcp_tool_signals::{evaluate_risk_evidence, risk_arguments};
 use guard_contracts::{
-    BrowserAutomationIntentV1, McpToolPolicyObservationV1, McpToolPolicyRequestV1,
-    McpToolPolicySubjectV1, McpToolRiskInputV1,
+    BrowserAutomationIntentV1, McpPolicyLookupInputV1, McpToolPolicyObservationV1,
+    McpToolPolicyRequestV1, McpToolPolicySubjectV1, McpToolRiskInputV1,
 };
 use serde_json::{json, Map, Value};
 
@@ -22,6 +22,11 @@ use crate::approval_proof_op::{claim_disposition, fresh_tool_approval, Dispositi
 use crate::mcp_tool_policy_composio::{provider_floor_blocks, requires_action_review};
 use crate::mcp_tool_policy_decision::{with_reuse, Current, Decision};
 use crate::mcp_tool_policy_grants::{browser_intent, exact_match_context, grant_selectors};
+use crate::mcp_tool_policy_lookup::policy_lookup;
+
+#[path = "mcp_tool_policy_memo.rs"]
+mod memo;
+pub(crate) use memo::PassMemo;
 
 pub(crate) const ERR_OBSERVATION: &str = "native_mcp_tool_policy_decide_observation_invalid";
 const ERR_ACTION: &str = "native_mcp_tool_policy_decide_action_invalid";
@@ -58,9 +63,19 @@ impl Phase {
 
 pub(crate) struct Ctx<'a> {
     pub(crate) observations: &'a [McpToolPolicyObservationV1],
+    /// Evidence to read the saved policy in-process for the initial pass.
+    pub(crate) lookup: Option<&'a McpPolicyLookupInputV1>,
+    /// What this call's passes over one subject share (`PassMemo`).
+    pub(crate) memo: Option<&'a PassMemo<'a>>,
 }
 
 impl Ctx<'_> {
+    fn has_observed(&self, need: &Value) -> bool {
+        self.observations
+            .iter()
+            .any(|observation| &observation.need == need)
+    }
+
     /// The observed result of `need`, or a stop asking the caller for it.
     pub(crate) fn ask(&self, need: Value) -> Flow<&Value> {
         self.observations
@@ -69,6 +84,10 @@ impl Ctx<'_> {
             .map(|observation| &observation.result)
             .ok_or(Stop::Need(need))
     }
+}
+
+fn return_need<T>(need: &Value) -> Flow<T> {
+    Err(Stop::Need(need.clone()))
 }
 
 pub(crate) enum Pass {
@@ -188,11 +207,18 @@ fn apply_temporary_grant(
             ));
         }
     }
-    let granted = ctx.ask(json!({
-        "kind": "extension_decision",
-        "phase": phase.as_str(),
-        "action": original.as_str(),
-    }))?;
+    let local_decision;
+    let granted = match &subject.extension {
+        Some(extension) => {
+            local_decision = memo::extension(ctx.memo, subject, extension, original.as_str());
+            &local_decision
+        }
+        None => ctx.ask(json!({
+            "kind": "extension_decision",
+            "phase": phase.as_str(),
+            "action": original.as_str(),
+        }))?,
+    };
     if !granted.is_null() {
         let action = parse_action(field(granted, "action")?)?;
         if matches!(action, GuardAction::Block | GuardAction::Review)
@@ -267,7 +293,7 @@ fn saved_evidence(
     subject: &McpToolPolicySubjectV1,
     intent: Option<&BrowserAutomationIntentV1>,
 ) -> Flow<Option<Saved>> {
-    let lookup = ctx.ask(json!({
+    let need = json!({
         "kind": "policy_lookup",
         "phase": phase.as_str(),
         "harness": subject.harness,
@@ -279,21 +305,43 @@ fn saved_evidence(
         "memory_command": subject.artifact.command,
         "memory_artifact_type": subject.artifact_type,
         "memory_artifact_name": subject.artifact.name,
-    }))?;
+    });
+    let read;
+    let lookup = match (ctx.lookup, phase) {
+        // Only the initial pass reads the store itself: a fresh pass judges a
+        // refreshed subject the caller's evidence was not built for. Every round
+        // replays this pass, so a pinned observation wins over a new read, and a
+        // saved row (which a claim can consume) is pinned as an observation
+        // instead of being trusted to be read the same way again.
+        (Some(input), Phase::Initial) if !ctx.has_observed(&need) => {
+            read = policy_lookup(input, subject, exact_match_context(intent))?;
+            if field(&read, "decision")?.is_null() {
+                &read
+            } else {
+                return_need(&need)?
+            }
+        }
+        _ => ctx.ask(need)?,
+    };
     let row = row_of(field(lookup, "decision")?)?;
     let Some(ignored) = field(lookup, "ignored_local_integrity")?.as_bool() else {
         return invalid();
     };
     if row.is_none() && !ignored {
-        let diagnosed = ctx.ask(json!({
-            "kind": "reuse_diagnostic",
-            "phase": phase.as_str(),
-            "harness": subject.harness,
-            "artifact_id": subject.artifact_id,
-            "artifact_hash": subject.artifact_hash,
-            "workspace": subject.workspace,
-            "publisher": subject.publisher,
-        }))?;
+        // The caller diagnoses a miss in the same effect when it can, saving a
+        // round trip; the stand-alone effect remains for callers that do not.
+        let diagnosed = match lookup.get("reuse_diagnostic") {
+            Some(inline) => inline,
+            None => ctx.ask(json!({
+                "kind": "reuse_diagnostic",
+                "phase": phase.as_str(),
+                "harness": subject.harness,
+                "artifact_id": subject.artifact_id,
+                "artifact_hash": subject.artifact_hash,
+                "workspace": subject.workspace,
+                "publisher": subject.publisher,
+            }))?,
+        };
         return Ok(match field(diagnosed, "reason")? {
             Value::Null => None,
             Value::String(reason) => Some(Saved {
@@ -353,7 +401,7 @@ pub(crate) fn evaluate_pass(
     claim: bool,
 ) -> Flow<Pass> {
     let intent = browser_intent(subject)?;
-    let current = evaluate_current(subject)?;
+    let current = memo::current(ctx.memo, subject)?;
     let current = apply_temporary_grant(ctx, phase, subject, intent.as_ref(), current)?;
     let command = subject.artifact.command.as_deref().unwrap_or("");
     let composio = requires_action_review(command);

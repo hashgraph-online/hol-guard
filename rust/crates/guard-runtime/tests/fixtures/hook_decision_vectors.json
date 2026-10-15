@@ -38,43 +38,6 @@
    }
   },
   {
-   "name": "relax_asks_native_file_read_second",
-   "query": {
-    "kind": "compose_current",
-    "inputs": {
-     "harness": "codex",
-     "canonical_harness": "codex",
-     "event_fields": {
-      "hook_event_name": "PreToolUse"
-     },
-     "tool_name_text": "Bash",
-     "configured_action": "review",
-     "has_configured_override": false,
-     "has_narrow_override": false,
-     "runtime_artifact_checked": false,
-     "prompt_nonblank": false,
-     "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
-     "cli_action": null,
-     "has_payload_action": false,
-     "payload_action": null,
-     "native_edge": null,
-     "daemon_status": null,
-     "fail_mode": null,
-     "permission_decision_reason": null
-    }
-   },
-   "expect": {
-    "needs_facts": [
-     "benign_native_file_read"
-    ],
-    "composition": null,
-    "event_name": "PreToolUse"
-   }
-  },
-  {
    "name": "relax_skips_native_file_read_for_other_harness",
    "query": {
     "kind": "compose_current",
@@ -104,49 +67,29 @@
     }
    },
    "expect": {
-    "needs_facts": [
-     "benign_tool_action"
-    ],
-    "composition": null,
-    "event_name": "PreToolUse"
-   }
-  },
-  {
-   "name": "relax_asks_benign_tool_action_last",
-   "query": {
-    "kind": "compose_current",
-    "inputs": {
-     "harness": "codex",
-     "canonical_harness": "codex",
-     "event_fields": {
-      "hook_event_name": "PreToolUse"
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      },
-     "tool_name_text": "Bash",
-     "configured_action": "review",
-     "has_configured_override": false,
-     "has_narrow_override": false,
-     "runtime_artifact_checked": false,
-     "prompt_nonblank": false,
-     "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false
-     },
-     "cli_action": null,
-     "has_payload_action": false,
-     "payload_action": null,
-     "native_edge": null,
-     "daemon_status": null,
-     "fail_mode": null,
-     "permission_decision_reason": null
+     "verified_benign": false
     }
-   },
-   "expect": {
-    "needs_facts": [
-     "benign_tool_action"
-    ],
-    "composition": null,
-    "event_name": "PreToolUse"
    }
   },
   {
@@ -221,9 +164,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -255,7 +196,8 @@
       "untrusted_payload_action": null,
       "untrusted_payload_action_disposition": null,
       "untrusted_payload_action_reason": null
-     }
+     },
+     "verified_benign": false
     }
    }
   },
@@ -277,9 +219,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": true
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -287,7 +227,25 @@
      "native_edge": null,
      "daemon_status": null,
      "fail_mode": null,
-     "permission_decision_reason": null
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "test -e /work/project/pyproject.toml && echo exists || echo absent"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
     }
    },
    "expect": {
@@ -311,9 +269,11 @@
       "untrusted_payload_action": null,
       "untrusted_payload_action_disposition": null,
       "untrusted_payload_action_reason": null
-     }
+     },
+     "verified_benign": true
     }
-   }
+   },
+   "requires_unix": true
   },
   {
    "name": "allow_default_needs_no_facts",
@@ -1629,9 +1589,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -1663,7 +1621,8 @@
       "untrusted_payload_action": null,
       "untrusted_payload_action_disposition": null,
       "untrusted_payload_action_reason": null
-     }
+     },
+     "verified_benign": false
     }
    }
   },
@@ -1984,7 +1943,7 @@
    }
   },
   {
-   "name": "copilot_payload_hint_asks_benign_classifier",
+   "name": "copilot_payload_hint_ignored_when_verified_benign",
    "query": {
     "kind": "compose_current",
     "inputs": {
@@ -2007,44 +1966,25 @@
      "native_edge": null,
      "daemon_status": null,
      "fail_mode": null,
-     "permission_decision_reason": null
-    }
-   },
-   "expect": {
-    "needs_facts": [
-     "benign_tool_action"
-    ],
-    "composition": null,
-    "event_name": "PreToolUse"
-   }
-  },
-  {
-   "name": "copilot_payload_hint_ignored_when_verified_benign",
-   "query": {
-    "kind": "compose_current",
-    "inputs": {
-     "harness": "copilot",
-     "canonical_harness": "copilot",
-     "event_fields": {
-      "hook_name": "preToolUse"
-     },
-     "tool_name_text": "Bash",
-     "configured_action": "allow",
-     "has_configured_override": false,
-     "has_narrow_override": false,
-     "runtime_artifact_checked": false,
-     "prompt_nonblank": false,
-     "has_command_text": true,
-     "facts": {
-      "benign_tool_action": true
-     },
-     "cli_action": null,
-     "has_payload_action": true,
-     "payload_action": "block",
-     "native_edge": null,
-     "daemon_status": null,
-     "fail_mode": null,
-     "permission_decision_reason": null
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "test -e /work/project/pyproject.toml && echo exists || echo absent"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
     }
    },
    "expect": {
@@ -2068,9 +2008,11 @@
       "untrusted_payload_action": "block",
       "untrusted_payload_action_disposition": "ignored",
       "untrusted_payload_action_reason": "untrusted_hook_payload_hint_ignored_guard_verified_benign"
-     }
+     },
+     "verified_benign": true
     }
-   }
+   },
+   "requires_unix": true
   },
   {
    "name": "copilot_payload_hint_applied_when_not_benign",
@@ -2089,9 +2031,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "benign_tool_action": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": true,
      "payload_action": "block",
@@ -2122,7 +2062,8 @@
       "untrusted_payload_action": "block",
       "untrusted_payload_action_disposition": "applied",
       "untrusted_payload_action_reason": null
-     }
+     },
+     "verified_benign": false
     }
    }
   },
@@ -2364,9 +2305,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -2469,9 +2408,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -2568,9 +2505,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -2670,9 +2605,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -2772,9 +2705,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -2874,9 +2805,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": "review",
      "has_payload_action": false,
@@ -2976,9 +2905,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3075,9 +3002,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3174,9 +3099,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3273,9 +3196,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3372,9 +3293,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3471,9 +3390,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3570,9 +3487,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3669,9 +3584,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3768,9 +3681,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3867,9 +3778,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -3966,9 +3875,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4064,9 +3971,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4154,9 +4059,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4249,9 +4152,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4346,9 +4247,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4441,9 +4340,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4538,9 +4435,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4630,9 +4525,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4728,9 +4621,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4824,9 +4715,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -4920,9 +4809,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5019,9 +4906,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5115,9 +5000,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5212,9 +5095,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5308,9 +5189,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5404,9 +5283,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5498,9 +5375,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5594,9 +5469,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5692,9 +5565,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5790,9 +5661,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -5888,9 +5757,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": true,
@@ -5986,9 +5853,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6087,9 +5952,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6186,9 +6049,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6284,9 +6145,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6383,9 +6242,7 @@
      "prompt_nonblank": false,
      "has_command_text": false,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6480,9 +6337,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6579,9 +6434,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6677,9 +6530,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6774,9 +6625,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": true
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": true,
@@ -6784,7 +6633,25 @@
      "native_edge": null,
      "daemon_status": "error",
      "fail_mode": "permissive",
-     "permission_decision_reason": null
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "test -e /work/project/pyproject.toml && echo exists || echo absent"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
     },
     "settled": {
      "current_policy_action": "allow",
@@ -6877,7 +6744,8 @@
      "queue_approval_request": false,
      "exit_code": 0
     }
-   }
+   },
+   "requires_unix": true
   },
   {
    "name": "evidence_names_native_file_read_classifier",
@@ -6897,9 +6765,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -6996,9 +6862,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": "bogus",
      "has_payload_action": false,
@@ -7152,9 +7016,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -7204,9 +7066,7 @@
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": false,
-      "benign_native_file_read": false,
-      "benign_tool_action": false
+      "verified_apply_patch": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -7237,6 +7097,308 @@
     }
    },
    "error": "native_hook_decision_action_invalid"
+  },
+  {
+   "name": "review_default_stays_review_for_unverified_command",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {
+      "verified_apply_patch": false
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "rm -rf /work/project/build"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     },
+     "verified_benign": false
+    }
+   }
+  },
+  {
+   "name": "review_default_stays_review_for_unknown_control_health",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {
+      "verified_apply_patch": false
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "test -e /work/project/pyproject.toml && echo exists || echo absent"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      },
+      "control_snapshot": {
+       "health": "mystery",
+       "layers": []
+      }
+     }
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     },
+     "verified_benign": false
+    }
+   },
+   "requires_unix": true
+  },
+  {
+   "name": "relax_benign_tool_action_with_protected_empty_controls",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {
+      "verified_apply_patch": false
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "test -e /work/project/pyproject.toml && echo exists || echo absent"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      },
+      "control_snapshot": {
+       "health": "protected",
+       "layers": []
+      }
+     }
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "warn",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "warn",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "warn",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     },
+     "verified_benign": true
+    }
+   },
+   "requires_unix": true
+  },
+  {
+   "name": "review_default_stays_review_for_native_read_tool",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {
+      "verified_apply_patch": false
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "Read",
+      "tool_input": {
+       "command": "test -e /work/project/pyproject.toml && echo exists || echo absent"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     },
+     "verified_benign": false
+    }
+   }
   }
  ]
 }

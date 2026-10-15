@@ -18,6 +18,14 @@ from scripts.ci import wait_for_pytest_shards as barrier
 from tests.support.ci_workflow import expand_ci_job_actions
 
 _RUN_ID = 123456
+# CI exports its real shard count, which can fit in one 100-job page. Pin a
+# count that spans pages so these tests keep exercising pagination.
+_TEST_SHARD_COUNT = 128
+
+
+@pytest.fixture(autouse=True)
+def _pin_shard_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(barrier, "SHARD_COUNT", _TEST_SHARD_COUNT)
 
 
 def _job(index: int, *, status: str = "completed", conclusion: str | None = "success") -> dict[str, object]:
@@ -172,9 +180,7 @@ def test_rejects_invalid_shard_state(status: object, conclusion: object) -> None
         _run([jobs])
 
 
-@pytest.mark.parametrize(
-    "index", [str(barrier.SHARD_COUNT), "-1", "00", "1.0", "${{ matrix.shard-index }}", "1) suffix"]
-)
+@pytest.mark.parametrize("index", [str(_TEST_SHARD_COUNT), "-1", "00", "1.0", "${{ matrix.shard-index }}", "1) suffix"])
 def test_rejects_invalid_shard_names(index: str) -> None:
     jobs = [*_jobs(), dict(_job(5000), name=f"coverage (3.12, {index})")]
     with pytest.raises(barrier.ShardWaitError, match="invalid Python coverage shard index"):
@@ -230,7 +236,7 @@ def test_retries_unexpanded_matrix_name_before_planning() -> None:
 
 
 @pytest.mark.parametrize("field,value", [("run_id", 99), ("run_id", True), ("run_attempt", 1)])
-@pytest.mark.parametrize("index", [0, barrier.SHARD_COUNT - 1])
+@pytest.mark.parametrize("index", [0, _TEST_SHARD_COUNT - 1])
 def test_rejects_jobs_from_another_run_or_attempt(field: str, value: object, index: int) -> None:
     jobs = _jobs()
     jobs[index][field] = value
@@ -238,7 +244,7 @@ def test_rejects_jobs_from_another_run_or_attempt(field: str, value: object, ind
         _run([jobs])
 
 
-@pytest.mark.parametrize("index", [0, barrier.SHARD_COUNT - 1])
+@pytest.mark.parametrize("index", [0, _TEST_SHARD_COUNT - 1])
 def test_rejects_inherited_success_with_new_job_id_and_current_attempt(index: int) -> None:
     jobs = _jobs()
     # Actual GitHub partial-rerun behavior: the attempt-2 endpoint returns
@@ -288,7 +294,7 @@ def test_stops_immediately_when_planning_failed(conclusion: str) -> None:
         _run([[plan]])
 
 
-@pytest.mark.parametrize("completed_shards", [0, barrier.SHARD_COUNT // 2, barrier.SHARD_COUNT - 1])
+@pytest.mark.parametrize("completed_shards", [0, _TEST_SHARD_COUNT // 2, _TEST_SHARD_COUNT - 1])
 def test_missing_shard_and_partial_reruns_expire_without_accepting_old_coverage(completed_shards: int) -> None:
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
         _run([_jobs()[:completed_shards]], timeout_seconds=10)

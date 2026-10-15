@@ -27,6 +27,7 @@ from .native_context import (
     _resolve_digest_home,
     bind_context_digest_home,
     ensure_resident_prerequisite,
+    reset_context_digest_home,
 )
 from .native_execution import _resident_request
 from .native_mcp_tool_evidence import _arguments_dto
@@ -75,7 +76,6 @@ _OPTIONAL_TEXT = (str, type(None))
 _NEED_FIELDS: dict[str, dict[str, tuple[type, ...]]] = {
     "provider_choices": {},
     "provider_authority_hash": {},
-    "extension_decision": {"action": _TEXT},
     "grant_lookup": {"harness": _TEXT, "selector": _TEXT},
     "policy_lookup": {
         "harness": _TEXT,
@@ -133,19 +133,26 @@ def _accepted(guard_home: Path) -> None:
 
 @dataclass(frozen=True, slots=True)
 class NativeToolPolicyResult:
-    """Rust's decision DTO plus the authority objects Python supplied."""
+    """Rust's decision DTO plus the authority objects Python supplied.
+
+    ``proxy`` is the resident's saved-allow gate and route verdict for the
+    decision when the caller supplied route inputs; it is ``None`` otherwise.
+    """
 
     payload: Mapping[str, Any]
     authority: FreshAuthority | None
+    proxy: Mapping[str, Any] | None = None
 
 
 def _subject(
+    store: GuardStore,
     config: GuardConfig,
     artifact: GuardArtifact,
     artifact_hash: str,
     arguments: object,
 ) -> dict[str, object]:
     from .mcp_tool_calls import _tool_call_configuration
+    from .native_mcp_extension_input import build_extension_input
 
     return {
         "config": json_safe_copy(_tool_call_configuration(config)),
@@ -159,6 +166,7 @@ def _subject(
         "publisher": artifact.publisher,
         "artifact_hash": artifact_hash,
         "arguments": _arguments_dto(arguments),
+        "extension": build_extension_input(store, artifact),
     }
 
 
@@ -168,6 +176,8 @@ def _round_trip(
     subject: dict[str, object],
     claim_saved_approval: bool,
     observations: list[dict[str, object]],
+    proxy_input: Mapping[str, object] | None = None,
+    lookup_input: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
@@ -176,6 +186,10 @@ def _round_trip(
         "subject": subject,
         "observations": observations,
     }
+    if proxy_input is not None:
+        request["proxy"] = dict(proxy_input)
+    if lookup_input is not None:
+        request["lookup"] = dict(lookup_input)
     try:
         digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
@@ -215,9 +229,17 @@ def _is_action(value: object) -> bool:
     return isinstance(value, str) and value in _ACTIONS
 
 
-def _validated_decision(payload: object) -> dict[str, Any]:
+def _validated_decision(payload: object, *, proxy_requested: bool = False) -> dict[str, Any]:
     invalid = NativeMcpToolPolicyError("payload_invalid")
-    if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS:
+    if not isinstance(payload, dict) or set(payload) - {"proxy"} != _PAYLOAD_KEYS:
+        raise invalid
+    proxy = payload.get("proxy")
+    if ("proxy" in payload) is not proxy_requested or (
+        proxy_requested
+        and not (
+            isinstance(proxy, dict) and isinstance(proxy.get("gate"), dict) and isinstance(proxy.get("route"), dict)
+        )
+    ):
         raise invalid
     optional_text = ("normalization_reason_code", "original_action", "approval_reuse_reason_code")
     if (
@@ -246,9 +268,8 @@ def _validated_decision(payload: object) -> dict[str, Any]:
 class _Effects:
     """Runs one named effect against the real store, in the correct scope."""
 
-    def __init__(self, store: GuardStore, artifact: GuardArtifact) -> None:
+    def __init__(self, store: GuardStore) -> None:
         self.store = store
-        self.artifact = artifact
         self.stack = ExitStack()
         self.stack.enter_context(store.connection_scope())
 
@@ -273,14 +294,6 @@ class _Effects:
     def _need_provider_authority_hash(self, _need: Mapping[str, Any]) -> object:
         return {"hash": self.store.read_mcp_provider_authority_hash()}
 
-    def _need_extension_decision(self, need: Mapping[str, Any]) -> object:
-        from .local_cli_trust import apply_local_mcp_extension_decision
-
-        decided = apply_local_mcp_extension_decision(self.store, self.artifact, need["action"])
-        if decided is None:
-            return None
-        return {"action": decided[0], "source": decided[1], "summary": decided[2]}
-
     def _need_grant_lookup(self, need: Mapping[str, Any]) -> object:
         lookup = self.store.resolve_policy_decision_lookup(need["harness"], need["selector"], consume_one_shot=False)
         decision = lookup["decision"]
@@ -300,10 +313,15 @@ class _Effects:
             consume_one_shot=False,
         )
         decision = lookup["decision"]
-        return {
+        ignored = lookup["ignored_local_integrity"] is not None
+        observed: dict[str, object] = {
             "decision": None if decision is None else json_safe_copy(dict(decision)),
-            "ignored_local_integrity": lookup["ignored_local_integrity"] is not None,
+            "ignored_local_integrity": ignored,
         }
+        if decision is None and not ignored:
+            # A miss is diagnosed in the same effect so Rust needs no second round.
+            observed["reuse_diagnostic"] = self._need_reuse_diagnostic(need)
+        return observed
 
     def _need_reuse_diagnostic(self, need: Mapping[str, Any]) -> object:
         return {
@@ -326,6 +344,26 @@ class _Effects:
         return {"outcome": "claimed" if claimed is True else "declined"}
 
 
+def _lookup_input(store: GuardStore, subject: Mapping[str, object]) -> dict[str, object] | None:
+    """Evidence for the resident's in-process saved-policy read, or ``None``.
+
+    Any failure leaves the read to the ``policy_lookup`` effect, which raises the
+    same error from the same place it always did.
+    """
+    artifact = cast("Mapping[str, Any]", subject["artifact"])
+    try:
+        return store.mcp_policy_lookup_input(
+            cast("str", subject["harness"]),
+            cast("str", subject["artifact_id"]),
+            workspace=cast("str | None", subject["workspace"]),
+            memory_command=artifact.get("command"),
+            memory_artifact_type=cast("str | None", subject["artifact_type"]),
+            memory_artifact_name=artifact.get("name"),
+        )
+    except Exception:
+        return None
+
+
 def native_evaluate_tool_call(
     *,
     store: GuardStore,
@@ -335,6 +373,7 @@ def native_evaluate_tool_call(
     arguments: object,
     claim_saved_approval: bool,
     fresh_authority_provider: FreshAuthorityProvider | None,
+    proxy_input: Mapping[str, object] | None = None,
 ) -> NativeToolPolicyResult:
     """Drive the resident op to a decision; raise ``NativeMcpToolPolicyError`` otherwise."""
     try:
@@ -344,43 +383,52 @@ def native_evaluate_tool_call(
     if not ensure_resident_prerequisite(guard_home):
         raise NativeMcpToolPolicyError("home_unprovisioned")
     initial_authority: FreshAuthority = (config, artifact, artifact_hash, arguments)
-    subject = _subject(config, artifact, artifact_hash, arguments)
     observations: list[dict[str, object]] = []
     authority: FreshAuthority | None = None
-    effects = _Effects(store, artifact)
+    # One connection serves the extension-authority read, the lookup evidence and every effect.
+    effects = _Effects(store)
     try:
+        subject = _subject(store, config, artifact, artifact_hash, arguments)
+        lookup_input = _lookup_input(store, subject)
         for _ in range(_MAX_ROUNDS):
             reply = _round_trip(
                 guard_home,
                 subject=subject,
                 claim_saved_approval=claim_saved_approval,
                 observations=observations,
+                proxy_input=proxy_input,
+                lookup_input=lookup_input,
             )
             if reply["status"] == "ok":
                 try:
-                    payload = _validated_decision(reply.get("payload"))
+                    payload = _validated_decision(reply.get("payload"), proxy_requested=proxy_input is not None)
                 except NativeMcpToolPolicyError as error:
                     raise _rejected(guard_home, error.code) from None
                 if payload["post_claim_authority"] == "fresh" and authority is None:
                     raise _rejected(guard_home, "payload_invalid")
+                # One success record per decision, not per round: each record
+                # re-reads runtime status.
                 _accepted(guard_home)
-                return NativeToolPolicyResult(payload, authority)
+                proxy = payload.pop("proxy", None)
+                return NativeToolPolicyResult(payload, authority, proxy)
             need = reply.get("payload")
             if not isinstance(need, dict):
                 raise _rejected(guard_home, "need_invalid")
-            _accepted(guard_home)
             if need.get("kind") == "fresh_authority":
                 # The claim is committed. Refresh authority without a storage
                 # lease, then read policy again in a new scope.
                 effects.close()
-                bind_context_digest_home(getattr(store, "guard_home", None))
-                provided = _fresh_authority(initial_authority, fresh_authority_provider)
+                home_token = bind_context_digest_home(getattr(store, "guard_home", None))
+                try:
+                    provided = _fresh_authority(initial_authority, fresh_authority_provider)
+                finally:
+                    reset_context_digest_home(home_token)
                 result: object = {"status": "failed"}
                 authority = initial_authority
+                effects = _Effects(store)
                 if provided is not None:
                     authority = provided
-                    result = {"status": "provided", "subject": _subject(*provided)}
-                effects = _Effects(store, authority[1])
+                    result = {"status": "provided", "subject": _subject(store, *provided)}
             else:
                 result = effects.run(cast("Mapping[str, Any]", need))
             observations.append({"need": need, "result": result})

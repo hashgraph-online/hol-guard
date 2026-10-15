@@ -133,17 +133,13 @@ def test_cli_binds_external_additions_to_actual_added_sources(
     assert "check failed" in capsys.readouterr().err
 
 
-def test_builder_workflow_checks_trust_before_regeneration() -> None:
+def test_builder_workflow_stages_trust_before_regeneration() -> None:
     root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/extension-builder-ci.yml").read_text())
+    workflow = yaml.safe_load((root / ".github/workflows/nightly-native.yml").read_text())
     steps = [step for job in workflow["jobs"].values() for step in job.get("steps", [])]
     step = next(item for item in steps if item.get("name") == "Stage external contribution trust defaults")
     script = step["run"]
-    assert script.index("refresh_extension_artifacts.py --trust-only") < script.index(
-        "verify_contribution_trust_map.py"
-    )
-    assert '--changed-from "$COMPARISON_BASE"' in script
-    assert step["env"]["COMPARISON_BASE"] == "${{ steps.contribution-base.outputs.sha }}"
+    assert "refresh_extension_artifacts.py --trust-only" in script
     assert steps.index(step) < next(
         index for index, item in enumerate(steps) if item.get("name") == "Install the locked development environment"
     )

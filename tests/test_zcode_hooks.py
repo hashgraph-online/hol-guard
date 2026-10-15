@@ -12,9 +12,7 @@ from codex_plugin_scanner.guard.adapters.zcode_hooks import (
     zcode_authority_block_reason,
     zcode_hook_process_exit,
     zcode_hook_response_from_guard,
-    zcode_hook_should_block,
 )
-from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _native_hook_permission_decision
 from codex_plugin_scanner.guard.runtime.actions import (
     normalize_harness_payload,
     normalize_zcode_hook_payload,
@@ -162,13 +160,6 @@ class TestZCodeHookResponses:
             "hol-guard command controls recover-authority" in payload["hookSpecificOutput"]["permissionDecisionReason"]
         )
 
-    def test_should_block_flags_blocking_actions(self) -> None:
-        assert zcode_hook_should_block(policy_action="review")
-        assert zcode_hook_should_block(policy_action="block")
-        assert zcode_hook_should_block(policy_action="sandbox-required")
-        assert zcode_hook_should_block(policy_action="require-reapproval")
-        assert not zcode_hook_should_block(policy_action="allow")
-
     def test_process_exit_review_pretool_exits_zero_so_ask_json_is_parsed(self) -> None:
         # ZCode only parses stdout JSON for successful hook processes; exit 2
         # would discard the ask envelope and deny the call outright.
@@ -196,16 +187,3 @@ class TestZCodeHookResponses:
         emit_zcode_hook_response(policy_action="review", reason="Approval required.", output_stream=stream)
         payload = json.loads(stream.getvalue())
         assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-
-
-class TestZCodePermissionDecisionGates:
-    def test_review_tier_asks_for_zcode(self) -> None:
-        assert _native_hook_permission_decision("review", harness="zcode") == "ask"
-        assert _native_hook_permission_decision("require-reapproval", harness="zcode") == "ask"
-
-    def test_hard_denials_stay_deny_for_zcode(self) -> None:
-        assert _native_hook_permission_decision("block", harness="zcode") == "deny"
-        assert _native_hook_permission_decision("sandbox-required", harness="zcode") == "deny"
-
-    def test_allow_stays_allow_for_zcode(self) -> None:
-        assert _native_hook_permission_decision("allow", harness="zcode") == "allow"

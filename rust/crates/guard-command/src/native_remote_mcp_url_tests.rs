@@ -106,7 +106,7 @@ fn remote_mcp_admission_rejects_nonpublic_destinations() {
 #[test]
 fn private_remote_url_rejects_whole_program_even_with_valid_content_digest() {
     for url in ["https://localhost:443/mcp", "https://[::ffff:10.0.0.1]/mcp"] {
-        let mut value: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+        let mut value: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
         let extension = value["extensions"]
             .as_array_mut()
             .unwrap()

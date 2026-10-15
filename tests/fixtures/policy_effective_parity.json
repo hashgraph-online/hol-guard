@@ -1,0 +1,4983 @@
+[
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-relaxed-watch-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-relaxed-watch-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-relaxed-protected-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-relaxed-protected-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-relaxed-extra_careful-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-relaxed-extra_careful-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-gentle-watch-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-gentle-watch-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-gentle-protected-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-gentle-protected-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-gentle-extra_careful-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "gentle",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-gentle-extra_careful-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-balanced-watch-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-balanced-watch-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-balanced-protected-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-balanced-protected-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-balanced-extra_careful-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-balanced-extra_careful-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-strict-watch-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-strict-watch-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-strict-protected-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-strict-protected-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-strict-extra_careful-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-strict-extra_careful-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "block",
+     "credential_exfiltration": "block",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "block",
+     "encoded_execution": "block",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "block",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "block",
+     "package_script": "block",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-paranoid-watch-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "block",
+     "credential_exfiltration": "block",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "block",
+     "encoded_execution": "block",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "block",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "block",
+     "package_script": "block",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-paranoid-watch-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "block",
+     "credential_exfiltration": "block",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "block",
+     "encoded_execution": "block",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "block",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "block",
+     "package_script": "block",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-paranoid-protected-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-paranoid-protected-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "block",
+     "credential_exfiltration": "block",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "block",
+     "encoded_execution": "block",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "block",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "block",
+     "package_script": "block",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-paranoid-extra_careful-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-paranoid-extra_careful-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-custom-watch-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-custom-watch-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-custom-protected-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-custom-protected-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-custom-extra_careful-False",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "custom",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-custom-extra_careful-True",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [
+     "security_level"
+    ],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "allow",
+     "credential_exfiltration": "warn",
+     "data_flow_exfiltration": "warn",
+     "destructive_shell": "warn",
+     "encoded_execution": "warn",
+     "encoded_exfiltration": "warn",
+     "guard_bypass": "warn",
+     "local_secret_read": "warn",
+     "malicious_skill": "warn",
+     "mcp_dangerous_tool": "warn",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "warn",
+     "prompt_injection": "warn"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-managed-lock",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "local_secret_read": "block",
+     "network_egress": "allow"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "block",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "allow",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-risk-override",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "nonsense": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-risk-key",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "explode",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-action",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "nope",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-posture",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "nope",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-level",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "x",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-sandbox",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "x",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-redaction",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "warn",
+    "default_action": "block",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "review",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "none",
+    "risk_actions": null,
+    "sandbox_analysis": "strict",
+    "security_level": "balanced",
+    "subprocess_action": "sandbox-required",
+    "unknown_publisher_action": "allow"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "warn",
+    "default_action": "block",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "review",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "none",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "strict",
+    "security_level": "balanced",
+    "subprocess_action": "sandbox-required",
+    "unknown_publisher_action": "allow"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-scalars",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": {
+     "a:b": "warn"
+    },
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "review",
+     "codex": "block"
+    },
+    "harness_postures": null,
+    "harness_risk_actions": {
+     "claude-code": {
+      "local_secret_read": "block"
+     }
+    },
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": {
+     "acme": "allow"
+    },
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {
+     "a:b": "warn"
+    },
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "review",
+     "codex": "block"
+    },
+    "harness_risk_actions": {
+     "claude-code": {
+      "local_secret_read": "block"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {
+     "acme": "allow"
+    },
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-harness-maps",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": {
+     "claude": {
+      "local_secret_read": "block"
+     },
+     "claude-code": {
+      "local_secret_read": "warn"
+     }
+    },
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-harness-risk-alias-conflict",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": {
+     "claude": {
+      "local_secret_read": "block"
+     },
+     "claude-code": {
+      "local_secret_read": "block"
+     }
+    },
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude": {
+      "local_secret_read": "block"
+     },
+     "claude-code": {
+      "local_secret_read": "block"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "guard-harness-risk-alias-same",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "review",
+     "claude-code": "block"
+    },
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-harness-action-alias-conflict",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "Bad Key!": "review"
+    },
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "guard-bad-harness-selector",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-catalog-hash",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_catalog_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_provider_catalog_hash_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-catalog-hash-upper",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_provider_catalog_hash_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-catalog-hash-short",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_tool_actions": {
+     "claude-code:mcp__srv__tool": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_tool_actions": {
+     "claude-code:mcp__srv__tool": "block"
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-mcp-tool-actions",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_tool_actions": {
+     "codex:mcp__server__*": "allow"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-mcp-namespace-allow",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_tool_actions": {
+     "codex:mcp__server__*": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_tool_actions": {
+     "codex:mcp__server__*": "block"
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-mcp-namespace-block",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_tool_actions": {
+     "codex:mcp__server__read": "allow"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_tool_actions": {
+     "codex:mcp__server__read": "allow"
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-mcp-tool-allow",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_tool_actions": {
+     "nocolon": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-mcp-tool-bad",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_actions": {
+     "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_provider_actions": {
+     "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE": "block"
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-mcp-provider-actions",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_actions": {
+     "claude-code:srv": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_provider_actions_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-mcp-provider-bad",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_actions": {
+     "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE": "allow"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_provider_actions_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-mcp-provider-allow",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude": {
+      "cloud_advisory": "allow",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "allow",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     },
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-watch-prompt",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "observe",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude": {
+      "cloud_advisory": "allow",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "allow",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     },
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-watch-observe",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude": {
+      "cloud_advisory": "allow",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "allow",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     },
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-watch-enforce",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-protected-prompt",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "observe",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude": {
+      "cloud_advisory": "allow",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "allow",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     },
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-protected-observe",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-protected-enforce",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-extra_careful-prompt",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "observe",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude": {
+      "cloud_advisory": "allow",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "allow",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     },
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-extra_careful-observe",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "protected",
+     "codex": "extra_careful",
+     "cursor": "watch",
+     "junk": "nope"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "extra_careful",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-extra_careful-enforce",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "extra_careful"
+    },
+    "harness_risk_actions": {
+     "claude-code": {
+      "network_egress": "block"
+     }
+    },
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "claude-code": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "block",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-existing-harness",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "codex": "protected"
+    },
+    "harness_risk_actions": {
+     "codex": {
+      "local_secret_read": "block"
+     }
+    },
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {
+     "codex": {
+      "cloud_advisory": "allow",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "block",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "allow",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-merges-stricter",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {},
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "require-reapproval",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "warn",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "overlay-empty",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-minimal",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "harness_actions": {
+     "claude": "review"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "risk_actions": {
+     "local_secret_read": "block"
+    },
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "review"
+    },
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "local_secret_read": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-risk",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "risk_actions": null,
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "map-none-risk",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "default_action": null,
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-null-action",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "risk_actions": {
+     "zzz": "block"
+    },
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-bad-risk",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "risk_actions": [
+     "a"
+    ],
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "map-not-mapping",
+  "op": "effective"
+ },
+ {
+  "configs": [
+   {
+    "mode": "enforce",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   },
+   {
+    "mode": "observe",
+    "protection_posture": "watch",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-protected-watch",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "harness_actions": {
+     "claude": "review"
+    },
+    "harness_risk_actions": {
+     "claude": {
+      "local_secret_read": "review"
+     }
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   },
+   {
+    "harness_actions": {
+     "claude-code": "block"
+    },
+    "harness_risk_actions": {
+     "claude-code": {
+      "local_secret_read": "block"
+     }
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "block",
+     "claude-code": "block"
+    },
+    "harness_risk_actions": {
+     "claude": {
+      "local_secret_read": "block"
+     },
+     "claude-code": {
+      "local_secret_read": "block"
+     }
+    },
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-alias",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "default_action": "allow",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "receipt_redaction_level": "none",
+    "sandbox_analysis": "off",
+    "security_level": "relaxed"
+   },
+   {
+    "default_action": "block",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "receipt_redaction_level": "full",
+    "sandbox_analysis": "strict",
+    "security_level": "paranoid",
+    "unknown_publisher_action": "allow"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "block",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "strict",
+    "security_level": "paranoid",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-floors",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": {
+     "x": "allow"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "publisher_actions": {
+     "a": "warn"
+    },
+    "risk_actions": {
+     "local_secret_read": "warn"
+    },
+    "security_level": "balanced"
+   },
+   {
+    "artifact_actions": {
+     "x": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "publisher_actions": {
+     "a": "review",
+     "b": "block"
+    },
+    "risk_actions": {
+     "local_secret_read": "block",
+     "network_egress": "review"
+    },
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {
+     "x": "block"
+    },
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {
+     "a": "review",
+     "b": "block"
+    },
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "local_secret_read": "block",
+     "network_egress": "review"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-maps",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_actions": {
+     "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE": "review"
+    },
+    "mcp_tool_actions": {
+     "claude-code:mcp__a__t": "review"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   },
+   {
+    "mcp_provider_actions": {
+     "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE": "block"
+    },
+    "mcp_tool_actions": {
+     "claude-code:mcp__a__t": "block"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_provider_actions": {
+     "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE": "block"
+    },
+    "mcp_tool_actions": {
+     "claude-code:mcp__a__t": "block"
+    },
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-mcp",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   },
+   {
+    "mcp_provider_catalog_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-first-catalog-wins",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_risk_actions": {},
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-one",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   },
+   {
+    "default_action": "zzz",
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": false,
+  "name": "compose-invalid-second",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "harness_postures": {
+     "claude": "watch",
+     "codex": "protected"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   },
+   {
+    "harness_postures": {
+     "bad": "zzz",
+     "claude": "extra_careful",
+     "codex": "watch"
+    },
+    "mode": "prompt",
+    "protection_posture": "protected",
+    "security_level": "balanced"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_postures": {
+     "claude": "extra_careful",
+     "codex": "protected"
+    },
+    "harness_risk_actions": {},
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {},
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": false,
+  "name": "compose-postures",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "observe",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   },
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "codex": "extra_careful"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": true,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {},
+    "harness_postures": {
+     "codex": "extra_careful"
+    },
+    "harness_risk_actions": {
+     "codex": {
+      "cloud_advisory": "require-reapproval",
+      "credential_exfiltration": "require-reapproval",
+      "data_flow_exfiltration": "require-reapproval",
+      "destructive_shell": "require-reapproval",
+      "encoded_execution": "require-reapproval",
+      "encoded_exfiltration": "block",
+      "guard_bypass": "block",
+      "local_secret_read": "require-reapproval",
+      "malicious_skill": "require-reapproval",
+      "mcp_dangerous_tool": "require-reapproval",
+      "network_egress": "require-reapproval",
+      "package_script": "require-reapproval",
+      "persistence": "require-reapproval",
+      "prompt_injection": "require-reapproval"
+     }
+    },
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "warn",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "require-reapproval",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "require-reapproval",
+     "mcp_dangerous_tool": "require-reapproval",
+     "network_egress": "warn",
+     "package_script": "require-reapproval",
+     "persistence": "require-reapproval",
+     "prompt_injection": "require-reapproval"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "compose-guard-home-workspace",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   },
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "review"
+    },
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   },
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": {
+     "claude": "watch"
+    },
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "watch",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "relaxed",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "ok": true,
+   "policy": {
+    "artifact_actions": {},
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": {
+     "claude": "review"
+    },
+    "harness_postures": {
+     "claude": "watch"
+    },
+    "harness_risk_actions": {},
+    "mode": "enforce",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "publisher_actions": {},
+    "receipt_redaction_level": "full",
+    "risk_actions": {
+     "cloud_advisory": "require-reapproval",
+     "credential_exfiltration": "require-reapproval",
+     "data_flow_exfiltration": "block",
+     "destructive_shell": "require-reapproval",
+     "encoded_execution": "require-reapproval",
+     "encoded_exfiltration": "block",
+     "guard_bypass": "block",
+     "local_secret_read": "require-reapproval",
+     "malicious_skill": "block",
+     "mcp_dangerous_tool": "block",
+     "network_egress": "require-reapproval",
+     "package_script": "require-reapproval",
+     "persistence": "block",
+     "prompt_injection": "block"
+    },
+    "sandbox_analysis": "off",
+    "security_level": "strict",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  },
+  "guard_config": true,
+  "name": "compose-guard-three",
+  "op": "compose"
+ },
+ {
+  "configs": [
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "warn",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   },
+   {
+    "artifact_actions": null,
+    "changed_hash_action": "require-reapproval",
+    "default_action": "nope",
+    "harness_actions": null,
+    "harness_postures": null,
+    "harness_risk_actions": null,
+    "managed_locked_settings": [],
+    "mode": "prompt",
+    "new_network_domain_action": "warn",
+    "protection_posture": "protected",
+    "protection_posture_explicit": false,
+    "publisher_actions": null,
+    "receipt_redaction_level": "full",
+    "risk_actions": null,
+    "sandbox_analysis": "off",
+    "security_level": "balanced",
+    "subprocess_action": "warn",
+    "unknown_publisher_action": "review"
+   }
+  ],
+  "expected": {
+   "error": "native_policy_snapshot_policy_invalid",
+   "ok": false
+  },
+  "guard_config": true,
+  "name": "compose-guard-invalid",
+  "op": "compose"
+ }
+]

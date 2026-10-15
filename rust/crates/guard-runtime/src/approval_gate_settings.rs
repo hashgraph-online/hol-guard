@@ -21,12 +21,12 @@ use serde_json::Value;
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrantV1, ApprovalGateGrants};
 use crate::approval_gate_state::{
     constant_time_eq, cooldown_active, enabled, epoch, is_future, iso_from_epoch, load_state,
-    optional_bool, optional_int, optional_string, reset_failed_attempts, verifier, verify_password,
-    write_state, ApprovalGatePublicConfig,
+    optional_bool, optional_int, optional_string, reset_failed_attempts, verifier, write_state,
+    ApprovalGatePublicConfig,
 };
 use crate::approval_gate_verify::{
-    input_from_mapping, invalidate_active_grants, recent_totp_satisfied_locked,
-    rotate_authentication_state, ApprovalGateInputV1,
+    input_from_mapping, invalidate_active_grants, raise_if_locked, recent_totp_satisfied_locked,
+    rotate_authentication_state, verify_password_stage, ApprovalGateInputV1,
 };
 use crate::encrypted_secret_store::random_bytes;
 use crate::totp::APPROVAL_GATE_HASH_ITERATIONS;
@@ -49,6 +49,14 @@ fn factor_generation(state: &Value) -> i64 {
         .max(0)
 }
 
+pub(crate) fn invalid_cooldown() -> ApprovalGateErrorV1 {
+    err(
+        "approval_gate_invalid_cooldown",
+        "Approval cooldown must be 0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds.",
+        403,
+    )
+}
+
 fn cooldown_seconds_of(state: &Value) -> i64 {
     crate::approval_gate_state::coerce_cooldown_seconds(state.get("cooldown_seconds")).unwrap_or(0)
 }
@@ -66,7 +74,7 @@ pub(crate) fn create_verifier(password: &str) -> Result<Value, ApprovalGateError
         return Err(err(
             "approval_gate_weak_password",
             "Approval gate password is too weak.",
-            400,
+            403,
         ));
     }
     let salt = random_bytes(16);
@@ -101,7 +109,7 @@ fn require_password_confirmation(
         _ => Err(err(
             "approval_gate_password_mismatch",
             "Approval gate password confirmation does not match.",
-            400,
+            403,
         )),
     }
 }
@@ -114,9 +122,11 @@ pub(crate) fn public_config_locked(
     let state = load_state(guard_home);
     let now_epoch = epoch(now);
     let configured = verifier(&state).is_some();
-    let cooldown_expires_at = optional_string(state.get("cooldown_expires_at"));
+    let cooldown_expires_at = optional_string(state.get("cooldown_expires_at"))
+        .filter(|value| is_future(Some(value), now_epoch));
     let cd_active = cooldown_active(&state, now_epoch);
-    let locked_until = optional_string(state.get("locked_until"));
+    let locked_until = optional_string(state.get("locked_until"))
+        .filter(|value| is_future(Some(value), now_epoch));
     let totp_enabled_v = totp_enabled(&state);
     let totp_recent = totp_enabled_v && recent_totp_satisfied_locked(guard_home, &state, now_epoch);
     ApprovalGatePublicConfig {
@@ -170,7 +180,7 @@ fn validate_grant_for_settings(
         None,
         factor_generation(state),
         totp_enabled(state),
-        true,
+        crate::approval_gate_consumers::totp_state_valid(guard_home, state),
         now_epoch,
     )
 }
@@ -246,32 +256,18 @@ pub(crate) fn next_settings_state(
             .insert("enabled".into(), Value::Bool(en));
     }
     if let Some(cs) = payload.get("cooldown_seconds") {
-        let secs = crate::approval_gate_state::coerce_cooldown_seconds(Some(cs)).map_err(|_| {
-            err(
-                "approval_gate_invalid_cooldown",
-                "Approval cooldown must be 0, 900, or 3600 seconds.",
-                403,
-            )
-        })?;
+        let secs = crate::approval_gate_state::coerce_cooldown_seconds(Some(cs))
+            .map_err(|_| invalid_cooldown())?;
         next_state
             .as_object_mut()
             .unwrap()
             .insert("cooldown_seconds".into(), Value::Number(secs.into()));
     }
-    if let Some(fc) = payload.get("fail_closed").and_then(|v| v.as_bool()) {
-        next_state
-            .as_object_mut()
-            .unwrap()
-            .insert("fail_closed".into(), Value::Bool(fc));
-    }
-    if let Some(sad) = payload
-        .get("strict_all_decisions")
-        .and_then(|v| v.as_bool())
-    {
-        next_state
-            .as_object_mut()
-            .unwrap()
-            .insert("strict_all_decisions".into(), Value::Bool(sad));
+    if let Some(sad) = payload.get("strict_all_decisions") {
+        next_state.as_object_mut().unwrap().insert(
+            "strict_all_decisions".into(),
+            Value::Bool(sad.as_bool() == Some(true)),
+        );
     }
     Ok(Some(next_state))
 }
@@ -356,35 +352,29 @@ pub(crate) fn unlock_cooldown_locked(
             423,
         ));
     }
-    let gate_input = approval_gate_input.cloned().unwrap_or_default();
-    let now_epoch = epoch(now);
-    // `_verify_password_stage` (password required, fail -> record+raise).
-    let password = match gate_input.password.as_deref() {
-        Some(p) => p,
-        None => {
-            let code = if totp_enabled(&state) {
-                "approval_gate_password_required"
-            } else {
-                "approval_gate_required"
-            };
-            return Err(err(code, "Approval password is required.", 403));
-        }
-    };
-    if !verify_password(password, verifier(&state)) {
-        crate::approval_gate_state::record_failed_attempt(
-            guard_home,
-            &mut state,
-            crate::approval_gate_state::ApprovalGateFactor::Password,
-            now,
-        );
+    if totp_enabled(&state) {
         return Err(err(
-            "approval_gate_invalid_password",
-            "Approval password is invalid.",
+            "approval_gate_totp_required",
+            "Cooldown unlock is unavailable while TOTP is enabled.",
             403,
         ));
     }
+    let seconds =
+        crate::approval_gate_state::coerce_cooldown_seconds(Some(&Value::from(duration_seconds)))
+            .map_err(|_| invalid_cooldown())?;
+    if seconds == 0 {
+        return Err(err(
+            "approval_gate_invalid_cooldown",
+            "Cooldown unlock requires 900 or 3600 seconds.",
+            403,
+        ));
+    }
+    let now_epoch = epoch(now);
+    raise_if_locked(&state, now_epoch)?;
+    let gate_input = approval_gate_input.cloned().unwrap_or_default();
+    verify_password_stage(guard_home, &mut state, gate_input.password.as_deref(), now)?;
     reset_failed_attempts(&mut state);
-    let expires = iso_from_epoch(now_epoch + duration_seconds as f64);
+    let expires = iso_from_epoch(now_epoch + seconds as f64);
     state
         .as_object_mut()
         .unwrap()

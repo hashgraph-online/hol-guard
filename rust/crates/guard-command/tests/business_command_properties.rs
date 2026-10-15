@@ -1,8 +1,7 @@
 //! Seeded generated-input checks for the gws Gmail send command parser and its
 //! wire JSON layer.
 
-#[path = "support/business_properties.rs"]
-mod business_properties;
+use crate::business_properties;
 
 use base64::{
     engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},

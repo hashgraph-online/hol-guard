@@ -6,47 +6,28 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, Metadata};
 use std::io;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
 use guard_contracts::SkillDirectoryLimitsV1;
 
 use crate::skill_identity_canon::{canonical_component, casefold, Failure};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct StatKey {
-    dev: u64,
-    ino: u64,
-    mode: u32,
-    nlink: u64,
-    size: u64,
-    mtime_ns: i128,
-    ctime_ns: i128,
-}
-
-pub(crate) fn stat_key(metadata: &Metadata) -> StatKey {
-    StatKey {
-        dev: metadata.dev(),
-        ino: metadata.ino(),
-        mode: metadata.mode(),
-        nlink: metadata.nlink(),
-        size: metadata.size(),
-        mtime_ns: i128::from(metadata.mtime()) * 1_000_000_000 + i128::from(metadata.mtime_nsec()),
-        ctime_ns: i128::from(metadata.ctime()) * 1_000_000_000 + i128::from(metadata.ctime_nsec()),
-    }
-}
+use crate::skill_identity_platform::{
+    directory_guard, link_loop, unsupported_reparse, DirectoryGuard,
+};
+pub(crate) use crate::skill_identity_platform::{security_mode, stat_key, StatKey};
 
 /// `lstat` with the identity-specific error mapping: a vanished path means the
 /// tree changed under us; anything else is unreadable.
 pub(crate) fn safe_lstat(path: &Path) -> Result<Metadata, Failure> {
-    fs::symlink_metadata(path).map_err(|error| match error.kind() {
+    let metadata = fs::symlink_metadata(path).map_err(|error| match error.kind() {
         io::ErrorKind::NotFound => Failure::TreeChangedDuringHash,
         _ => Failure::UnreadableEntry,
-    })
-}
-
-pub(crate) fn security_mode(metadata: &Metadata) -> String {
-    format!("{:04o}", metadata.mode() & 0o7777)
+    })?;
+    if unsupported_reparse(&metadata) {
+        return Err(Failure::UnsupportedReparsePoint);
+    }
+    Ok(metadata)
 }
 
 /// Canonicalize an existing path, naming the failure the way identity callers
@@ -55,7 +36,7 @@ pub(crate) fn resolve_existing(path: &Path, broken: Failure) -> Result<PathBuf, 
     fs::canonicalize(path).map_err(|error| {
         if error.kind() == io::ErrorKind::NotFound {
             broken
-        } else if error.raw_os_error() == Some(libc::ELOOP) {
+        } else if link_loop(&error) {
             Failure::SymlinkLoop
         } else {
             Failure::UnreadableEntry
@@ -72,14 +53,15 @@ pub(crate) fn is_directory(path: &Path) -> bool {
 /// Lexical (no filesystem access) absolute normalization: `.` and `..` are
 /// collapsed textually, matching `os.path.abspath` for absolute inputs.
 pub(crate) fn lexical_normalize(path: &Path) -> PathBuf {
-    let mut normalized = PathBuf::from("/");
+    let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
             Component::Normal(part) => normalized.push(part),
             Component::ParentDir => {
                 normalized.pop();
             }
-            Component::RootDir | Component::CurDir | Component::Prefix(_) => {}
+            Component::RootDir | Component::Prefix(_) => normalized.push(component.as_os_str()),
+            Component::CurDir => {}
         }
     }
     normalized
@@ -114,6 +96,7 @@ fn open_directory(path: &Path) -> Result<fs::ReadDir, Failure> {
 struct Frame {
     children: fs::ReadDir,
     parts: Vec<String>,
+    _guard: DirectoryGuard,
 }
 
 #[derive(Default)]
@@ -156,7 +139,7 @@ fn classify(path: &Path) -> Result<(EntryType, StatKey, Option<String>), Failure
     } else {
         return Err(Failure::SpecialFile);
     };
-    Ok((entry_type, stat_key(&metadata), raw_target))
+    Ok((entry_type, stat_key(path, &metadata)?, raw_target))
 }
 
 /// Walk `root` depth first, capturing every entry. Directory contents are
@@ -171,6 +154,7 @@ pub(crate) fn collect_entries(
     let mut stack = vec![Frame {
         children: open_directory(root)?,
         parts: Vec::new(),
+        _guard: directory_guard(root)?,
     }];
     while let Some(frame) = stack.last_mut() {
         let Some(next) = frame.children.next() else {
@@ -203,6 +187,7 @@ pub(crate) fn collect_entries(
             stack.push(Frame {
                 children: open_directory(&path)?,
                 parts,
+                _guard: directory_guard(&path)?,
             });
         }
     }

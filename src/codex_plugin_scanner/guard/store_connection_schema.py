@@ -48,6 +48,7 @@ from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_receipt_rollup_schema import request_receipt_rollup_rebuild
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
@@ -1269,8 +1270,7 @@ class StoreConnectionSchemaMixin:
             for idx_stmt in receipt_rollup_index_statements():
                 connection.execute(idx_stmt)
             if not self._schema_version_applied(connection, version=6):
-                if receipt_rollups_need_backfill(connection):
-                    backfill_receipt_rollups(connection)
+                request_receipt_rollup_rebuild(connection, _now())
                 self._record_schema_version(connection, version=6)
             if not self._schema_version_applied(
                 connection,
@@ -1278,9 +1278,10 @@ class StoreConnectionSchemaMixin:
             ):
                 # P45 changes ``warn`` from the reviewed bucket to allowed.
                 # Existing v6 rollups can have the right total while retaining
-                # the old bucket semantics, so this migration must rebuild them
-                # unconditionally before incremental deltas are applied.
-                backfill_receipt_rollups(connection)
+                # the old bucket semantics, so this migration requests a rebuild;
+                # the resident runs it before the next incremental delta or
+                # total read, keeping the archived-receipt totals it preserves.
+                request_receipt_rollup_rebuild(connection, _now())
                 self._record_schema_version(
                     connection,
                     version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
