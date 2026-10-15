@@ -191,3 +191,44 @@ export function shouldShowPurchasePrompt(input: {
 export function sponsoredCardLabel(featured: boolean): string {
   return featured ? "Sponsored · Featured" : "Sponsored";
 }
+
+export const DISCOVERY_PRODUCT_LABEL: Record<DiscoveryOffer["product"], string> = {
+  always: "Featured all day",
+  time_slot: "Featured time window",
+  sponsored: "Sponsored listing",
+};
+
+/** Indicative price straight from the server offer; null when it gave none. */
+export function formatOfferPrice(offer: DiscoveryOffer): string | null {
+  if (offer.indicativeAmountCents === null || !offer.currency) return null;
+  try {
+    const amount = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: offer.currency.toUpperCase(),
+      maximumFractionDigits: offer.indicativeAmountCents % 100 === 0 ? 0 : 2,
+    }).format(offer.indicativeAmountCents / 100);
+    return `from ${amount} / month`;
+  } catch {
+    return null;
+  }
+}
+
+/** A time-window feature says when it ends; an all-day feature says nothing. */
+export function featuredWindowLabel(placement: DiscoveryPlacement): string | null {
+  if (placement.product !== "time_slot") return null;
+  const ends = Date.parse(placement.endsAt);
+  if (!Number.isFinite(ends)) return null;
+  return `Featured until ${new Date(ends).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
+/** Featured extensions lead the list; everything else keeps catalog order. */
+export function orderFeaturedFirst<T extends { extension_id: string }>(
+  extensions: readonly T[],
+  featuredIds: ReadonlySet<string>,
+): T[] {
+  if (featuredIds.size === 0) return [...extensions];
+  return [
+    ...extensions.filter((extension) => featuredIds.has(extension.extension_id)),
+    ...extensions.filter((extension) => !featuredIds.has(extension.extension_id)),
+  ];
+}

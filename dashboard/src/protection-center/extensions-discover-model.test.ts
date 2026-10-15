@@ -11,6 +11,10 @@ import {
   parseDiscoveryProjection,
   shouldShowPurchasePrompt,
   sponsoredCardLabel,
+  DISCOVERY_PRODUCT_LABEL,
+  featuredWindowLabel,
+  formatOfferPrice,
+  orderFeaturedFirst,
   MIN_ORGANIC_ROWS_BEFORE_IN_FEED,
   type DiscoveryPlacement,
 } from "./extensions-discover-model";
@@ -225,6 +229,26 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   );
   assert.ok(markup.includes("Sponsored"));
   assert.ok(markup.includes("Featured"));
+}
+
+// Offer prices come only from the server quote; a missing quote shows none.
+{
+  const offer = { product: "always" as const, availability: "open" as const, indicativeAmountCents: 50_000, currency: "usd", checkedAt: END, quoteRequired: true };
+  assert.equal(formatOfferPrice(offer), "from $500 / month");
+  assert.equal(formatOfferPrice({ ...offer, indicativeAmountCents: 1_250 }), "from $12.50 / month");
+  assert.equal(formatOfferPrice({ ...offer, indicativeAmountCents: null }), null);
+  assert.equal(DISCOVERY_PRODUCT_LABEL.sponsored, "Sponsored listing");
+}
+
+// Only a time-window feature names its end; featured rows lead, the rest keep order.
+{
+  assert.equal(featuredWindowLabel(placement({ product: "always" })), null);
+  assert.match(featuredWindowLabel(placement({ product: "time_slot" })) ?? "", /^Featured until /);
+  const ordered = orderFeaturedFirst(
+    [{ extension_id: "a" }, { extension_id: "b" }, { extension_id: "c" }],
+    new Set(["c"]),
+  );
+  assert.deepEqual(ordered.map((entry) => entry.extension_id), ["c", "a", "b"]);
 }
 
 console.log("extensions-discover-model.test.ts: all assertions passed");
