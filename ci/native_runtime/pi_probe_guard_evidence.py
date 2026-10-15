@@ -15,6 +15,8 @@ other daemon route.
 
 With no reachable review service the extension must fail every hook closed.
 It may run the Guard CLI only to recover the daemon, never to review a hook.
+A recovery call carries no case ID, so the probe runs each unavailable-service
+case alone and credits it with the CLI records that its run appended.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import json
 import re
 import time
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 try:
@@ -234,12 +237,44 @@ def wait_for_bridge_native_routes(daemon: Any, expected: int, *, timeout_seconds
     raise ProbeError(f"timed out waiting for native bridge route evidence: {last}")
 
 
+def capture_log_size(path: Path) -> int:
+    """Where the CLI capture log ends now, so a run's own records can be read later."""
+
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def read_capture_records(path: Path, start: int = 0) -> list[dict[str, Any]]:
+    """Parse the CLI capture log records written at or after byte ``start``."""
+
+    try:
+        lines = path.read_bytes()[start:].decode("utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ProbeError(f"CLI wrapper did not write its capture log: {exc}") from exc
+    records: list[dict[str, Any]] = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+            case_id = record["case_id"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ProbeError("CLI wrapper capture log contains invalid JSON") from exc
+        if not isinstance(case_id, str) or not isinstance(record, dict):
+            raise ProbeError("CLI wrapper capture log has an invalid record")
+        records.append(record)
+    return records
+
+
 def assert_unavailable_results(
     results: list[dict[str, Any]],
     records: Mapping[str, list[dict[str, Any]]],
     cases: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Each case failed closed, and the CLI only ever tried daemon recovery."""
+    """Each case failed closed, and its own run only ever tried daemon recovery once.
+
+    ``records`` maps each case ID to the CLI records appended while that case ran.
+    """
 
     expected_ids = {str(case["id"]) for case in cases}
     result_ids = [result.get("id") for result in results]
@@ -250,11 +285,14 @@ def assert_unavailable_results(
     by_id = {result["id"]: result for result in results}
     if set(by_id) != expected_ids:
         raise ProbeError("generated extension did not return every unavailable-service case")
-    invocations = [record for case_records in records.values() for record in case_records]
-    if any(record.get("invocation_kind") != "recovery" for record in invocations):
-        raise ProbeError("generated extension ran a Guard CLI review instead of failing closed")
-    if len(invocations) != len(expected_ids):
-        raise ProbeError(f"generated extension did not try daemon recovery once per case: {len(invocations)}")
+    if not set(records) <= expected_ids:
+        raise ProbeError("CLI capture records name an unexpected unavailable-service case")
+    for case_id in sorted(expected_ids):
+        case_records = records.get(case_id, [])
+        if any(record.get("invocation_kind") != "recovery" for record in case_records):
+            raise ProbeError(f"generated extension ran a Guard CLI review instead of failing closed: {case_id}")
+        if len(case_records) != 1:
+            raise ProbeError(f"generated extension did not try daemon recovery once for {case_id}: {len(case_records)}")
     evidence: dict[str, dict[str, Any]] = {}
     for case_id, result in by_id.items():
         returned = result.get("result")
@@ -278,7 +316,9 @@ __all__ = [
     "assert_guard_requests",
     "assert_unavailable_results",
     "bridge_route_counts",
+    "capture_log_size",
     "generated_transport",
+    "read_capture_records",
     "text_digest",
     "wait_for_bridge_native_routes",
 ]

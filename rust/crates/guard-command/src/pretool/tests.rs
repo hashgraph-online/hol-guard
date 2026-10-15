@@ -404,6 +404,37 @@ fn reviews_dotenv_family_shell_reads() {
 }
 
 #[test]
+fn windows_aliases_of_secret_paths_get_the_plain_path_decision() {
+    // Win32 drops trailing dots and spaces from each name and reads
+    // `name::$DATA` as the file's default stream.
+    for (alias, plain) in [
+        ("cat '.env::$DATA'", "cat .env"),
+        ("cat '.env::$DATA.'", "cat .env"),
+        ("cat '.ENV. '", "cat .env"),
+        ("cat ~/.npmrc.", "cat ~/.npmrc"),
+        ("cat ~/.ssh./id_rsa.", "cat ~/.ssh/id_rsa"),
+        ("cat '.aws\\credentials::$DATA'", "cat .aws/credentials"),
+        ("cat notes.md.", "cat notes.md"),
+    ] {
+        let alias_decision = evaluate_pre_tool(&request(alias)).unwrap();
+        let plain_decision = evaluate_pre_tool(&request(plain)).unwrap();
+        assert_eq!(
+            (
+                alias_decision.decision,
+                alias_decision.minimum_action,
+                alias_decision.reason_code
+            ),
+            (
+                plain_decision.decision,
+                plain_decision.minimum_action,
+                plain_decision.reason_code
+            ),
+            "{alias}"
+        );
+    }
+}
+
+#[test]
 fn allows_bounded_exact_commands() {
     for command in [
         "pwd",

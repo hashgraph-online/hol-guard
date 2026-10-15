@@ -164,6 +164,35 @@
       "reason": null
     },
     {
+      "name": "node-entry-build",
+      "scripts": {
+        "build": "node build.js",
+        "test": "node test.js"
+      },
+      "command": "npm run build",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "node-entry-test",
+      "scripts": {
+        "build": "node build.js",
+        "test": "node test.js"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "node-entry-pnpm-test",
+      "scripts": {
+        "test": "node test.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
       "name": "prebuild",
       "scripts": {
         "build": "vite build",

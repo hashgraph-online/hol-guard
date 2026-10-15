@@ -7,6 +7,8 @@
 
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
+#[path = "directory_targets_tmp_alias.rs"]
+pub(crate) mod tmp_alias;
 
 #[cfg(unix)]
 #[path = "path_trust.rs"]
@@ -125,17 +127,8 @@ fn absolute_path_spelling_matches(
     }
     // macOS exposes the root temporary directory through this fixed system
     // alias. Permit the exact canonical suffix.
-    #[cfg(target_os = "macos")]
-    {
-        let alias = std::path::Path::new("/tmp");
-        if let Ok(relative) = supplied.strip_prefix(alias) {
-            if std::fs::canonicalize(alias).is_ok_and(|alias_canonical| {
-                alias_canonical == std::path::Path::new("/private/tmp")
-                    && canonical == alias_canonical.join(relative)
-            }) {
-                return true;
-            }
-        }
+    if tmp_alias::private_tmp_spelling(supplied).is_some_and(|spelling| spelling == canonical) {
+        return true;
     }
     // Other links count only when nobody but this user or root can retarget
     // them, such as `/var -> private/var` or a link in the user's own

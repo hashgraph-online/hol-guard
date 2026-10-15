@@ -95,6 +95,7 @@ pub(crate) use git_routes::{git_dir_route_within_scope, git_route_within_workspa
 mod apply_patch_writes;
 mod lockfile_install;
 mod omp_hashline_writes;
+mod pipe_attacks;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
@@ -763,6 +764,9 @@ fn evaluate_single_command(
             "native_secret_exfiltration",
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
+    }
+    if let Some((reason_code, reason)) = pipe_attacks::pipe_attack(&model) {
+        return Ok(pretool_decision(model, "block", reason_code, reason));
     }
     if model
         .wrapper_chain

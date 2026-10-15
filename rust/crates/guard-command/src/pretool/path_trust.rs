@@ -9,7 +9,7 @@
 //! time the shell follows it, so its spelling never counts as the target.
 
 use std::os::unix::fs::MetadataExt;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 /// Deepest chain of links followed before a spelling is refused.
 const MAX_LINK_DEPTH: u8 = 8;
@@ -50,10 +50,40 @@ fn links_trusted(path: &Path, uid: u32, depth: u8) -> bool {
                 && (!metadata.file_type().is_symlink()
                     || (private_directory(&resolved_parent, uid)
                         && std::fs::read_link(entry).is_ok_and(|target| {
-                            let target = parent.join(target);
-                            plain_components(&target) && links_trusted(&target, uid, depth + 1)
+                            link_target(&resolved_parent, &target).is_some_and(|target| {
+                                plain_components(&target) && links_trusted(&target, uid, depth + 1)
+                            })
                         })))
         })
+}
+
+/// Where a link whose canonical parent is `resolved_parent` points, spelled
+/// without `.` or `..`. The kernel resolves a relative target from the
+/// directory holding the link, so its leading `..` steps climb that canonical
+/// directory exactly: `../../private/tmp` names one real path. A `..` after a
+/// named step could climb back out of another link, so it is refused.
+fn link_target(resolved_parent: &Path, target: &Path) -> Option<PathBuf> {
+    let mut joined = if target.is_absolute() {
+        PathBuf::new()
+    } else {
+        resolved_parent.to_path_buf()
+    };
+    let mut named = false;
+    for component in target.components() {
+        match component {
+            Component::RootDir => joined.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir if !named => {
+                joined.pop();
+            }
+            Component::Normal(name) => {
+                named = true;
+                joined.push(name);
+            }
+            _ => return None,
+        }
+    }
+    Some(joined)
 }
 
 /// A directory, read without following a link, that belongs to this user or
@@ -93,3 +123,7 @@ pub(in crate::pretool) fn steady_directory(path: &Path, uid: u32) -> bool {
             && (metadata.mode() & 0o022 == 0 || metadata.mode() & 0o1000 != 0)
     })
 }
+
+#[cfg(test)]
+#[path = "path_trust_tests.rs"]
+mod tests;

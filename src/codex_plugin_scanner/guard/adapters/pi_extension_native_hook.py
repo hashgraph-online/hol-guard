@@ -49,6 +49,17 @@ const GUARD_NATIVE_HOOK_OUTPUT_LIMIT_CHARS = 8 * GUARD_MAX_SERIALIZED_RESPONSE_C
 // Time the runtime may take to start and exit beyond its own deadline.
 const GUARD_NATIVE_HOOK_GRACE_MS = 100;
 const GUARD_NATIVE_HOOK_UNSTARTABLE = new Set(['ENOENT', 'EACCES', 'ENOEXEC', 'EPERM']);
+// The bridge may use at most this share of the hook's remaining time. A reply
+// that misses the bridge deadline then still leaves the extension time to
+// recover the daemon and answer before the harness ends the hook.
+const GUARD_NATIVE_HOOK_BUDGET_SHARE = 0.7;
+
+// The daemon budget for one hook: capped for the bridge, unchanged when the
+// extension posts to the daemon itself.
+function nativeGuardBudgetMs(budgetMs: number, remainingMs: number): number {
+  if (GUARD_NATIVE_HOOK_RUNTIME === null || process.platform === 'win32') return budgetMs;
+  return Math.max(1, Math.min(budgetMs, Math.floor(remainingMs * GUARD_NATIVE_HOOK_BUDGET_SHARE)));
+}
 
 type GuardDaemonReply = {
   status: number;

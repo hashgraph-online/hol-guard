@@ -20,7 +20,9 @@ from ci.native_runtime.pi_probe_guard_evidence import (
     assert_guard_requests,
     assert_unavailable_results,
     bridge_route_counts,
+    capture_log_size,
     generated_transport,
+    read_capture_records,
     text_digest,
     wait_for_bridge_native_routes,
 )
@@ -128,7 +130,7 @@ def test_unavailable_service_fails_closed_and_only_recovers_the_daemon() -> None
         {"id": case["id"], "preserved": False, "result": {"isError": True}, "input_content_unchanged": True}
         for case in cases
     ]
-    recoveries = {"unknown": [{"case_id": "unknown", "invocation_kind": "recovery"} for _ in cases]}
+    recoveries = {str(case["id"]): [{"case_id": "unknown", "invocation_kind": "recovery"}] for case in cases}
 
     evidence = assert_unavailable_results(results, recoveries, cases)
     assert all(case_evidence["is_error"] for case_evidence in evidence.values())
@@ -137,8 +139,14 @@ def test_unavailable_service_fails_closed_and_only_recovers_the_daemon() -> None
     reviewed["negative-observe"] = [{"case_id": "negative-observe", "invocation_kind": "hook"}]
     with pytest.raises(ProbeError, match="CLI review"):
         assert_unavailable_results(results, reviewed, cases)
-    with pytest.raises(ProbeError, match="recovery once per case"):
-        assert_unavailable_results(results, {"unknown": recoveries["unknown"][1:]}, cases)
+    # Two recoveries for one case must not stand in for a case that never recovered.
+    shifted = deepcopy(recoveries)
+    shifted["negative-empty"] *= 2
+    del shifted["negative-observe"]
+    with pytest.raises(ProbeError, match="recovery once for negative-empty"):
+        assert_unavailable_results(results, shifted, cases)
+    with pytest.raises(ProbeError, match="unexpected unavailable-service case"):
+        assert_unavailable_results(results, {**recoveries, "unknown": recoveries["negative-empty"]}, cases)
     preserved = deepcopy(results)
     preserved[0]["preserved"] = True
     with pytest.raises(ProbeError, match="silently preserved"):
@@ -149,6 +157,20 @@ def test_unavailable_service_fails_closed_and_only_recovers_the_daemon() -> None
         assert_unavailable_results(unblocked, recoveries, cases)
     with pytest.raises(ProbeError, match="duplicate"):
         assert_unavailable_results([results[0]] * len(cases), recoveries, cases)
+
+
+def test_capture_records_read_only_what_a_run_appended(tmp_path: Path) -> None:
+    log = tmp_path / "cli.jsonl"
+    assert capture_log_size(log) == 0
+    log.write_text(json.dumps({"case_id": "unknown", "invocation_kind": "recovery"}) + "\n", encoding="utf-8")
+    offset = capture_log_size(log)
+    with log.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"case_id": "negative-empty", "invocation_kind": "hook"}) + "\n")
+
+    assert [record["case_id"] for record in read_capture_records(log)] == ["unknown", "negative-empty"]
+    assert read_capture_records(log, offset) == [{"case_id": "negative-empty", "invocation_kind": "hook"}]
+    with pytest.raises(ProbeError, match="capture log"):
+        read_capture_records(tmp_path / "missing.jsonl")
 
 
 @pytest.mark.skipif(sys.platform == "win32" or shutil.which("node") is None, reason="POSIX Node bridge capture")

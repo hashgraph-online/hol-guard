@@ -363,3 +363,7 @@ mod hidden_listing_tests;
 #[cfg(test)]
 #[path = "directory_read_tests.rs"]
 mod directory_read_tests;
+
+#[cfg(all(test, unix))]
+#[path = "directory_read_tmp_alias_tests.rs"]
+mod directory_read_tmp_alias_tests;

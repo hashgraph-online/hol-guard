@@ -33,7 +33,9 @@ try:
         NODE_BRIDGE_CAPTURE_SOURCE,
         assert_guard_requests,
         assert_unavailable_results,
+        capture_log_size,
         generated_transport,
+        read_capture_records,
         wait_for_bridge_native_routes,
     )
     from ci.native_runtime.pi_probe_guard_evidence import text_digest as _text_digest
@@ -50,7 +52,9 @@ except ModuleNotFoundError:  # Run directly as a script from its own directory.
         NODE_BRIDGE_CAPTURE_SOURCE,
         assert_guard_requests,
         assert_unavailable_results,
+        capture_log_size,
         generated_transport,
+        read_capture_records,
         wait_for_bridge_native_routes,
     )
     from pi_probe_guard_evidence import text_digest as _text_digest  # type: ignore[no-redef]
@@ -535,20 +539,9 @@ def _run_node_cases(
 
 
 def _read_records(path: Path) -> dict[str, list[dict[str, Any]]]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise ProbeError(f"CLI wrapper did not write its capture log: {exc}") from exc
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for line in lines:
-        try:
-            record = json.loads(line)
-            case_id = record["case_id"]
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ProbeError("CLI wrapper capture log contains invalid JSON") from exc
-        if not isinstance(case_id, str) or not isinstance(record, dict):
-            raise ProbeError("CLI wrapper capture log has an invalid record")
-        grouped.setdefault(case_id, []).append(record)
+    for record in read_capture_records(path):
+        grouped.setdefault(record["case_id"], []).append(record)
     return grouped
 
 
@@ -1158,12 +1151,14 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
         )
         negative_cases = _negative_cases()
         negative_results = []
+        negative_records: dict[str, list[dict[str, Any]]] = {}
         negative_errors = []
         for case in negative_cases:
             # Each unavailable-service case must start with a fresh extension runtime.
             # A timed-out child can leave containment state set for that process.
             negative_cases_path = root / f"{case['id']}-cases.json"
             negative_cases_path.write_text(json.dumps([case], ensure_ascii=True), encoding="utf-8")
+            log_offset = capture_log_size(negative_log)
             try:
                 case_results, _ = _run_node_cases(
                     node=node,
@@ -1177,10 +1172,11 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
                 negative_errors.append((case["id"], exc))
                 continue
             negative_results.extend(case_results)
+            negative_records[str(case["id"])] = read_capture_records(negative_log, log_offset)
         if negative_errors:
             failed_cases = ", ".join(str(case_id) for case_id, _ in negative_errors)
             raise ProbeError(f"generated Pi extension failed negative cases: {failed_cases}") from negative_errors[0][1]
-        negative_evidence = assert_unavailable_results(negative_results, _read_records(negative_log), negative_cases)
+        negative_evidence = assert_unavailable_results(negative_results, negative_records, negative_cases)
         receipt = {
             "schema": "hol-guard.installed-pi-native-output.v1",
             "package_version": package_version,

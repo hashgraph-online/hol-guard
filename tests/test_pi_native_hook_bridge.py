@@ -184,3 +184,62 @@ class TestNativeReplyReader:
     def test_a_runtime_that_cannot_start_falls_back_to_the_daemon_request(self, tmp_path: Path) -> None:
         assert _run_bridge(tmp_path, tmp_path / "missing-runtime")["kind"] == "unused"
         assert _run_bridge(tmp_path, None)["kind"] == "unused"
+
+
+def _budget_harness(tmp_path: Path, runtime: Path | None) -> Path:
+    harness = tmp_path / "budget.ts"
+    _ = harness.write_text(
+        "import { spawn } from 'node:child_process';\n"
+        "const GUARD_MAX_SERIALIZED_RESPONSE_CHARS = 1024;\n"
+        f"const GUARD_HOME = {json.dumps(str(tmp_path))};\n"
+        "const GUARD_NATIVE_HOOK_RUNTIME: string | null = "
+        f"{json.dumps(None if runtime is None else str(runtime))};\n"
+        + native_hook_reply_source("omp")
+        + "console.log(JSON.stringify([[3100, 4000], [3100, 1000], [150, 4000], [5, 1]].map(\n"
+        "  ([budget, remaining]) => nativeGuardBudgetMs(budget, remaining))));\n",
+        encoding="utf-8",
+    )
+    return harness
+
+
+@pytest.mark.skipif(
+    _bun_executable() is None or os.name == "nt",
+    reason="Bun is required, and Windows keeps the daemon request instead of the bridge",
+)
+@pytest.mark.parametrize(
+    ("runtime", "expected"),
+    [(RUNTIME, [2800, 700, 150, 1]), (None, [3100, 3100, 150, 5])],
+    ids=["bridge", "fetch"],
+)
+def test_bridge_uses_at_most_seventy_percent_of_the_remaining_hook_time(
+    tmp_path: Path, runtime: Path | None, expected: list[int]
+) -> None:
+    bun = _bun_executable()
+    assert bun is not None
+    completed = subprocess.run(
+        [bun, str(_budget_harness(tmp_path, runtime))],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert json.loads(completed.stdout) == expected
+
+
+@pytest.mark.usefixtures("advertised_runtime")
+def test_generated_extension_caps_the_bridge_daemon_budget(tmp_path: Path) -> None:
+    source = managed_extension_source(
+        guard_home=tmp_path / "guard-home",
+        home_dir=tmp_path,
+        settings_path=tmp_path / "settings.json",
+        harness="omp",
+        display_name="Oh My Pi",
+    )
+
+    request = source.split("async function daemonGuardResponse(", 1)[1].split("\n}\n", 1)[0]
+    assert "const bridgeBudgetMs = nativeGuardBudgetMs(budgetMs, remainingMs);" in request
+    assert "payloadWithBudget(bridgeBudgetMs),\n    bridgeBudgetMs," in request
+    # A direct daemon post after the bridge is unavailable keeps the full budget.
+    assert "const daemonPayload = payloadWithBudget(budgetMs);" in request
+    assert "body: daemonPayload," in request

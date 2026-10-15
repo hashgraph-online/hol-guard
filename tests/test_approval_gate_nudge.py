@@ -184,6 +184,43 @@ def test_passive_posture_reads_state_file_without_native_probe(
     assert ("nudge" in posture) == (expected["status"] == "not_set")
 
 
+def _nested_state(depth: int) -> str:
+    """An enabled-false state object whose containers nest ``depth`` levels deep."""
+
+    return '{"enabled": false, "pad": ' + "[" * (depth - 1) + "]" * (depth - 1) + "}"
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        '{"enabled": false, "cooldown_seconds": NaN}',
+        '{"enabled": false, "cooldown_seconds": Infinity}',
+        '{"enabled": false, "cooldown_seconds": -Infinity}',
+        '{"enabled": false, "label": "\\ud800"}',
+        _nested_state(128),
+        _nested_state(100_000),
+    ],
+)
+def test_passive_posture_reports_unknown_for_json_the_resident_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    # The resident fails closed on these, so reporting `not_set` would understate enforcement.
+    _forbid_native_gate_probe(monkeypatch)
+    _ = (tmp_path / APPROVAL_GATE_STATE_FILE).write_text(state, encoding="utf-8")
+
+    assert approval_gate_posture(tmp_path, passive=True) == {"status": "unknown"}
+
+
+@pytest.mark.parametrize("state", [_nested_state(127), '{"enabled": false, "cooldown_seconds": 1e400}'])
+def test_passive_posture_accepts_json_the_resident_accepts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    _forbid_native_gate_probe(monkeypatch)
+    _ = (tmp_path / APPROVAL_GATE_STATE_FILE).write_text(state, encoding="utf-8")
+
+    assert approval_gate_posture(tmp_path, passive=True)["status"] == "not_set"
+
+
 def test_doctor_modes_read_gate_posture_without_native_probe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

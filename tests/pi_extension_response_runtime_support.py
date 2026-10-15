@@ -80,6 +80,10 @@ async function runGuardCliCommand() {{
 
 {native_reply}
 
+function nativeGuardBudgetMs(budgetMs) {{
+  return budgetMs;
+}}
+
 async function nativeGuardReply(query) {{
   if (nativeLines.length === 0) return undefined;
   nativeQueries.push(query);
