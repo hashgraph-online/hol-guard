@@ -353,6 +353,7 @@ fn narrower_sink_runs(raw: &str, context: crate::pretool::PathContext<'_>) -> bo
     .ok()
     .is_some_and(|model| {
         crate::pretool::contained_wrapper::contained_core(&model, context).is_some()
+            && crate::pretool::contained_wrapper::sink_peels_leading_cd(&model, context)
     })
 }
 
