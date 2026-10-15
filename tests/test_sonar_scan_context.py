@@ -151,6 +151,7 @@ def test_saved_context_from_another_source_or_execution_is_not_reusable(tmp_path
 def test_preparing_a_new_scan_removes_metadata_from_a_previous_task(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     Path("sonar-project.properties").write_text("sonar.projectKey=hashgraph-online_hol-guard\n", encoding="utf-8")
+    Path(".release-please-manifest.json").write_text('{".": "3.42.0"}\n', encoding="utf-8")
     stale = Path(".scannerwork/report-task.txt")
     stale.parent.mkdir()
     stale.write_text("ceTaskId=previous-task\n", encoding="utf-8")
@@ -158,6 +159,47 @@ def test_preparing_a_new_scan_removes_metadata_from_a_previous_task(tmp_path, mo
     monkeypatch.setattr(context_module, "github_json", Mock(return_value=[pull()]))
     context_module.prepare(environment())
     assert not stale.exists()
+
+
+def test_scan_settings_carry_the_release_please_package_version(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("sonar-project.properties").write_text("sonar.projectKey=hashgraph-online_hol-guard\n", encoding="utf-8")
+    Path(".release-please-manifest.json").write_text('{".": "3.42.0"}\n', encoding="utf-8")
+    monkeypatch.setattr(context_module, "checkout_revision", lambda: SHA)
+    monkeypatch.setattr(context_module, "github_json", Mock(return_value=[pull()]))
+    context_module.prepare(environment())
+    assert "sonar.projectVersion=3.42.0\n" in Path("sonar-scan.properties").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("version", ["3.42.0", "3.42.0-rc.1", "3.42.0+build.7", "3.42.0-beta-2.1+sha.abc"])
+def test_semver_prerelease_and_build_identifiers_are_accepted(tmp_path, monkeypatch, version):
+    monkeypatch.chdir(tmp_path)
+    Path(".release-please-manifest.json").write_text(f'{{".": "{version}"}}', encoding="utf-8")
+    assert context_module.package_version() == version
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        "{}",
+        '{".": 3}',
+        '{".": "3.42.0\\nsonar.qualitygate.wait=false"}',
+        "[]",
+        '{".": "3.42.0-.."}',
+        '{".": "3.42.0-rc..1"}',
+        '{".": "3.42.0+"}',
+        '{".": "3.42.0-rc.1."}',
+    ],
+)
+def test_an_invalid_package_version_blocks_scan_preparation(tmp_path, monkeypatch, manifest):
+    monkeypatch.chdir(tmp_path)
+    Path("sonar-project.properties").write_text("sonar.projectKey=hashgraph-online_hol-guard\n", encoding="utf-8")
+    Path(".release-please-manifest.json").write_text(manifest, encoding="utf-8")
+    monkeypatch.setattr(context_module, "checkout_revision", lambda: SHA)
+    monkeypatch.setattr(context_module, "github_json", Mock(return_value=[pull()]))
+    with pytest.raises(ValueError, match="valid package version"):
+        context_module.prepare(environment())
+    assert not Path("sonar-scan.properties").exists()
 
 
 @pytest.mark.parametrize(("status", "exit_code"), [("OK", 0), ("ERROR", 1), ("WARN", 1), ("NONE", 1), (None, 1)])

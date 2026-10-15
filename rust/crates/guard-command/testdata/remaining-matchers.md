@@ -20,8 +20,8 @@ resource limits, and expired caller deadlines cannot become empty evidence.
 
 The semantic profile is **CPython 3.12 / Unicode 15.0.0**. PHP and repo2nb configurations admit ASCII comparison strings; opaque Unicode
 operands preserve CPython comparison results using the two non-ASCII lowercase
-mappings that can introduce ASCII (`İ` and `K`). The generator checks that
-assumption exhaustively against Unicode 15.0.0. Non-ASCII configurations in
+mappings that can introduce ASCII (`İ` and `K`). The historical CPython
+fixture recording checked that assumption exhaustively against Unicode 15.0.0. Non-ASCII configurations in
 these grammars reject admission. Other case conversions outside the implemented
 ASCII grammar and non-ASCII URL authorities requiring NFKC validation return
 explicit unsupported errors. Opaque Unicode payloads and URL paths remain
@@ -49,15 +49,21 @@ includes option-value confusion, unknown options, ambiguous abbreviations,
 consumed help flags, method overrides, mixed curl operations, malformed URLs,
 IPv6, wrapper arguments, Unicode boundaries, and ordered multi-segment evidence.
 Forty-six additional parser cases exercise the PHP/repo2nb classifiers on 23
-Unicode-bearing commands. Rust tests additionally cover actual parser integration, invalid configuration,
-expired deadlines, command limits, and forged literal provenance. The fixture
-generator verifies the exact curl option tables as well as all reference cases.
+Unicode-bearing commands. Rust tests additionally cover actual parser integration,
+invalid configuration, expired deadlines, command limits, and forged literal
+provenance.
 
-Regenerate or check from the repository root with the locked Python 3.12 environment:
+The canonical `remaining-matchers.v1.json` reference fixture is frozen. Its
+one-time CPython generator was retired with the Python matcher implementations.
+It cannot be regenerated from the current Python source tree, and the old
+generator command is not a valid verification step. The Rust parity tests
+consume the checked-in fixture and independently exercise the native parser,
+matcher admission, curl option tables, and error contracts. Changes to the
+frozen expected outcomes require an explicitly reviewed migration and fresh
+source-independent proof, not reconstruction of the retired Python matchers.
+
+Run the retained native tests from the repository root:
 
 ```sh
-PYTHONPATH=src python rust/crates/guard-command/testdata/generate_remaining_matcher_fixtures.py --check
+cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --lib
 ```
-
-The Rust modules are registered by the native program integration. Their tests
-run with `cargo test -p guard-command --lib` from `rust/` after that registration.

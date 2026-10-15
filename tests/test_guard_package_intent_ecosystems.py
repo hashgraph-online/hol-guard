@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    parse_manifest_dependency_changes,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from tests.package_intent_fixtures import (
     _native_package_intent,  # noqa: F401 -- registers the module autouse fixture
     _write_text,
@@ -170,20 +167,3 @@ def test_parse_package_intent_cargo_go_maven_gradle_composer_and_ruby_are_suppor
     assert bundler.targets[0].package_name == "rspec"
     assert gem is not None
     assert gem.targets[0].package_name == "rails"
-
-
-def test_parse_manifest_dependency_changes_truncates_large_lockfiles_safely() -> None:
-    before_text = '{"packages":{}}'
-    package_entries = ",".join(f'"node_modules/pkg-{index}":{{"version":"1.0.{index}"}}' for index in range(500))
-    after_text = f'{{"packages":{{{package_entries}}}}}'
-
-    result = parse_manifest_dependency_changes(
-        path="package-lock.json",
-        before_text=before_text,
-        after_text=after_text,
-        byte_limit=256,
-    )
-
-    assert result.changes == ()
-    assert result.truncated is True
-    assert result.parse_errors == ("byte_limit_exceeded",)

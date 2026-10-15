@@ -19,6 +19,9 @@ from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_direct_lane_mcp_relay import NativePolicySnapshotMcpRelayMixin
+from .native_policy_snapshot_direct_lane_saved import NativePolicySnapshotSavedStateMixin
+from .native_policy_snapshot_harness_postures import binding_with_harness_postures
 from .native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
 from .native_policy_snapshot_publisher_transport import (
@@ -108,6 +111,8 @@ def ensure_native_launch_resident_verifier(store: GuardStore) -> None:
 class NativePolicySnapshotPublisher(
     NativePolicySnapshotWorkspaceReadinessMixin,
     NativePolicySnapshotPublicationMixin,
+    NativePolicySnapshotMcpRelayMixin,
+    NativePolicySnapshotSavedStateMixin,
     NativePolicySnapshotPublisherInputs,
 ):
     """Asynchronously publish an authenticated snapshot and expose its barrier."""
@@ -138,6 +143,7 @@ class NativePolicySnapshotPublisher(
         self._last_runtime_status: Any | None = None
         self._resident_startup_required = True
         self._acked = False
+        self._harness_postures: dict[str, str] = {}
         self._epoch = 0
         self._last_error: str | None = None
         self._published_config_digest: str | None = None
@@ -151,6 +157,9 @@ class NativePolicySnapshotPublisher(
         self._failure_count = 0
         self._workspace_paths: set[Path] = set()
         self._pending_workspace_paths: set[Path] = set()
+        # Pending workspaces the current ACK already covers. They compile with
+        # the next publish but never queue one of their own.
+        self._deferred_workspace_paths: set[Path] = set()
         self._command_control_runtime = None
         self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
         self._input_fingerprint: (
@@ -413,7 +422,7 @@ class NativePolicySnapshotPublisher(
             }
             if "command_extensions" in snapshot:
                 binding["command_extensions_bound"] = True
-            return binding
+            return binding_with_harness_postures(binding, self._harness_postures)
 
     def current_runtime_status(self) -> Any | None:
         """Return the verified runtime status bound to the acknowledged snapshot."""

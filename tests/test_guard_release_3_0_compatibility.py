@@ -10,7 +10,7 @@ Covered contracts:
   list are negotiated together in a single ``initialize_client`` handshake, and
   a 2.x client receives both plus the negotiated protocol version.
 - A 2.x-era receipt store (schema migrations 10 and 16 present, rollup bucket
-  state stale) is reconstructed by ``backfill_receipt_rollups`` so archived
+  state stale) is reconstructed by the resident rollup rebuild so archived
   receipt rollups are rebuilt rather than lost.
 """
 
@@ -26,7 +26,6 @@ from codex_plugin_scanner.guard.runtime.surface_server import (
 )
 from codex_plugin_scanner.guard.schemas.surface_server import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_receipt_rollups import backfill_receipt_rollups
 
 from .test_guard_receipt_persistence import _make_receipt
 
@@ -127,7 +126,7 @@ class TestLegacyReceiptRollupReconstruction:
             connection.execute("update receipt_rollup_actions set dirty = 1 where receipt_id = 'r-legacy-warn'")
 
         with store._connect() as connection:
-            backfill_receipt_rollups(connection)
+            connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
 
         analytics = store.receipt_analytics(top_limit=5)
         assert analytics["allowed"] == 1
@@ -140,11 +139,11 @@ class TestLegacyReceiptRollupReconstruction:
         store.add_receipt(_make_receipt(receipt_id="r-legacy-block", policy_decision="block"))
 
         with store._connect() as connection:
-            backfill_receipt_rollups(connection)
+            connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
         first = store.receipt_analytics(top_limit=5)
 
         with store._connect() as connection:
-            backfill_receipt_rollups(connection)
+            connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
         second = store.receipt_analytics(top_limit=5)
 
         assert first["allowed"] == second["allowed"]

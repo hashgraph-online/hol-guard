@@ -1,4 +1,8 @@
-"""Route ZCode's native containment receipt through its updatedInput contract."""
+"""Route native containment receipts through the PreToolUse updatedInput contract.
+
+ZCode, Claude Code and Codex 0.131+ apply a hook's ``updatedInput``, so a contained test run is
+rewritten into Guard's execution sink instead of stopping for review.
+"""
 
 from __future__ import annotations
 
@@ -22,10 +26,15 @@ _PROFILES = {
     "native_package_test_readonly_containment_required": "package-test-readonly-v1",
     "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
     "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
+    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
     "native_git_readonly_containment_required": "git-readonly-v1",
     "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
     "native_node_build_output_containment_required": "node-build-output-v1",
+    "native_workspace_containment_required": "workspace-contained-v1",
 }
+_ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
+# Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
+_SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
 
 
 def cleanup_stale_zcode_requests() -> None:
@@ -81,10 +90,10 @@ def route_zcode_containment(
     """Rewrite at the authority edge so frozen/stdlib hook clients also work."""
     # The execution sink needs the denial/profile receipt, not another rewrite.
     # An untrusted caller setting this flag only keeps its original call denied.
-    if harness != "zcode" or workspace is None or payload.get("guard_containment_receipt_only") is True:
+    if harness not in _ROUTED_HARNESSES or workspace is None or payload.get("guard_containment_receipt_only") is True:
         return response
     config = {
-        "harness": "zcode",
+        "harness": harness,
         "guard_home": str(guard_home),
         "python_executable": sys.executable,
         "package_root": str(Path(__file__).resolve().parents[3]),
@@ -98,6 +107,50 @@ def route_zcode_containment(
     return routed if routed is not None else response
 
 
+def contained_sink_command_prefix() -> tuple[str, ...]:
+    """The argv prefix ``route_zcode_containment`` starts the sink with."""
+    return _sink_command_prefix(
+        {"python_executable": sys.executable, "package_root": str(Path(__file__).resolve().parents[3])}
+    )
+
+
+def _sink_command_prefix(config: Mapping[str, object]) -> tuple[str, ...]:
+    if getattr(sys, "frozen", False):
+        from ..stable_guard_cli import resolve_frozen_guard_cli
+
+        return (resolve_frozen_guard_cli(),)
+    package_root = Path(str(config["package_root"]))
+    command = isolated_guard_cli_command(str(config["python_executable"]), package_root, ())
+    if sys.platform != "win32":
+        return command
+    # Git Bash hands a native program each doubled backslash as a single one,
+    # which breaks the escaped package root in the bootstrap. The same
+    # directory written with forward slashes needs no escaping.
+    root = str(package_root.resolve())
+    return (*command[:-1], command[-1].replace(repr(root), repr(root.replace("\\", "/")), 1))
+
+
+def _request_root() -> str | None:
+    """Where the sink looks for a snapshot; on Windows not TEMP, which the
+    harness shell may set differently from this hook."""
+    if sys.platform != "win32":
+        return None
+    from ..windows_paths import trusted_windows_local_temp
+
+    return str(trusted_windows_local_temp())
+
+
+def platform_contains(response: Mapping[str, object]) -> bool:
+    """macOS runs every contained profile; Linux runs the workspace sandbox;
+    Windows runs installed Python in an AppContainer."""
+    profile = response.get("required_execution_profile")
+    return (
+        sys.platform == "darwin"
+        or (sys.platform == "linux" and profile == "workspace-contained-v1")
+        or (sys.platform == "win32" and profile == "python-eval-readonly-v1")
+    )
+
+
 def contained_zcode_response(
     response: Mapping[str, object],
     *,
@@ -108,8 +161,11 @@ def contained_zcode_response(
     """Allow only the rewritten sink; native authority is rechecked at execution."""
     reason = response.get("reason_code")
     if (
-        sys.platform != "darwin"
-        or config.get("harness") != "zcode"
+        not platform_contains(response)
+        or config.get("harness") not in _SINK_HARNESSES
+        # The sink command is POSIX-quoted; on Windows only Claude Code runs
+        # it through Git Bash.
+        or (sys.platform == "win32" and config.get("harness") != "claude-code")
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
         or response.get("observe_mode") is True
@@ -161,7 +217,7 @@ def contained_zcode_response(
         if len(serialized) > 1_048_576:
             return None
         cleanup_stale_zcode_requests()
-        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-"))
+        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-", dir=_request_root()))
         # mkdtemp creates an owner-only directory; do not widen its permissions.
         request = directory / "request.json"
         descriptor = os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -171,7 +227,7 @@ def contained_zcode_response(
             "guard",
             "execute-contained-test",
             "--harness",
-            "zcode",
+            str(config["harness"]),
             "--guard-home",
             str(config["guard_home"]),
             "--workspace",
@@ -183,16 +239,7 @@ def contained_zcode_response(
         ]
         if "--home" in cli_args:
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
-        if getattr(sys, "frozen", False):
-            from ..stable_guard_cli import resolve_frozen_guard_cli
-
-            command = (resolve_frozen_guard_cli(), *args)
-        else:
-            command = isolated_guard_cli_command(
-                str(config["python_executable"]),
-                Path(str(config["package_root"])),
-                args,
-            )
+        command = (*_sink_command_prefix(config), *args)
         return {
             "policy_action": "allow",
             "reason_code": "native_contained_execution_routed",

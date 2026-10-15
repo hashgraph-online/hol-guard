@@ -1,0 +1,187 @@
+"""Fail-closed GraphQL schema allowlist for the full-task gateway.
+
+Each entry maps a type name to {real field name: child type, or None for a scalar}. A field that is not
+listed for its parent type is rejected at every depth. Keys are field names, never aliases. The shapes
+come from what the pinned gh sends for `repo create/view`, `pr create/view/list` and `auth status`.
+Person and repository types expose scalars only: no connection reaches other repositories, users or nodes.
+"""
+
+from __future__ import annotations
+
+
+def scalars(*names: str) -> dict[str, str | None]:
+    return dict.fromkeys(names)
+
+
+REPO_SCALARS = [
+    "id",
+    "databaseId",
+    "name",
+    "nameWithOwner",
+    "url",
+    "sshUrl",
+    "isPrivate",
+    "visibility",
+    "description",
+    "isFork",
+    "isArchived",
+    "isEmpty",
+    "createdAt",
+    "pushedAt",
+    "updatedAt",
+    "homepageUrl",
+    "viewerPermission",
+    "hasIssuesEnabled",
+    "hasWikiEnabled",
+    "mergeCommitAllowed",
+    "squashMergeAllowed",
+    "rebaseMergeAllowed",
+    "stargazerCount",
+    "forkCount",
+    "__typename",
+]
+PR_SCALARS = [
+    "id",
+    "number",
+    "url",
+    "title",
+    "state",
+    "body",
+    "isDraft",
+    "maintainerCanModify",
+    "mergeable",
+    "reviewDecision",
+    "additions",
+    "deletions",
+    "changedFiles",
+    "headRefName",
+    "baseRefName",
+    "headRefOid",
+    "baseRefOid",
+    "isCrossRepository",
+    "createdAt",
+    "__typename",
+]
+REACTIONS = {"reactionGroups": "ReactionGroup"}
+
+SCHEMA: dict[str, dict[str, str | None]] = {
+    "Repository": {
+        **scalars(*REPO_SCALARS),
+        "defaultBranchRef": "Ref",
+        "owner": "Actor",
+        "parent": "RepositoryRef",
+        "templateRepository": "RepositoryRef",
+        "pullRequest": "PullRequest",
+        "pullRequests": "PullRequestConnection",
+        "licenseInfo": "License",
+        "primaryLanguage": "Language",
+        "languages": "LanguageConnection",
+        "repositoryTopics": "TopicConnection",
+    },
+    # parent, headRepository, baseRepository and templateRepository: scalars and owner only, no nesting.
+    "RepositoryRef": {**scalars(*REPO_SCALARS), "defaultBranchRef": "Ref", "owner": "Actor"},
+    "Actor": scalars("login", "id", "url", "name", "databaseId", "__typename"),
+    "Reviewer": {**scalars("__typename", "login", "name", "slug"), "organization": "Actor"},
+    "Ref": {"name": None, "target": "GitObject", "__typename": None},
+    "GitObject": scalars("oid", "__typename"),
+    "PageInfo": scalars("hasNextPage", "endCursor", "__typename"),
+    "License": scalars("name", "spdxId", "__typename"),
+    "Language": scalars("name", "color", "__typename"),
+    "LanguageConnection": {"totalCount": None, "nodes": "Language", "__typename": None},
+    "TopicConnection": {"totalCount": None, "nodes": "RepositoryTopic", "__typename": None},
+    "RepositoryTopic": {"topic": "Topic", "__typename": None},
+    "Topic": scalars("name", "__typename"),
+    "PullRequest": {
+        **scalars(*PR_SCALARS),
+        "author": "Actor",
+        "headRepositoryOwner": "Actor",
+        "headRepository": "RepositoryRef",
+        "baseRepository": "RepositoryRef",
+        "autoMergeRequest": "AutoMerge",
+        "commits": "CommitConnection",
+        "reviewRequests": "ReviewRequestConnection",
+        "reviews": "ReviewConnection",
+        "comments": "CommentConnection",
+        "assignees": "AssigneeConnection",
+        "labels": "LabelConnection",
+        "milestone": "Milestone",
+        "projectItems": "ProjectItemConnection",
+        **REACTIONS,
+    },
+    "PullRequestConnection": {"totalCount": None, "nodes": "PullRequest", "pageInfo": "PageInfo", "__typename": None},
+    "AutoMerge": {
+        **scalars("authorEmail", "commitBody", "commitHeadline", "mergeMethod", "enabledAt"),
+        "enabledBy": "Actor",
+    },
+    "CommitConnection": {"totalCount": None, "nodes": "PullRequestCommit", "__typename": None},
+    "PullRequestCommit": {"commit": "Commit", "__typename": None},
+    "Commit": {"oid": None, "statusCheckRollup": "StatusCheckRollup", "__typename": None},
+    "StatusCheckRollup": {"contexts": "CheckContextConnection", "__typename": None},
+    "CheckContextConnection": {"nodes": "CheckContext", "pageInfo": "PageInfo", "totalCount": None},
+    "CheckContext": {
+        **scalars(
+            "__typename",
+            "context",
+            "state",
+            "targetUrl",
+            "createdAt",
+            "description",
+            "name",
+            "status",
+            "conclusion",
+            "startedAt",
+            "completedAt",
+            "detailsUrl",
+        ),
+        "checkSuite": "CheckSuite",
+    },
+    "CheckSuite": {"workflowRun": "WorkflowRun"},
+    "WorkflowRun": {"workflow": "Workflow"},
+    "Workflow": scalars("name"),
+    "ReviewRequestConnection": {"nodes": "ReviewRequest", "totalCount": None},
+    "ReviewRequest": {"requestedReviewer": "Reviewer"},
+    "ReviewConnection": {"nodes": "Review", "pageInfo": "PageInfo", "totalCount": None},
+    "Review": {
+        **scalars("id", "authorAssociation", "submittedAt", "body", "state", "createdAt", "url"),
+        "author": "Actor",
+        "commit": "GitObject",
+        **REACTIONS,
+    },
+    "CommentConnection": {"nodes": "Comment", "pageInfo": "PageInfo", "totalCount": None},
+    "Comment": {
+        **scalars(
+            "id",
+            "authorAssociation",
+            "body",
+            "createdAt",
+            "includesCreatedEdit",
+            "isMinimized",
+            "minimizedReason",
+            "url",
+            "viewerDidAuthor",
+        ),
+        "author": "Actor",
+        **REACTIONS,
+    },
+    "ReactionGroup": {"content": None, "users": "ReactorConnection"},
+    "ReactorConnection": scalars("totalCount"),
+    "AssigneeConnection": {"nodes": "Actor", "totalCount": None},
+    "LabelConnection": {"nodes": "Label", "totalCount": None},
+    "Label": scalars("id", "name", "description", "color"),
+    "Milestone": scalars("number", "title", "description", "dueOn"),
+    "ProjectItemConnection": {"totalCount": None, "nodes": "ProjectItem", "pageInfo": "PageInfo"},
+    "ProjectItem": {"id": None, "project": "Project", "fieldValueByName": "ProjectFieldValue"},
+    "Project": scalars("id", "title"),
+    "ProjectFieldValue": scalars("optionId", "name"),
+    "CreateRepositoryPayload": {"repository": "Repository", "__typename": None},
+    "CreatePullRequestPayload": {"pullRequest": "PullRequest", "__typename": None},
+}
+# Inline fragments and fragment definitions may name these types where the parent type is the key.
+FRAGMENT_TYPES: dict[str, frozenset[str]] = {
+    "Actor": frozenset({"User", "Bot", "Organization", "Mannequin", "Enterprise"}),
+    "Reviewer": frozenset({"User", "Bot", "Team", "Mannequin"}),
+    "RepositoryRef": frozenset({"Repository"}),
+    "CheckContext": frozenset({"StatusContext", "CheckRun"}),
+    "ProjectFieldValue": frozenset({"ProjectV2ItemFieldSingleSelectValue"}),
+}
+MUTATION_PAYLOADS = {"createRepository": "CreateRepositoryPayload", "createPullRequest": "CreatePullRequestPayload"}

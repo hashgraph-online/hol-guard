@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
-from codex_plugin_scanner.guard.runtime.extension_trust import activation_for, extension_is_active, trust_class_for
+from codex_plugin_scanner.guard.runtime.extension_trust import extension_is_active
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_extension_control_authority_fixtures import MemorySecretStore, _proof, _store
 
@@ -68,13 +68,6 @@ def _authority_layers(store: GuardStore) -> tuple[ExtensionControlLayer, ...]:
     view = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     assert view.health is AuthorityHealth.PROTECTED
     return view.layers
-
-
-@pytest.mark.parametrize("extension_id", WORKSPACE_CLI_EXTENSIONS)
-def test_workspace_cli_rules_are_external_and_opt_in(extension_id: str) -> None:
-    assert trust_class_for(extension_id) == "external"
-    assert activation_for(extension_id) == "opt-in"
-    assert extension_is_active(extension_id, ()) is False
 
 
 @pytest.mark.parametrize("extension_id", WORKSPACE_CLI_EXTENSIONS)

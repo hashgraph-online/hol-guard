@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..native_rich_command_model import NativeCommandModelError
 from ..runtime.command_matcher_contracts import CommandMatcher
 from ..runtime.command_model import parse_shell_command
 from ..runtime.command_path_set_matcher import ExecutablePathSetMatcher
@@ -62,18 +63,26 @@ def validate_native_bindings(
 ) -> None:
     if not rows:
         return
-    matchers = {operation.operation_id: _matcher(discovery, operation) for operation in discovery.operations}
-    for owner, argv in rows:
-        validate_known_options(owner, argv)
-        command = parse_shell_command(" ".join((discovery.metadata.executable, *argv)))
-        matches = [operation for operation in discovery.operations if matchers[operation.operation_id].match(command)]
-        if any(operation.operation_id in blocked_ids for operation in matches):
-            raise BuilderError(
-                "safe_variant_conflict", "A safe invocation overlaps a native explicitly blocked operation."
-            )
-        longest = max((len(operation.path) for operation in matches), default=-1)
-        owners = {operation.operation_id for operation in matches if len(operation.path) == longest}
-        if owners != {owner.operation_id}:
-            raise BuilderError(
-                "safe_variant_scope", "Native parsing assigns this safe invocation to another or ambiguous operation."
-            )
+    try:
+        matchers = {operation.operation_id: _matcher(discovery, operation) for operation in discovery.operations}
+        for owner, argv in rows:
+            validate_known_options(owner, argv)
+            command = parse_shell_command(" ".join((discovery.metadata.executable, *argv)))
+            matches = [
+                operation for operation in discovery.operations if matchers[operation.operation_id].match(command)
+            ]
+            if any(operation.operation_id in blocked_ids for operation in matches):
+                raise BuilderError(
+                    "safe_variant_conflict", "A safe invocation overlaps a native explicitly blocked operation."
+                )
+            longest = max((len(operation.path) for operation in matches), default=-1)
+            owners = {operation.operation_id for operation in matches if len(operation.path) == longest}
+            if owners != {owner.operation_id}:
+                raise BuilderError(
+                    "safe_variant_scope",
+                    "Native parsing assigns this safe invocation to another or ambiguous operation.",
+                )
+    except NativeCommandModelError as error:
+        raise BuilderError(
+            "native_unavailable", "Native command validation is unavailable; repair the runtime."
+        ) from error

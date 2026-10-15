@@ -55,6 +55,11 @@ def test_acknowledged_watch_does_not_queue_unsupported_pi_tools(
 ) -> None:
     edge = _edge(harness, action_type="unknown")
     edge["result"]["reason_code"] = "native_pre_tool_unknown_review"
+    edge["harness_response"] = {
+        "decision": "allow",
+        "reason": "HOL Guard recorded this action under Watch.",
+        "policy_action": "warn",
+    }
     worker, store = _worker(tmp_path, monkeypatch, edge)
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "observe"})
     response = worker.review_http_payload(

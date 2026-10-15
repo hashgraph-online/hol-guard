@@ -79,7 +79,7 @@
       "complete": false,
       "evidence": [
         "tests/test_guard_compound_developer_inspection.py",
-        "tests/test_guard_compound_readonly_auto_allow.py",
+        "rust/crates/guard-runtime/src/hook_decision_benign_tool_action_tests.rs",
         "tests/test_guard_trusted_local_tools.py"
       ],
       "blockers": [
@@ -120,7 +120,6 @@
       "outcome": "blocked",
       "complete": false,
       "evidence": [
-        ".github/workflows/guard-network-remediation-proof.yml",
         "tests/test_guard_network_capability_reachability.py"
       ],
       "blockers": [
@@ -147,9 +146,8 @@
       "outcome": "partial",
       "complete": false,
       "evidence": [
-        ".github/workflows/guard-gvisor-reference.yml",
+        ".github/workflows/nightly-native.yml",
         "tests/test_guard_gvisor_reference_runtime.py",
-        "tests/test_guard_container_network_plan.py",
         "tests/test_guard_kubernetes_runtime.py"
       ],
       "blockers": [
@@ -222,7 +220,7 @@
       "outcome": "partial",
       "complete": false,
       "evidence": [
-        ".github/workflows/guard-network-remediation-proof.yml"
+        "tests/test_guard_network_remediation_proof.py"
       ],
       "blockers": [
         "Review-loop completion is recorded only after the synchronized pull requests have no actionable unresolved findings."

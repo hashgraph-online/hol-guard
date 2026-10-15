@@ -145,7 +145,7 @@ commands to satisfy a test.
 
 ## Installed-wheel matrix
 
-The [Extension Builder workflow](../../../.github/workflows/extension-builder-ci.yml)
+The [Extension Builder workflow](../../../.github/workflows/nightly-native.yml)
 builds and installs a wheel on Linux with Python 3.10 and 3.13, macOS ARM64
 with Python 3.13, and Windows with Python 3.13. The
 [installed verifier](../../../scripts/ci/verify_extension_builder_install.py)
@@ -184,19 +184,14 @@ review outputs; the canonical source and trust map remain the inputs.
 
 ## Legacy migration validation
 
-The structural diagnostic in `scripts/command_source_backlog.py` reads
-pinned legacy Python blobs without importing or executing them. It reports
-allowlisted literal conversions and blockers for dynamic imports, custom code,
-top-level execution, unsupported constructs, and missing native operations.
-Validate any proposed JSON with the Rust compiler and add independent portable
-cases before publication.
+The one-time Python backlog and reviewed-baseline converters are retired.
+For any historical Python proposal, manually express the reviewed behavior
+as canonical JSON and independent portable cases without executing the old
+Python module. Validate the source and portable cases with the Rust
+`guard-command-source` compiler and check the generated projections before
+publication. A missing native operation is a Rust implementation gap, not
+permission to restore a Python evaluator.
 
-The one-time reviewed-baseline converter in
-`scripts/migrate_command_extension_sources.py` is dry-run by default,
-requires an explicit baseline identity and compiler, and only writes after
-`--write`. It is migration tooling, not a release or hook-path dependency.
-`native_operation_required` is a contract gap to resolve in reviewed Rust
-support; it is not permission to restore a Python fallback.
 
 ## Material limitations
 

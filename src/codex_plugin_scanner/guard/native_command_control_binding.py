@@ -1,9 +1,10 @@
-"""Bounded native command program metadata and verified control projection.
+"""Native command program metadata and the verified control projection.
 
-Program loading and authority reads are publisher work. Snapshot validation
-only calls the pure binding validator; it never imports the extension registry
-or invokes the build compiler. The resident independently requires the binding
-to name its packaged program, catalog, and trust digests.
+Program loading and authority reads are publisher work. Binding admission is
+Rust's: the snapshot builder and the resident each validate the typed binding
+(health, layers, targets, authority, effective digest) against the packaged
+program, so Python only captures the binding as canonical JSON and checks the
+program artifact's own digest.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .native_command_control_authority import validate_authority_binding, validate_control_floor
+from .native_command_control_authority import validate_control_floor
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _generation_floor_mac_v3,
@@ -33,47 +34,8 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 NATIVE_COMMAND_CONTROL_BINDING_SCHEMA = "guard.native-command-control-binding.v1"
-NATIVE_COMMAND_PROGRAM_CAPABILITY = "native-command-program-v1"
-_PROGRAM_SCHEMA = "guard.native-command-program.v1"
-_PROGRAM_SEMANTIC_PROFILE = "cpython-3.12-ucd15"
 _PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
 _MAX_PROGRAM_BYTES = 4 * 1024 * 1024
-_MAX_U64 = (1 << 64) - 1
-_RUNTIME_SCHEMA = "guard.extension-control-runtime-snapshot.v1"
-_BINDING_FIELDS = frozenset(
-    {
-        "schema",
-        "program_digest",
-        "catalog_digest",
-        "trust_digest",
-        "health",
-        "revision",
-        "managed_revision",
-        "effective_digest",
-        "layers",
-    }
-)
-_LAYER_FIELDS = frozenset({"schema_version", "kind", "catalog_digest", "global_lockdown", "controls"})
-_CONTROL_FIELDS = frozenset({"target_kind", "target_id", "state"})
-_HEALTH_VALUES = frozenset(
-    {"unenrolled", "protected", "degraded-unacknowledged", "degraded-acknowledged", "tampered", "recovery-required"}
-)
-_PROGRAM_FIELDS = frozenset(
-    {
-        "schema",
-        "compiler_version",
-        "semantic_profile",
-        "authoring_semantics_digest",
-        "catalog_digest",
-        "trust_digest",
-        "extensions",
-        "rules",
-        "nodes",
-        "coverage",
-        "matcher_families",
-        "program_digest",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,37 +81,14 @@ def load_native_command_program_metadata() -> NativeCommandProgramMetadata:
 
 @lru_cache(maxsize=2)
 def _metadata_from_bytes(content: bytes) -> NativeCommandProgramMetadata:
+    """Verify the artifact's own digest; the Rust runtime admits the program itself."""
+
     try:
         raw = _strict_json_loads_v3(content)
-        if not isinstance(raw, dict) or set(raw) != _PROGRAM_FIELDS:
-            raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-        if (
-            raw.get("schema") != _PROGRAM_SCHEMA
-            or type(raw.get("compiler_version")) is not int
-            or raw["compiler_version"] != 1
-            or raw.get("semantic_profile") != _PROGRAM_SEMANTIC_PROFILE
+        if not isinstance(raw, dict) or not all(
+            _valid_digest_v3(raw.get(name)) for name in ("program_digest", "catalog_digest", "trust_digest")
         ):
             raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-        for name in ("program_digest", "catalog_digest", "trust_digest", "authoring_semantics_digest"):
-            if not _valid_digest_v3(raw.get(name)):
-                raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-        # Bound structural validation before canonical re-encoding; actual
-        # matcher/IR admission remains the resident's responsibility.
-        pending: list[tuple[object, int]] = [(raw, 0)]
-        remaining = 1_000_000
-        while pending:
-            value, depth = pending.pop()
-            remaining -= 1
-            if remaining < 0 or depth > 64:
-                raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-            if isinstance(value, dict):
-                if len(value) > 16_384:
-                    raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-                pending.extend((child, depth + 1) for child in value.values())
-            elif isinstance(value, list):
-                if len(value) > 16_384:
-                    raise NativePolicySnapshotError("native_command_program_artifact_invalid")
-                pending.extend((child, depth + 1) for child in value)
         program_digest = cast(str, raw.pop("program_digest"))
         canonical = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode(
             "utf-8"
@@ -163,109 +102,12 @@ def _metadata_from_bytes(content: bytes) -> NativeCommandProgramMetadata:
         raise NativePolicySnapshotError("native_command_program_artifact_invalid") from error
 
 
-def _require_fields(value: object, fields: frozenset[str]) -> Mapping[str, object]:
-    if not isinstance(value, Mapping) or set(value) != fields:
-        raise NativePolicySnapshotError("native_command_control_binding_invalid")
-    return value
-
-
-def _valid_target(value: object, kind: str) -> bool:
-    if not isinstance(value, str) or len(value) > 256 or not value.startswith("command."):
-        return False
-    parts = value[len("command.") :].replace("-", ".").split(".")
-    return all(
-        part and all("a" <= character <= "z" or "0" <= character <= "9" for character in part) for part in parts
-    ) and (".permission." in value) == (kind == "permission")
-
-
-def _effective_control_digest(binding: Mapping[str, object]) -> str:
-    layers = cast(list[dict[str, object]], binding["layers"])
-    canonical_layers = [
-        {
-            **layer,
-            "controls": sorted(
-                cast(list[dict[str, str]], layer["controls"]),
-                key=lambda control: (control["target_kind"], control["target_id"]),
-            ),
-        }
-        for layer in sorted(layers, key=lambda layer: cast(str, layer["kind"]))
-    ]
-    payload = {
-        "schema_version": _RUNTIME_SCHEMA,
-        "catalog_digest": binding["catalog_digest"],
-        "health": binding["health"],
-        "revision": binding["revision"],
-        "managed_revision": binding["managed_revision"],
-        "layers": canonical_layers,
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(f"{_RUNTIME_SCHEMA}\0{len(canonical)}\0{canonical}".encode()).hexdigest()
-
-
-def validate_native_command_control_binding(value: object) -> None:
-    """Apply the exact typed Rust binding contract without authority reads."""
-
-    _validate_json_limits_v3(value)
-    fields = _BINDING_FIELDS | ({"authority"} if isinstance(value, Mapping) and "authority" in value else set())
-    binding = _require_fields(value, fields)
-    if "authority" in binding:
-        validate_authority_binding(binding["authority"])
-    health = binding.get("health")
-    if (
-        binding.get("schema") != NATIVE_COMMAND_CONTROL_BINDING_SCHEMA
-        or not isinstance(health, str)
-        or health not in _HEALTH_VALUES
-    ):
-        raise NativePolicySnapshotError("native_command_control_binding_invalid")
-    for field in ("program_digest", "catalog_digest", "trust_digest", "effective_digest"):
-        if not _valid_digest_v3(binding.get(field)):
-            raise NativePolicySnapshotError("native_command_control_binding_invalid")
-    for field in ("revision", "managed_revision"):
-        revision = binding.get(field)
-        if type(revision) is not int or not 0 <= revision <= _MAX_U64:
-            raise NativePolicySnapshotError("native_command_control_binding_invalid")
-    layers = binding.get("layers")
-    if not isinstance(layers, list) or len(layers) > 2:
-        raise NativePolicySnapshotError("native_command_control_layer_invalid")
-    kinds: set[str] = set()
-    for raw_layer in layers:
-        layer = _require_fields(raw_layer, _LAYER_FIELDS)
-        kind = layer.get("kind")
-        if (
-            not isinstance(kind, str)
-            or kind not in {"local-admin", "signed-cloud"}
-            or kind in kinds
-            or layer.get("schema_version") != "1.0.0"
-            or layer.get("catalog_digest") != binding["catalog_digest"]
-            or type(layer.get("global_lockdown")) is not bool
-        ):
-            raise NativePolicySnapshotError("native_command_control_layer_invalid")
-        kinds.add(kind)
-        controls = layer.get("controls")
-        if not isinstance(controls, list) or len(controls) > 512:
-            raise NativePolicySnapshotError("native_command_control_layer_invalid")
-        targets: set[tuple[str, str]] = set()
-        for raw_control in controls:
-            control = _require_fields(raw_control, _CONTROL_FIELDS)
-            target_kind, target_id = control.get("target_kind"), control.get("target_id")
-            state = control.get("state")
-            if (
-                not isinstance(target_kind, str)
-                or target_kind not in {"extension", "permission"}
-                or not isinstance(target_id, str)
-                or not _valid_target(target_id, target_kind)
-                or not isinstance(state, str)
-                or state not in {"enabled", "disabled"}
-                or (target_kind, target_id) in targets
-            ):
-                raise NativePolicySnapshotError("native_command_control_target_invalid")
-            targets.add((target_kind, target_id))
-    if binding["effective_digest"] != _effective_control_digest(binding):
-        raise NativePolicySnapshotError("native_command_control_digest_mismatch")
-
-
 def capture_native_command_control_binding(value: object) -> dict[str, object]:
-    validate_native_command_control_binding(value)
+    """Bound and canonicalize a binding; Rust validates its contents at build and install."""
+
+    if not isinstance(value, Mapping):
+        raise NativePolicySnapshotError("native_command_control_binding_invalid")
+    _validate_json_limits_v3(value)
     return cast(dict[str, object], json.loads(_canonical_json_bytes_v3(value)))
 
 
@@ -306,7 +148,6 @@ def build_native_command_control_binding(
         "effective_digest": snapshot.effective_digest,
         "layers": sorted((_layer_payload(layer) for layer in snapshot.layers), key=lambda layer: str(layer["kind"])),
     }
-    validate_native_command_control_binding(binding)
     return binding
 
 

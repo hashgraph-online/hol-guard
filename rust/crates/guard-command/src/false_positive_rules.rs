@@ -160,7 +160,7 @@ pub const SOURCE_INSPECTION_SENSITIVE_PARTS: &[&str] = &[
     "credentials",
 ];
 pub const SOURCE_INSPECTION_BENIGN_DOTFILES: &[&str] = &[".nvmrc"];
-const KNOWN_SKILL_DOC_ROOT_SUFFIXES: &[&str] = &[
+pub(crate) const KNOWN_SKILL_DOC_ROOT_SUFFIXES: &[&str] = &[
     ".codex/superpowers/skills",
     ".codex/skills",
     ".agents/skills",
@@ -538,6 +538,16 @@ pub fn target_is_known_skill_doc_path(target: &str, home_dir: Option<&Path>) -> 
             continue;
         }
         return true;
+    }
+    for suffix in KNOWN_AGENT_DOC_SUFFIXES {
+        let expected = format!("{home}/{suffix}");
+        if normalized == expected
+            && Path::new(&expected).is_file()
+            && !is_link(&home)
+            && !path_has_symlink_component(&normalized, &home)
+        {
+            return true;
+        }
     }
     false
 }

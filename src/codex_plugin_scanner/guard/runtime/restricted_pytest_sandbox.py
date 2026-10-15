@@ -4,53 +4,34 @@ from __future__ import annotations
 
 import contextlib
 import os
-import re
 import signal
 import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
-from itertools import islice
 from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, TextIO
 
-from .restricted_credential_patterns import (
-    _read_only_credential_denials,
-    _read_only_credential_patterns,
-    _seatbelt_string,
-)
+from ..native_restricted_pytest import restricted_native
 from .restricted_pytest_model import (
     _DEFAULT_CPU_SECONDS,
     _DEFAULT_FILE_BYTES,
     _DEFAULT_MEMORY_BYTES,
     _DEFAULT_OPEN_FILES,
     _DEFAULT_PROCESSES,
-    _DENIED_ENV_KEYS,
-    _LINUX_READ_FILES,
-    _LINUX_READ_ROOTS,
-    _MACOS_READ_FILES,
-    _MACOS_READ_ROOTS,
-    _PROXY_ENV_KEYS,
-    _SAFE_ENV_KEYS,
-    _SEALED_SYSTEM_EXECUTABLE_ROOTS,
-    _SECRET_ENV_PATTERN,
-    PYTEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
     READ_ONLY_TEST_PROFILES,
     RestrictedPytestError,
     RestrictedPytestPlan,
 )
-from .restricted_pytest_validation import (
-    _first_symlink_expansion,
-    _path_is_within,
-    _path_is_within_any,
-    _restricted_pythonpath,
-    _runtime_distribution_root,
-)
 
 _RESOURCE_AVAILABLE = os.name == "posix"
 _MAX_REPLAY_BYTES = 1_048_576
+# Output that names a denied file operation. A failed contained run that
+# prints one of these gets the sandbox's own explanation appended, so the
+# agent can move the write instead of treating the failure as a test bug.
+_WRITE_DENIAL_MARKERS = (b"eperm", b"erofs", b"operation not permitted", b"read-only file system")
 _NODE_VIRTUAL_ADDRESS_BYTES = 16 * 1024 * 1024 * 1024
 if _RESOURCE_AVAILABLE:
     import resource as _resource
@@ -66,156 +47,82 @@ def _restricted_environment(
     private_home: Path,
     private_tmp: Path,
     allowed_executables: tuple[Path, ...],
+    user_site_root: Path | None = None,
 ) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for key, value in source.items():
-        if (
-            key in _DENIED_ENV_KEYS
-            or key in _PROXY_ENV_KEYS
-            or _SECRET_ENV_PATTERN.search(key)
-            or "\x00" in key
-            or "\x00" in value
-        ):
-            continue
-        if key in {"HOME", "PATH", "TEMP", "TMP", "TMPDIR"}:
-            continue
-        if key == "PYTHONPATH":
-            result[key] = _restricted_pythonpath(value, workspace=workspace, cwd=cwd)
-            continue
-        if key == "VIRTUAL_ENV":
-            virtual_environment = Path(value).expanduser()
-            try:
-                resolved_virtual_environment = virtual_environment.resolve(strict=True)
-            except (OSError, RuntimeError):
-                continue
-            if _path_is_within(resolved_virtual_environment, workspace):
-                result[key] = str(resolved_virtual_environment)
-            continue
-        if key in _SAFE_ENV_KEYS or key.startswith("LC_"):
-            result[key] = value
-    executable_dirs = list(dict.fromkeys(str(path.parent) for path in allowed_executables))
-    result.update(
-        {
-            "HOME": str(private_home),
-            "PATH": os.pathsep.join(executable_dirs),
-            "PWD": str(cwd),
-            "PYTHONNOUSERSITE": "1",
-            "TEMP": str(private_tmp),
-            "TMP": str(private_tmp),
-            "TMPDIR": str(private_tmp),
-        }
-    )
+    fields: dict[str, object] = {
+        "source": dict(source),
+        "workspace": workspace,
+        "cwd": cwd,
+        "private_home": private_home,
+        "private_tmp": private_tmp,
+        "allowed_executables": allowed_executables,
+    }
+    if user_site_root is not None:
+        fields["user_site_root"] = user_site_root
+    result = restricted_native("environment", fields, dict)
+    if not all(isinstance(value, str) for value in result.values()):
+        raise ValueError("Invalid native restricted environment reply")
     return result
 
 
-def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+def _link_user_site(source: Mapping[str, str], private_home: Path) -> Path | None:
+    """Link the user's own Python packages into the private HOME for reading."""
+
+    target = restricted_native("user_site_link_target", {"source": dict(source)}, (str, type(None)))
+    if target is None:
+        return None
+    library = private_home / "Library"
+    library.mkdir(mode=0o700)
+    (library / "Python").symlink_to(target, target_is_directory=True)
+    return Path(target)
+
+
+def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> list[str]:
     if plan.output_roots:
         if plan.profile_version != "node-build-output-v1":
             raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected output grants.")
         from .restricted_node_tool import validate_build_output_root
 
         for path in plan.output_roots:
-            validate_build_output_root(path, workspace=plan.workspace)
+            validate_build_output_root(path, workspace=plan.workspace, cwd=plan.cwd)
     if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
         raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":
-        profile = _macos_profile(plan, private_root=private_root)
+        profile = _macos_profile(plan, private_root=private_root, user_site_root=user_site_root)
         return [str(plan.backend_executable), "-p", profile, "--", *plan.command]
+    if plan.backend != "linux-bubblewrap":
+        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected restricted backend.")
     return _bubblewrap_argv(plan, private_root=private_root)
 
 
-def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
-    read_roots = [plan.workspace, private_root]
-    read_roots.extend(plan.read_only_roots)
-    read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
-    read_roots.extend(_runtime_read_roots(plan, private_root=private_root))
-    read_files = [path for path in _MACOS_READ_FILES if path.exists()]
-    if plan.profile_version in {
-        "node-test-readonly-v1",
-        "vitest-readonly-v1",
-        "node-tool-readonly-v1",
-        "node-build-output-v1",
-        "node-eval-readonly-v1",
-    }:
-        # Node initializes OpenSSL before collection; never grant the wider config tree.
-        read_files.extend(
-            path
-            for path in (
-                Path("/opt/homebrew/etc/openssl@3/openssl.cnf"),
-                Path("/usr/local/etc/openssl@3/openssl.cnf"),
-            )
-            if path.is_file()
+def _profile_fields(plan: RestrictedPytestPlan, private_root: Path) -> Mapping[str, object]:
+    return {
+        key: getattr(plan, key)
+        for key in (
+            "profile_version",
+            "workspace",
+            "cwd",
+            "allowed_executables",
+            "read_only_roots",
+            "output_roots",
+            "command",
+            "backend_executable",
         )
-    read_filters = " ".join(f"(subpath {_seatbelt_string(path)})" for path in read_roots)
-    read_file_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in read_files)
-    collection_targets = ()
-    if plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION:
-        collection_targets = _collection_link_metadata(plan)
-    metadata_paths = (
-        Path("/"),
-        *collection_targets,
-        *_ancestor_paths((*read_roots, *plan.allowed_executables, *collection_targets)),
-    )
-    metadata_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in metadata_paths)
-    executable_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in plan.allowed_executables)
-    read_only_workspace = plan.profile_version in READ_ONLY_TEST_PROFILES
-    write_filters = " ".join(
-        (
-            *(() if read_only_workspace else (f"(subpath {_seatbelt_string(plan.workspace)})",)),
-            *(f"(subpath {_seatbelt_string(path)})" for path in plan.output_roots),
-            f"(subpath {_seatbelt_string(private_root)})",
-            '(literal "/dev/null")',
-        )
-    )
-    immutable_executables = " ".join(
-        f"(literal {_seatbelt_string(path)})"
-        for path in plan.allowed_executables
-        if not _path_is_within(path, plan.workspace)
-    )
-    immutable_executable_denial = f"(deny file-write* {immutable_executables})" if immutable_executables else ""
-    return "\n".join(
-        (
-            "(version 1)",
-            "(deny default)",
-            "(deny file-link)",
-            "(allow process-fork)",
-            f"(allow process-exec {executable_filters})",
-            "(allow signal (target self) (target children))",
-            "(allow sysctl-read)",
-            '(allow file-read-data (literal "/"))',
-            f"(allow file-read-metadata {metadata_filters})",
-            # Collection may stat the ordinary symlink targets snapshotted above;
-            # their contents and unrelated external metadata remain unavailable.
-            f"(allow file-read* {read_filters} {read_file_filters})",
-            f"(allow file-write* {write_filters})",
-            *([immutable_executable_denial] if immutable_executable_denial else ()),
-            *(
-                _read_only_credential_denials(
-                    hide_metadata=plan.profile_version in {"vitest-readonly-v1", "node-build-output-v1"}
-                )
-                if read_only_workspace
-                else ()
-            ),
-        )
-    )
+    } | {"private_root": private_root}
+
+
+def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> str:
+    fields = dict(_profile_fields(plan, private_root))
+    if user_site_root is not None:
+        fields["user_site_root"] = user_site_root
+    return restricted_native("macos_profile", fields, str)
 
 
 def _collection_link_metadata(plan: RestrictedPytestPlan) -> tuple[Path, ...]:
-    targets: set[Path] = set()
-    patterns = _read_only_credential_patterns()
-    # Only the collector's immediate roots need extra target metadata. Do not
-    # recurse into dependencies or follow directory links into external trees.
-    for directory in {plan.workspace, plan.cwd}:
-        with os.scandir(directory) as entries:
-            for entry in islice(entries, 4096):
-                if entry.is_symlink():
-                    try:
-                        target = Path(entry.path).resolve(strict=True)
-                    except (OSError, RuntimeError):
-                        continue
-                    if not any(re.search(pattern, str(target)) for pattern in patterns):
-                        targets.add(target)
-    return tuple(sorted(targets))
+    return tuple(
+        Path(path)
+        for path in restricted_native("collection_link_metadata", _profile_fields(plan, plan.workspace), list)
+    )
 
 
 def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
@@ -223,137 +130,40 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
         from .restricted_linux_namespace import linux_readonly_argv
 
         return linux_readonly_argv(plan, private_root=private_root)
-    argv = [
-        str(plan.backend_executable),
-        "--die-with-parent",
-        "--new-session",
-        "--unshare-all",
-        "--unshare-net",
-        "--proc",
-        "/proc",
-        "--dev",
-        "/dev",
-        "--tmpfs",
-        "/tmp",
-    ]
-    readonly_paths = [path for path in (*_LINUX_READ_ROOTS, *_LINUX_READ_FILES) if path.exists()]
-    readonly_paths.extend(_runtime_read_roots(plan, private_root=private_root))
-    readonly_paths.extend(path for path in plan.allowed_executables if not _path_is_within(path, plan.workspace))
-    argv.extend(("--bind", str(plan.workspace), str(plan.workspace)))
-    argv.extend(("--dir", str(private_root)))
-    argv.extend(("--bind", str(private_root), str(private_root)))
-    for path in _dedupe_parent_paths(readonly_paths):
-        argv.extend(("--ro-bind", str(path), str(path)))
-    argv.extend(("--chdir", str(plan.cwd), "--", *plan.command))
-    return argv
+    return restricted_native("bubblewrap_argv", _profile_fields(plan, private_root), list)
 
 
 def _dedupe_parent_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
-    resolved: list[Path] = []
-    for path in sorted(
-        {item.resolve(strict=False) for item in paths},
-        key=lambda item: (len(item.parts), str(item)),
-    ):
-        if any(_path_is_within(path, parent) for parent in resolved):
-            continue
-        resolved.append(path)
-    return tuple(resolved)
+    return tuple(Path(path) for path in restricted_native("dedupe_parent_paths", {"roots": paths}, list))
 
 
 def _ancestor_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
-    ancestors: list[Path] = []
-    for path in paths:
-        current = path
-        for parent in (current, *current.parents):
-            if parent == Path("/") or parent in ancestors:
-                continue
-            ancestors.append(parent)
-    return tuple(ancestors)
+    return tuple(Path(path) for path in restricted_native("ancestor_paths", {"roots": paths}, list))
 
 
 def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
-    roots: list[Path] = []
-    for executable in plan.allowed_executables:
-        if private_root is not None and _path_is_within(executable, private_root):
-            continue
-        symlink_runtime_roots = _symlink_runtime_roots(executable)
-        for symlink_runtime_root in symlink_runtime_roots:
-            if symlink_runtime_root not in roots:
-                roots.append(symlink_runtime_root)
-        if symlink_runtime_roots:
-            continue
-        if _path_is_within(executable, plan.workspace) or _path_is_within_any(
-            executable, _SEALED_SYSTEM_EXECUTABLE_ROOTS
-        ):
-            continue
-        root = executable.parent.parent if executable.parent.name == "bin" else executable.parent
-        if root not in roots:
-            roots.append(root)
-    return tuple(roots)
+    return tuple(
+        Path(path)
+        for path in restricted_native(
+            "runtime_roots",
+            {
+                "allowed_executables": plan.allowed_executables,
+                "workspace": plan.workspace,
+                "private_root": private_root,
+            },
+            list,
+        )
+    )
 
 
 def _symlink_runtime_roots(executable: Path) -> tuple[Path, ...]:
-    """Return lexical runtime roots named by an executable's symlink chain.
-
-    Managed Python installations commonly expose a stable version alias (for
-    example ``cpython-3.12-*``) that points at a patch-version directory.  The
-    macOS sandbox must be able to traverse that alias before it can reach the
-    already-approved resolved executable. Homebrew adds both a package alias
-    and a framework-entrypoint symlink, so walk every bounded expansion. Keep
-    each grant at its exact distribution root instead of widening it to a
-    user runtime cache or package-manager prefix.
-    """
-
-    roots: list[Path] = []
-    current = executable.absolute()
-    for _depth in range(16):
-        expansion = _first_symlink_expansion(current)
-        if expansion is None:
-            break
-        current = expansion
-        if _path_is_within_any(current, _SEALED_SYSTEM_EXECUTABLE_ROOTS):
-            continue
-        root = _runtime_distribution_root(current)
-        if root not in roots:
-            roots.append(root)
-    return tuple(roots)
+    return tuple(Path(path) for path in restricted_native("symlink_runtime_roots", {"path": executable}, list))
 
 
 def _current_user_process_ceiling() -> int:
     if sys.platform not in {"darwin", "linux"}:
         return _DEFAULT_PROCESSES
-    try:
-        with tempfile.TemporaryFile(mode="w+b") as output:
-            result = subprocess.run(
-                [
-                    "/bin/ps",
-                    "-U",
-                    str(os.getuid()),
-                    "-o",
-                    "nlwp=" if sys.platform == "linux" else "pid=",
-                ],
-                stdin=subprocess.DEVNULL,
-                stdout=output,
-                stderr=subprocess.DEVNULL,
-                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
-                timeout=3,
-                check=False,
-            )
-            output.seek(0)
-            raw = output.read(1_048_577)
-        rows = raw.splitlines()
-        if result.returncode != 0 or len(raw) > 1_048_576 or not rows or any(not row.strip().isdigit() for row in rows):
-            raise ValueError("invalid bounded process count")
-        # Linux counts threads against RLIMIT_NPROC, not just process leaders.
-        current = sum(int(row.strip()) for row in rows) if sys.platform == "linux" else len(rows)
-        if current <= 0:
-            raise ValueError("invalid bounded thread count")
-        return current + _DEFAULT_PROCESSES
-    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
-        raise RestrictedPytestError(
-            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-            "The desktop process budget could not be measured; protected execution was not started.",
-        ) from error
+    return restricted_native("process_ceiling", {}, int)
 
 
 def _run_backend_process(
@@ -364,6 +174,8 @@ def _run_backend_process(
     cwd: Path | None = None,
     stdout_capture: bytearray | None = None,
     node_virtual_address_space: bool = False,
+    merge_stderr: bool = False,
+    write_denial_note: str | None = None,
 ) -> int:
     if (
         node_virtual_address_space
@@ -409,7 +221,7 @@ def _run_backend_process(
                 cwd=cwd,
                 stdin=subprocess.DEVNULL,
                 stdout=stdout_file,
-                stderr=stderr_file,
+                stderr=stdout_file if merge_stderr else stderr_file,
                 close_fds=True,
                 start_new_session=True,
                 preexec_fn=apply_limits if _RESOURCE_AVAILABLE else None,
@@ -425,9 +237,16 @@ def _run_backend_process(
             int | signal.Handlers | Callable[[int, FrameType | None], object] | None,
         ] = {}
 
+        def signal_run(signum: int | None = None) -> None:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL if signum is None else signum)
+            else:
+                # The Windows runner's kill-on-close job ends its descendants.
+                process.kill()
+
         def forward_signal(signum: int, _frame: object) -> None:
             with contextlib.suppress(OSError):
-                os.killpg(process.pid, signum)
+                signal_run(signum)
 
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[signum] = signal.getsignal(signum)
@@ -437,7 +256,7 @@ def _run_backend_process(
                 return_code = process.wait(timeout=timeout_seconds)
             except subprocess.TimeoutExpired as error:
                 with contextlib.suppress(OSError):
-                    os.killpg(process.pid, signal.SIGKILL)
+                    signal_run()
                 _ = process.wait()
                 raise RestrictedPytestError(
                     "pytest_restricted_timeout",
@@ -448,7 +267,7 @@ def _run_backend_process(
             # The run owns this new session/group. Stop lingering workers even
             # if the launcher exited successfully before all descendants did.
             with contextlib.suppress(OSError):
-                os.killpg(process.pid, signal.SIGKILL)
+                signal_run()
             for signum, handler in previous_handlers.items():
                 _ = signal.signal(signum, handler)
             if stdout_capture is None:
@@ -456,19 +275,37 @@ def _run_backend_process(
             else:
                 stdout_file.seek(0)
                 stdout_capture.extend(stdout_file.read(_MAX_REPLAY_BYTES))
-            _replay_sandbox_output(stderr_file, sys.stderr)
+            if not merge_stderr:
+                _replay_sandbox_output(stderr_file, sys.stderr)
+        if (
+            write_denial_note is not None
+            and return_code != 0
+            and (_write_denied(stdout_file) or (not merge_stderr and _write_denied(stderr_file)))
+        ):
+            destination = sys.stdout if merge_stderr else sys.stderr
+            destination.write(f"\n[HOL Guard] {write_denial_note}\n")
+            destination.flush()
         return return_code if return_code >= 0 else 128 + abs(return_code)
+
+
+def _write_denied(source: BinaryIO) -> bool:
+    source.seek(0)
+    text = source.read(_MAX_REPLAY_BYTES).lower()
+    return any(marker in text for marker in _WRITE_DENIAL_MARKERS)
 
 
 def _replay_sandbox_output(source: BinaryIO, destination: TextIO) -> None:
     source.seek(0)
     raw = source.read(_MAX_REPLAY_BYTES + 1)
     truncated = len(raw) > _MAX_REPLAY_BYTES
-    text = raw[:_MAX_REPLAY_BYTES].decode("utf-8", errors="replace")
+    # Windows programs end lines with CRLF; a lone CR stays replaced.
+    text = raw[:_MAX_REPLAY_BYTES].decode("utf-8", errors="replace").replace("\r\n", "\n")
     safe_text = "".join(character if character in {"\n", "\t"} or ord(character) >= 32 else "�" for character in text)
     if truncated:
         safe_text += "\n[HOL Guard truncated restricted pytest output]\n"
-    destination.write(safe_text)
+    # A Windows pipe may use a code page without the replacement character.
+    encoding = getattr(destination, "encoding", None) or "utf-8"
+    destination.write(safe_text.encode(encoding, errors="replace").decode(encoding))
     destination.flush()
 
 

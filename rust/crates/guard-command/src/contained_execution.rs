@@ -13,10 +13,9 @@
 //! Wave-1 contract: public API names match Python symbol names
 //! (`pub fn` / `pub struct` / `pub enum`), private helpers keep their `_` names
 //! (Rust `fn`), `pub` visibility is reserved for symbols other files consume.
-#![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, DirEntry, File};
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
@@ -36,27 +35,11 @@ use crate::effect_decision::{
     EffectTargetScope, GuardAction, PositiveProof, ProofRequirement, ProofRoute,
     EFFECT_CONTRACT_SCHEMA_VERSION, EFFECT_DECISION_SCHEMA_VERSION,
 };
-use crate::package_intent_common::LocalPackageExecutionEvidence;
 use crate::package_intent_parser::parse_package_intent;
 
 // ===========================================================================
 // file_identity.py (:1-33)
 // ===========================================================================
-
-/// `full_stat_identity` (:8-20) — portable stat identity incl. link, time, and
-/// Windows attributes (0 on unix).
-fn full_stat_identity(metadata: &fs::Metadata) -> [u64; 8] {
-    [
-        metadata.dev(),
-        metadata.ino(),
-        metadata.mode() as u64,
-        metadata.nlink(),
-        metadata.size(),
-        metadata.mtime() as u64,
-        metadata.ctime() as u64,
-        0,
-    ]
-}
 
 /// `content_stat_identity` (:23-32) — compact stat tuple used to detect
 /// content/path replacement.
@@ -69,191 +52,6 @@ fn content_stat_identity(metadata: &fs::Metadata) -> [u64; 6] {
         metadata.ctime() as u64,
         metadata.mode() as u64,
     ]
-}
-
-// ===========================================================================
-// jsonc-lite: duplicate-key object parse for package evidence.
-// package_evidence_common.read_json_with_integrity uses
-// `json.loads(..., object_pairs_hook=_unique_json_pairs)`; we reimplement the
-// hook check on top of serde_json (duplicate keys already rejected upstream by
-// callers in the Python path, so a serde Map is equivalent for our uses).
-// ===========================================================================
-
-/// `object_mapping` (package_evidence_common.py :74-77): str-keyed map view,
-/// rejecting non-objects. serde_json::Value objects are always str-keyed.
-fn object_mapping(value: &Value) -> Option<&Map<String, Value>> {
-    value.as_object()
-}
-
-/// `valid_sha512_integrity` (package_evidence_common.py :80-87): `sha512-` +
-/// ≥64 base64url chars.
-fn valid_sha512_integrity(value: Option<&str>) -> bool {
-    static SHA512_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^sha512-[A-Za-z0-9_-]{64,}={0,2}$").unwrap());
-    value.map(|v| SHA512_RE.is_match(v)).unwrap_or(false)
-}
-
-/// `version_spec_matches` (package_evidence_common.py :95-127).
-fn version_spec_matches(
-    specifier: Option<&str>,
-    version: Option<&str>,
-    version_re: &Regex,
-    caret_pins_zero_major: bool,
-) -> bool {
-    let (Some(specifier), Some(version)) = (specifier, version) else {
-        return false;
-    };
-    let Some(spec_match) = version_re.captures(specifier) else {
-        return false;
-    };
-    let Some(version_match) = version_re.captures(version) else {
-        return false;
-    };
-    let spec_parts: Vec<u64> = (1..=3)
-        .filter_map(|i| spec_match.get(i))
-        .filter_map(|m| m.as_str().parse().ok())
-        .collect();
-    let version_parts: Vec<u64> = (1..=3)
-        .filter_map(|i| version_match.get(i))
-        .filter_map(|m| m.as_str().parse().ok())
-        .collect();
-    if spec_parts.len() != 3 || version_parts.len() != 3 {
-        return false;
-    }
-    if specifier.starts_with('^') {
-        if spec_parts[0] > 0 {
-            return version_parts >= spec_parts && version_parts[0] == spec_parts[0];
-        }
-        if caret_pins_zero_major {
-            if spec_parts[1] > 0 {
-                return version_parts >= spec_parts && version_parts[0..2] == spec_parts[0..2];
-            }
-            return version_parts == spec_parts;
-        }
-        return version_parts >= spec_parts && version_parts[0] == spec_parts[0];
-    }
-    if specifier.starts_with('~') {
-        return version_parts >= spec_parts && version_parts[0..2] == spec_parts[0..2];
-    }
-    version_parts == spec_parts
-}
-
-/// `_unique_json_pairs` (package_evidence_common.py :69-71): reject duplicate
-/// keys. serde_json::Value collapses duplicates before we can see them, so this
-/// uses `serde_json::from_str` on the pairs-form text via `jsonc` when needed;
-/// for strict JSON the path goes through `serde_json::from_str` then we scan
-/// the raw text for duplicate keys at the top level. Since Python raises on any
-/// duplicate key in *any* object, we conservatively reject duplicates by
-/// reparsing with a simple scanner. For our callers the input files are
-/// package.json / package-lock.json / bun.lock where duplicates are already
-/// malformed JSON; serde is the observed behavior and callers that care fail
-/// closed elsewhere.
-fn unique_json_parse(text: &str) -> Option<Value> {
-    serde_json::from_str::<Value>(text).ok()
-}
-
-/// `read_json_with_integrity` (package_evidence_common.py :51-67): bounded
-/// file read with a TOCTOU stat check plus sha256 of the exact bytes read.
-fn read_json_with_integrity(
-    path: &Path,
-    allow_jsonc: bool,
-) -> (Option<Map<String, Value>>, Option<String>) {
-    let Ok(descriptor) = File::open(path) else {
-        return (None, None);
-    };
-    let Ok(before) = descriptor.metadata() else {
-        return (None, None);
-    };
-    if !before.is_file() {
-        return (None, None);
-    }
-    let mut file = descriptor;
-    let mut content: Vec<u8> = Vec::new();
-    let mut buf = [0u8; 1024 * 1024];
-    loop {
-        let Ok(read) = file.read(&mut buf) else {
-            return (None, None);
-        };
-        if read == 0 {
-            break;
-        }
-        content.extend_from_slice(&buf[..read]);
-        if content.len() > MAX_MANIFEST_JSON_BYTES {
-            return (None, None);
-        }
-    }
-    let Ok(after) = file.metadata() else {
-        return (None, None);
-    };
-    if (before.dev(), before.ino(), before.size(), before.mtime())
-        != (after.dev(), after.ino(), after.size(), after.mtime())
-    {
-        return (None, None);
-    }
-    let Ok(decoded) = std::str::from_utf8(&content) else {
-        return (None, None);
-    };
-    let payload = if allow_jsonc {
-        crate::jsonc::loads_jsonc(decoded).ok()
-    } else {
-        unique_json_parse(decoded)
-    };
-    let Some(payload) = payload else {
-        return (None, None);
-    };
-    let map = object_mapping(&payload).cloned();
-    let digest = format!("sha256:{}", hex::encode(Sha256::digest(&content)));
-    (map, Some(digest))
-}
-
-/// `resolved_package_bin_target` (package_evidence_common.py :130-146).
-fn resolved_package_bin_target(package_root: &Path, raw_target: &str) -> Option<PathBuf> {
-    let trimmed = raw_target.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    // `PurePosixPath` semantics — reject absolute / drive-like targets first.
-    if trimmed.starts_with('/') || trimmed.contains('\\') {
-        return None;
-    }
-    let portable = Path::new(trimmed);
-    if portable.is_absolute() || portable.components().count() == 0 {
-        return None;
-    }
-    let mut parts = Vec::new();
-    for component in portable.components() {
-        match component {
-            std::path::Component::Normal(part) => parts.push(part.to_owned()),
-            _ => return None,
-        }
-    }
-    if parts.is_empty() || parts.iter().any(|p| p == "..") {
-        return None;
-    }
-    let mut candidate = package_root.to_path_buf();
-    for part in parts {
-        candidate.push(part);
-    }
-    // `resolve(strict=False)` — canonicalize without existence requirement.
-    let resolved = weak_canonicalize(&candidate);
-    let root_resolved = weak_canonicalize(package_root);
-    if !resolved.starts_with(&root_resolved) {
-        return None;
-    }
-    Some(resolved)
-}
-
-/// `read_package_json` (package_evidence_common.py :149-169): bounded
-/// non-symlink package.json object without raising.
-fn read_package_json(path: &Path) -> Option<Map<String, Value>> {
-    const MAX_PACKAGE_JSON_BYTES: u64 = 512 * 1024;
-    let meta = fs::symlink_metadata(path).ok()?;
-    if meta.file_type().is_symlink() || !meta.is_file() || meta.size() > MAX_PACKAGE_JSON_BYTES {
-        return None;
-    }
-    let text = fs::read_to_string(path).ok()?;
-    let payload: Value = serde_json::from_str(&text).ok()?;
-    payload.as_object().cloned()
 }
 
 /// Weak canonicalization — lexical cleanup plus `canonicalize` when the path
@@ -277,114 +75,11 @@ fn weak_canonicalize(path: &Path) -> PathBuf {
 }
 
 // ===========================================================================
-// local_node_runner_options.py (:1-74)
-// ===========================================================================
-
-/// `_STDOUT_REPORTERS` (:9).
-const STDOUT_REPORTERS: &[&str] = &["default", "dot", "verbose", "basic"];
-
-/// `vitest_result_arguments` (:12-39): bounded vitest argv → (files, valid).
-fn vitest_result_arguments(tail: &[String]) -> (Vec<String>, bool) {
-    if tail.is_empty() || tail[0] != "run" {
-        return (Vec::new(), false);
-    }
-    let mut files: Vec<String> = Vec::new();
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let mut index = 1;
-    while index < tail.len() {
-        let token = &tail[index];
-        if token == "--no-coverage" {
-            if seen.contains(token) {
-                return (Vec::new(), false);
-            }
-            seen.insert(token.clone());
-        } else if token == "--reporter" || token.starts_with("--reporter=") {
-            if seen.contains("reporter") {
-                return (Vec::new(), false);
-            }
-            seen.insert("reporter".to_owned());
-            let reporter: &str = if token == "--reporter" {
-                index += 1;
-                if index >= tail.len() {
-                    return (Vec::new(), false);
-                }
-                &tail[index]
-            } else {
-                token.split_once('=').map(|x| x.1).unwrap_or("")
-            };
-            if !STDOUT_REPORTERS.contains(&reporter) {
-                return (Vec::new(), false);
-            }
-        } else if token.starts_with('-') {
-            return (Vec::new(), false);
-        } else {
-            files.push(token.clone());
-        }
-        index += 1;
-    }
-    let ok = !files.is_empty();
-    (files, ok)
-}
-
-/// `bun_locked_version` (:42-72): bun.lock registry-pinned version for a
-/// package name.
-fn bun_locked_version(
-    payload: Option<&Map<String, Value>>,
-    package: &str,
-) -> (Option<String>, bool) {
-    let Some(payload) = payload else {
-        return (None, false);
-    };
-    if payload.get("lockfileVersion").and_then(|v| v.as_u64()) != Some(0) {
-        return (None, false);
-    }
-    let Some(packages) = object_mapping(payload.get("packages").unwrap_or(&Value::Null)) else {
-        return (None, false);
-    };
-    let Some(entry) = packages.get(package).and_then(|v| v.as_object()) else {
-        return (None, false);
-    };
-    if entry
-        .get("registry")
-        .and_then(|v| v.as_str())
-        .map(|r| !r.trim().is_empty())
-        != Some(true)
-    {
-        return (None, false);
-    }
-    let version = entry
-        .get("version")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned);
-    let Some(version) = version else {
-        return (None, false);
-    };
-    let resolved = entry
-        .get("resolved")
-        .and_then(|v| v.as_str())
-        .map(str::trim);
-    let integrity = entry.get("integrity").and_then(|v| v.as_str());
-    let source_ok = resolved
-        .map(|r| {
-            !r.starts_with("file:")
-                && !r.starts_with("git+")
-                && !r.starts_with("git://")
-                && !r.starts_with("github:")
-        })
-        .unwrap_or(true)
-        && valid_sha512_integrity(integrity);
-    (Some(version), source_ok)
-}
-
-// ===========================================================================
 // containment_contract.py (:1-434)
 // ===========================================================================
 
 const CONTAINMENT_SCHEMA_VERSION: &str = "containment-contract-v1";
 const MAX_TOKEN: usize = 256;
-const MAX_ARG: usize = 4096;
 const MAX_TOKENS: usize = 256;
 const MAX_PATH_ITEM: usize = 4096;
 const MAX_PATH_ITEMS: usize = 4096;
@@ -637,7 +332,7 @@ pub fn validate_containment_policy(policy: &ContainmentPolicy) -> Result<(), Str
         _reject(path.is_empty() || path.len() > MAX_PATH_ITEM, "policy_path")?;
     }
     _reject(
-        policy.workspace_write_paths.is_empty(),
+        policy.workspace_write_paths.is_empty() && policy.action != ContainmentAction::Read,
         "policy_write_paths",
     )?;
     _reject(
@@ -886,7 +581,6 @@ pub fn resolve_workspace_path(workspace: &Path, raw: &str) -> Option<PathBuf> {
 const MAX_CAPTURED_OUTPUT_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TOTAL_CAPTURED_OUTPUT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_OUTPUT_FILES: usize = 128;
-const MAX_ENTRIES: usize = 50_000;
 const CAPTURED_OUTPUT_MEDIA_TYPE: &str = "application/octet-stream";
 
 /// `OutputBoundaryError` (:12-14) → `Err(String)`.
@@ -951,8 +645,6 @@ pub fn read_verified_output(path: &Path) -> Result<ContainmentCapturedOutput, St
 // containment_executor.py (:1-496)
 // ===========================================================================
 
-const CONTAINMENT_SANDBOX_NAME: &str = "hol-guard-contained";
-const CONTAINMENT_APPLE_TERMINATION_SIGNAL: u8 = 15;
 const BUBBLEWRAP_PATH: &str = "/usr/bin/bwrap";
 
 pub(crate) fn _now_epoch_ms() -> u64 {
@@ -1237,33 +929,14 @@ pub(crate) fn _linux_bwrap_argv(
     Ok(argv)
 }
 
-// ===========================================================================
-// contained_execution_common.py (:1-96)
-// ===========================================================================
-
-const CONTAINMENT_BINDING_FRAME: &[u8] = b"hol-guard:contained-execution:v1\x00";
-
-/// `containment_binding_digest` (:74-79): sha256 over framed canonical JSON.
-pub(crate) fn _binding_digest(payload: &Value) -> String {
-    let mut buf = Vec::new();
-    let _ = guard_contracts::write_canonical_json(payload, &mut buf);
-    let mut frame = CONTAINMENT_BINDING_FRAME.to_vec();
-    frame.extend_from_slice(&buf);
-    format!("sha256:{}", hex::encode(Sha256::digest(&frame)))
-}
-
 /// `canonical_json` (:82-87) — `json.dumps(sort_keys=True, separators)`.
 pub(crate) fn _canonical_json(payload: &Value) -> Vec<u8> {
-    let mut buf = Vec::new();
-    let _ = guard_contracts::write_canonical_json(payload, &mut buf);
-    buf
+    crate::contained_runner::common::canonical_bytes(payload).unwrap_or_default()
 }
 
 // ===========================================================================
 // containment_health.py (:1-332)
 // ===========================================================================
-
-const CONTAINMENT_PROOF_SATISFIED: &str = "proof_satisfied";
 
 /// `ContainmentHealthEvidence` (:48-79).
 #[derive(Debug, Clone, PartialEq)]
@@ -1352,169 +1025,8 @@ fn _parse_intent(command_text: &str) -> Option<crate::package_intent_common::Pac
 }
 
 // ===========================================================================
-// local_package_script_evidence.py (:1-334)
+// workspace-write path helpers
 // ===========================================================================
-
-const MAX_BUN_LOCK_PACKAGES: usize = 20_000;
-
-static SCRIPT_VERSION_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(?:[~^])?(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$").unwrap());
-static NAME_TOKEN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_.-]+$").unwrap());
-static SCOPE_TOKEN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^@[A-Za-z0-9_.-]+$").unwrap());
-
-const SCRIPT_SAFE_FLAGS: &[&str] = &["--filter", "--silent", "--if-present", "--bail"];
-
-/// `script_arguments` (:45-71).
-fn _script_arguments(tail: &[String]) -> (Vec<String>, bool) {
-    if tail.is_empty() {
-        return (Vec::new(), false);
-    }
-    let mut positional: Vec<String> = Vec::new();
-    for token in tail {
-        if token.starts_with("--") && !SCRIPT_SAFE_FLAGS.contains(&token.as_str()) {
-            return (Vec::new(), false);
-        }
-        if token.starts_with('-') && token.len() > 1 {
-            return (Vec::new(), false);
-        }
-        positional.push(token.clone());
-    }
-    let ok = !positional.is_empty();
-    (positional, ok)
-}
-
-/// `build_local_package_script_evidence` (:74-245).
-pub fn build_local_package_script_evidence(
-    workspace: &Path,
-    execution: &LocalPackageExecutionEvidence,
-) -> Option<Value> {
-    let mut reasons: Vec<String> = Vec::new();
-    if !execution.local_only_requested {
-        reasons.push("remote_install_not_disabled".to_owned());
-    }
-    if execution.manager_name != "bun" {
-        reasons.push("manager_mismatch".to_owned());
-    }
-    let manager = execution.manager.as_ref();
-    if !(manager.is_some() && manager.map(|m| m.status) == Some("available")) {
-        reasons.push("manager_identity_incomplete".to_owned());
-    }
-    let executable = execution.local_executable.as_ref();
-    let executable_path = executable.and_then(|e| e.resolved_path.clone());
-    let executable_hash = executable.and_then(|e| e.content_hash.clone());
-    if !(executable.is_some()
-        && executable.map(|e| e.status) == Some("available")
-        && executable_path.is_some()
-        && executable_hash.is_some())
-    {
-        reasons.push("executable_identity_incomplete".to_owned());
-    }
-    let root_manifest = workspace.join("package.json");
-    let lockfile = {
-        let bun = workspace.join("bun.lock");
-        if bun.exists() {
-            bun
-        } else {
-            workspace.join("package-lock.json")
-        }
-    };
-    let package_root = workspace.join("node_modules");
-    let manifest = read_package_json(&root_manifest);
-    let lock_payload = if lockfile.file_name().and_then(|n| n.to_str()) == Some("bun.lock") {
-        crate::jsonc::loads_jsonc(&fs::read_to_string(&lockfile).ok()?).ok()
-    } else {
-        unique_json_parse(&fs::read_to_string(&lockfile).ok()?)
-    };
-    let declared = manifest
-        .as_ref()
-        .and_then(|m| m.get("packageManager"))
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned);
-    if declared.is_none() {
-        reasons.push("manifest_package_manager_missing".to_owned());
-    }
-    let (locked_version, lock_source_ok) =
-        bun_locked_version(lock_payload.as_ref().and_then(|v| v.as_object()), "bun");
-    if locked_version.is_none() {
-        reasons.push("lock_dependency_missing".to_owned());
-    }
-    if !lock_source_ok {
-        reasons.push("lock_source_drift".to_owned());
-    }
-    let installed_manifest = read_package_json(&package_root.join("bun").join("package.json"));
-    let installed_version = installed_manifest
-        .as_ref()
-        .and_then(|m| m.get("version"))
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned);
-    if installed_version.is_none() {
-        reasons.push("installed_package_missing".to_owned());
-    }
-    if declared.as_deref() != installed_version.as_deref() && declared.is_some() {
-        // declared is `bun@x.y.z` packageManager spec; normalize
-        let declared_bun = declared
-            .as_deref()
-            .and_then(|d| d.strip_prefix("bun@"))
-            .map(str::to_owned);
-        if declared_bun.as_deref() != installed_version.as_deref() {
-            reasons.push("declared_dependency_mismatch".to_owned());
-        }
-    }
-    if !version_spec_matches(
-        installed_version.as_deref(),
-        locked_version.as_deref(),
-        &SCRIPT_VERSION_RE,
-        true,
-    ) {
-        reasons.push("manifest_lock_version_drift".to_owned());
-    }
-    let mut seen = BTreeSet::new();
-    let normalized: Vec<String> = reasons
-        .iter()
-        .filter(|r| seen.insert((*r).clone()))
-        .cloned()
-        .collect();
-    let binding = _binding_digest(&json!({
-        "schema_version": 1,
-        "manager_name": execution.manager_name,
-        "package_name": execution.package_name,
-        "executable_name": execution.executable_name,
-        "declared_version": declared,
-        "locked_version": locked_version,
-        "installed_version": installed_version,
-        "reasons": normalized,
-    }));
-    Some(json!({
-        "schema_version": 1,
-        "status": if normalized.is_empty() { "complete" } else { "incomplete" },
-        "reasons": normalized,
-        "binding_digest": binding,
-        "manager_name": execution.manager_name,
-        "package_name": execution.package_name,
-        "executable_name": execution.executable_name,
-        "declared_version": declared,
-        "locked_version": locked_version,
-        "installed_version": installed_version,
-        "evidence_scope": "launch_identity",
-        "review_disposition": "review_required",
-        "direct_silent_verification": false,
-    }))
-}
-
-// ===========================================================================
-// workspace_snapshot_inputs.py (:1-260)
-// ===========================================================================
-
-const MAX_TREE_FILES: usize = 10_000;
-const MAX_TREE_BYTES: u64 = 128 * 1024 * 1024;
-const MAX_SOURCE_BYTES: u64 = 32 * 1024 * 1024;
-const MAX_DISCOVERY_ENTRIES: usize = 50_000;
-const DISCOVERY_TIMEOUT_SECONDS: f64 = 5.0;
-const MAX_MANIFEST_JSON_BYTES: usize = 8 * 1024 * 1024;
 
 const PROTECTED_NAMES: &[&str] = &[
     ".git",
@@ -1526,9 +1038,6 @@ const PROTECTED_NAMES: &[&str] = &[
     "credentials.json",
     "secrets.json",
 ];
-
-const TYPESCRIPT_INPUT_SUFFIXES: &[&str] =
-    &[".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"];
 
 fn _is_protected_path(relative: &Path) -> bool {
     relative
@@ -1548,829 +1057,6 @@ pub(crate) fn _canonical_directory(root: &Path) -> Result<PathBuf, String> {
         return Err("workspace_not_directory".to_owned());
     }
     Ok(canonical)
-}
-
-fn _bounded_entries<'a>(
-    directory: &'a Path,
-    started_at: Instant,
-    visited: &'a mut usize,
-) -> Result<Vec<DirEntry>, String> {
-    let mut out = Vec::new();
-    let rd = fs::read_dir(directory).map_err(|_| "workspace_unreadable".to_owned())?;
-    for entry in rd {
-        let entry = entry.map_err(|_| "workspace_unreadable".to_owned())?;
-        *visited += 1;
-        if *visited > MAX_DISCOVERY_ENTRIES {
-            return Err("snapshot_discovery_entries".to_owned());
-        }
-        if started_at.elapsed().as_secs_f64() > DISCOVERY_TIMEOUT_SECONDS {
-            return Err("snapshot_discovery_timeout".to_owned());
-        }
-        out.push(entry);
-    }
-    Ok(out)
-}
-
-fn _file_digest(path: &Path) -> Result<String, String> {
-    file_sha256(path).ok_or_else(|| "input_unreadable".to_owned())
-}
-
-/// `SnapshotInput` — `ContainmentInput` for a file with a tree-relative path.
-fn _snapshot_input(path: &Path, canonical_root: &Path) -> Result<ContainmentInput, String> {
-    let digest = _file_digest(path)?;
-    let relative = path
-        .strip_prefix(canonical_root)
-        .map_err(|_| "input_outside_workspace".to_owned())?
-        .to_string_lossy()
-        .into_owned();
-    Ok(ContainmentInput {
-        path: relative,
-        resolved_path: path.to_string_lossy().into_owned(),
-        sha256: digest,
-        kind: "file".to_owned(),
-    })
-}
-
-/// `_tree_inputs` (workspace_snapshot_inputs.py :64-120).
-fn _tree_inputs(_workspace: &Path, root: &Path) -> Result<(String, Vec<ContainmentInput>), String> {
-    let canonical_root = _canonical_directory(root)?;
-    let mut captured: Vec<(String, String, ContainmentInput)> = Vec::new();
-    let mut total_bytes: u64 = 0;
-    let started_at = Instant::now();
-    let mut visited = 0usize;
-    let mut directories = vec![canonical_root.clone()];
-    while let Some(directory) = directories.pop() {
-        for entry in _bounded_entries(&directory, started_at, &mut visited)? {
-            let path = entry.path();
-            let relative = path
-                .strip_prefix(&canonical_root)
-                .map_err(|_| "input_outside_workspace".to_owned())?;
-            if _is_protected_path(relative) {
-                return Err("protected package-tree path".to_owned());
-            }
-            let ftype = entry
-                .file_type()
-                .map_err(|_| "workspace_unreadable".to_owned())?;
-            if ftype.is_symlink() {
-                return Err("package tree cannot contain symlinks".to_owned());
-            }
-            if ftype.is_dir() {
-                directories.push(path);
-                continue;
-            }
-            if !ftype.is_file() {
-                return Err("package tree inputs must be regular files".to_owned());
-            }
-            total_bytes += entry
-                .metadata()
-                .map_err(|_| "workspace_unreadable".to_owned())?
-                .size();
-            if captured.len() >= MAX_TREE_FILES || total_bytes > MAX_TREE_BYTES {
-                return Err("package tree exceeds containment identity budget".to_owned());
-            }
-            let digest = _file_digest(&path)?;
-            let input = _snapshot_input(&path, &canonical_root)?;
-            captured.push((relative.to_string_lossy().into_owned(), digest, input));
-        }
-    }
-    captured.sort_by(|a, b| a.0.cmp(&b.0));
-    let records: Vec<Value> = captured
-        .iter()
-        .map(|(rel, digest, _)| json!({"path": rel, "sha256": digest}))
-        .collect();
-    let digest = _binding_digest(&json!({"files": records}));
-    Ok((digest, captured.into_iter().map(|(_, _, i)| i).collect()))
-}
-
-/// `_typescript_closure_inputs` (:123-170).
-fn _typescript_closure_inputs(
-    workspace: &Path,
-    package_root: &Path,
-    sources: &[String],
-) -> Result<(String, Vec<ContainmentInput>), String> {
-    let _ = package_root;
-    let _ = workspace;
-    let canonical_workspace = _canonical_directory(workspace)?;
-    let mut captured: Vec<ContainmentInput> = Vec::new();
-    let mut _total_bytes: u64 = 0;
-    for source in sources {
-        let candidate = workspace.join(source);
-        let canonical = weak_canonicalize(&candidate);
-        if !canonical.starts_with(&canonical_workspace) {
-            return Err("source_outside_workspace".to_owned());
-        }
-        let meta = fs::symlink_metadata(&candidate).map_err(|_| "source_unreadable".to_owned())?;
-        if meta.file_type().is_symlink() || !meta.is_file() {
-            return Err("source_not_regular".to_owned());
-        }
-        if meta.size() > MAX_SOURCE_BYTES {
-            return Err("source_too_large".to_owned());
-        }
-        _total_bytes += meta.size();
-        captured.push(_snapshot_input(&canonical, &canonical_workspace)?);
-    }
-    let records: Vec<Value> = captured
-        .iter()
-        .map(|i| json!({"path": i.path, "sha256": i.sha256}))
-        .collect();
-    let digest = _binding_digest(&json!({"files": records}));
-    let _ = package_root;
-    Ok((digest, captured))
-}
-
-/// `complete_workspace_snapshot` (:56-60).
-pub fn complete_workspace_snapshot(
-    workspace: &Path,
-    package_root: &Path,
-) -> Result<(String, Vec<ContainmentInput>), String> {
-    _tree_inputs(workspace, package_root)
-}
-
-/// `typescript_snapshot_inputs` (typescript_snapshot_inputs.py :26-38).
-pub fn typescript_snapshot_inputs(
-    workspace: &Path,
-    package_root: &Path,
-    sources: &[String],
-) -> Result<(String, Vec<ContainmentInput>, String, Vec<ContainmentInput>), String> {
-    let (tree_digest, package_inputs) = _tree_inputs(workspace, package_root)?;
-    let (closure_digest, closure_inputs) =
-        _typescript_closure_inputs(workspace, package_root, sources)?;
-    Ok((tree_digest, package_inputs, closure_digest, closure_inputs))
-}
-
-/// `reject_external_node_modules` (workspace_snapshot_inputs.py :173-215):
-/// inputs under workspace `node_modules` are rejected unless they sit under the
-/// caller's approved package root.
-pub fn reject_external_node_modules(
-    workspace: &Path,
-    package_root: &Path,
-    inputs: &[ContainmentInput],
-) -> Result<(), String> {
-    let canonical_workspace = _canonical_directory(workspace)?;
-    let canonical_package_root = _canonical_directory(package_root)?;
-    for input in inputs {
-        let resolved = PathBuf::from(&input.resolved_path);
-        if !resolved.starts_with(&canonical_workspace) {
-            return Err("input_outside_workspace".to_owned());
-        }
-        let relative = resolved
-            .strip_prefix(&canonical_workspace)
-            .map_err(|_| "input_outside_workspace".to_owned())?;
-        let mut parts = relative.components().peekable();
-        if let Some(std::path::Component::Normal(first)) = parts.peek() {
-            if *first == "node_modules" && !resolved.starts_with(&canonical_package_root) {
-                return Err("input_outside_package_root".to_owned());
-            }
-        }
-    }
-    Ok(())
-}
-
-// ===========================================================================
-// local_node_runner_evidence.py (:1-356)
-// ===========================================================================
-
-const RUNNER_KIND_VITEST: &str = "vitest";
-const RUNNER_KIND_ESLINT: &str = "eslint";
-const RUNNER_KIND_TSX: &str = "tsx";
-
-fn _runner_operation(runner: &str) -> &'static str {
-    match runner {
-        "vitest" => "test",
-        "eslint" => "lint",
-        _ => "diagnostic",
-    }
-}
-
-const TEST_SUFFIXES: &[&str] = &[
-    ".test.js",
-    ".test.jsx",
-    ".test.ts",
-    ".test.tsx",
-    ".spec.js",
-    ".spec.jsx",
-    ".spec.ts",
-    ".spec.tsx",
-];
-const LINT_SUFFIXES: &[&str] = &[".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"];
-
-/// `_runner_arguments` (:231-271).
-fn _runner_arguments(
-    workspace: &Path,
-    tokens: &[String],
-    reasons: &mut Vec<String>,
-) -> (String, Vec<String>, Vec<String>) {
-    if tokens.len() < 2 {
-        reasons.push("argv_too_short".to_owned());
-        return (String::new(), Vec::new(), Vec::new());
-    }
-    let manager = tokens[0].clone();
-    if manager != "npx" && manager != "bunx" {
-        reasons.push("manager_mismatch".to_owned());
-        return (String::new(), Vec::new(), Vec::new());
-    }
-    let runner = tokens[1].clone();
-    if runner != RUNNER_KIND_VITEST && runner != RUNNER_KIND_ESLINT && runner != RUNNER_KIND_TSX {
-        reasons.push("runner_unsupported".to_owned());
-        return (String::new(), Vec::new(), Vec::new());
-    }
-    let tail: Vec<String> = tokens[2..].to_vec();
-    let (raw_files, args_ok) = if runner == RUNNER_KIND_VITEST {
-        vitest_result_arguments(&tail)
-    } else {
-        _script_arguments(&tail)
-    };
-    if !args_ok {
-        reasons.push("arguments_not_read_only".to_owned());
-    }
-    let input_files = _validated_input_files(workspace, &runner, &raw_files, reasons);
-    (runner, tail, input_files)
-}
-
-/// `_validated_input_files` (:274-315).
-fn _validated_input_files(
-    workspace: &Path,
-    runner: &str,
-    raw_files: &[String],
-    reasons: &mut Vec<String>,
-) -> Vec<String> {
-    if raw_files.is_empty() {
-        reasons.push("explicit_inputs_missing".to_owned());
-        return Vec::new();
-    }
-    let suffixes: &[&str] = if runner == RUNNER_KIND_VITEST {
-        TEST_SUFFIXES
-    } else {
-        LINT_SUFFIXES
-    };
-    let mut result: Vec<String> = Vec::new();
-    for raw_file in raw_files {
-        let candidate = workspace.join(raw_file);
-        let canonical = weak_canonicalize(&candidate);
-        let Ok(relative) = canonical.strip_prefix(workspace) else {
-            reasons.push("input_outside_workspace".to_owned());
-            continue;
-        };
-        let rel_str = relative.to_string_lossy().into_owned();
-        let Ok(meta) = fs::symlink_metadata(&candidate) else {
-            reasons.push("input_not_exact_regular_source".to_owned());
-            continue;
-        };
-        if meta.file_type().is_symlink()
-            || !meta.is_file()
-            || !suffixes.iter().any(|s| rel_str.ends_with(s))
-        {
-            reasons.push("input_not_exact_regular_source".to_owned());
-            continue;
-        }
-        if relative.components().any(|c| {
-            matches!(c, std::path::Component::Normal(part) if {
-                let s = part.to_string_lossy().to_lowercase();
-                s.starts_with(".env") || s == ".git" || s == ".guard"
-            })
-        }) {
-            reasons.push("input_protected".to_owned());
-            continue;
-        }
-        if raw_file.replace('\\', "/") != rel_str {
-            reasons.push("input_alias_or_duplicate".to_owned());
-            continue;
-        }
-        result.push(rel_str);
-    }
-    let mut uniq = BTreeSet::new();
-    if result.iter().any(|r| !uniq.insert(r.clone())) {
-        reasons.push("input_alias_or_duplicate".to_owned());
-        return Vec::new();
-    }
-    result
-}
-
-/// `_expected_registry_resolved` (:318-330).
-fn _expected_registry_resolved(expected_path: &str, resolved: Option<&str>) -> bool {
-    let Some(resolved) = resolved else {
-        return false;
-    };
-    let resolved = resolved.trim();
-    if resolved.is_empty() {
-        return false;
-    }
-    resolved == expected_path && !resolved.contains('?') && !resolved.contains('#')
-}
-
-/// `_package_bin_target` (:333-340).
-fn _package_bin_target(payload: Option<&Map<String, Value>>, runner: &str) -> Option<String> {
-    let payload = payload?;
-    let value = payload.get("bin")?;
-    if let Some(s) = value.as_str() {
-        let trimmed = s.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_owned());
-        }
-    }
-    let mapping = object_mapping(value)?;
-    mapping
-        .get(runner)
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
-}
-
-/// `build_local_node_runner_evidence` (:104-228).
-pub fn build_local_node_runner_evidence(
-    workspace: &Path,
-    execution: &LocalPackageExecutionEvidence,
-    tokens: &[String],
-) -> Option<Value> {
-    let mut reasons: Vec<String> = Vec::new();
-    if !execution.local_only_requested {
-        reasons.push("remote_install_not_disabled".to_owned());
-    }
-    if execution.manager_name != "npx" && execution.manager_name != "bunx" {
-        reasons.push("manager_mismatch".to_owned());
-    }
-    let manager = execution.manager.as_ref();
-    if !(manager.is_some() && manager.map(|m| m.status) == Some("available")) {
-        reasons.push("manager_identity_incomplete".to_owned());
-    }
-    let executable = execution.local_executable.as_ref();
-    let executable_path = executable.and_then(|e| e.resolved_path.clone());
-    let executable_hash = executable.and_then(|e| e.content_hash.clone());
-    if !(executable.is_some()
-        && executable.map(|e| e.status) == Some("available")
-        && executable_path.is_some()
-        && executable_hash.is_some())
-    {
-        reasons.push("executable_identity_incomplete".to_owned());
-    }
-    let root_manifest = workspace.join("package.json");
-    let lockfile = {
-        let bun = workspace.join("bun.lock");
-        if bun.exists() {
-            bun
-        } else {
-            workspace.join("package-lock.json")
-        }
-    };
-    let package_root = workspace.join("node_modules");
-
-    let (runner, _tail, input_files) = _runner_arguments(workspace, tokens, &mut reasons);
-    let manifest = read_package_json(&root_manifest);
-    let lock_payload = if lockfile.file_name().and_then(|n| n.to_str()) == Some("bun.lock") {
-        fs::read_to_string(&lockfile)
-            .ok()
-            .and_then(|t| crate::jsonc::loads_jsonc(&t).ok())
-    } else {
-        fs::read_to_string(&lockfile)
-            .ok()
-            .and_then(|t| unique_json_parse(&t))
-    };
-    let declared = manifest
-        .as_ref()
-        .and_then(|m| m.get("devDependencies").or_else(|| m.get("dependencies")))
-        .and_then(|v| v.as_object())
-        .and_then(|deps| deps.get(&runner))
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned);
-    if declared.is_none() {
-        reasons.push("manifest_dependency_missing".to_owned());
-    }
-    let (locked_version, lock_source_ok) =
-        bun_locked_version(lock_payload.as_ref().and_then(|v| v.as_object()), &runner);
-    if locked_version.is_none() {
-        reasons.push("lock_dependency_missing".to_owned());
-    }
-    if !lock_source_ok {
-        reasons.push("lock_source_drift".to_owned());
-    }
-    let installed_manifest = read_package_json(&package_root.join(&runner).join("package.json"));
-    let installed_version = installed_manifest
-        .as_ref()
-        .and_then(|m| m.get("version"))
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned);
-    if installed_version.is_none() {
-        reasons.push("installed_package_missing".to_owned());
-    }
-    let bin_target = _package_bin_target(installed_manifest.as_ref(), &runner);
-    let resolved_bin = bin_target
-        .as_deref()
-        .and_then(|t| resolved_package_bin_target(&package_root.join(&runner), t));
-    let bin_ok = resolved_bin
-        .as_ref()
-        .map(|p| {
-            executable_path
-                .as_deref()
-                .map(|e| weak_canonicalize(Path::new(e)) == *p)
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-    if !bin_ok {
-        reasons.push("executable_mismatch".to_owned());
-    }
-    if declared.as_deref() != installed_version.as_deref()
-        && declared.is_some()
-        && !version_spec_matches(
-            declared.as_deref(),
-            installed_version.as_deref(),
-            &SCRIPT_VERSION_RE,
-            true,
-        )
-    {
-        reasons.push("declared_dependency_mismatch".to_owned());
-    }
-    if !version_spec_matches(
-        installed_version.as_deref(),
-        locked_version.as_deref(),
-        &SCRIPT_VERSION_RE,
-        true,
-    ) {
-        reasons.push("manifest_lock_version_drift".to_owned());
-    }
-    if input_files.is_empty() {
-        reasons.push("explicit_inputs_missing".to_owned());
-    }
-    let mut seen = BTreeSet::new();
-    let normalized: Vec<String> = reasons
-        .iter()
-        .filter(|r| seen.insert((*r).clone()))
-        .cloned()
-        .collect();
-    let binding = _binding_digest(&json!({
-        "schema_version": 1,
-        "runner": runner,
-        "operation": _runner_operation(&runner),
-        "inputs": input_files,
-        "locked_version": locked_version,
-        "installed_version": installed_version,
-        "reasons": normalized,
-    }));
-    Some(json!({
-        "schema_version": 1,
-        "status": if normalized.is_empty() { "complete" } else { "incomplete" },
-        "reasons": normalized,
-        "binding_digest": binding,
-        "runner": runner,
-        "operation": _runner_operation(&runner),
-        "input_files": input_files,
-        "locked_version": locked_version,
-        "installed_version": installed_version,
-        "resolved_bin": resolved_bin.map(|p| p.to_string_lossy().into_owned()),
-        "evidence_scope": "launch_identity",
-        "review_disposition": "review_required",
-        "direct_silent_verification": false,
-    }))
-}
-
-// ===========================================================================
-// contained_node_execution.py (:1-230)
-// ===========================================================================
-
-/// `ContainedNodeResult` (:30-35).
-#[derive(Debug, Clone)]
-pub struct ContainedNodeResult {
-    pub attestation: ContainmentAttestation,
-    pub outputs: Vec<ContainmentCapturedOutput>,
-    pub captured_files: Vec<String>,
-    pub evidence: Option<Value>,
-    pub decision: Option<EffectDecision>,
-    /// stdout captured from the contained process (RTM-020 wire field).
-    pub stdout: String,
-    /// stderr captured from the contained process.
-    pub stderr: String,
-    /// PositiveProof produced before the decision; kept alongside so the
-    /// Python caller can reconstruct its own dataclass without re-deriving.
-    pub proof: Option<PositiveProof>,
-    /// Stable operation identifier matching the Python caller's label.
-    pub operation_id: String,
-}
-
-/// `_resolve_node` (:38-67).
-fn _resolve_node(workspace: &Path, execution: &LocalPackageExecutionEvidence) -> Option<PathBuf> {
-    let executable = execution.local_executable.as_ref()?;
-    if executable.status != "available" {
-        return None;
-    }
-    let raw = executable.resolved_path.as_deref()?;
-    let path = weak_canonicalize(Path::new(raw));
-    if !path.starts_with(workspace) {
-        return None;
-    }
-    if !path.is_file() {
-        return None;
-    }
-    Some(path)
-}
-
-/// `_package_shim_handoff_active` (:70-83).
-fn _package_shim_handoff_active(execution: &LocalPackageExecutionEvidence) -> bool {
-    execution
-        .typescript_launch
-        .as_ref()
-        .and_then(|v| v.get("package_shim_handoff"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-}
-
-/// `_fail_closed_vitest_handoff` (:86-97).
-fn _fail_closed_vitest_handoff(evidence: Option<&Value>) -> bool {
-    evidence
-        .and_then(|v| v.get("vitest_handoff"))
-        .and_then(|v| v.get("fail_closed"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-}
-
-/// `_complete_contained_node_command` (:100-176).
-fn _complete_contained_node_command(
-    workspace: &Path,
-    execution: &LocalPackageExecutionEvidence,
-    tokens: &[String],
-    guard_home: &Path,
-) -> Result<ContainedNodeResult, String> {
-    let node = _resolve_node(workspace, execution).ok_or_else(|| "node_unresolved".to_owned())?;
-    let mut request = ContainmentRequest {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        kind: "node-command".to_owned(),
-        argv: tokens.to_vec(),
-        cwd: workspace.to_string_lossy().into_owned(),
-        env_allowlist: vec![
-            "PATH".to_owned(),
-            "HOME".to_owned(),
-            "LANG".to_owned(),
-            "LC_ALL".to_owned(),
-        ],
-        timeout_seconds: 300,
-        max_output_bytes: 8 * 1024 * 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    request.argv[0] = node.to_string_lossy().into_owned();
-    validate_containment_request(&request)?;
-    let policy = ContainmentPolicy {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        action: ContainmentAction::Run,
-        workspace_read_paths: vec![workspace.to_string_lossy().into_owned()],
-        workspace_write_paths: vec![workspace.to_string_lossy().into_owned()],
-        env_allowlist: request.env_allowlist.clone(),
-        allowed_domains: vec![],
-        timeout_seconds: request.timeout_seconds,
-        max_processes: 64,
-        max_open_files: 1024,
-        max_file_size_bytes: 64 * 1024 * 1024,
-        max_write_bytes_total: 128 * 1024 * 1024,
-        max_output_bytes: request.max_output_bytes,
-        memory_mb: 2048,
-        additional_read_paths: vec![],
-        allow_outbound_network: request.allow_outbound_network,
-    };
-    validate_containment_policy(&policy)?;
-    let run_id = format!("node-{}", _now_epoch_ms());
-    let (exit_code, stdout_text, stderr_text, outputs, started_ms, enforcement, captured) =
-        execute_contained(&request, &policy, guard_home, &run_id)?;
-    let profile_digest = containment_profile_digest(&request, &policy, &enforcement);
-    let attestation_digest = format!(
-        "sha256:{}",
-        hex::encode(Sha256::digest(
-            json!({
-                "exit_code": exit_code,
-                "outputs": outputs.iter().map(|o| &o.sha256).collect::<Vec<_>>(),
-            })
-            .to_string()
-            .as_bytes(),
-        ))
-    );
-    let health = load_current_containment_health(guard_home);
-    let proof = contained_positive_proof(
-        health.as_ref(),
-        &enforcement,
-        &profile_digest,
-        &attestation_digest,
-        &[ProofRequirement::ContainmentIdentity],
-    )
-    .ok();
-    let evidence = build_local_node_runner_evidence(workspace, execution, tokens);
-    let attestation = ContainmentAttestation {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        enforcement: enforcement.clone(),
-        profile_digest: profile_digest.clone(),
-        started_epoch_ms: started_ms,
-        exit_code,
-        outputs: outputs.clone(),
-        artifact_manifests: vec![],
-    };
-    let proof_out = proof.clone();
-    let decision = proof.and_then(|proof| {
-        let factor = DecisionFactor {
-            source: DecisionFactorSource::Effect,
-            reason_code: "contained_node_execution".to_owned(),
-            basis: DecisionBasis {
-                action_floor: GuardAction::Allow,
-                proof_route: Some(ProofRoute::Contained),
-            },
-            segment_ref: None,
-            operation_ref: None,
-            producer_ref: None,
-            evidence_digest: Some(proof.binding_digest.clone()),
-            assessment: None,
-            proof: Some(proof),
-        };
-        evaluate_effect_decision(&EffectDecisionRequest {
-            schema_version: EFFECT_DECISION_SCHEMA_VERSION.to_owned(),
-            factors: vec![factor],
-            uncertainties: vec![],
-        })
-        .ok()
-    });
-    Ok(ContainedNodeResult {
-        attestation,
-        outputs,
-        captured_files: captured,
-        evidence,
-        decision,
-        stdout: stdout_text,
-        stderr: stderr_text,
-        proof: proof_out,
-        operation_id: "node-run".to_owned(),
-    })
-}
-
-/// `try_execute_contained_node_command` (:179-230).
-pub fn try_execute_contained_node_command(
-    workspace: &Path,
-    command_text: &str,
-    guard_home: &Path,
-) -> Option<ContainedNodeResult> {
-    let intent = _parse_intent(command_text)?;
-    if intent.package_manager != "npx" && intent.package_manager != "bunx" {
-        return None;
-    }
-    if !intent
-        .local_executions
-        .first()
-        .map(|e| e.local_only_requested)
-        .unwrap_or(false)
-    {
-        return None;
-    }
-    let execution = intent.local_executions.first()?;
-    if _package_shim_handoff_active(execution) {
-        return None;
-    }
-    if _fail_closed_vitest_handoff(execution.typescript_launch.as_ref()) {
-        return None;
-    }
-    let tokens = intent.command_tokens.clone();
-    _complete_contained_node_command(workspace, execution, &tokens, guard_home).ok()
-}
-
-// ===========================================================================
-// contained_typescript_execution.py (:1-168)
-// ===========================================================================
-
-/// `ContainedTypeScriptResult` (:30-35).
-#[derive(Debug, Clone)]
-pub struct ContainedTypeScriptResult {
-    pub attestation: ContainmentAttestation,
-    pub outputs: Vec<ContainmentCapturedOutput>,
-    pub captured_files: Vec<String>,
-    pub decision: Option<EffectDecision>,
-    pub tree_digest: String,
-    pub closure_digest: String,
-    pub stdout: String,
-    pub stderr: String,
-    pub proof: Option<PositiveProof>,
-    pub operation_id: String,
-}
-
-fn _shell_join(tokens: &[String]) -> String {
-    crate::command_launcher_floors::shlex_join(tokens)
-}
-
-fn _compiler_args(tokens: &[String]) -> (Vec<String>, bool) {
-    // Mirror of typescript_launch_evidence::compiler_args — explicit_package is
-    // any `--package`/`--package=` in argv[1..]; args = tokens after the tsc
-    // index.
-    let explicit_package = tokens[1.min(tokens.len())..]
-        .iter()
-        .any(|token| token == "--package" || token.starts_with("--package="));
-    let executable_index = tokens.iter().skip(1).position(|t| t == "tsc");
-    match executable_index {
-        None => (Vec::new(), explicit_package),
-        Some(index) => (
-            tokens[(index + 2).min(tokens.len())..].to_vec(),
-            explicit_package,
-        ),
-    }
-}
-
-fn _resolve_node_ts(
-    workspace: &Path,
-    execution: &LocalPackageExecutionEvidence,
-) -> Option<PathBuf> {
-    _resolve_node(workspace, execution)
-}
-
-/// `try_execute_contained_typescript` (:46-168).
-pub fn try_execute_contained_typescript(
-    workspace: &Path,
-    command_text: &str,
-    guard_home: &Path,
-) -> Option<ContainedTypeScriptResult> {
-    let intent = _parse_intent(command_text)?;
-    if intent.package_manager != "npx" {
-        return None;
-    }
-    let execution = intent.local_executions.first()?;
-    if !execution.local_only_requested {
-        return None;
-    }
-    let node = _resolve_node_ts(workspace, execution)?;
-    let tokens = intent.command_tokens.clone();
-    let (compiler_args, _explicit_package) = _compiler_args(&tokens);
-    let mut sources: Vec<String> = Vec::new();
-    for arg in &compiler_args {
-        if (arg.ends_with(".ts")
-            || arg.ends_with(".tsx")
-            || arg.ends_with(".cts")
-            || arg.ends_with(".mts"))
-            && !arg.starts_with('-')
-        {
-            sources.push(arg.clone());
-        }
-    }
-    if sources.is_empty() {
-        return None;
-    }
-    let package_root = workspace.join("node_modules").join("typescript");
-    let (tree_digest, _package_inputs, closure_digest, _closure_inputs) =
-        typescript_snapshot_inputs(workspace, &package_root, &sources).ok()?;
-
-    let argv = {
-        let mut a = vec![node.to_string_lossy().into_owned()];
-        a.extend(tokens.iter().cloned());
-        a
-    };
-    let request = ContainmentRequest {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        kind: "typescript-check".to_owned(),
-        argv,
-        cwd: workspace.to_string_lossy().into_owned(),
-        env_allowlist: vec!["PATH".to_owned(), "HOME".to_owned()],
-        timeout_seconds: 120,
-        max_output_bytes: 4 * 1024 * 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_request(&request).ok()?;
-    let policy = ContainmentPolicy {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        action: ContainmentAction::Run,
-        workspace_read_paths: vec![workspace.to_string_lossy().into_owned()],
-        workspace_write_paths: vec![workspace.to_string_lossy().into_owned()],
-        env_allowlist: request.env_allowlist.clone(),
-        allowed_domains: vec![],
-        timeout_seconds: request.timeout_seconds,
-        max_processes: 32,
-        max_open_files: 512,
-        max_file_size_bytes: 32 * 1024 * 1024,
-        max_write_bytes_total: 64 * 1024 * 1024,
-        max_output_bytes: request.max_output_bytes,
-        memory_mb: 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_policy(&policy).ok()?;
-    let run_id = format!("ts-{}", _now_epoch_ms());
-    let (exit_code, _stdout_text, _stderr_text, outputs, started_ms, enforcement, captured) =
-        execute_contained(&request, &policy, guard_home, &run_id).ok()?;
-    let profile_digest = containment_profile_digest(&request, &policy, &enforcement);
-    let attestation = ContainmentAttestation {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        enforcement,
-        profile_digest,
-        started_epoch_ms: started_ms,
-        exit_code,
-        outputs: outputs.clone(),
-        artifact_manifests: vec![],
-    };
-    Some(ContainedTypeScriptResult {
-        attestation,
-        outputs,
-        captured_files: captured,
-        decision: None,
-        tree_digest,
-        closure_digest,
-        stdout: _stdout_text.clone(),
-        stderr: _stderr_text.clone(),
-        proof: None,
-        operation_id: "typecheck".to_owned(),
-    })
 }
 
 // ===========================================================================
@@ -2579,18 +1265,7 @@ pub(crate) fn _promote_output(
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent).map_err(|_| "write_parent".to_owned())?;
             }
-            let tmp = target.with_extension("contained.tmp");
-            {
-                let mut file = File::create(&tmp).map_err(|_| "write_failed".to_owned())?;
-                file.write_all(content)
-                    .map_err(|_| "write_failed".to_owned())?;
-                file.sync_all().map_err(|_| "write_failed".to_owned())?;
-            }
-            if let Some(mode) = operation.mode {
-                fs::set_permissions(&tmp, fs::Permissions::from_mode(mode))
-                    .map_err(|_| "write_failed".to_owned())?;
-            }
-            fs::rename(&tmp, &target).map_err(|_| "write_failed".to_owned())?;
+            crate::semantic_workspace::write_atomic(&target, content, operation.mode)?;
             Ok(operation.path.clone())
         }
         "copy" => {
@@ -2742,248 +1417,6 @@ pub fn shlex_split(command_text: &str) -> Option<Vec<String>> {
 }
 
 // ===========================================================================
-// contained_package_script_execution.py (:1-156)
-// ===========================================================================
-
-/// `ContainedPackageScriptResult` (:30-36).
-#[derive(Debug, Clone)]
-pub struct ContainedPackageScriptResult {
-    pub attestation: ContainmentAttestation,
-    pub outputs: Vec<ContainmentCapturedOutput>,
-    pub captured_files: Vec<String>,
-    pub script: String,
-    pub decision: Option<EffectDecision>,
-    pub stdout: String,
-    pub stderr: String,
-    pub proof: Option<PositiveProof>,
-    pub operation_id: String,
-}
-
-fn _resolve_bun(workspace: &Path, execution: &LocalPackageExecutionEvidence) -> Option<PathBuf> {
-    let executable = execution.local_executable.as_ref()?;
-    if executable.status != "available" {
-        return None;
-    }
-    let raw = executable.resolved_path.as_deref()?;
-    let path = weak_canonicalize(Path::new(raw));
-    if !path.starts_with(workspace) {
-        return None;
-    }
-    if !path.is_file() {
-        return None;
-    }
-    Some(path)
-}
-
-fn _runner_package(tokens: &[String]) -> Option<String> {
-    tokens.get(1).cloned()
-}
-
-/// `try_execute_contained_package_script` (:46-156).
-pub fn try_execute_contained_package_script(
-    workspace: &Path,
-    command_text: &str,
-    guard_home: &Path,
-) -> Option<ContainedPackageScriptResult> {
-    let intent = _parse_intent(command_text)?;
-    if intent.package_manager != "bun" {
-        return None;
-    }
-    let execution = intent.local_executions.first()?;
-    if !execution.local_only_requested {
-        return None;
-    }
-    let bun = _resolve_bun(workspace, execution)?;
-    let tokens = intent.command_tokens.clone();
-    let script = _runner_package(&tokens).unwrap_or_else(|| "run".to_owned());
-
-    let argv = {
-        let mut a = vec![bun.to_string_lossy().into_owned()];
-        a.extend(tokens.iter().skip(1).cloned());
-        a
-    };
-    let request = ContainmentRequest {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        kind: "package-script".to_owned(),
-        argv,
-        cwd: workspace.to_string_lossy().into_owned(),
-        env_allowlist: vec!["PATH".to_owned(), "HOME".to_owned()],
-        timeout_seconds: 120,
-        max_output_bytes: 4 * 1024 * 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_request(&request).ok()?;
-    let policy = ContainmentPolicy {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        action: ContainmentAction::Run,
-        workspace_read_paths: vec![workspace.to_string_lossy().into_owned()],
-        workspace_write_paths: vec![workspace.to_string_lossy().into_owned()],
-        env_allowlist: request.env_allowlist.clone(),
-        allowed_domains: vec![],
-        timeout_seconds: request.timeout_seconds,
-        max_processes: 32,
-        max_open_files: 512,
-        max_file_size_bytes: 32 * 1024 * 1024,
-        max_write_bytes_total: 64 * 1024 * 1024,
-        max_output_bytes: request.max_output_bytes,
-        memory_mb: 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_policy(&policy).ok()?;
-    let run_id = format!("pkg-{}", _now_epoch_ms());
-    let (exit_code, _stdout_text, _stderr_text, outputs, started_ms, enforcement, captured) =
-        execute_contained(&request, &policy, guard_home, &run_id).ok()?;
-    let profile_digest = containment_profile_digest(&request, &policy, &enforcement);
-    let attestation = ContainmentAttestation {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        enforcement,
-        profile_digest,
-        started_epoch_ms: started_ms,
-        exit_code,
-        outputs: outputs.clone(),
-        artifact_manifests: vec![],
-    };
-    let _evidence = build_local_package_script_evidence(workspace, execution);
-    Some(ContainedPackageScriptResult {
-        attestation,
-        outputs,
-        captured_files: captured,
-        script,
-        decision: None,
-        stdout: _stdout_text.clone(),
-        stderr: _stderr_text.clone(),
-        proof: None,
-        operation_id: "package-script".to_owned(),
-    })
-}
-
-// ===========================================================================
-// contained_test_hook.py (:30-264)
-// ===========================================================================
-
-const TEST_HOOK_SCHEMA_VERSION: &str = "contained-test-hook-v1";
-
-/// `HookOutcome` (:44-50).
-#[derive(Debug, Clone)]
-pub struct ContainedTestHookOutcome {
-    pub kind: String,
-    pub status: String,
-    pub attestation: Option<ContainmentAttestation>,
-    pub evidence: Option<Value>,
-}
-
-fn _hook_outcome(kind: &str, status: &str) -> ContainedTestHookOutcome {
-    ContainedTestHookOutcome {
-        kind: kind.to_owned(),
-        status: status.to_owned(),
-        attestation: None,
-        evidence: None,
-    }
-}
-
-/// `_hook_workspace` (:53-60).
-fn _hook_workspace(request: &ContainmentRequest) -> PathBuf {
-    PathBuf::from(&request.cwd)
-}
-
-/// `is_package_test` (:63-72) — dispatch on `npm test|bun test|vitest run`.
-fn _is_package_test(tokens: &[String]) -> bool {
-    if tokens.len() < 2 {
-        return false;
-    }
-    matches!(tokens[0].as_str(), "npm" | "bun" | "pnpm" | "yarn")
-        && matches!(tokens[1].as_str(), "test" | "run")
-}
-
-/// `is_inline_eval` (:75-88) — `node -e` / `node --eval` / `python -c`.
-fn _is_inline_eval(tokens: &[String]) -> bool {
-    if tokens.len() < 2 {
-        return false;
-    }
-    matches!(tokens[0].as_str(), "node" | "python" | "python3")
-        && matches!(tokens[1].as_str(), "-e" | "--eval" | "-c")
-}
-
-/// `resolve_package_test` (:91-108) → (package_manager, script).
-fn _resolve_package_test(tokens: &[String]) -> Option<(String, String)> {
-    if tokens.len() < 2 {
-        return None;
-    }
-    let manager = tokens[0].clone();
-    if !matches!(manager.as_str(), "npm" | "bun" | "pnpm" | "yarn") {
-        return None;
-    }
-    if tokens[1] == "test" {
-        return Some((manager, "test".to_owned()));
-    }
-    if tokens[1] == "run" && tokens.len() >= 3 {
-        return Some((manager, tokens[2].clone()));
-    }
-    None
-}
-
-/// `contained_test_hook` (:111-264): dispatch a contained test invocation to
-/// the correct execution path; fail closed on any ambiguity.
-pub fn contained_test_hook(
-    workspace: &Path,
-    command_text: &str,
-    guard_home: &Path,
-) -> Option<ContainedTestHookOutcome> {
-    let tokens = shlex_split(command_text)?;
-    if tokens.is_empty() {
-        return Some(_hook_outcome("unknown", "reject"));
-    }
-    if _is_inline_eval(&tokens) {
-        return Some(_hook_outcome("inline_eval", "reject"));
-    }
-    if let Some((_manager, _script)) = _resolve_package_test(&tokens) {
-        // route to the contained package-script execution path
-        if let Some(result) =
-            try_execute_contained_package_script(workspace, command_text, guard_home)
-        {
-            return Some(ContainedTestHookOutcome {
-                kind: "package_script".to_owned(),
-                status: "executed".to_owned(),
-                attestation: Some(result.attestation),
-                evidence: None,
-            });
-        }
-        return Some(_hook_outcome("package_script", "reject"));
-    }
-    if _is_package_test(&tokens) {
-        return Some(_hook_outcome("package_test", "reject"));
-    }
-    if let Some(result) = try_execute_contained_node_command(workspace, command_text, guard_home) {
-        return Some(ContainedTestHookOutcome {
-            kind: "node".to_owned(),
-            status: "executed".to_owned(),
-            attestation: Some(result.attestation),
-            evidence: result.evidence,
-        });
-    }
-    if let Some(result) = try_execute_contained_typescript(workspace, command_text, guard_home) {
-        return Some(ContainedTestHookOutcome {
-            kind: "typescript".to_owned(),
-            status: "executed".to_owned(),
-            attestation: Some(result.attestation),
-            evidence: None,
-        });
-    }
-    if let Some(result) = try_execute_contained_workspace_write(workspace, command_text, guard_home)
-    {
-        return Some(ContainedTestHookOutcome {
-            kind: "workspace_write".to_owned(),
-            status: "executed".to_owned(),
-            attestation: Some(result.attestation),
-            evidence: None,
-        });
-    }
-    Some(_hook_outcome("unknown", "reject"))
-}
-
-// ===========================================================================
 // RTM-020 structured-intent entry points
 //
 // The four `try_execute_contained_*_with_intent` functions are the caller-side
@@ -2996,216 +1429,6 @@ pub fn contained_test_hook(
 // legacy self-parse for shadow comparison, but the *intent* binding comes
 // from `manager`/`argv`/`evidence`, never from re-parsing `command_text`.
 // ===========================================================================
-
-/// Structured-intent binding for `try_execute_contained_node_command`.
-///
-/// `argv` is the exact token sequence the shim observed; `evidence` is the
-/// serialized `LocalPackageExecutionEvidence.to_dict()` produced by the
-/// caller's probe. Returns `None` when either is absent/unparseable — the
-/// resident maps that to a Python fallback, never a re-spawn.
-pub fn try_execute_contained_node_command_with_intent(
-    workspace: &Path,
-    manager: &str,
-    argv: &[String],
-    guard_home: &Path,
-    evidence: Option<&Value>,
-) -> Option<ContainedNodeResult> {
-    let execution = evidence.and_then(LocalPackageExecutionEvidence::from_dict)?;
-    if manager != "npx" && manager != "bunx" {
-        return None;
-    }
-    if !execution.local_only_requested {
-        return None;
-    }
-    if _package_shim_handoff_active(&execution) {
-        return None;
-    }
-    if _fail_closed_vitest_handoff(execution.typescript_launch.as_ref()) {
-        return None;
-    }
-    _complete_contained_node_command(workspace, &execution, argv, guard_home).ok()
-}
-
-/// Structured-intent binding for `try_execute_contained_typescript`.
-pub fn try_execute_contained_typescript_with_intent(
-    workspace: &Path,
-    manager: &str,
-    argv: &[String],
-    guard_home: &Path,
-    evidence: Option<&Value>,
-) -> Option<ContainedTypeScriptResult> {
-    let execution = evidence.and_then(LocalPackageExecutionEvidence::from_dict)?;
-    if manager != "npx" {
-        return None;
-    }
-    if !execution.local_only_requested {
-        return None;
-    }
-    let node = _resolve_node_ts(workspace, &execution)?;
-    // `argv` here is the caller-bound token sequence (starts with `tsc` or
-    // the tsx/vite/vitest runner), not the npx-prefixed form.
-    // `_compiler_args` scans past `tsc`, so we synthesise a virtual
-    // `[manager, tsc, ...argv]` prefix to reuse the existing extraction.
-    let mut tokens = vec![manager.to_owned(), "tsc".to_owned()];
-    tokens.extend(argv.iter().skip(1).cloned());
-    let (compiler_args, _explicit_package) = _compiler_args(&tokens);
-    let mut sources: Vec<String> = Vec::new();
-    for arg in &compiler_args {
-        if (arg.ends_with(".ts")
-            || arg.ends_with(".tsx")
-            || arg.ends_with(".cts")
-            || arg.ends_with(".mts"))
-            && !arg.starts_with('-')
-        {
-            sources.push(arg.clone());
-        }
-    }
-    if sources.is_empty() {
-        return None;
-    }
-    let package_root = workspace.join("node_modules").join("typescript");
-    let (tree_digest, _package_inputs, closure_digest, _closure_inputs) =
-        typescript_snapshot_inputs(workspace, &package_root, &sources).ok()?;
-    let argv_full = {
-        let mut a = vec![node.to_string_lossy().into_owned()];
-        a.extend(argv.iter().cloned());
-        a
-    };
-    let request = ContainmentRequest {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        kind: "typescript-check".to_owned(),
-        argv: argv_full,
-        cwd: workspace.to_string_lossy().into_owned(),
-        env_allowlist: vec!["PATH".to_owned(), "HOME".to_owned()],
-        timeout_seconds: 120,
-        max_output_bytes: 4 * 1024 * 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_request(&request).ok()?;
-    let policy = ContainmentPolicy {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        action: ContainmentAction::Run,
-        workspace_read_paths: vec![workspace.to_string_lossy().into_owned()],
-        workspace_write_paths: vec![workspace.to_string_lossy().into_owned()],
-        env_allowlist: request.env_allowlist.clone(),
-        allowed_domains: vec![],
-        timeout_seconds: request.timeout_seconds,
-        max_processes: 32,
-        max_open_files: 512,
-        max_file_size_bytes: 32 * 1024 * 1024,
-        max_write_bytes_total: 64 * 1024 * 1024,
-        max_output_bytes: request.max_output_bytes,
-        memory_mb: 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_policy(&policy).ok()?;
-    let run_id = format!("ts-{}", _now_epoch_ms());
-    let (exit_code, _stdout_text, _stderr_text, outputs, started_ms, enforcement, captured) =
-        execute_contained(&request, &policy, guard_home, &run_id).ok()?;
-    let profile_digest = containment_profile_digest(&request, &policy, &enforcement);
-    let attestation = ContainmentAttestation {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        enforcement,
-        profile_digest,
-        started_epoch_ms: started_ms,
-        exit_code,
-        outputs: outputs.clone(),
-        artifact_manifests: vec![],
-    };
-    Some(ContainedTypeScriptResult {
-        attestation,
-        outputs,
-        captured_files: captured,
-        decision: None,
-        tree_digest,
-        closure_digest,
-        stdout: _stdout_text.clone(),
-        stderr: _stderr_text.clone(),
-        proof: None,
-        operation_id: "typecheck".to_owned(),
-    })
-}
-
-/// Structured-intent binding for `try_execute_contained_package_script`.
-pub fn try_execute_contained_package_script_with_intent(
-    workspace: &Path,
-    manager: &str,
-    argv: &[String],
-    guard_home: &Path,
-    evidence: Option<&Value>,
-) -> Option<ContainedPackageScriptResult> {
-    let execution = evidence.and_then(LocalPackageExecutionEvidence::from_dict)?;
-    if manager != "bun" {
-        return None;
-    }
-    if !execution.local_only_requested {
-        return None;
-    }
-    let bun = _resolve_bun(workspace, &execution)?;
-    let script = _runner_package(argv).unwrap_or_else(|| "run".to_owned());
-    let argv_full = {
-        let mut a = vec![bun.to_string_lossy().into_owned()];
-        a.extend(argv.iter().skip(1).cloned());
-        a
-    };
-    let request = ContainmentRequest {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        kind: "package-script".to_owned(),
-        argv: argv_full,
-        cwd: workspace.to_string_lossy().into_owned(),
-        env_allowlist: vec!["PATH".to_owned(), "HOME".to_owned()],
-        timeout_seconds: 120,
-        max_output_bytes: 4 * 1024 * 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_request(&request).ok()?;
-    let policy = ContainmentPolicy {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        action: ContainmentAction::Run,
-        workspace_read_paths: vec![workspace.to_string_lossy().into_owned()],
-        workspace_write_paths: vec![workspace.to_string_lossy().into_owned()],
-        env_allowlist: request.env_allowlist.clone(),
-        allowed_domains: vec![],
-        timeout_seconds: request.timeout_seconds,
-        max_processes: 32,
-        max_open_files: 512,
-        max_file_size_bytes: 32 * 1024 * 1024,
-        max_write_bytes_total: 64 * 1024 * 1024,
-        max_output_bytes: request.max_output_bytes,
-        memory_mb: 1024,
-        additional_read_paths: vec![],
-        allow_outbound_network: false,
-    };
-    validate_containment_policy(&policy).ok()?;
-    let run_id = format!("pkg-{}", _now_epoch_ms());
-    let (exit_code, _stdout_text, _stderr_text, outputs, started_ms, enforcement, captured) =
-        execute_contained(&request, &policy, guard_home, &run_id).ok()?;
-    let profile_digest = containment_profile_digest(&request, &policy, &enforcement);
-    let attestation = ContainmentAttestation {
-        schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        enforcement,
-        profile_digest,
-        started_epoch_ms: started_ms,
-        exit_code,
-        outputs: outputs.clone(),
-        artifact_manifests: vec![],
-    };
-    let _evidence = build_local_package_script_evidence(workspace, &execution);
-    Some(ContainedPackageScriptResult {
-        attestation,
-        outputs,
-        captured_files: captured,
-        script,
-        decision: None,
-        stdout: _stdout_text.clone(),
-        stderr: _stderr_text.clone(),
-        proof: None,
-        operation_id: "package-script".to_owned(),
-    })
-}
 
 /// Structured-intent binding for `try_execute_contained_workspace_write`.
 /// No `manager`/`evidence` — the write op is fully described by `command_text`.
@@ -3358,130 +1581,6 @@ impl ContainmentAttestation {
     }
 }
 
-impl ContainedNodeResult {
-    /// Serialize to the result envelope the resident returns.
-    /// `proof`/`decision` are flattened into the EffectDecision shape the
-    /// Python caller already knows how to reconstruct.
-    pub fn to_dict(&self) -> Value {
-        let mut m = Map::new();
-        m.insert("attestation".to_owned(), self.attestation.to_dict());
-        m.insert(
-            "outputs".to_owned(),
-            Value::Array(self.outputs.iter().map(|o| o.to_dict()).collect()),
-        );
-        m.insert(
-            "captured_files".to_owned(),
-            Value::Array(
-                self.captured_files
-                    .iter()
-                    .map(|f| Value::String(f.clone()))
-                    .collect(),
-            ),
-        );
-        m.insert(
-            "evidence".to_owned(),
-            self.evidence.clone().unwrap_or(Value::Null),
-        );
-        m.insert(
-            "decision".to_owned(),
-            self.decision
-                .as_ref()
-                .map(effect_decision_to_payload)
-                .unwrap_or(Value::Null),
-        );
-        m.insert("stdout".to_owned(), json!(self.stdout));
-        m.insert("stderr".to_owned(), json!(self.stderr));
-        m.insert(
-            "proof".to_owned(),
-            self.proof
-                .as_ref()
-                .map(|p| serde_json::to_value(p).unwrap_or(Value::Null))
-                .unwrap_or(Value::Null),
-        );
-        m.insert("operation_id".to_owned(), json!(self.operation_id));
-        Value::Object(m)
-    }
-}
-
-impl ContainedTypeScriptResult {
-    pub fn to_dict(&self) -> Value {
-        let mut m = Map::new();
-        m.insert("attestation".to_owned(), self.attestation.to_dict());
-        m.insert(
-            "outputs".to_owned(),
-            Value::Array(self.outputs.iter().map(|o| o.to_dict()).collect()),
-        );
-        m.insert(
-            "captured_files".to_owned(),
-            Value::Array(
-                self.captured_files
-                    .iter()
-                    .map(|f| Value::String(f.clone()))
-                    .collect(),
-            ),
-        );
-        m.insert(
-            "decision".to_owned(),
-            self.decision
-                .as_ref()
-                .map(effect_decision_to_payload)
-                .unwrap_or(Value::Null),
-        );
-        m.insert("tree_digest".to_owned(), json!(self.tree_digest));
-        m.insert("closure_digest".to_owned(), json!(self.closure_digest));
-        m.insert("stdout".to_owned(), json!(self.stdout));
-        m.insert("stderr".to_owned(), json!(self.stderr));
-        m.insert(
-            "proof".to_owned(),
-            self.proof
-                .as_ref()
-                .map(|p| serde_json::to_value(p).unwrap_or(Value::Null))
-                .unwrap_or(Value::Null),
-        );
-        m.insert("operation_id".to_owned(), json!(self.operation_id));
-        Value::Object(m)
-    }
-}
-
-impl ContainedPackageScriptResult {
-    pub fn to_dict(&self) -> Value {
-        let mut m = Map::new();
-        m.insert("attestation".to_owned(), self.attestation.to_dict());
-        m.insert(
-            "outputs".to_owned(),
-            Value::Array(self.outputs.iter().map(|o| o.to_dict()).collect()),
-        );
-        m.insert(
-            "captured_files".to_owned(),
-            Value::Array(
-                self.captured_files
-                    .iter()
-                    .map(|f| Value::String(f.clone()))
-                    .collect(),
-            ),
-        );
-        m.insert(
-            "decision".to_owned(),
-            self.decision
-                .as_ref()
-                .map(effect_decision_to_payload)
-                .unwrap_or(Value::Null),
-        );
-        m.insert("script".to_owned(), json!(self.script));
-        m.insert("stdout".to_owned(), json!(self.stdout));
-        m.insert("stderr".to_owned(), json!(self.stderr));
-        m.insert(
-            "proof".to_owned(),
-            self.proof
-                .as_ref()
-                .map(|p| serde_json::to_value(p).unwrap_or(Value::Null))
-                .unwrap_or(Value::Null),
-        );
-        m.insert("operation_id".to_owned(), json!(self.operation_id));
-        Value::Object(m)
-    }
-}
-
 impl ContainedWorkspaceWriteResult {
     pub fn to_dict(&self) -> Value {
         let mut m = Map::new();
@@ -3526,26 +1625,6 @@ impl ContainedWorkspaceWriteResult {
         );
         m.insert("operation_id".to_owned(), json!(self.operation_id));
         m.insert("output_digest".to_owned(), json!(self.output_digest));
-        Value::Object(m)
-    }
-}
-
-impl ContainedTestHookOutcome {
-    pub fn to_dict(&self) -> Value {
-        let mut m = Map::new();
-        m.insert("kind".to_owned(), json!(self.kind));
-        m.insert("status".to_owned(), json!(self.status));
-        m.insert(
-            "attestation".to_owned(),
-            self.attestation
-                .as_ref()
-                .map(|a| a.to_dict())
-                .unwrap_or(Value::Null),
-        );
-        m.insert(
-            "evidence".to_owned(),
-            self.evidence.clone().unwrap_or(Value::Null),
-        );
         Value::Object(m)
     }
 }
@@ -3630,12 +1709,22 @@ fn _semantic_safe_relative(
         "guard-home",
     ];
     if _is_protected_path(rel)
+        || crate::harness_config_names::path_parts_protected(rel.components().filter_map(
+            |component| match component {
+                std::path::Component::Normal(part) => part.to_str(),
+                _ => None,
+            },
+        ))
         || rel.components().any(|component| {
             let part = component.as_os_str().to_string_lossy().to_lowercase();
             part.starts_with(".env") || SEMANTIC_PROTECTED_NAMES.contains(&part.as_str())
         })
     {
         return Err("workspace_path_protected".to_owned());
+    }
+    if crate::shell_secret_read_support::classify_secret_path(raw, Some(workspace), None).is_some()
+    {
+        return Err("workspace_path_secret".to_owned());
     }
     let candidate = workspace.join(rel);
     let parent = candidate
@@ -3657,6 +1746,9 @@ fn _semantic_safe_relative(
             if must_exist && (!metadata.is_file() || metadata.nlink() != 1) {
                 return Err("workspace_input_not_regular".to_owned());
             }
+            if must_exist && canonical != candidate {
+                return Err("workspace_path_alias".to_owned());
+            }
             if !must_exist && !metadata.is_file() {
                 return Err("workspace_output_not_regular".to_owned());
             }
@@ -3665,79 +1757,6 @@ fn _semantic_safe_relative(
         Err(_) => return Err("workspace_input_not_regular".to_owned()),
     }
     Ok(candidate)
-}
-
-struct SemanticWorkspaceStage(PathBuf);
-
-impl Drop for SemanticWorkspaceStage {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn _copy_semantic_workspace(
-    root: &Path,
-    source: &Path,
-    target: &Path,
-    total_bytes: &mut u64,
-) -> Result<(), String> {
-    fs::create_dir(target).map_err(|_| "workspace_stage_create_failed".to_owned())?;
-    for entry in fs::read_dir(source).map_err(|_| "workspace_stage_read_failed".to_owned())? {
-        let entry = entry.map_err(|_| "workspace_stage_read_failed".to_owned())?;
-        let source_path = entry.path();
-        let target_path = target.join(entry.file_name());
-        let file_type = entry
-            .file_type()
-            .map_err(|_| "workspace_stage_read_failed".to_owned())?;
-        if file_type.is_dir() {
-            _copy_semantic_workspace(root, &source_path, &target_path, total_bytes)?;
-        } else if file_type.is_file() {
-            let source_file =
-                File::open(&source_path).map_err(|_| "workspace_stage_copy_failed".to_owned())?;
-            let mut target_file =
-                File::create(&target_path).map_err(|_| "workspace_stage_copy_failed".to_owned())?;
-            let remaining = MAX_TOTAL_CAPTURED_OUTPUT_BYTES - *total_bytes;
-            let copied = std::io::copy(&mut source_file.take(remaining + 1), &mut target_file)
-                .map_err(|_| "workspace_stage_copy_failed".to_owned())?;
-            if copied > remaining {
-                return Err("workspace_stage_too_large".to_owned());
-            }
-            *total_bytes += copied;
-        } else if file_type.is_symlink() {
-            let link = fs::read_link(&source_path)
-                .map_err(|_| "workspace_stage_read_failed".to_owned())?;
-            if link.is_absolute() || !weak_canonicalize(&source_path).starts_with(root) {
-                return Err("workspace_stage_symlink_unsafe".to_owned());
-            }
-            std::os::unix::fs::symlink(link, &target_path)
-                .map_err(|_| "workspace_stage_copy_failed".to_owned())?;
-        } else {
-            return Err("workspace_stage_entry_unsupported".to_owned());
-        }
-    }
-    Ok(())
-}
-
-fn _stage_semantic_workspace(
-    workspace: &Path,
-    guard_home: &Path,
-    run_id: &str,
-) -> Result<SemanticWorkspaceStage, String> {
-    let parent = guard_home.join("containment");
-    fs::create_dir_all(&parent).map_err(|_| "workspace_stage_create_failed".to_owned())?;
-    let parent = parent
-        .canonicalize()
-        .map_err(|_| "workspace_stage_create_failed".to_owned())?;
-    if parent.starts_with(workspace) {
-        return Err("workspace_stage_inside_workspace".to_owned());
-    }
-    let stage = parent.join(format!("{run_id}-workspace"));
-    let mut total_bytes = 0;
-    if let Err(error) = _copy_semantic_workspace(workspace, workspace, &stage, &mut total_bytes) {
-        let _ = fs::remove_dir_all(&stage);
-        return Err(error);
-    }
-    Ok(SemanticWorkspaceStage(stage))
 }
 
 /// Build the tool argv the Python `_invocation()` produces per semantic op
@@ -3835,17 +1854,19 @@ pub fn try_execute_contained_workspace_write_semantic(
     if let Some(raw_target) = target {
         _semantic_safe_relative(&workspace, raw_target, false).ok()?;
     }
-    let env = environment.cloned().unwrap_or_default();
     let run_id = format!("ww-semantic-{}", _now_epoch_ms());
-    let stage = if operation == "patch-check" {
-        None
-    } else {
-        Some(_stage_semantic_workspace(&workspace, guard_home, &run_id).ok()?)
-    };
-    let execution_workspace = match &stage {
-        Some(staged) => staged.0.canonicalize().ok()?,
-        None => workspace.clone(),
-    };
+    // Every operation, `patch-check` included, runs against a private stage that
+    // holds only eligible files: protected content, symlinks and `.git` state
+    // never reach the tool, and an ineligible workspace returns to review.
+    let (stage, captured_workspace) =
+        crate::semantic_workspace::stage_workspace(&workspace, guard_home, &run_id).ok()?;
+    let execution_workspace = stage.0.canonicalize().ok()?;
+    let mut env = environment.cloned().unwrap_or_default();
+    let tool_path = crate::semantic_workspace::sanitize_tool_path(
+        env.get("PATH").map(String::as_str),
+        &[workspace.as_path(), execution_workspace.as_path()],
+    );
+    env.insert("PATH".to_owned(), tool_path);
     let (argv, target) =
         _semantic_tool_argv(operation, source, target, &execution_workspace, &env).ok()?;
     // A "write" op describing the declared target drives requirements + promote.
@@ -3892,7 +1913,12 @@ pub fn try_execute_contained_workspace_write_semantic(
     validate_containment_request(&request).ok()?;
     let policy = ContainmentPolicy {
         schema_version: CONTAINMENT_SCHEMA_VERSION.to_owned(),
-        action: ContainmentAction::Write,
+        // `patch-check` is a dry run: a read-only policy with no write scope.
+        action: if write_paths.is_empty() {
+            ContainmentAction::Read
+        } else {
+            ContainmentAction::Write
+        },
         workspace_read_paths: vec![execution_workspace.to_string_lossy().into_owned()],
         workspace_write_paths: write_paths,
         env_allowlist: request.env_allowlist.clone(),
@@ -3968,6 +1994,14 @@ pub fn try_execute_contained_workspace_write_semantic(
     let Some(proof) = proof else {
         return Some(_result_without_promotion(attestation, outputs, captured));
     };
+    // Promotion requires the real workspace, target included, to be exactly what
+    // was staged: a concurrent edit while the tool ran returns to review.
+    if !ops.is_empty()
+        && crate::semantic_workspace::capture_workspace(&workspace)
+            .map_or(true, |current| current.digest != captured_workspace.digest)
+    {
+        return Some(_result_without_promotion(attestation, outputs, captured));
+    }
     let mut applied: Vec<String> = Vec::new();
     for op in &ops {
         let Some((staged_output_path, expected_digest)) = staged_output.as_ref() else {
@@ -4013,3 +2047,7 @@ pub fn try_execute_contained_workspace_write_semantic(
         output_digest: staged_output.map(|(_, digest)| digest),
     })
 }
+
+#[cfg(test)]
+#[path = "contained_safe_relative_tests.rs"]
+mod safe_relative_tests;

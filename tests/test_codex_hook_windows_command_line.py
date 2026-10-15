@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_command_line
+from codex_plugin_scanner.guard import codex_hook_command_line, codex_hook_registration
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bridge_config_from_argv, decode_bridge_config_argument
@@ -213,7 +213,9 @@ def test_windows_treats_legacy_posix_entries_as_guard_but_not_launchable() -> No
 
 
 @pytest.mark.parametrize("windows", [False, True])
-def test_health_and_ownership_recognise_rendered_guard_hooks(windows: bool) -> None:
+def test_health_and_ownership_recognise_rendered_guard_hooks(windows: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The fixture paths are illustrative; this test covers command-line recognition only.
+    monkeypatch.setattr(codex_hook_registration, "missing_guard_hook_program", lambda *_args, **_kwargs: None)
     hooks = _hooks(render_hook_command(_argv(windows=windows), windows=windows))
 
     assert live_guard_codex_hooks_intercept(hooks, windows=windows)

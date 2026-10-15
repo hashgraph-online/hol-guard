@@ -25,6 +25,7 @@ pub(super) struct GenericSignals {
     pub(super) package_values: Vec<String>,
     pub(super) path_values: Vec<String>,
     pub(super) url_values: Vec<String>,
+    pub(super) request_body_or_method: bool,
     pub(super) prompt_present: bool,
     pub(super) env_reference: bool,
     pub(super) benign_prompt: bool,
@@ -168,8 +169,15 @@ fn command_from_value_at_depth(
         Value::String(text) => {
             let trimmed = text.trim();
             if trimmed.starts_with('[') || trimmed.starts_with('{') {
-                let parsed = parse_strict_nested_json(trimmed.as_bytes())?;
-                return command_from_value_at_depth(&parsed, depth.saturating_add(1));
+                match parse_strict_nested_json(trimmed.as_bytes()) {
+                    Ok(parsed) => {
+                        return command_from_value_at_depth(&parsed, depth.saturating_add(1));
+                    }
+                    // PowerShell commands open with type literals such as
+                    // `[System.IO.File]::`; text that is not JSON is the command.
+                    Err(GenericExtractionError::Malformed) => {}
+                    Err(error) => return Err(error),
+                }
             }
             Ok(vec![bounded_string(value)?])
         }

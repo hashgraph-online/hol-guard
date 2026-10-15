@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import stat
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -55,6 +57,13 @@ def snapshot(tmp_path, monkeypatch):
             (directory / "command.example.json").write_text('{"id":"command.example"}')
     (root / "contracts/extensions/trust-class-map.v1.json").unlink()
     monkeypatch.setattr(bundle.subprocess, "check_output", lambda *args, **kwargs: SHA + "\n")
+    committed = {path.relative_to(root).as_posix(): path.read_bytes() for path in bundle.selected_files(root)}
+
+    def git_show(command, **kwargs):
+        data = committed.get(command[-1].split(":", 1)[1])
+        return subprocess.CompletedProcess(command, int(data is None), data or b"", b"")
+
+    monkeypatch.setattr(bundle.subprocess, "run", git_show)
     output = tmp_path / "snapshot"
     bundle.create_bundle(root, output, SHA)
     return root, output
@@ -77,6 +86,17 @@ def test_snapshot_is_deterministic_and_source_bound(snapshot, tmp_path):
         bundle.verify_bundle(output, "c" * 40)
     with pytest.raises(ValueError, match="checkout"):
         bundle.create_bundle(root, second, "c" * 40)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_snapshot_rejects_public_records_not_matching_committed_git(snapshot, tmp_path, missing):
+    root, _ = snapshot
+    path = root / "contributions/extensions/command.example.json"
+    if missing:
+        path = root / "contributions/extensions/command.new.json"
+    path.write_text('{"id":"command.changed"}')
+    with pytest.raises(ValueError, match="committed source"):
+        bundle.create_bundle(root, tmp_path / "unreviewed", SHA)
 
 
 def test_snapshot_ignores_a_leftover_unreviewed_repository_map(snapshot, tmp_path):
@@ -174,7 +194,7 @@ class PublisherRemote:
         if method == "PATCH":
             assert endpoint.endswith("/releases/123")
             assert "draft=false" in args and "make_latest=false" in args
-            assert set(self.downloads) == {bundle.ARCHIVE, bundle.MANIFEST}
+            assert set(self.downloads) == {bundle.ARCHIVE, bundle.MANIFEST, publisher.PROVENANCE}
             self.release["draft"] = False
             self.published = self.tag_exists = True
             return json.dumps(self.release)
@@ -213,6 +233,8 @@ class PublisherRemote:
 @pytest.fixture
 def remote(snapshot, monkeypatch):
     state = PublisherRemote(snapshot[1])
+    (snapshot[1] / publisher.PROVENANCE).write_text("signed provenance")
+    monkeypatch.setattr(publisher, "verify_provenance", lambda *args: None)
     monkeypatch.setattr(publisher, "github", state.github)
     monkeypatch.setattr(publisher, "upload_asset", state.upload)
     monkeypatch.setattr(publisher, "download_asset", state.download)
@@ -221,10 +243,10 @@ def remote(snapshot, monkeypatch):
 
 @pytest.mark.parametrize("draft", [True, False])
 def test_existing_matching_snapshot_is_verified_without_overwrite(snapshot, remote, draft):
-    remote.set_release(draft, [bundle.ARCHIVE, bundle.MANIFEST])
+    remote.set_release(draft, [bundle.ARCHIVE, bundle.MANIFEST, publisher.PROVENANCE])
     publisher.publish(snapshot[1], SHA)
     assert not remote.created and not remote.uploads
-    assert set(remote.downloads) == {bundle.ARCHIVE, bundle.MANIFEST}
+    assert set(remote.downloads) == {bundle.ARCHIVE, bundle.MANIFEST, publisher.PROVENANCE}
     assert remote.published is draft
 
 
@@ -234,8 +256,8 @@ def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snap
     remote.bad_download = not matching
     if matching:
         publisher.publish(snapshot[1], SHA)
-        assert remote.uploads == [bundle.MANIFEST]
-        assert remote.published and len(remote.downloads) == 2
+        assert set(remote.uploads) == {bundle.MANIFEST, publisher.PROVENANCE}
+        assert remote.published and len(remote.downloads) == 3
     else:
         with pytest.raises(ValueError, match="refusing to overwrite"):
             publisher.publish(snapshot[1], SHA)
@@ -245,7 +267,7 @@ def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snap
 def test_new_snapshot_uses_create_response_until_downloaded_assets_verify(snapshot, remote):
     publisher.publish(snapshot[1], SHA)
     assert remote.created and remote.published
-    assert set(remote.uploads) == {bundle.ARCHIVE, bundle.MANIFEST}
+    assert set(remote.uploads) == {bundle.ARCHIVE, bundle.MANIFEST, publisher.PROVENANCE}
     assert len([c for c in remote.calls if "/commits/" in c[1]]) == 1
     created = next(i for i, c in enumerate(remote.calls) if "POST" in c)
     assert not any("/releases/tags/" in c[1] or "--paginate" in c for c in remote.calls[created + 1 :])
@@ -257,6 +279,69 @@ def test_corrupt_new_upload_keeps_verified_draft_unpublished(snapshot, remote):
         publisher.publish(snapshot[1], SHA)
     assert remote.created and remote.uploads and remote.downloads
     assert remote.release["draft"] is True and not remote.published
+
+
+def test_provenance_verifies_both_subjects_and_trusted_source(snapshot, monkeypatch):
+    _, output = snapshot
+    (output / publisher.PROVENANCE).write_text("signed provenance")
+    calls = []
+    monkeypatch.setattr(publisher, "github", lambda *args: calls.append(args))
+    publisher.verify_provenance(output, SHA)
+    assert {Path(call[2]).name for call in calls} == {bundle.ARCHIVE, bundle.MANIFEST}
+    for call in calls:
+        assert call[:2] == ("attestation", "verify")
+        for flag, value in (
+            ("--bundle", str(output / publisher.PROVENANCE)),
+            ("--repo", publisher.REPOSITORY),
+            ("--signer-workflow", publisher.WORKFLOW),
+            ("--source-ref", "refs/heads/main"),
+            ("--source-digest", SHA),
+        ):
+            assert call[call.index(flag) + 1] == value
+
+
+def test_missing_provenance_is_rejected_before_release_creation(snapshot, monkeypatch):
+    calls = []
+    monkeypatch.setattr(publisher, "github", lambda *args: calls.append(args))
+    with pytest.raises(ValueError, match="provenance is missing"):
+        publisher.publish(snapshot[1], SHA)
+    assert not calls
+
+
+@pytest.mark.parametrize("failure_call", [1, 2])
+def test_failed_provenance_never_publishes_a_release(snapshot, remote, monkeypatch, failure_call):
+    verifications = []
+
+    def verify(directory, expected_sha):
+        verifications.append((directory, expected_sha))
+        if len(verifications) == failure_call:
+            raise RuntimeError("invalid provenance signature")
+
+    monkeypatch.setattr(publisher, "verify_provenance", verify)
+    with pytest.raises(RuntimeError, match="invalid provenance"):
+        publisher.publish(snapshot[1], SHA)
+    assert not remote.published
+    assert remote.created is (failure_call == 2)
+
+
+def test_retry_preserves_existing_provenance_bytes(snapshot, remote, monkeypatch):
+    remote.set_release(False, [bundle.ARCHIVE, bundle.MANIFEST, publisher.PROVENANCE])
+    original_download = remote.download
+    verifications = []
+
+    def download(asset, destination):
+        original_download(asset, destination)
+        if asset["name"] == publisher.PROVENANCE:
+            destination.write_text("earlier signed provenance")
+
+    monkeypatch.setattr(publisher, "download_asset", download)
+    monkeypatch.setattr(
+        publisher, "verify_provenance",
+        lambda directory, sha: verifications.append((directory / publisher.PROVENANCE).read_text()),
+    )
+    publisher.publish(snapshot[1], SHA)
+    assert verifications == ["signed provenance", "earlier signed provenance"]
+    assert not remote.uploads
 
 
 @pytest.mark.parametrize("draft,status", [(False, 404), (True, 403), (True, 503)])
@@ -363,7 +448,21 @@ def test_publication_is_postmerge_and_never_writes_a_branch():
     assert "scripts/publish_extension_snapshot.py" in commands
 
 
-def test_legacy_directory_changes_are_accepted_by_existing_path_gate():
+def test_contribution_gate_accepts_public_records_and_rejects_shared_catalogs():
     workflow = (ROOT / ".github/workflows/generated-artifacts-guard.yml").read_text()
-    assert "owned+='|^docs/guard/extensions/" not in workflow
-    assert "native-command-program|command-catalog" in workflow
+    patterns = re.findall(r"^\s*owned\+?='([^']*)'$", workflow, flags=re.MULTILINE)
+    assert patterns
+    owned = re.compile("".join(patterns))
+    for path in (
+        "contributions/extensions/command.example.json",
+        "contributions/command-sources/command.example.json",
+        "contracts/extensions/trust/command.example.v1.json",
+    ):
+        assert not owned.search(path), path
+    for path in (
+        "docs/guard/extensions/catalog.v1.json",
+        "docs/guard/extensions/catalog.v2.json",
+        "contracts/extensions/command-catalog.v1.json",
+        "contracts/extensions/build-descriptors/command.example.json",
+    ):
+        assert owned.search(path), path

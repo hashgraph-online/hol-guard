@@ -241,12 +241,6 @@ class HarnessProtectionContract:
 
         return self.capability_events
 
-    @property
-    def event_capabilities(self) -> tuple[HarnessEventCapability, ...]:
-        """Compatibility alias for callers using the event-oriented name."""
-
-        return self.capability_events
-
 
 @dataclass(frozen=True, slots=True)
 class HarnessSetupStep:

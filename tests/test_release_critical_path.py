@@ -293,8 +293,15 @@ def test_feed_discovery_skips_unfinished_and_ambiguous_releases(tmp_path):
 
 def test_compilation_and_signing_run_beside_packaging_and_registry_verification():
     jobs = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
-    assert jobs["precompile-native"]["needs"] == "authorize-release"
-    assert jobs["build"]["needs"] == "authorize-release"
+    assert jobs["precompile-native"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    assert jobs["resolve-alpha-version"]["needs"] == "authorize-release"
+    # Build + Verify adopts the resolved alpha version so it can never differ from the binaries.
+    assert jobs["build"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    assert "needs.authorize-release.result == 'success'" in jobs["build"]["if"]
+    assert "!cancelled()" in jobs["build"]["if"]
+    version_step = next(step for step in jobs["build"]["steps"] if step.get("id") == "version")
+    assert version_step["env"]["RESOLVED_ALPHA_VERSION"] == "${{ needs.resolve-alpha-version.outputs.version }}"
+    assert 'RELEASE_VERSION="$RESOLVED_ALPHA_VERSION"' in version_step["run"]
     assert jobs["build-native-guard-wheels"]["needs"] == ["build", "precompile-native"]
     assert "publish-main-pypi" not in jobs["publish-main-assets"]["needs"]
     assert jobs["wake-main-core-feeds"]["needs"] == ["build", "publish-main-assets"]
@@ -403,6 +410,28 @@ def test_signed_core_waits_for_the_exact_registry_publish_job(monkeypatch, concl
         assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is expected
     with pytest.raises(ValueError, match="authorized release dispatch"):
         publication_ready("hashgraph-online/hol-guard", "123", "b" * 40)
+
+
+def test_signed_core_reads_the_publish_job_from_the_first_attempt(monkeypatch):
+    # Publish jobs run only on attempt 1. Rerunning a later failed job marks them
+    # skipped in the latest attempt, which must not withhold updater assets.
+    run = {
+        "path": ".github/workflows/publish.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "a" * 40,
+        "conclusion": "success",
+    }
+    job_paths = []
+
+    def api(args, **kwargs):
+        if "--paginate" not in args:
+            return json.dumps(run)
+        job_paths.append(next(arg for arg in args if "/jobs" in arg))
+        return "success\n" if "/attempts/1/jobs" in job_paths[-1] else "skipped\n"
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is True
+    assert job_paths == ["repos/hashgraph-online/hol-guard/actions/runs/123/attempts/1/jobs?per_page=100"]
 
 
 def test_no_public_release_is_created_before_manual_registry_success(tmp_path, monkeypatch):

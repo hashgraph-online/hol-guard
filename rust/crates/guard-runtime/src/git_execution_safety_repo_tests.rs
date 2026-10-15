@@ -258,8 +258,92 @@ fn push_requires_a_stable_account_and_a_checked_out_branch() {
     assert!(!crate::git_execution_safety_checks::decide(&request).allowed);
     request.branch = Some("-main".to_owned());
     assert!(!crate::git_execution_safety_checks::decide(&request).allowed);
+    // `HEAD` names the checked-out branch.
+    request.branch = Some("HEAD".to_owned());
+    assert!(crate::git_execution_safety_checks::decide(&request).allowed);
     fixture.config("remote.origin.pushurl", "https://example.invalid/x.git");
     assert!(!fixture.allowed(Check::PushOrigin));
+}
+
+#[test]
+fn push_of_a_branch_the_command_creates_requires_that_it_does_not_exist_yet() {
+    let fixture = Fixture::new("push-created");
+    if !fixture.host_git_is_trusted() {
+        return;
+    }
+    let decide = |branch: &str, reference: Option<&str>| {
+        let mut request = fixture.request(Check::PushOrigin);
+        request.branch = Some(branch.to_owned());
+        request.reference = reference.map(str::to_owned);
+        crate::git_execution_safety_checks::decide(&request).allowed
+    };
+    assert!(!decide("feature/new", None));
+    assert!(decide("feature/new", Some("HEAD")));
+    // The checked-out branch, `HEAD` itself and any other start point stay out.
+    assert!(!decide("main", Some("HEAD")));
+    assert!(!decide("HEAD", Some("HEAD")));
+    assert!(!decide("feature/new", Some("main")));
+    // A branch that already exists would make `switch -c` fail or push it.
+    git(
+        &fixture.repository,
+        &fixture.home,
+        &["branch", "feature/new"],
+    );
+    assert!(!decide("feature/new", Some("HEAD")));
+    // A known `origin` branch of that name would be moved by the push.
+    assert!(decide("feature/three", Some("HEAD")));
+    git(
+        &fixture.repository,
+        &fixture.home,
+        &["update-ref", "refs/remotes/origin/feature/three", "HEAD"],
+    );
+    assert!(!decide("feature/three", Some("HEAD")));
+    // Configuration for the new branch is still read.
+    assert!(decide("feature/two", Some("HEAD")));
+    fixture.config("branch.feature/two.pushRemote", "elsewhere");
+    assert!(!decide("feature/two", Some("HEAD")));
+}
+
+#[test]
+fn push_from_a_repository_with_linked_worktrees_reads_the_worktree_scope_only_when_enabled() {
+    let fixture = Fixture::new("push-linked");
+    if !fixture.host_git_is_trusted() {
+        return;
+    }
+    let linked = fixture.root.join("linked");
+    git(
+        &fixture.repository,
+        &fixture.home,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "feature/one",
+            linked.to_str().unwrap(),
+        ],
+    );
+    assert!(fixture.allowed(Check::PushOrigin));
+    let mut request = fixture.request(Check::PushOrigin);
+    request.cwd = linked.to_string_lossy().into_owned();
+    request.branch = Some("feature/one".to_owned());
+    assert!(crate::git_execution_safety_checks::decide(&request).allowed);
+    request.branch = Some("HEAD".to_owned());
+    assert!(crate::git_execution_safety_checks::decide(&request).allowed);
+    // Once enabled, a worktree-scoped push URL reroutes the push.
+    fixture.config("extensions.worktreeConfig", "true");
+    assert!(crate::git_execution_safety_checks::decide(&request).allowed);
+    git(
+        &linked,
+        &fixture.home,
+        &[
+            "config",
+            "--worktree",
+            "remote.origin.pushurl",
+            "https://example.invalid/x.git",
+        ],
+    );
+    assert!(!crate::git_execution_safety_checks::decide(&request).allowed);
 }
 
 #[test]
@@ -428,4 +512,116 @@ fn absent_account_config_directory_is_a_stable_global_config() {
         Some(&account),
     ));
     let _ = std::fs::remove_dir_all(&home);
+}
+
+const SSH_ORIGIN: &str = "git@github.com:acme/app.git";
+
+#[test]
+fn single_instead_of_rewrite_to_github_https_is_proven_for_fetch_and_push() {
+    let fixture = Fixture::new("instead-of");
+    if !fixture.host_git_is_trusted() {
+        return;
+    }
+    fixture.config("remote.origin.url", SSH_ORIGIN);
+    assert!(!fixture.allowed(Check::FetchOrigin), "raw ssh origin");
+    assert!(!fixture.allowed(Check::PushOrigin), "raw ssh origin");
+    fixture.config("url.https://github.com/.insteadOf", "git@github.com:");
+    assert!(fixture.allowed(Check::FetchOrigin));
+    assert!(fixture.allowed(Check::PushOrigin));
+
+    // A rewrite that does not end on the allowed https form stays refused.
+    fixture.config("remote.origin.url", "git@gitlab.example:acme/app.git");
+    assert!(!fixture.allowed(Check::FetchOrigin));
+    fixture.config("remote.origin.url", SSH_ORIGIN);
+    // A second rule, a different base or a push-only rewrite stays refused.
+    fixture.config("url.https://github.com/.insteadOf", "git@github.com:");
+    git(
+        &fixture.repository,
+        &fixture.home,
+        &[
+            "config",
+            "--add",
+            "url.https://github.com/.insteadOf",
+            "git@github.com:acme",
+        ],
+    );
+    assert!(!fixture.allowed(Check::FetchOrigin), "extra prefix value");
+    git(
+        &fixture.repository,
+        &fixture.home,
+        &["config", "--unset-all", "url.https://github.com/.insteadOf"],
+    );
+    fixture.config("url.https://github.com/.insteadOf", "git@github.com:");
+    fixture.config("url.https://elsewhere.example/.pushInsteadOf", "https://");
+    assert!(!fixture.allowed(Check::PushOrigin), "pushInsteadOf");
+    git(
+        &fixture.repository,
+        &fixture.home,
+        &[
+            "config",
+            "--unset-all",
+            "url.https://elsewhere.example/.pushInsteadOf",
+        ],
+    );
+    fixture.config(
+        "url.https://elsewhere.example/.insteadOf",
+        "git@github.com:",
+    );
+    assert!(!fixture.allowed(Check::FetchOrigin), "non-github rewrite");
+}
+
+#[test]
+fn instead_of_selection_is_longest_prefix_and_never_ambiguous() {
+    use crate::git_execution_safety_config::rewritten_remote_url;
+    let rules = |pairs: &[(&str, &str)]| {
+        let mut config = crate::git_execution_safety_config::GitConfig::new();
+        for (base, prefix) in pairs {
+            config
+                .entry(format!("url.{base}.insteadof"))
+                .or_default()
+                .push((*prefix).to_owned());
+        }
+        config
+    };
+    let url = SSH_ORIGIN;
+    let single = rules(&[("https://github.com/", "git@github.com:")]);
+    assert_eq!(
+        rewritten_remote_url(&single, url).as_deref(),
+        Some("https://github.com/acme/app.git")
+    );
+    let longer = rules(&[
+        ("https://github.com/", "git@github.com:"),
+        ("https://mirror.example/", "git@github.com:acme"),
+    ]);
+    assert_eq!(
+        rewritten_remote_url(&longer, url).as_deref(),
+        Some("https://mirror.example//app.git")
+    );
+    let tied = rules(&[
+        ("https://a.example/", "git@"),
+        ("https://b.example/", "git@"),
+    ]);
+    assert_eq!(rewritten_remote_url(&tied, url), None);
+    assert_eq!(rewritten_remote_url(&rules(&[("x", "")]), url), None);
+    assert_eq!(rewritten_remote_url(&rules(&[]), url).as_deref(), Some(url));
+}
+
+#[test]
+fn bloated_repository_config_still_proves_fetch_and_repo_hooks_path_does_not() {
+    let fixture = Fixture::new("bloated");
+    if !fixture.host_git_is_trusted() {
+        return;
+    }
+    let mut config = std::fs::read_to_string(fixture.repository.join(".git/config")).unwrap();
+    for index in 0..9000 {
+        config.push_str(&format!(
+            "[branch \"b{index}\"]\n\tremote = origin\n\tmerge = refs/heads/b{index}\n"
+        ));
+    }
+    assert!(config.len() > 400_000);
+    std::fs::write(fixture.repository.join(".git/config"), config).unwrap();
+    assert!(fixture.allowed(Check::FetchOrigin));
+    assert!(fixture.allowed(Check::PushOrigin));
+    fixture.config("core.hooksPath", "hooks-in-repo");
+    assert!(!fixture.allowed(Check::PushOrigin), "repo-local hooksPath");
 }

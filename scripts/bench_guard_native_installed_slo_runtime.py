@@ -12,7 +12,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner  # noqa: E402
-from codex_plugin_scanner.guard.config import hook_fast_path_enabled  # noqa: E402
 from codex_plugin_scanner.guard.native_runtime import native_mode, native_runtime_status  # noqa: E402
 from scripts.native_slo_contract import (  # noqa: E402
     clear_proof_environment,
@@ -106,7 +105,6 @@ def _runtime_summary(runtime: Path) -> dict[str, object]:
     source_package = (_REPO_ROOT / "src" / "codex_plugin_scanner").resolve()
     package_origin = "source_tree" if package_path.is_relative_to(source_package) else "installed"
     _require(package_origin == "installed", "benchmark imported the source tree")
-    _require(hook_fast_path_enabled(), "native hook fast path is disabled")
     return {
         "mode": status.mode,
         "target": capabilities.target,

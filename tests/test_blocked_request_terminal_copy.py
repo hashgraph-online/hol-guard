@@ -99,6 +99,7 @@ def test_native_package_denial_clears_approval_copy(tmp_path, harness):
     assert row == ("block", 0)
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 @pytest.mark.parametrize("stage", ["pretool", "permission"])
 def test_copilot_native_denial_records_no_prompt(tmp_path, monkeypatch, capsys, stage):
     context = _context(tmp_path)

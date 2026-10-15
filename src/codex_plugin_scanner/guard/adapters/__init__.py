@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
-from .base import HarnessAdapter, HarnessContext
+if TYPE_CHECKING:
+    from .base import HarnessAdapter, HarnessContext
 
 _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".codex", "CodexHarnessAdapter"),
@@ -52,6 +54,14 @@ def list_adapters() -> tuple[HarnessAdapter, ...]:
     """Return the known harness adapters."""
 
     return _adapters()
+
+
+def __getattr__(name: str) -> Any:
+    if name in {"HarnessAdapter", "HarnessContext"}:
+        value = getattr(import_module(".base", __name__), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = ["HarnessContext", "get_adapter", "list_adapters"]

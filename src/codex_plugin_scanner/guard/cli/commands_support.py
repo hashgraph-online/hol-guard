@@ -24,7 +24,6 @@ from . import commands_support_runtime_artifacts as _commands_support_runtime_ar
 from . import commands_support_codex_commands as _commands_support_codex_commands
 from . import commands_support_codex_reads as _commands_support_codex_reads
 from . import commands_support_codex_git_config as _commands_support_codex_git_config
-from . import commands_support_codex_git as _commands_support_codex_git
 from . import commands_support_codex_paths as _commands_support_codex_paths
 from . import commands_support_runtime_resolution as _commands_support_runtime_resolution
 from . import commands_support_connect as _commands_support_connect
@@ -44,6 +43,8 @@ from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
 from . import commands_dispatch_cloud_review as _commands_dispatch_cloud_review
 from . import commands_hook as _commands_hook
+from . import commands_remove_hooks as _commands_remove_hooks
+from . import commands_repair as _commands_repair
 from . import commands_router as _commands_router
 from . import commands_isolation as _commands_isolation
 
@@ -62,7 +63,6 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_support_codex_commands,
     _commands_support_codex_reads,
     _commands_support_codex_git_config,
-    _commands_support_codex_git,
     _commands_support_codex_paths,
     _commands_support_runtime_resolution,
     _commands_support_connect,
@@ -82,6 +82,8 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_dispatch_cloud,
     _commands_dispatch_cloud_review,
     _commands_hook,
+    _commands_remove_hooks,
+    _commands_repair,
     _commands_router,
     _commands_isolation,
 )

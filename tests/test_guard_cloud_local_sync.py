@@ -18,15 +18,38 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_tests_without_resident_posture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the cloud snapshot tests independent of the posture resident op.
+
+    These tests assert the cloud snapshot, not the supply-chain posture, and
+    some pin that building it opens a single store connection and leaves the
+    stored integrity state untouched. The posture op needs the resident's
+    verifier key, which provisioning writes for a throwaway guard home, and
+    the Windows enterprise lab cannot provision a resident for such homes at
+    all. The posture bridge has its own tests against the real resident.
+    """
+
+    from codex_plugin_scanner.guard import local_supply_chain
+
+    monkeypatch.setattr(
+        local_supply_chain,
+        "native_local_supply_chain_posture",
+        lambda *_args, **_kwargs: {"status": "not_configured"},
+    )
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -440,6 +463,7 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
 
 def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    provision_native_verifier_key_for_store(store)
     opened = 0
     original = sqlite3.connect
 
@@ -473,6 +497,7 @@ def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:
 
 def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    provision_native_verifier_key_for_store(store)
     cached_state = {
         "backend": "cached-backend",
         "mode": "degraded",
@@ -1085,7 +1110,7 @@ def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
     monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "25")
 
     cohort = [
-        guard_runner_module._canonical_policy_enforcement_enabled(
+        runner_native_sync.canonical_policy_enforcement_enabled(
             device_id=f"device-{index}",
             workspace_id="workspace-alpha",
         )
@@ -1095,7 +1120,7 @@ def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
     assert any(cohort)
     assert not all(cohort)
     assert cohort == [
-        guard_runner_module._canonical_policy_enforcement_enabled(
+        runner_native_sync.canonical_policy_enforcement_enabled(
             device_id=f"device-{index}",
             workspace_id="workspace-alpha",
         )

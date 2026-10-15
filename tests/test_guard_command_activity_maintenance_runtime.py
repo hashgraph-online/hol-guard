@@ -13,6 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import server as daemon_server
+from tests.daemon_control_patching import patch_daemon_global
 
 
 class _SequencedEvent:
@@ -51,12 +52,6 @@ class _FakeServer:
 
 
 class _ThreadStillStopping:
-    joined: bool = False
-
-    def join(self, timeout: float | None = None) -> None:
-        assert timeout == 5
-        self.joined = True
-
     def is_alive(self) -> bool:
         return True
 
@@ -78,7 +73,7 @@ def test_long_lived_daemon_rechecks_daily_and_uses_global_retention(monkeypatch:
         loaded.append((home, workspace))
         return _LoadedConfig(evidence_retain_days=90)
 
-    monkeypatch.setattr(daemon_server, "load_guard_config", load)
+    patch_daemon_global(monkeypatch, "load_guard_config", load)
     daemon_server.GuardDaemonServer._maintain_command_activity_best_effort(service)
     assert loaded == [(Path("/global-home"), None)]
 
@@ -87,8 +82,6 @@ def test_daemon_restart_rejects_a_still_stopping_maintenance_worker() -> None:
     service = object.__new__(daemon_server.GuardDaemonServer)
     worker = _ThreadStillStopping()
     service._command_activity_maintenance_thread = cast(threading.Thread, cast(object, worker))
-    service._join_command_activity_maintenance()
-    assert worker.joined is True
     assert service._command_activity_maintenance_thread is not None
     with pytest.raises(RuntimeError, match="still stopping"):
         service._require_command_activity_maintenance_stopped()

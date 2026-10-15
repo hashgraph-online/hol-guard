@@ -9,22 +9,35 @@
 
 #[cfg(test)]
 thread_local! {
-    static FORCE_WINDOWS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FORCE_WINDOWS: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
 }
 
 /// Runs `body` as if Guard were evaluating PowerShell commands on Windows.
 #[cfg(test)]
 pub(crate) fn with_windows_powershell_reads<T>(body: impl FnOnce() -> T) -> T {
-    FORCE_WINDOWS.with(|flag| flag.set(true));
+    with_forced_host(true, body)
+}
+
+/// Runs `body` as if Guard were evaluating commands on a non-Windows host,
+/// whatever platform the tests actually run on.
+#[cfg(test)]
+pub(crate) fn with_posix_powershell_host<T>(body: impl FnOnce() -> T) -> T {
+    with_forced_host(false, body)
+}
+
+#[cfg(test)]
+fn with_forced_host<T>(windows: bool, body: impl FnOnce() -> T) -> T {
+    let previous = FORCE_WINDOWS.with(|flag| flag.replace(Some(windows)));
     let result = body();
-    FORCE_WINDOWS.with(|flag| flag.set(false));
+    FORCE_WINDOWS.with(|flag| flag.set(previous));
     result
 }
 
-pub(crate) fn windows_powershell_reads() -> bool {
+/// Host gate: PowerShell parsing and cmdlet mapping only apply on Windows.
+pub(crate) fn windows_powershell_host() -> bool {
     #[cfg(test)]
-    if FORCE_WINDOWS.with(std::cell::Cell::get) {
-        return true;
+    if let Some(forced) = FORCE_WINDOWS.with(std::cell::Cell::get) {
+        return forced;
     }
     cfg!(windows)
 }

@@ -128,6 +128,8 @@ pub(crate) fn evaluate_approval_gate_request(
     request: &ApprovalGateRequestV1,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request).map_err(str::to_owned)?;
+    let _session =
+        crate::approval_gate_verify::SessionSignalsScope::enter(&request.session_signals);
     let (status, code, error_status, message, payload) = match evaluate(request) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), None, None, Some(payload)),
         Err(e) => (
@@ -173,6 +175,8 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
     let guard_home = PathBuf::from(&request.guard_home);
     let now = request.now.as_deref();
     let params = request.params.as_ref();
+    // An absent settings payload is an empty one, not "nothing to check".
+    let empty_payload = Value::Object(serde_json::Map::new());
     let input = request.approval_gate_input.as_ref().map(input_from_wire);
     let grant = request.approval_gate_grant.as_ref().map(grant_from_wire);
     let input_ref = input.as_ref();
@@ -225,11 +229,23 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
             Ok(json!({"validated": true}))
         }
         ApprovalGateMethodV1::UpdateSettings => {
-            let cfg = settings::update_settings(&guard_home, grants, params, grant_ref, now)?;
+            let cfg = settings::update_settings(
+                &guard_home,
+                grants,
+                Some(params.unwrap_or(&empty_payload)),
+                grant_ref,
+                now,
+            )?;
             Ok(cfg.to_dict())
         }
         ApprovalGateMethodV1::ValidateSettingsUpdate => {
-            settings::validate_settings_update(&guard_home, grants, params, grant_ref, now)?;
+            settings::validate_settings_update(
+                &guard_home,
+                grants,
+                Some(params.unwrap_or(&empty_payload)),
+                grant_ref,
+                now,
+            )?;
             Ok(json!({"validated": true}))
         }
         ApprovalGateMethodV1::RevokeCooldown => {
@@ -381,6 +397,10 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
 }
 
 #[cfg(test)]
+#[path = "approval_gate_vector_tests.rs"]
+mod vector_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -413,6 +433,7 @@ mod tests {
             now: None,
             duration_seconds: None,
             device_label: None,
+            session_signals: vec!["sid=test".to_owned()],
         }
     }
 
@@ -465,7 +486,7 @@ mod tests {
             serde_json::from_slice(&evaluate_approval_gate_request(&req).unwrap()).unwrap();
         assert_eq!(r["status"].as_str().unwrap(), "error");
         assert_eq!(r["code"].as_str().unwrap(), "approval_gate_weak_password");
-        assert_eq!(r["error_status"].as_i64().unwrap(), 400);
+        assert_eq!(r["error_status"].as_i64().unwrap(), 403);
         let _ = std::fs::remove_dir_all(&home);
     }
 

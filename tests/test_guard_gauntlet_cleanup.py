@@ -26,7 +26,7 @@ def test_cleanup_attempts_both_steps_and_keeps_failure_details_private(
 
     result = lifecycle.cleanup_case_resources(object(), object(), tmp_path / "guard-home", tmp_path)
 
-    assert calls == ["native", "daemon"]
+    assert calls == ["daemon", "native"]
     if failed_steps:
         assert result == {"cleanup_ok": False, "cleanup_error": "RuntimeError"}
         diagnostic = (tmp_path / "cleanup-error.txt").read_text()
@@ -59,10 +59,30 @@ def test_diagnostic_write_failure_preserves_cleanup_failure(
 
     result = lifecycle.cleanup_case_resources(object(), object(), tmp_path / "guard-home", tmp_path)
 
-    assert calls == ["native", "daemon"]
+    assert calls == ["daemon", "native"]
     assert result == {
         "cleanup_ok": False,
         "cleanup_error": "RuntimeError",
         "cleanup_diagnostic_error": type(write_error).__name__,
     }
     assert "private" not in str(result)
+
+
+def test_cleanup_keeps_native_available_until_daemon_workers_drain(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    state = {"native_alive": True, "daemon_drained": False}
+
+    def drain_daemon(_daemon: object) -> None:
+        # Evidence workers can still make resident calls while draining.
+        assert state["native_alive"]
+        state["daemon_drained"] = True
+
+    def retire_native(_identity: object, _home: Path) -> None:
+        assert state["daemon_drained"]
+        state["native_alive"] = False
+
+    monkeypatch.setattr(lifecycle.probe, "_cleanup_installed_daemon", drain_daemon)
+    monkeypatch.setattr(lifecycle.probe, "_cleanup_native", retire_native)
+    assert lifecycle.cleanup_case_resources(object(), object(), tmp_path, tmp_path) == {"cleanup_ok": True}
+    assert not state["native_alive"]

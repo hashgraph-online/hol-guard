@@ -106,7 +106,7 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   page.on("response", (response) => {
     const url = new URL(response.url());
-    if (url.pathname.startsWith("/v1/extension-controls")) extensionResponses.push({ path: url.pathname, status: response.status() });
+    if (/^\/v[12]\/extension-controls/.test(url.pathname)) extensionResponses.push({ path: url.pathname, status: response.status() });
   });
 
   await page.addInitScript(({ daemon, token }) => {
@@ -247,9 +247,12 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   await expect(page.getByTestId("protection-module-detail")).toBeVisible();
 
   await expect.poll(() => extensionResponses.length).toBeGreaterThan(1);
-  expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/catalog" && response.status === 200)).toBe(true);
+  // The installed daemon serves the bounded v2 catalog; the full v1 catalog is never read.
+  expect(extensionResponses.some((response) => response.path === "/v2/extension-controls/catalog/index" && response.status === 200)).toBe(true);
+  expect(extensionResponses.some((response) => response.path === "/v2/extension-controls/catalog/extensions/command.git/rules" && response.status === 200)).toBe(true);
+  expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/catalog")).toBe(false);
   expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/effective" && response.status === 200)).toBe(true);
-  expect(extensionResponses.every((response) => response.status >= 200 && response.status < 300)).toBe(true);
+  expect(extensionResponses.every((response) => (response.status >= 200 && response.status < 300) || response.status === 304)).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
 

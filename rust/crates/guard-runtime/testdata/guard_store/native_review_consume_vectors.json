@@ -1,0 +1,3588 @@
+{
+ "scenarios": [
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "once_allow_then_replay",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "artifact_scope_allow",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "artifact",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "domain_bound_hash",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "domain_hash_does_not_match_plain",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "session_scope_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "session",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "global_scope_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "global",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "null_scope_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": null,
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "deny_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "deny",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "null_action_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": null,
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "pending_row_ignored",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": null,
+     "resolution_scope": null,
+     "resolved_at": null,
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "pending",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:05:01+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "expired_after_five_minutes",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:05:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:05:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "exactly_five_minutes",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:05:00.000001+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "five_minutes_plus_one_microsecond",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T11:59:59+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "decision_in_the_future",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:00:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:00:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "same_instant_as_now",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "newer_deny_masks_older_allow",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "deny",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:30+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "15ce30ace864664e1d1164cac6fb3bbbd78203ff13e2ad5b641c0141d1918490",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r2"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "15ce30ace864664e1d1164cac6fb3bbbd78203ff13e2ad5b641c0141d1918490",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r2"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "newer_allow_beats_older_deny",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "deny",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T11:59:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:30+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "same_instant_conflict_fails_closed",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "deny",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "same_instant_scope_conflict_fails_closed",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "session",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "same_instant_duplicates_spend_once",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r3",
+     "resolution_action": "allow",
+     "resolution_scope": "artifact",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "equal_instant_different_offsets",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T14:00:00+02:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "offset_instant_is_normalized_for_key",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T14:00:00+02:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "fractional_seconds_key",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00.123456+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "e448353da8997235c1024d0f25f82e7c35dfd8402bdca45b2bf741d719956d73",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "e448353da8997235c1024d0f25f82e7c35dfd8402bdca45b2bf741d719956d73",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "short_fraction_key",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00.5+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T13:02:00+01:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:02:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T13:02:00+01:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:02:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "now_with_offset",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "not-a-time",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "invalid_now_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "naive_now_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "invalid_row_timestamp_blocks_older_allow",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "garbage",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "naive_row_timestamp_blocks_older_allow",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:30",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "null_row_timestamp_blocks",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": null,
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "codex",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "harness_mismatch",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "other",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "artifact_id_mismatch",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Read",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "artifact_name_mismatch",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "ls",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "launch_target_mismatch",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/elsewhere"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "workspace_mismatch",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": null
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": null
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "null_workspace_matches_null",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": null
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "null_workspace_does_not_match_value",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": null
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": null
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "value_workspace_does_not_match_null",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "no_rows",
+   "native_may_deny": false,
+   "rows": []
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:a:b:c:d",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "uppercase_hex_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:a:b:c:d",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a:b:c",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "three_token_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a:b:c",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a:b:c:d:e",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "five_token_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a:b:c:d:e",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a:b:c:d",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "short_digest_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a:b:c:d",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a-b:c_d:e1:f2",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "bd946f25c6eab995070e7ce774bb698c531ac33b667f2e0d03a347a33b03de39",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a-b:c_d:e1:f2",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "token_charset_binding",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a-b:c_d:e1:f2",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:A:b:c:d",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "uppercase_token_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:A:b:c:d",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:b:c:d",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "5cbf92b6ba771608e4a5063db8359d2bcb66f154fdc46fc7c44ec99b18e838ec",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:b:c:d",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "token_length_128_binding",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:b:c:d",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:b:c:d",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "token_length_129_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:b:c:d",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa::b:c:d",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "empty_token_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa::b:c:d",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta\n",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "trailing_newline_binding_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta\n",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "plain_hash_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "request_id": "r2"
+      },
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "request_id": "r2"
+      },
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "request_id": "r2"
+      },
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "different_bindings_spend_separately",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    },
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r2",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:45+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "ba41339d04e441697755d414609f4cf251808385a92b7c48e2b654c6eb779e47",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r2"
+      },
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "new_decision_after_spend_is_a_new_capability",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00Z",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00Z",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "z_suffix_timestamp",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00Z",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "space_separator_timestamp",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01 12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "hour_only_offset_timestamp",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T14:00:00+02",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "invalid_calendar_date_row",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-02-30T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "hour_24_row_refused",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T24:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    },
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": false
+    }
+   ],
+   "name": "long_fraction_truncated",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00.123456789+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "basic_format_timestamp",
+   "native_may_deny": true,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "20260301T120000+0000",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-02-23T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-02-23T12:01:00+00:00",
+       "effect_digest": "5124947475647562453df540c514e025fdebee534942c778b6f4f37adae24c41",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "week_date_timestamp",
+   "native_may_deny": true,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-W09-1T12:00:00+00:00",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [
+      {
+       "created_at": "2026-03-01T12:01:00+00:00",
+       "effect_digest": "7f77f6fa1192ce11ea4e2aa2799a2818569dccd4d1f23cbe742c63cb2056e804",
+       "event_name": "native-review.once-consumed",
+       "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+       "request_id": "r1"
+      }
+     ],
+     "result": true
+    }
+   ],
+   "name": "offset_with_seconds_timestamp",
+   "native_may_deny": true,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": "2026-03-01T12:00:00+00:00:30",
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  },
+  {
+   "after_first_call_rows": [],
+   "calls": [
+    {
+     "args": {
+      "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+      "artifact_id": "native-review:claude-code:cmd",
+      "artifact_name": "Bash",
+      "harness": "claude-code",
+      "launch_target": "cat .env",
+      "now": "2026-03-01T12:01:00+00:00",
+      "workspace": "/work/space"
+     },
+     "effects": [],
+     "result": false
+    }
+   ],
+   "name": "non_string_timestamp",
+   "native_may_deny": false,
+   "rows": [
+    {
+     "approval_url": "http://127.0.0.1/approvals",
+     "artifact_hash": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
+     "artifact_id": "native-review:claude-code:cmd",
+     "artifact_name": "Bash",
+     "artifact_type": "native_review",
+     "changed_fields_json": "[]",
+     "config_path": "/cfg",
+     "created_at": "2026-03-01T11:59:00+00:00",
+     "harness": "claude-code",
+     "launch_target": "cat .env",
+     "policy_action": "require-reapproval",
+     "recommended_scope": "once",
+     "request_id": "r1",
+     "resolution_action": "allow",
+     "resolution_scope": "once",
+     "resolved_at": 12345,
+     "review_command": "hol-guard approvals",
+     "source_scope": "workspace",
+     "status": "resolved",
+     "workspace": "/work/space"
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-native-review-consume-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE approval_requests (\n          request_id text primary key,\n          harness text not null,\n          artifact_id text not null,\n          artifact_name text not null,\n          artifact_type text not null,\n          artifact_hash text not null,\n          publisher text,\n          policy_action text not null,\n          recommended_scope text not null,\n          changed_fields_json text not null,\n          source_scope text not null,\n          oauth_source text,\n          config_path text not null,\n          workspace text,\n          launch_target text,\n          normalized_identity_key text,\n          action_identity text,\n          queue_group_id text,\n          dedupe_count integer not null default 1,\n          last_seen_at text,\n          transport text,\n          risk_summary text,\n          risk_signals_json text not null default '[]',\n          artifact_label text,\n          source_label text,\n          trigger_summary text,\n          why_now text,\n          launch_summary text,\n          risk_headline text,\n          action_envelope_json text,\n          decision_v2_json text,\n          fallback_cli_command text,\n          scanner_evidence_json text not null default '[]',\n          browser_intent_json text,\n          desktop_notified_at text,\n          raw_command_text text,\n          continuation_snapshot_json text,\n          extension_allow_hint_json text,\n          guard_version text,\n          first_seen_guard_version text,\n          last_seen_guard_version text,\n          watch_only_observation integer not null default 0,\n          review_command text not null,\n          approval_url text not null,\n          status text not null,\n          resolution_action text,\n          resolution_scope text,\n          reason text,\n          created_at text not null,\n          resolved_at text\n        )",
+  "CREATE TABLE guard_continuation_effects (\n          effect_key text primary key,\n          request_id text not null,\n          evidence_id text not null,\n          event_name text not null,\n          created_at text not null\n        )",
+  "CREATE INDEX idx_approval_status_created on approval_requests(status, created_at desc)",
+  "CREATE INDEX idx_approval_status_harness_created on approval_requests(status, harness, created_at desc)",
+  "CREATE INDEX idx_approval_status_identity_workspace on approval_requests(status, normalized_identity_key, workspace)",
+  "CREATE INDEX idx_approval_source_group_status on approval_requests(oauth_source, queue_group_id, status)",
+  "CREATE INDEX idx_approval_status_last_seen on approval_requests(status, last_seen_at desc, request_id desc)",
+  "CREATE INDEX idx_approval_status_harness_last_seen on approval_requests(status, harness, last_seen_at desc, request_id desc)",
+  "CREATE INDEX idx_approval_harness_status on approval_requests(harness, status)",
+  "CREATE INDEX idx_approval_artifact_hash on approval_requests(artifact_hash)",
+  "CREATE INDEX idx_approval_workspace_status on approval_requests(workspace, status)",
+  "CREATE INDEX idx_approval_policy_action on approval_requests(policy_action)",
+  "CREATE INDEX idx_approval_status_watch_last_seen on approval_requests(status, watch_only_observation, last_seen_at desc, request_id desc)",
+  "CREATE INDEX idx_approval_resolution on approval_requests(resolution_action, resolved_at)"
+ ]
+}

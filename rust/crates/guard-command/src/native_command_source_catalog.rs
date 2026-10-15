@@ -385,8 +385,8 @@ pub fn compile_addition_with_mcp(
     trust: &[u8],
 ) -> Result<CompiledSourceCatalog, &'static str> {
     let mut output = lower_catalog(sources, mcp_sources, trust)?;
-    NativeCommandProgram::from_packaged_bytes(EMBEDDED_PROGRAM)?;
-    let mut base: Value = serde_json::from_slice(EMBEDDED_PROGRAM)
+    NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())?;
+    let mut base: Value = serde_json::from_slice(packaged_command_program_bytes())
         .map_err(|_| "command_source_packaged_base_invalid")?;
     let base_digest = base["program_digest"].as_str().unwrap().to_owned();
     let existing: BTreeSet<_> = base["extensions"]

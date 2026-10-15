@@ -6,12 +6,10 @@ import json
 import urllib.request
 from pathlib import Path
 
-import pytest
-
-from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_app_server_fake import codex_app_server
 
 
 def _request(request_id: str, launch_target: str) -> GuardApprovalRequest:
@@ -77,40 +75,31 @@ def _seed_codex_operation(store: GuardStore, *, request_id: str, socket_path: Pa
 
 def test_phase14_package_approval_resume_targets_only_matching_request(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured_payloads: list[dict[str, object]] = []
-
-    def _fake_send(**kwargs):
-        captured_payloads.extend(kwargs["payloads"])
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
-
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-minimist", "npm install minimist@1.2.8"), "2026-05-19T10:00:00+00:00")
     store.add_approval_request(_request("req-lodash", "npm install lodash@4.17.21"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-control.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-minimist",
-        socket_path=socket_path,
-        command_text="npm install minimist@1.2.8",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-
-    try:
-        payload = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-minimist/approve",
-            {"scope": "artifact", "reason": "reviewed"},
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-minimist",
+            socket_path=server.socket_path,
+            command_text="npm install minimist@1.2.8",
         )
-    finally:
-        daemon.stop()
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
 
-    serialized_payloads = json.dumps(captured_payloads)
+        try:
+            payload = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-minimist/approve",
+                {"scope": "artifact", "reason": "reviewed"},
+            )
+        finally:
+            daemon.stop()
+
+    serialized_payloads = json.dumps(server.continuations())
 
     assert payload["codexResume"]["status"] == "sent"
     assert "req-minimist" in serialized_payloads

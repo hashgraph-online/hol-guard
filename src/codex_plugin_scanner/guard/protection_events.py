@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,4 +43,31 @@ def record_posture_change(
             guard_home,
             "guard.protection.watch_auto_reverted" if auto else "guard.protection.watch_reverted",
             {"value": next_posture, "source": source},
+        )
+
+
+def record_harness_posture_changes_if_needed(
+    guard_home: Path,
+    *,
+    previous: Mapping[str, str],
+    updated: Mapping[str, str],
+    event_source: str,
+) -> None:
+    """Record one timeline event per harness whose override changed."""
+
+    for harness in sorted(set(previous) | set(updated)):
+        before = previous.get(harness)
+        after = updated.get(harness)
+        if before == after:
+            continue
+        record_protection_event(
+            guard_home,
+            "guard.protection.harness_posture_selected",
+            {
+                "harness": harness,
+                "previous": before or "inherit",
+                "value": after or "inherit",
+                "source": event_source,
+                "auto": event_source == "auto-revert",
+            },
         )

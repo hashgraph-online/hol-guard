@@ -16,10 +16,7 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
@@ -27,7 +24,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     rotate_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
-from codex_plugin_scanner.guard.runtime_transition_admission import verified_admission_payload
 from codex_plugin_scanner.guard.runtime_transition_hook_probe import PROBE_FIELD, transition_hook_observation
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_native_decision_receipt import _receipt
@@ -234,89 +230,6 @@ def test_desktop_bridge_runs_proxy_and_preserves_its_hook_channels(monkeypatch, 
     assert stderr.getvalue() == '{"schema":"native-observation"}\n'
 
 
-@pytest.mark.usefixtures("native_hook_force")
-@pytest.mark.parametrize("security_level", ["balanced", "paranoid"])
-def test_legacy_channel_uses_real_configured_hook_and_persisted_rust_receipts(tmp_path, monkeypatch, security_level):
-    with monkeypatch.context() as role_patch:
-        paths = codex_adapter._hook_packaged_file_paths
-        role_patch.setattr(
-            codex_adapter,
-            "_hook_packaged_file_paths",
-            lambda: tuple((role, path) for role, path in paths() if role not in {"hook_probe", "native_receipt"}),
-        )
-        context, workspace, store = installed_context(tmp_path)
-    (context.guard_home / "config.toml").write_text(f'security_level = "{security_level}"\n')
-    live_identity = native_runtime_status().identity
-    assert live_identity is not None
-    reference = context.guard_home / "native-comparison-reference"
-    reference.write_bytes(live_identity.path.read_bytes())
-    reference.chmod(0o700)
-    metadata = reference.stat()
-    identity = NativeRuntimeIdentity(reference, metadata.st_size, metadata.st_mtime_ns, live_identity.sha256)
-    assert identity.path != live_identity.path
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=context.home_dir)
-    daemon.start()
-    real_launch = observer.run_isolated_hook_process
-    launched = []
-    launch_diagnostics = []
-
-    def legacy_launch(*args, **kwargs):
-        payload = json.loads(kwargs["input_text"])
-        assert PROBE_FIELD not in payload and payload["tool_call_id"].startswith("transition-hook-")
-        launched.append(payload["tool_call_id"])
-        started = time.monotonic()
-        result = real_launch(*args, **kwargs)
-        receipt = daemon._server.hook_worker.last_native_decision_receipt or {}
-        output = json.loads(result.stdout)
-        launch_diagnostics.append(
-            {
-                "elapsed": time.monotonic() - started,
-                "returncode": result.returncode,
-                "timed_out": result.timed_out,
-                "decision": receipt.get("decision"),
-                "policy_action": receipt.get("policy_action"),
-                "reason_code": receipt.get("reason_code"),
-                "permission_reason": str(output.get("hookSpecificOutput", {}).get("permissionDecisionReason", ""))[
-                    :512
-                ],
-            }
-        )
-        assert not result.stderr  # Actual bridge has no probe envelope to emit.
-        return result
-
-    monkeypatch.setattr(observer, "run_isolated_hook_process", legacy_launch)
-    try:
-        try:
-            proof = observe(context, workspace, identity, time.monotonic() + 20, receipt_store=store)
-        except TransitionError as error:
-            with store._connect() as connection:
-                counts = {
-                    name: connection.execute(f"select count(*) from {name}").fetchone()[0]
-                    for name in ("command_activity", "command_activity_correlations", "native_hook_decision_receipts")
-                }
-            pytest.fail(
-                str(
-                    {
-                        "reason": error.reason,
-                        "launches": launch_diagnostics,
-                        "counts": counts,
-                        "writer": daemon._server.runtime_hook_evidence_writer.stats(),
-                    }
-                )
-            )
-        assert len(launched) == 2 and len(set(launched)) == 2
-        assert proof.allow_receipt["decision"] == "allow" and proof.deny_receipt["decision"] == "deny"
-        assert store.get_native_decision_receipt(proof.allow_receipt["decision_id"]) == proof.allow_receipt
-        assert store.get_native_decision_receipt(proof.deny_receipt["decision_id"]) == proof.deny_receipt
-        assert verified_admission_payload(proof)["installed_hook_evidence"]["harness"] == "codex"
-        evidence = verified_admission_payload(proof)["installed_hook_evidence"]
-        assert evidence["observation_channel"] == "persisted-receipt"
-        assert native_runtime_status().identity == live_identity  # Comparison file never selects the loaded runtime.
-    finally:
-        daemon.stop()
-        assert close_native_residents(context.guard_home, deadline_monotonic=time.monotonic() + 5)
-
-
 @pytest.mark.parametrize(
     "fault,reason",
     [
@@ -351,6 +264,8 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(tmp_path, mon
         (context.guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE).write_text('{"invalid":"fixture"}')
     if fault in {"unrelated_nonce", "wrong_runtime", "changed_receipt", "stale_receipt"}:
         writer = RuntimeHookEvidenceWriter(store=store)
+        # The deadline measures the observer, not one-time native store provisioning.
+        _ = store.count_command_shadow_observations()
     launched = []
 
     def launch(argv, *, input_text, **kwargs):
@@ -404,121 +319,6 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(tmp_path, mon
     finally:
         if writer is not None:
             assert writer.stop(timeout_seconds=1)
-
-
-@pytest.mark.usefixtures("native_hook_force")
-@pytest.mark.parametrize("security_level", [None, "paranoid"], ids=["default", "hard_block"])
-def test_real_configured_argv_traverses_daemon_rpc_and_native_edge(tmp_path, monkeypatch, security_level):
-    context, workspace, store = installed_context(tmp_path)
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", "/Applications/HOL Guard.app/Contents/MacOS/HOL Guard")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", "/untrusted/runtime-owner")
-    if security_level is not None:
-        (context.guard_home / "config.toml").write_text(f'security_level = "{security_level}"\n')
-    identity = native_runtime_status().identity
-    assert identity is not None
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=context.home_dir)
-    daemon.start()
-    assert load_guard_config(context.guard_home).security_level == (security_level or "balanced")
-    policy_path = context.guard_home / "config.toml"
-    policy_before = policy_path.read_bytes() if policy_path.exists() else None
-    real_launch = observer.run_isolated_hook_process
-    real_review = daemon._server.hook_worker.review_http_payload
-    reviews = []
-    launched_environments = []
-    launched_commands = []
-
-    def measured_review(**kwargs):
-        result = real_review(**kwargs)
-        receipt = daemon._server.hook_worker.last_native_decision_receipt or {}
-        response = result or {}
-        reviews.append(
-            {
-                "probe_present": PROBE_FIELD in kwargs["payload"],
-                "decision": receipt.get("decision"),
-                "harness": receipt.get("harness"),
-                "receipt_present": bool(receipt),
-                "policy_action": response.get("policy_action"),
-                "reason_code": response.get("reason_code"),
-                "prompted": response.get("prompted") is True,
-            }
-        )
-        return result
-
-    monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", measured_review)
-
-    def measured_launch(*args, **kwargs):
-        started = time.monotonic()
-        environment = kwargs["environment"]
-        launched_environments.append(dict(environment))
-        launched_commands.append(tuple(args[0]))
-        assert environment.get("HOL_GUARD_DESKTOP") == "1"
-        assert environment.get("HOL_GUARD_DESKTOP_HOOK_PROXY") == "/Applications/HOL Guard.app/Contents/MacOS/HOL Guard"
-        assert "HOL_GUARD_DESKTOP_RUNTIME_OWNER" not in environment
-        # The observer continues to launch the manifest-authenticated bridge.
-        # Frozen Desktop proxy selection is handled inside that bridge.
-        result = real_launch(*args, **kwargs)
-        assert not result.timed_out, {
-            "elapsed": time.monotonic() - started,
-            "returncode": result.returncode,
-            "containment_failed": result.containment_failed,
-            "stdout_present": bool(result.stdout),
-            "stderr_present": bool(result.stderr),
-            "reviews": reviews,
-        }
-        output = json.loads(result.stdout)
-        assert result.stderr, {
-            "elapsed": time.monotonic() - started,
-            "returncode": result.returncode,
-            "containment_failed": result.containment_failed,
-            "output_limit_exceeded": result.output_limit_exceeded,
-            "output_keys": list(output),
-            "reason_code": output.get("reason_code"),
-            "reviews": reviews,
-        }
-        observed = json.loads(result.stderr)["native_receipt"]
-        expected = "allow" if json.loads(kwargs["input_text"])["tool_input"].get("command") == "pwd" else "deny"
-        assert observed["decision"] == expected, {
-            "expected": expected,
-            "decision": observed["decision"],
-            "policy_action": observed["policy_action"],
-            "reason_code": observed["reason_code"],
-            "reviews": reviews,
-        }
-        assert observed["runtime_identity"] == identity.sha256
-        permission = output.get("hookSpecificOutput", {}).get("permissionDecision")
-        assert permission in ({None, "allow"} if expected == "allow" else {"deny"}), {
-            "expected": expected,
-            "permission": permission,
-            "output_keys": list(output),
-        }
-        return result
-
-    monkeypatch.setattr(observer, "run_isolated_hook_process", measured_launch)
-    try:
-        proof = observe(context, workspace, identity, time.monotonic() + 20)
-        assert len(reviews) == 2 and all(item["probe_present"] and item["receipt_present"] for item in reviews)
-        assert [item["decision"] for item in reviews] == ["allow", "deny"]
-        assert len(launched_environments) == 2
-        assert len(launched_commands) == 2
-        assert launched_commands[0] == launched_commands[1]
-        assert launched_commands[0][0] != "/bin/sh"
-        assert any("codex_daemon_hook_bridge.py" in part for part in launched_commands[0])
-        assert all(not item["prompted"] for item in reviews)
-        payload = verified_admission_payload(proof)
-        assert proof.allow_receipt["decision"] == "allow"
-        assert proof.deny_receipt["decision"] == "deny"
-        assert proof.deny_receipt["policy_action"] == "block"
-        assert (policy_path.read_bytes() if policy_path.exists() else None) == policy_before
-        assert payload["installed_hook_evidence"]["harness"] == "codex"
-        assert payload["installed_hook_evidence"]["observation_channel"] == "probe-envelope"
-        # Active hook evidence is covered by the same tamper seal as receipts.
-        proof.installed_hook_evidence["harness"] = "foreign"
-        with pytest.raises(TransitionError, match="functional_proof_missing"):
-            verified_admission_payload(proof)
-    finally:
-        daemon.stop()
-        assert close_native_residents(context.guard_home, deadline_monotonic=time.monotonic() + 3)
 
 
 @pytest.mark.usefixtures("native_hook_force")

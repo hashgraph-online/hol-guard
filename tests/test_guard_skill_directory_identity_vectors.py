@@ -11,12 +11,6 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.portable_skill_directory_discovery import (
-    discover_skill_documents as portable_discover,
-)
-from codex_plugin_scanner.guard.portable_skill_directory_identity import (
-    inspect_skill_directory as portable_inspect,
-)
 from codex_plugin_scanner.guard.skill_directory_discovery import discover_skill_documents as native_discover
 from codex_plugin_scanner.guard.skill_directory_identity import inspect_skill_directory as native_inspect
 from codex_plugin_scanner.guard.skill_directory_identity_contract import SkillDirectoryIdentityLimits
@@ -37,7 +31,6 @@ _WIRE_FIELDS = (
     "incomplete_state_hash",
 )
 _IMPLEMENTATIONS: dict[str, tuple[Callable[..., Any], Callable[..., Any]]] = {
-    "portable": (portable_inspect, portable_discover),
     "native": (native_inspect, native_discover),
 }
 
@@ -101,7 +94,7 @@ def _expected(spec: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.parametrize("implementation", sorted(_IMPLEMENTATIONS))
 @pytest.mark.parametrize("spec", _VECTORS["inspect"], ids=lambda spec: spec["name"])
-def test_inspect_matches_shared_vectors(tmp_path: Path, spec: dict[str, Any], implementation: str) -> None:
+def test_native_inspect_matches_original_vectors(tmp_path: Path, spec: dict[str, Any], implementation: str) -> None:
     _skip_unavailable(implementation)
     base = tmp_path.resolve() / "case"
     base.mkdir()
@@ -123,7 +116,7 @@ def test_inspect_matches_shared_vectors(tmp_path: Path, spec: dict[str, Any], im
 
 @pytest.mark.parametrize("implementation", sorted(_IMPLEMENTATIONS))
 @pytest.mark.parametrize("spec", _VECTORS["discover"], ids=lambda spec: spec["name"])
-def test_discovery_matches_shared_vectors(tmp_path: Path, spec: dict[str, Any], implementation: str) -> None:
+def test_native_discovery_matches_original_vectors(tmp_path: Path, spec: dict[str, Any], implementation: str) -> None:
     _skip_unavailable(implementation)
     base = tmp_path.resolve() / "case"
     base.mkdir()

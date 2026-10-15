@@ -43,6 +43,7 @@ from scripts.ci.rust_io_ownership_policy import (
     _STRUCTURED_OUTPUT_MEDIATION_PATHS,
     _TRANSPORT_AUTHORITY_PATHS,
     _TRANSPORT_DECODE_PATHS,
+    _TRANSPORT_ENCODE_OPERATIONS,
     _TRANSPORT_IDENTITY_PATHS,
     _TRANSPORT_INTEGRITY_PATHS,
     COMPATIBILITY_MODES,
@@ -83,13 +84,7 @@ ROOTS: Final = (
         "review_http_payload",
         "HookWorker",
     ),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-        "_review_post_tool_http",
-        "HookWorker",
-    ),
     RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
-    RootSpec("src/codex_plugin_scanner/guard/native_runtime.py", "review_post_tool_native"),
     RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
     RootSpec(
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
@@ -178,11 +173,8 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 
 
 def _category(path: str, kind: str) -> str:
-    # These two decision-time evidence hashes moved from command_evaluation.
-    # Keep their original migration category; they are not asynchronous policy
-    # work and this exception must not admit file reads or decoders.
-    if path == "src/codex_plugin_scanner/guard/runtime/command_native_factors.py" and kind == "hash":
-        return "pending_authority_migration"
+    if kind == "transport_encode":
+        return "transport_encode"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
     if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
@@ -222,7 +214,9 @@ def _observations(record: FunctionRecord) -> Iterable[IoObservation]:
             chain = _attribute_chain(node.func)
             kind: str | None = None
             operation: str | None = None
-            if chain and chain[0] in _ARCHIVE_MODULES:
+            if (path, chain) in _TRANSPORT_ENCODE_OPERATIONS:
+                kind, operation = "transport_encode", name
+            elif chain and chain[0] in _ARCHIVE_MODULES:
                 kind, operation = "archive", name
             elif name in _FS_FUNCTIONS or name in _FS_METHODS:
                 kind, operation = "filesystem", name
@@ -298,20 +292,12 @@ def _native_branch(record: FunctionRecord, marker: str) -> ast.If | None:
 def _branch_failures(root: Path, records: dict[tuple[str, str], list[FunctionRecord]]) -> list[str]:
     failures: list[str] = []
     review = _root_record(root, ROOTS[0], records)
-    native = _native_branch(review, "auto")
-    if native is None or not _call_in_branch(native, "_review_native_edge"):
-        failures.append("HookWorker.review_http_payload has no direct auto/force native edge return")
+    if not _call_in(review.node, "_review_native_edge"):
+        failures.append("HookWorker.review_http_payload has no direct native edge return")
     elif any(
-        _call_in_branch(native, forbidden) for forbidden in ("load_guard_config", "review", "evaluate_source_file_ref")
+        _call_in(review.node, forbidden) for forbidden in ("load_guard_config", "review", "evaluate_source_file_ref")
     ):
-        failures.append("HookWorker native PostTool branch reaches Python semantic evaluation")
-
-    post = _root_record(root, ROOTS[1], records)
-    required = _native_branch(post, "native_required")
-    if required is None or not _call_in_branch(required, "review_post_tool_native"):
-        failures.append("HookWorker PostTool native-required branch is incomplete")
-    elif _call_in_branch(required, "review"):
-        failures.append("HookWorker native-required branch calls Python review")
+        failures.append("HookWorker hook review reaches Python semantic evaluation")
 
     publisher_path = "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py"
     publisher = records.get((publisher_path, "start"), [])

@@ -265,6 +265,8 @@ def test_writer_drops_only_evidence_when_queue_is_full(tmp_path: Path) -> None:
 
 def test_writer_stops_with_bounded_sqlite_contention(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    # The bound measures SQLite contention, not one-time native provisioning.
+    _ = store.count_command_shadow_observations()
     lock = sqlite3.connect(store.path)
     _ = lock.execute("begin immediate")
     writer = RuntimeHookEvidenceWriter(
@@ -278,7 +280,11 @@ def test_writer_stops_with_bounded_sqlite_contention(tmp_path: Path) -> None:
             payload={"command": "rg safe"},
             succeeded=True,
         )
-        time.sleep(0.02)
+        # Time only the shutdown: the first contended attempt pays any cold
+        # native start-up, which is not what this bound measures.
+        attempt_deadline = time.monotonic() + 10
+        while writer.stats()["failures"] < 1 and time.monotonic() < attempt_deadline:
+            time.sleep(0.01)
         started = time.monotonic()
         assert writer.stop(timeout_seconds=1)
         assert time.monotonic() - started < 0.5
@@ -315,6 +321,45 @@ def test_writer_drains_accepted_records_on_shutdown(tmp_path: Path) -> None:
 
     assert recorded == [True, True, True]
     assert writer.stats()["durable_pending"] == 0
+
+
+def test_writer_derives_invocation_preview_only_for_records_that_carry_a_command(tmp_path: Path) -> None:
+    previewed: list[object] = []
+    persisted: list[tuple[bool, object]] = []
+
+    def preview(payload: object) -> str:
+        previewed.append(payload)
+        return "echo hi"
+
+    def record(**kwargs: object) -> bool:
+        persisted.append((bool(kwargs["has_command"]), kwargs["invocation_preview"]))
+        return True
+
+    with (
+        patch(
+            "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.build_invocation_preview_from_payload",
+            side_effect=preview,
+        ),
+        patch(
+            "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_deferred_post_hook_command_activity",
+            side_effect=record,
+        ),
+    ):
+        writer = RuntimeHookEvidenceWriter(
+            store=GuardStore(tmp_path / "guard-home"),
+            batch_wait_seconds=0.025,
+        )
+        for payload in ({"tool_name": "read", "tool_input": {"path": "docs/readme.md"}}, {"command": "echo hi"}):
+            assert writer.submit_command_activity(
+                harness="pi",
+                event="PostToolUse",
+                payload=payload,
+                succeeded=True,
+            )
+        assert writer.stop(timeout_seconds=1)
+
+    assert previewed == [{"command": "echo hi"}]
+    assert persisted == [(False, None), (True, "echo hi")]
 
 
 def test_writer_recovers_accepted_record_after_failed_process(tmp_path: Path) -> None:

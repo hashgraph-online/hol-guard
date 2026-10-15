@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
-from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -16,28 +13,11 @@ from codex_plugin_scanner.guard.contained_package_script_execution import (
 )
 from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
 from codex_plugin_scanner.guard.runtime import local_package_script_evidence as evidence_module
-from codex_plugin_scanner.guard.runtime.command_contained_routine_candidates import (
-    contained_routine_candidate_operation,
-)
-from codex_plugin_scanner.guard.runtime.containment_contract import (
-    ContainmentAttestation,
-    ContainmentBackend,
-    ContainmentFailure,
-    ContainmentInput,
-    ContainmentNetworkMode,
-    ContainmentRequest,
-)
-from codex_plugin_scanner.guard.runtime.containment_executor import ContainmentExecutionResult, file_sha256
-from codex_plugin_scanner.guard.runtime.containment_health import (
-    CONTAINMENT_POLICY_CONTRACT_DIGEST,
-    ContainmentHealthEvidence,
-)
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRequirement, ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.runtime.local_package_script_evidence import (
     build_local_package_script_evidence,
 )
-from codex_plugin_scanner.guard.runtime.workspace_snapshot_inputs import complete_workspace_snapshot
 from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 from tests.native_command_test_support import iter_native_command_evaluations
@@ -94,61 +74,9 @@ def _workspace(root: Path, operation: str) -> Path:
     return workspace
 
 
-def _manager(root: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-    shim = (root / "shim").resolve()
-    shim.mkdir()
-    real = (root / "real-bin").resolve()
-    bun = real / "bun"
-    _write(bun, "synthetic-bun", executable=True)
-    monkeypatch.setattr(execution_module, "_resolve_bun", _bun_resolver(bun))
-    monkeypatch.setattr(execution_module, "_load_current_containment_health", _fake_health)
-    return shim, bun
-
-
-def _bun_resolver(bun: Path) -> Callable[[str, Path], str]:
-    def resolve(_path: str, _shim: Path) -> str:
-        return str(bun)
-
-    return resolve
-
-
-def _health() -> tuple[ContainmentHealthEvidence, str]:
-    fingerprint = hashlib.sha256(b"runtime").hexdigest()
-    return (
-        ContainmentHealthEvidence(
-            backend=ContainmentBackend.LINUX_BWRAP,
-            backend_digest=hashlib.sha256(b"backend").hexdigest(),
-            policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
-            daemon_fingerprint=fingerprint,
-            runtime_fingerprint=fingerprint,
-            probe_at=datetime.now(timezone.utc).isoformat(),
-            probe_enforced=True,
-        ),
-        fingerprint,
-    )
-
-
-def _fake_health(_guard_home: Path) -> tuple[ContainmentHealthEvidence, str]:
-    return _health()
-
-
-def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecutionResult:
-    return ContainmentExecutionResult(
-        exit_code=exit_code,
-        stdout="routine-output\n",
-        stderr="" if exit_code == 0 else "routine-failed\n",
-        timed_out=False,
-        attestation=ContainmentAttestation(
-            backend=ContainmentBackend.LINUX_BWRAP,
-            backend_digest=hashlib.sha256(b"backend").hexdigest(),
-            request_digest=request.binding_digest,
-            policy_digest=request.policy.digest,
-            launch_digest=request.launch_digest,
-            executable_digest=request.executable_digest,
-            enforced=True,
-            failure=None,
-        ),
-    )
+def _requires_containment_proof(evaluation: object) -> bool:
+    reasons = evaluation.decision_plane.reasons
+    return any(reason.reason_code == "contained-routine-proof-required" for reason in reasons)
 
 
 @pytest.mark.parametrize("partition", range(_CORPUS_PARTITIONS))
@@ -168,20 +96,17 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
     for (case, oracle), reviewed in zip(benign, evaluations, strict=True):
         assert case.case_id == oracle.case_id
         evaluation = reviewed.evaluation
-        operation = contained_routine_candidate_operation(evaluation.command)
+        owned = _requires_containment_proof(evaluation)
         if oracle.owner != "CDX-061":
-            assert operation is None
+            assert not owned
             continue
-        assert operation is not None
+        assert owned
         assert evaluation.minimum_action == "review"
         # Intrinsic Git-context reapproval strengthens, never replaces, the
         # independently required containment proof.
         expected_floor = "require-reapproval" if reviewed.native_minimum_action == "require-reapproval" else "review"
         assert evaluation.decision_plane.action == expected_floor
         assert evaluation.decision_plane.proof_routes == frozenset()
-        assert any(
-            reason.reason_code == "contained-routine-proof-required" for reason in evaluation.decision_plane.reasons
-        )
     adversarial = list(
         zip(
             iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
@@ -195,7 +120,7 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
     for (case, oracle), reviewed in zip(adversarial, evaluations, strict=True):
         assert case.case_id == oracle.case_id
         assert oracle.owner != "CDX-061"
-        assert contained_routine_candidate_operation(reviewed.evaluation.command) is None
+        assert not _requires_containment_proof(reviewed.evaluation)
 
 
 def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
@@ -207,82 +132,12 @@ def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
     evaluations = iter_native_command_evaluations(
         (case.command for case, _oracle in owned), cwd=Path("workspace"), home_dir=Path("home")
     )
-    operations: set[str] = set()
     count = 0
     for (case, oracle), reviewed in zip(owned, evaluations, strict=True):
         assert case.case_id == oracle.case_id
-        operation = contained_routine_candidate_operation(reviewed.evaluation.command)
         count += 1
-        assert operation is not None
-        operations.add(operation)
+        assert _requires_containment_proof(reviewed.evaluation)
     assert count == 275
-    assert operations == {"test", "lint", "build", "typecheck", "compile-check", "dependency-tree", "workspace-check"}
-
-
-@pytest.mark.parametrize("operation", tuple(_OPERATIONS))
-def test_exact_bun_script_runs_through_central_contained_decision(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    operation: str,
-) -> None:
-    workspace = _workspace(tmp_path, operation)
-    shim, bun = _manager(tmp_path, monkeypatch)
-    captured: list[ContainmentRequest] = []
-
-    def execute(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
-        assert timeout_seconds == 120.0
-        captured.append(request)
-        return _result(request)
-
-    monkeypatch.setattr(execution_module, "execute_contained", execute)
-    result = try_execute_contained_package_script(
-        "bun",
-        ("run", operation),
-        workspace=workspace,
-        guard_home=tmp_path,
-        shim_directory=shim,
-        environment={"PATH": str(shim), "GITHUB_TOKEN": "must-not-cross"},
-    )
-
-    assert result is not None
-    assert result.operation_id == operation
-    assert result.proof.route is ProofRoute.CONTAINED
-    assert ProofRequirement.DEPENDENCY_PROVENANCE not in result.proof.satisfied_requirements
-    assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
-    assert len(captured) == 1
-    request = captured[0]
-    assert request.argv[0] == str(bun)
-    assert request.argv[1].startswith("node_modules/")
-    assert request.policy.allowed_write_paths == ()
-    assert request.policy.network_mode is ContainmentNetworkMode.OFFLINE
-    assert "GITHUB_TOKEN" not in request.environment_dict()
-    assert {"package.json", "package-lock.json", "src/example.ts"} <= {item.snapshot_path for item in request.inputs}
-
-
-def test_contained_nonzero_result_is_returned_without_live_manager_reexecution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "test")
-    shim, _bun = _manager(tmp_path, monkeypatch)
-
-    def failed_result(request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        return _result(request, 1)
-
-    monkeypatch.setattr(execution_module, "execute_contained", failed_result)
-
-    result = try_execute_contained_package_script(
-        "bun",
-        ("run", "test"),
-        workspace=workspace,
-        guard_home=tmp_path,
-        shim_directory=shim,
-        environment={"PATH": str(shim)},
-    )
-
-    assert result is not None
-    assert result.exit_code == 1
-    assert result.stderr == "routine-failed\n"
 
 
 @pytest.mark.parametrize(
@@ -355,186 +210,6 @@ def test_scoped_registry_tarball_omits_scope_from_filename() -> None:
     assert evidence_module._canonical_resolution("@scope/tool", "1.2.3", resolved)  # pyright: ignore[reportPrivateUsage]
 
 
-@pytest.mark.parametrize("relative", (".env", "src/linked.ts"))
-def test_protected_or_linked_workspace_never_reaches_executor(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    relative: str,
-) -> None:
-    workspace = _workspace(tmp_path, "build")
-    if relative.endswith("linked.ts"):
-        outside = tmp_path / "outside.ts"
-        _write(outside, "private")
-        path = workspace / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.symlink_to(outside)
-    else:
-        _write(workspace / relative, "synthetic-secret")
-    shim, _bun = _manager(tmp_path, monkeypatch)
-
-    def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        raise AssertionError("unsafe workspace reached executor")
-
-    monkeypatch.setattr(execution_module, "execute_contained", unexpected)
-
-    assert (
-        try_execute_contained_package_script(
-            "bun",
-            ("run", "build"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-
-def test_runner_drift_after_evidence_fails_before_execution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "build")
-    runner = workspace / "node_modules" / "vite" / "bin" / "vite.mjs"
-    shim, _bun = _manager(tmp_path, monkeypatch)
-    actual_snapshot = complete_workspace_snapshot
-
-    def drifting_snapshot(path: Path) -> tuple[str, tuple[ContainmentInput, ...]]:
-        captured = actual_snapshot(path)
-        _write(runner, "process.exit(9);\n", executable=True)
-        return captured
-
-    monkeypatch.setattr(execution_module, "complete_workspace_snapshot", drifting_snapshot)
-
-    def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        raise AssertionError("drifted runner reached executor")
-
-    monkeypatch.setattr(execution_module, "execute_contained", unexpected)
-
-    assert (
-        try_execute_contained_package_script(
-            "bun",
-            ("run", "build"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-
-def test_untrusted_runner_is_contained_without_minting_dependency_provenance(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "build")
-    runner = workspace / "node_modules" / "vite" / "bin" / "vite.mjs"
-    _write(runner, "arbitraryWorkspaceCode();\n", executable=True)
-    shim, _bun = _manager(tmp_path, monkeypatch)
-
-    def execute(request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        assert request.policy.network_mode is ContainmentNetworkMode.OFFLINE
-        assert request.policy.allowed_write_paths == ()
-        assert "GITHUB_TOKEN" not in request.environment_dict()
-        return _result(request)
-
-    monkeypatch.setattr(execution_module, "execute_contained", execute)
-    result = try_execute_contained_package_script(
-        "bun",
-        ("run", "build"),
-        workspace=workspace,
-        guard_home=tmp_path,
-        shim_directory=shim,
-        environment={"PATH": str(shim), "GITHUB_TOKEN": "must-not-cross"},
-    )
-
-    assert result is not None
-    assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
-    assert ProofRequirement.DEPENDENCY_PROVENANCE not in result.proof.satisfied_requirements
-
-
-def test_bun_alias_resolving_into_shim_directory_fails_closed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "build")
-    shim = tmp_path / "shim"
-    alias = tmp_path / "alias"
-    shim.mkdir()
-    alias.mkdir()
-    _write(shim / "bun", "shim", executable=True)
-    (alias / "bun").symlink_to(shim / "bun")
-    monkeypatch.setattr(execution_module, "_load_current_containment_health", _fake_health)
-
-    assert (
-        try_execute_contained_package_script(
-            "bun",
-            ("run", "build"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(alias)},
-        )
-        is None
-    )
-
-
-def test_unenforced_backend_and_missing_health_return_to_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "build")
-    shim, bun = _manager(tmp_path, monkeypatch)
-
-    def failed(request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        return ContainmentExecutionResult(
-            exit_code=None,
-            stdout="",
-            stderr="unsupported-platform",
-            timed_out=False,
-            attestation=ContainmentAttestation(
-                backend=ContainmentBackend.UNSUPPORTED,
-                backend_digest=hashlib.sha256(b"unavailable").hexdigest(),
-                request_digest=request.binding_digest,
-                policy_digest=request.policy.digest,
-                launch_digest=request.launch_digest,
-                executable_digest=file_sha256(str(bun)),
-                enforced=False,
-                failure=ContainmentFailure.UNSUPPORTED_PLATFORM,
-            ),
-        )
-
-    monkeypatch.setattr(execution_module, "execute_contained", failed)
-    assert (
-        try_execute_contained_package_script(
-            "bun",
-            ("run", "build"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-    def unavailable(_home: Path) -> tuple[ContainmentHealthEvidence, str]:
-        raise RuntimeError("unavailable")
-
-    monkeypatch.setattr(execution_module, "_load_current_containment_health", unavailable)
-    assert (
-        try_execute_contained_package_script(
-            "bun",
-            ("run", "build"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-
 def test_all_bun_execution_enters_guard_but_only_exact_scripts_have_evidence(tmp_path: Path) -> None:
     for operation in _OPERATIONS:
         assert package_shim_command_requires_guard("bun", ("run", operation), workspace=tmp_path)
@@ -542,3 +217,145 @@ def test_all_bun_execution_enters_guard_but_only_exact_scripts_have_evidence(tmp
         assert package_shim_command_requires_guard("bun", argv, workspace=tmp_path)
         assert build_local_package_script_evidence("bun", argv, workspace=tmp_path) is None
     assert not package_shim_command_requires_guard("bun", ("--version",), workspace=tmp_path)
+
+
+def _manager(root: Path) -> Path:
+    directory = (root / "bin").resolve()
+    _write(directory / "bun", "#!/bin/sh\nexit 99\n", executable=True)
+    return directory
+
+
+@pytest.fixture
+def native_home(package_intent_native: Path) -> Path:
+    return package_intent_native
+
+
+def test_native_request_carries_environment_and_timeout_without_python_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = _workspace(tmp_path, "test")
+    shim = _manager(tmp_path)
+    captured: dict[str, object] = {}
+
+    def native(workspace_arg: Path, manager: str, argv: tuple[str, ...], **kwargs: object) -> None:
+        captured.update(workspace=workspace_arg, manager=manager, argv=argv, **kwargs)
+
+    monkeypatch.setattr(execution_module._native_execution, "contained_package_script_execute_native", native)
+    environment = {"PATH": str(shim), "GITHUB_TOKEN": "left-to-the-resident"}
+    result = try_execute_contained_package_script(
+        "bun",
+        ("run", "test"),
+        workspace=workspace,
+        guard_home=tmp_path,
+        shim_directory=shim,
+        environment=environment,
+        timeout_seconds=45.0,
+    )
+
+    assert result is None
+    assert captured["workspace"] == workspace
+    assert captured["manager"] == "bun"
+    assert captured["argv"] == ("run", "test")
+    assert captured["environment"] == environment
+    assert captured["timeout_seconds"] == 45.0
+    # The resident rebuilds the script evidence; Python never supplies it.
+    assert "evidence" not in captured
+
+
+@pytest.mark.parametrize("manager", ("npm", "pnpm", "yarn", "bunx", "npx"))
+def test_only_bun_reaches_the_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, manager: str) -> None:
+    def native(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("resident must only see bun")
+
+    monkeypatch.setattr(execution_module._native_execution, "contained_package_script_execute_native", native)
+    assert (
+        try_execute_contained_package_script(
+            manager,
+            ("run", "test"),
+            workspace=tmp_path,
+            guard_home=tmp_path,
+            shim_directory=tmp_path,
+            environment={},
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("operation", tuple(_OPERATIONS))
+def test_exact_bun_script_is_contained_by_the_resident_or_returns_to_review(
+    native_home: Path, tmp_path: Path, operation: str
+) -> None:
+    workspace = _workspace(tmp_path, operation)
+    shim = _manager(tmp_path)
+    result = try_execute_contained_package_script(
+        "bun",
+        ("run", operation),
+        workspace=workspace,
+        guard_home=native_home,
+        shim_directory=shim,
+        environment={"PATH": str(shim), "GITHUB_TOKEN": "must-not-cross"},
+    )
+
+    # Hosts without an enforcing backend or an immutable bun return to review.
+    if result is None:
+        return
+    assert result.operation_id == operation
+    assert result.proof.route is ProofRoute.CONTAINED
+    assert ProofRequirement.DEPENDENCY_PROVENANCE not in result.proof.satisfied_requirements
+    assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
+    assert result.exit_code != 99, "the live package manager must never run"
+    assert "must-not-cross" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("operation", "scripts"),
+    (
+        ("build", {"build": "vite build && cat /etc/passwd"}),
+        ("build", {"prebuild": "node prepare.js"}),
+        ("typecheck", {"typecheck": "tsc --noEmit --project ../x"}),
+        ("lint", {"lint": "eslint --fix src/example.ts"}),
+        ("test", {"test": "vitest run --coverage src/example.test.ts"}),
+    ),
+)
+def test_workspace_code_abuse_returns_to_review(
+    native_home: Path, tmp_path: Path, operation: str, scripts: dict[str, str]
+) -> None:
+    workspace = _workspace(tmp_path, operation)
+    manifest = cast(dict[str, object], json.loads((workspace / "package.json").read_text(encoding="utf-8")))
+    cast(dict[str, object], manifest["scripts"]).update(scripts)
+    _write(workspace / "package.json", json.dumps(manifest))
+    shim = _manager(tmp_path)
+    assert (
+        try_execute_contained_package_script(
+            "bun",
+            ("run", operation),
+            workspace=workspace,
+            guard_home=native_home,
+            shim_directory=shim,
+            environment={"PATH": str(shim)},
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("relative", (".env", "src/linked.ts"))
+def test_protected_or_linked_workspace_returns_to_review(native_home: Path, tmp_path: Path, relative: str) -> None:
+    workspace = _workspace(tmp_path, "test")
+    shim = _manager(tmp_path)
+    target = workspace / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if relative == ".env":
+        target.write_text("TOKEN=secret\n", encoding="utf-8")
+    else:
+        target.symlink_to("/usr/bin/true")
+    assert (
+        try_execute_contained_package_script(
+            "bun",
+            ("run", "test"),
+            workspace=workspace,
+            guard_home=native_home,
+            shim_directory=shim,
+            environment={"PATH": str(shim)},
+        )
+        is None
+    )

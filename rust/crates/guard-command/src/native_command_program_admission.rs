@@ -27,7 +27,7 @@ fn valid_mcp_server_name(value: &str) -> bool {
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-fn public_ipv4(address: Ipv4Addr) -> bool {
+pub(crate) fn public_ipv4(address: Ipv4Addr) -> bool {
     let [a, b, c, _] = address.octets();
     if address.is_multicast() {
         return false;
@@ -45,7 +45,7 @@ fn public_ipv4(address: Ipv4Addr) -> bool {
         || a >= 240)
 }
 
-fn public_ipv6(address: Ipv6Addr) -> bool {
+pub(crate) fn public_ipv6(address: Ipv6Addr) -> bool {
     if let Some(mapped) = address.to_ipv4_mapped() {
         return public_ipv4(mapped);
     }

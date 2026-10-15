@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(bound, known);
         assert_eq!(bound.len(), CAPABILITIES.len());
         let program: serde_json::Value =
-            serde_json::from_slice(super::super::EMBEDDED_PROGRAM).unwrap();
+            serde_json::from_slice(super::super::packaged_command_program_bytes()).unwrap();
         for (extension, rule, permission) in CAPABILITIES {
             let row = program["rules"]
                 .as_array()

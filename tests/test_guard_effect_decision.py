@@ -29,16 +29,6 @@ from codex_plugin_scanner.guard.runtime.effect_decision import (
     FinalDisposition,
     PositiveProof,
     evaluate_effect_decision,
-    factors_from_extension_evidence,
-)
-from codex_plugin_scanner.guard.runtime.extension_evidence import (
-    EvidenceSeverity,
-    ExtensionEvidence,
-    ExtensionEvidenceBatch,
-    ExtensionMatchClass,
-    ExtensionRuleIdentity,
-    OwnedSafeVariant,
-    SafeVariantOutcome,
 )
 
 _DIGEST = "a" * 64
@@ -211,57 +201,3 @@ def test_empty_or_malformed_input_fails_closed() -> None:
         _ = EffectDecisionRequest((), schema_version="2.0.0")
     with pytest.raises(ValueError, match="lowercase SHA-256"):
         _ = replace(_proof(), binding_digest="not-a-digest")
-
-
-def _evidence(
-    rule_suffix: str,
-    floor: GuardAction,
-    *,
-    safe: bool = False,
-) -> ExtensionEvidence:
-    identity = ExtensionRuleIdentity("command.test", "1.0.0", f"command.test.{rule_suffix}", "1.0.0")
-    return ExtensionEvidence(
-        identity=identity,
-        match_class=ExtensionMatchClass.UNSAFE,
-        severity=EvidenceSeverity.CRITICAL if floor == "block" else EvidenceSeverity.HIGH,
-        declared_floor=floor,
-        base_fact=f"{rule_suffix}.matched",
-        segment_ref=f"segment:{rule_suffix}",
-        operation_ref=f"operation:{rule_suffix}",
-        effect_claims=frozenset({EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION}),
-        proof_requirements=frozenset({ProofRequirement.OPERATION_AND_TARGETS}),
-        safe_variant=(
-            OwnedSafeVariant(identity, f"{rule_suffix}.safe", SafeVariantOutcome.OWNED_RULE_NOT_RAISED)
-            if safe
-            else None
-        ),
-    )
-
-
-def test_owned_safe_variant_never_suppresses_a_stronger_sibling() -> None:
-    safe = _evidence("owned", "review", safe=True)
-    sibling = _evidence("sibling", "block")
-    factors = factors_from_extension_evidence(ExtensionEvidenceBatch((safe, sibling)))
-    decision = evaluate_effect_decision(EffectDecisionRequest(factors))
-    assert [factor.reason_code for factor in factors] == ["sibling.matched"]
-    assert decision.action == "block"
-
-
-def test_extension_factor_identity_binds_the_complete_evidence_record() -> None:
-    first = _evidence("shared", "review")
-    second = replace(first, severity=EvidenceSeverity.CRITICAL)
-    factors = factors_from_extension_evidence(ExtensionEvidenceBatch((first, second)))
-    assert len({factor.evidence_digest for factor in factors}) == 2
-    assert evaluate_effect_decision(EffectDecisionRequest(factors)).action == "review"
-
-
-def test_extension_versions_with_build_metadata_remain_valid() -> None:
-    evidence = _evidence("metadata", "review")
-    identity = replace(
-        evidence.identity,
-        extension_version="1.0.0+build.1",
-        rule_version="1.0.0+rule.2",
-    )
-    factors = factors_from_extension_evidence(ExtensionEvidenceBatch((replace(evidence, identity=identity),)))
-    assert factors[0].producer_ref == "extension:command.test/command.test.metadata"
-    assert evaluate_effect_decision(EffectDecisionRequest(factors)).action == "review"

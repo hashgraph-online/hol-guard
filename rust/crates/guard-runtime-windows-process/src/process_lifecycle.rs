@@ -73,6 +73,19 @@ pub fn process_start_marker(process_id: u32) -> io::Result<String> {
     process_start_marker_for_handle(&process)
 }
 
+/// Like `process_start_marker`, but fails once the process has exited. An exited
+/// process stays queryable while any handle to it (often its parent's) is open.
+pub fn running_process_start_marker(process_id: u32) -> io::Result<String> {
+    let process = super::open_process(process_id, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?;
+    if !process_is_running(&process)? {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "process has exited",
+        ));
+    }
+    process_start_marker_for_handle(&process)
+}
+
 /// Wait for a process to terminate, treating an already-gone PID as exited.
 pub fn wait_for_process_exit(process_id: u32, timeout: std::time::Duration) -> io::Result<bool> {
     let process =

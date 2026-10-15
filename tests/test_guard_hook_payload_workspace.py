@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.adapters.zcode_hooks import prepare_zcode_hook_p
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.cli.commands_support_workspace import _workspace_from_hook_payload
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.runtime.secret_file_requests import is_explicitly_benign_tool_action_request
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -45,16 +44,6 @@ def test_hook_payload_cwd_resolves_workspace(tmp_path: Path) -> None:
     assert _workspace_from_hook_payload({}) is None
     assert _workspace_from_hook_payload({"workspaceRoot": str(repository), "cwd": str(other)}) == repository.resolve()
     assert _workspace_from_hook_payload({"cwd": str(other)}, repository) == repository.resolve()
-
-
-def test_cached_check_is_benign_only_with_payload_cwd(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    repository = _repository(tmp_path)
-    command = {"command": "git diff --cached --check"}
-
-    assert not is_explicitly_benign_tool_action_request("Bash", command, cwd=None, home_dir=home)
-    assert is_explicitly_benign_tool_action_request("Bash", command, cwd=repository, home_dir=home)
 
 
 def test_grok_and_zcode_payloads_keep_workspace_root_when_cwd_differs(tmp_path: Path) -> None:

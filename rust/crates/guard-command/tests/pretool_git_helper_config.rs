@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -126,6 +125,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
         for command in [
             "git log --no-ext-diff --no-textconv --show-signature -1",
             "git log --no-ext-diff --no-textconv --format=%G? -1",
+            "git -c core.hooksPath=.githooks branch --list",
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,
@@ -149,6 +149,8 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             "git status --short",
             "git -c core.quotepath=false status --short",
             "git -c core.fsmonitor=false status --short",
+            "git -c core.hooksPath=/dev/null -c core.fsmonitor=false status --short",
+            "git -c core.fsmonitor=false -c core.hooksPath=/tmp/no-hooks status --porcelain",
             "git -P -c core.quotepath=false -C . status --short",
             "echo ready && git status --short | head -1",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",

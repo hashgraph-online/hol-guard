@@ -62,7 +62,6 @@ _IMPORT_ROOTS: Final = (
     "codex_plugin_scanner.cli",
     "codex_plugin_scanner.guard.cli.commands",
     "codex_plugin_scanner.guard.daemon.server",
-    "codex_plugin_scanner.guard.daemon.hook_process_entrypoint",
 )
 
 

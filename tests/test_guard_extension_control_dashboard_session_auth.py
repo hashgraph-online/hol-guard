@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.native_daemon_route import native_origin_decision
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -127,14 +128,10 @@ def test_dashboard_session_authorizes_new_extension_control_routes(tmp_path: Pat
         "/v1/local-clis/discover",
         "/v1/local-clis/forget",
     ):
-        assert daemon_server_module._GuardDaemonHandler._is_hosted_dashboard_api_path(
-            path,
-            [part for part in path.split("/") if part],
-        )
-    assert not daemon_server_module._GuardDaemonHandler._is_hosted_dashboard_api_path(
-        "/v1/extension-controls/not-real",
-        ["v1", "extension-controls", "not-real"],
-    )
+        assert native_origin_decision("https://hol.org", path, guard_home=store.guard_home).allowed
+    assert not native_origin_decision(
+        "https://hol.org", "/v1/extension-controls/not-real", guard_home=store.guard_home
+    ).allowed
 
 
 def test_dashboard_session_rejects_forged_expired_and_foreign_origin_test_lab_requests(

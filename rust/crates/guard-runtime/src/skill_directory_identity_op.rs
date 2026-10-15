@@ -99,9 +99,43 @@ fn decide(request: &SkillDirectoryIdentityRequestV1) -> Result<Value, &'static s
             );
             serde_json::to_value(discovery).map_err(|_| PAYLOAD_INVALID)
         }
+        SkillDirectoryCommandV1::InspectEncoded {
+            skill_document_hex,
+            scope_root_hex,
+            path_encoding,
+            limits,
+        } => {
+            let document =
+                crate::skill_identity_platform::decode_path_hex(skill_document_hex, path_encoding)?;
+            let scope =
+                crate::skill_identity_platform::decode_path_hex(scope_root_hex, path_encoding)?;
+            let identity = crate::skill_identity_inspect::inspect_skill_directory(
+                &document,
+                &scope,
+                &clamp_limits(limits),
+            );
+            serde_json::to_value(identity).map_err(|_| PAYLOAD_INVALID)
+        }
+        SkillDirectoryCommandV1::DiscoverEncoded {
+            skill_root_hex,
+            path_encoding,
+            limits,
+        } => {
+            let root =
+                crate::skill_identity_platform::decode_path_hex(skill_root_hex, path_encoding)?;
+            let discovery = crate::skill_identity_discovery::discover_skill_documents(
+                &root,
+                &clamp_limits(limits),
+            );
+            serde_json::to_value(discovery).map_err(|_| PAYLOAD_INVALID)
+        }
+        SkillDirectoryCommandV1::Incomplete { reason } => serde_json::to_value(
+            crate::skill_identity_inspect::incomplete_identity(*reason, None, 0, 0),
+        )
+        .map_err(|_| PAYLOAD_INVALID),
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "skill_directory_identity_op_tests.rs"]
 mod tests;

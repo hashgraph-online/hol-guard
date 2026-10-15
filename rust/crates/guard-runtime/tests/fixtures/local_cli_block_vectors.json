@@ -1,0 +1,736 @@
+{
+  "blocks": [
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "codex",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "codex",
+      "label": "codex-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "claude-code",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "claude-code",
+      "label": "claude-code-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "copilot",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "copilot",
+      "label": "copilot-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "kimi",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "kimi",
+      "label": "kimi-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "devin",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "devin",
+      "label": "devin-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "zcode",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "zcode",
+      "label": "zcode-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "openclaw",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "openclaw",
+      "label": "openclaw-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "hermes",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "hermes",
+      "label": "hermes-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "cline",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "cline",
+      "label": "cline-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "grok",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "grok",
+      "label": "grok-plain",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "codex",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "codex",
+      "label": "codex-bare",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "claude-code",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "claude-code",
+      "label": "claude-code-bare",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "codex",
+        "verdict": {
+          "action": {
+            "action_type": "shell",
+            "command": "demo-tool build"
+          },
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked",
+          "risk": {
+            "level": "low",
+            "signals": [
+              "local_cli"
+            ]
+          },
+          "scope": "workspace"
+        }
+      },
+      "harness": "codex",
+      "label": "codex-with-action",
+      "name": "demo-tool",
+      "result": {
+        "action": {
+          "action_type": "shell",
+          "command": "demo-tool build"
+        },
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow",
+        "risk": {
+          "level": "low",
+          "signals": [
+            "local_cli"
+          ]
+        },
+        "scope": "workspace"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "claude-code",
+        "verdict": {
+          "action": {
+            "action_type": "shell",
+            "command": "demo-tool build"
+          },
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked",
+          "risk": {
+            "level": "low",
+            "signals": [
+              "local_cli"
+            ]
+          },
+          "scope": "workspace"
+        }
+      },
+      "harness": "claude-code",
+      "label": "claude-code-with-action",
+      "name": "demo-tool",
+      "result": {
+        "action": {
+          "action_type": "shell",
+          "command": "demo-tool build"
+        },
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow",
+        "risk": {
+          "level": "low",
+          "signals": [
+            "local_cli"
+          ]
+        },
+        "scope": "workspace"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "codex",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "codex",
+      "label": "codex-unicode",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed \u2014 r\u00e9sum\u00e9 \u2603",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "claude-code",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this demo-tool command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "claude-code",
+      "label": "claude-code-unicode",
+      "name": "demo-tool",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed \u2014 r\u00e9sum\u00e9 \u2603",
+        "reason_code": "native_allow"
+      }
+    },
+    {
+      "expected": {
+        "approval_reuse_status": "blocked",
+        "harness": "codex",
+        "verdict": {
+          "decision": "deny",
+          "minimum_action": "block",
+          "policy_action": "block",
+          "reason": "Your custom extension rules block this My \"quoted\" tool \u00e9 command.",
+          "reason_code": "local_cli_extension_blocked"
+        }
+      },
+      "harness": "codex",
+      "label": "codex-name",
+      "name": "My \"quoted\" tool \u00e9",
+      "result": {
+        "decision": "allow",
+        "minimum_action": "allow",
+        "policy_action": "allow",
+        "reason": "Allowed by policy.",
+        "reason_code": "native_allow"
+      }
+    }
+  ],
+  "command_ids": [
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "root",
+      "tokens": []
+    },
+    {
+      "catalog": [],
+      "expected": "root",
+      "tokens": []
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "build",
+      "tokens": [
+        "build"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "build",
+      "tokens": [
+        "build",
+        "--watch"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "db.migrate",
+      "tokens": [
+        "db",
+        "migrate"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "db.migrate.up",
+      "tokens": [
+        "db",
+        "migrate",
+        "up",
+        "--all"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "db",
+      "tokens": [
+        "db",
+        "seed"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "a.b.c.d",
+      "tokens": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "other",
+      "tokens": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "other",
+      "tokens": [
+        "test"
+      ]
+    },
+    {
+      "catalog": [],
+      "expected": "other",
+      "tokens": [
+        "test"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "other",
+      "tokens": [
+        "Build"
+      ]
+    },
+    {
+      "catalog": [
+        "build",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "a.b.c.d.e"
+      ],
+      "expected": "db.migrate",
+      "tokens": [
+        "db.migrate"
+      ]
+    },
+    {
+      "catalog": [
+        "",
+        "x"
+      ],
+      "expected": "",
+      "tokens": [
+        ""
+      ]
+    }
+  ],
+  "grant_answers": {
+    "cases": [
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "allowed",
+        "label": "allowed"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "blocked"
+        },
+        "expected": "blocked",
+        "label": "blocked"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "none"
+        },
+        "expected": null,
+        "label": "none"
+      },
+      {
+        "answer": {
+          "cli_id": null,
+          "identity_hash": null,
+          "state": "none"
+        },
+        "expected": "unverified",
+        "label": "none-without-identity"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "review"
+        },
+        "expected": "unverified",
+        "label": "unknown-state"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.other",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "blocked"
+        },
+        "expected": "unverified",
+        "label": "other-cli"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state": "blocked"
+        },
+        "expected": "unverified",
+        "label": "other-hash"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state": "allowed"
+        },
+        "expected": "unverified",
+        "label": "allowed-other-hash"
+      },
+      {
+        "answer": {
+          "cli_id": null,
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "blocked"
+        },
+        "expected": "unverified",
+        "label": "blocked-without-cli"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "state": "blocked"
+        },
+        "expected": "unverified",
+        "label": "upper-hash"
+      },
+      {
+        "answer": {
+          "cli_id": "local-cli.demo-tool",
+          "extra": 1,
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "blocked"
+        },
+        "expected": "unverified",
+        "label": "extra-key"
+      },
+      {
+        "answer": null,
+        "expected": "unverified",
+        "label": "failure"
+      }
+    ],
+    "cli_id": "local-cli.demo-tool",
+    "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "watch": {
+    "reason": "Watch recorded this action without stopping it.",
+    "reason_code": "local_cli_extension_blocked"
+  }
+}

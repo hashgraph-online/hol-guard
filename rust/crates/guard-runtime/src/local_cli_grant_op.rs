@@ -13,6 +13,8 @@ use guard_contracts::{
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
+use std::path::Path;
 
 use crate::local_store_read::{self, StoreReadError};
 
@@ -114,6 +116,72 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
         request.command_id.as_deref().unwrap_or(OTHER_COMMAND_ID),
     )?;
     Ok(reply(state))
+}
+
+/// The grant answer the daemon reads for an allowed `PreToolUse` that
+/// launches the CLI `source` names, as `decide_local_cli_grant` requests it.
+pub(crate) fn decide_allowed_launch(
+    guard_home: &str,
+    source: &LocalCliIdentitySourceV1,
+    command_id: Option<&str>,
+) -> Result<Value, &'static str> {
+    decide(&LocalCliGrantRequestV1 {
+        schema: LOCAL_CLI_GRANT_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        store_path: store_text(guard_home),
+        guard_home: guard_home.to_owned(),
+        current_action: "allow".to_owned(),
+        source: source.clone(),
+        command_id: command_id.map(str::to_owned),
+    })
+}
+
+fn store_text(guard_home: &str) -> String {
+    Path::new(guard_home)
+        .join(local_store_read::STORE_FILE_NAME)
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// The command catalog the daemon reads for `cli_id` (rows whose columns all
+/// have their declared types), and whether any command of it is blocked.
+pub(crate) fn command_catalog(
+    guard_home: &str,
+    cli_id: &str,
+) -> Result<(BTreeSet<String>, bool), &'static str> {
+    let store_path = local_store_read::require_store_path(&store_text(guard_home), guard_home)
+        .map_err(store_error)?;
+    let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
+    else {
+        return Ok((BTreeSet::new(), false));
+    };
+    let mut catalog = BTreeSet::new();
+    if table_exists(&connection, "local_cli_command")? {
+        let mut statement = connection
+            .prepare(
+                "select command_id from local_cli_command where cli_id = ?1 \
+                 and typeof(command_id) = 'text' and typeof(name) = 'text' \
+                 and typeof(usage) = 'text' and typeof(description) = 'text' \
+                 and (parent_id is null or typeof(parent_id) = 'text')",
+            )
+            .map_err(|_| STORE_UNAVAILABLE)?;
+        let rows = statement
+            .query_map(params![cli_id], |row| row.get::<_, String>(0))
+            .map_err(|_| STORE_UNAVAILABLE)?;
+        for row in rows {
+            catalog.insert(row.map_err(|_| STORE_UNAVAILABLE)?);
+        }
+    }
+    let blocked = table_exists(&connection, "local_cli_command_grant")?
+        && connection
+            .query_row(
+                "select exists(select 1 from local_cli_command_grant \
+                 where cli_id = ?1 and state = 'block')",
+                params![cli_id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(|_| STORE_UNAVAILABLE)?;
+    Ok((catalog, blocked))
 }
 
 fn outcome(state: GrantState, cli_id: Option<&str>, identity_hash: Option<&str>) -> Value {

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Final, Literal, cast
 from urllib.parse import urlsplit
 
-from .containment_executor import file_sha256
+from .contained_execution_common import file_sha256
 from .package_evidence_common import (
     object_mapping,
     read_json_with_integrity,

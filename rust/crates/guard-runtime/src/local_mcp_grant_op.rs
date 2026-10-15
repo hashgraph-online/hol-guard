@@ -137,7 +137,7 @@ fn validate(request: &LocalMcpGrantRequestV1) -> Result<(), &'static str> {
     }
 }
 
-fn decide(request: &LocalMcpGrantRequestV1) -> Result<Value, &'static str> {
+pub(crate) fn decide(request: &LocalMcpGrantRequestV1) -> Result<Value, &'static str> {
     let store_path = local_store_read::require_store_path(&request.store_path, &request.guard_home)
         .map_err(store_error)?;
     validate(request)?;
@@ -159,7 +159,8 @@ fn decide(request: &LocalMcpGrantRequestV1) -> Result<Value, &'static str> {
     {
         return Ok(outcome(McpGrantState::None, None));
     }
-    let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
+    let Some(connection) =
+        local_store_read::open_read_only_cached(&store_path).map_err(store_error)?
     else {
         return Ok(outcome(McpGrantState::None, None));
     };

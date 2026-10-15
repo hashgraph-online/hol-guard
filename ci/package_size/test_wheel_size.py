@@ -16,7 +16,6 @@ from scripts.ci.check_wheel_size import NATIVE, inspect_wheel
     [
         ({"data": b"x" * 4096}, "unpacked"),
         ({NATIVE + "hol-guard-runtime.exe": b"x" * 4096}, "runtime"),
-        ({NATIVE + "guard-command-source": b"x" * 4096}, "compiler"),
         ({"data": b"x"}, "download"),
     ],
 )
@@ -25,7 +24,7 @@ def test_budget_rejects_each_growth_dimension(tmp_path, payload, metric):
     with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, content in payload.items():
             archive.writestr(name, content)
-    limits = {name: 100000 for name in ("download", "unpacked", "runtime", "compiler")}
+    limits = {name: 100000 for name in ("download", "unpacked", "runtime")}
     limits[metric] = 0
     report, failures = inspect_wheel(wheel, {"win_amd64": limits})
     assert len(failures) == 1
@@ -33,6 +32,16 @@ def test_budget_rejects_each_growth_dimension(tmp_path, payload, metric):
     assert "Largest compressed members" in report
     limits[metric] = 100000
     assert inspect_wheel(wheel, {"win_amd64": limits})[1] == []
+
+
+@pytest.mark.parametrize("name", ["guard-command-source", "guard-command-source.exe"])
+def test_platform_wheel_rejects_a_packaged_source_compiler(tmp_path, name):
+    wheel = tmp_path / "hol_guard-1.0-py3-none-win_amd64.whl"
+    with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(NATIVE + name, b"x" * 4096)
+    limits = {key: 100000 for key in ("download", "unpacked", "runtime")}
+    _, failures = inspect_wheel(wheel, {"win_amd64": limits})
+    assert failures == [f"{wheel.name}: platform wheel must not contain {NATIVE + name}"]
 
 
 def test_unknown_platform_cannot_skip_budget(tmp_path):
@@ -75,10 +84,9 @@ def test_cli_rejects_empty_distribution_directory(tmp_path):
     assert "contains no wheels" in result.stderr
 
 
-@pytest.mark.parametrize("megabytes,expected", [(1, 0), (12, 1)])
+@pytest.mark.parametrize("megabytes,expected", [(1, 0), (42, 1)])
 def test_cli_native_gate_reuses_binaries_without_building(tmp_path, megabytes, expected):
-    (tmp_path / "hol-guard-runtime.exe").write_bytes(b"runtime")
-    (tmp_path / "guard-command-source.exe").write_bytes(b"x" * megabytes * 1024 * 1024)
+    (tmp_path / "hol-guard-runtime.exe").write_bytes(b"x" * megabytes * 1024 * 1024)
     script = Path(__file__).resolve().parents[2] / "scripts/ci/check_wheel_size.py"
     result = subprocess.run(
         [sys.executable, str(script), "--native-dir", str(tmp_path), "--platform", "win_amd64"],
@@ -89,4 +97,4 @@ def test_cli_native_gate_reuses_binaries_without_building(tmp_path, megabytes, e
     )
     assert result.returncode == expected, result.stderr
     if expected:
-        assert "compiler exceeds budget" in result.stdout
+        assert "runtime exceeds budget" in result.stdout

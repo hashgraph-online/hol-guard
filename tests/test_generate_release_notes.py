@@ -76,6 +76,8 @@ def test_select_previous_tag_picks_closest_same_channel_tag() -> None:
     assert select_previous_tag(["alpha/v3.0.0a289", "alpha/v3.0.0a290"], "3.0.0a290", "alpha") == "alpha/v3.0.0a289"
     assert select_previous_tag(["v2.2.128"], "3.0.0", "stable") == "v2.2.128"
     assert select_previous_tag(["v3.0.1"], "3.0.1", "stable") is None
+    assert select_previous_tag(["alpha/v3.1.0a13", "v3.42.0"], "3.43.0a1", "alpha") == "v3.42.0"
+    assert select_previous_tag(["v3.42.0", "alpha/v3.43.0a1"], "3.43.0a2", "alpha") == "alpha/v3.43.0a1"
 
 
 def test_extract_summary_bullets_reads_summary_section_with_limits() -> None:
@@ -209,6 +211,10 @@ def test_render_notes_alpha_channel_and_empty_history() -> None:
         source_sha="a" * 40,
     )
     assert "opt-in prerelease" in alpha
+    assert "`hol-guard update --alpha`" in alpha
+    assert "platform wheel attached to [this prerelease]" in alpha
+    assert "pure wheel only" in alpha
+    assert 'uv tool install "hol-guard[cisco]==3.0.0a290"' not in alpha
     assert "since [Guard 3.0.0a289]" in alpha
 
     empty = render_notes(

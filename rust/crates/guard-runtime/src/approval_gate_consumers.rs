@@ -54,7 +54,7 @@ fn requires_decision_gate(state: &serde_json::Value, action: &str, scope: &str) 
 }
 
 /// `totp_state_valid` for `validate*` — whether the TOTP state resolves.
-fn totp_state_valid(guard_home: &Path, state: &serde_json::Value) -> bool {
+pub(crate) fn totp_state_valid(guard_home: &Path, state: &serde_json::Value) -> bool {
     match crate::approval_gate_state::optional_string(state.get("totp_secret_id")) {
         Some(id) => {
             let mut store = TotpSecretStore::new(guard_home);

@@ -16,7 +16,7 @@ from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
 from ..store_local_cli_retention import LocalCliReplaySkippedError, later_timestamp
-from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, OTHER_COMMAND_ID, LocalCliCommand
+from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .time_support import parse_utc_timestamp
@@ -197,51 +197,11 @@ def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
     """Compile exact operator choices into the authenticated native policy.
 
     Only catalogued tools can be allowed. The fallback may block new tools,
-    but cannot grant permission to tools the operator has never seen.
+    but cannot grant permission to tools the operator has never seen. The
+    guard store resident reads the grants and compiles the selectors.
     """
 
-    actions: dict[str, str] = {}
-    for item in store.list_local_cli_items():
-        if item.get("surface") != "mcp" or item.get("stale") is True:
-            continue
-        cli_id = item.get("cli_id")
-        if not isinstance(cli_id, str):
-            continue
-        observation = store.find_local_mcp_observation(cli_id=cli_id)
-        marker = observation.get("server_command") if observation is not None else None
-        if not isinstance(marker, str) or not marker.startswith(OBSERVED_MCP_PREFIX):
-            continue
-        harness, separator, namespace = marker[len(OBSERVED_MCP_PREFIX) :].partition(":")
-        if not separator:
-            continue
-        example = observed_mcp_tool(harness, namespace + "probe")
-        if example is None or example.namespace != namespace:
-            continue
-        server = example.server_identity
-        if item.get("identity_hash") != server.identity_hash:
-            continue
-        grant = store.read_local_mcp_grant(server.identity_hash)
-        if grant is None:
-            continue
-        if grant.get("state") == "blocked":
-            actions[f"{harness}:{namespace}*"] = "block"
-            continue
-        states = grant.get("command_states")
-        commands = grant.get("commands")
-        if not isinstance(states, Mapping) or not isinstance(commands, list):
-            continue
-        if states.get(OTHER_COMMAND_ID) == "block":
-            actions[f"{harness}:{namespace}*"] = "block"
-        for command in commands:
-            if not isinstance(command, LocalCliCommand) or command.command_id == OTHER_COMMAND_ID:
-                continue
-            tool = observed_mcp_tool(harness, command.usage)
-            if tool is None or tool.namespace != namespace or tool.command_id != command.command_id:
-                continue
-            state = states.get(command.command_id)
-            if state in {"allow", "review", "block"}:
-                actions[f"{harness}:{tool.qualified_name}"] = str(state)
-    return bound_native_mcp_tool_actions(actions)
+    return bound_native_mcp_tool_actions(store.read_observed_mcp_tool_actions())
 
 
 def bound_native_mcp_tool_actions(

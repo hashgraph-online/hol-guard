@@ -194,8 +194,25 @@ def build_source_compiler() -> None:
 def regenerate_projections() -> None:
     """Publish current sources without admitting historical fixture snapshots."""
     build_source_compiler()
+    _run(
+        [
+            sys.executable,
+            "scripts/build_native_command_program.py",
+            "--compiler",
+            str(COMPILER),
+            "--check-public-descriptors",
+        ]
+    )
     for check in ([], ["--check"]):
-        _run([sys.executable, "scripts/build_native_command_program.py", "--compiler", str(COMPILER), *check])
+        _run(
+            [
+                sys.executable,
+                "scripts/build_native_command_program.py",
+                "--compiler",
+                str(COMPILER),
+                *check,
+            ]
+        )
         _run([sys.executable, "scripts/export_extension_directory.py", *check])
 
 

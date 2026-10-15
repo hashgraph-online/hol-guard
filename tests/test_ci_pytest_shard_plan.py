@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from scripts.ci.build_pytest_shard_plan import (
+    SANDBOX_GATE_FILES,
     SCHEDULING_ONLY_NODE_IDS,
     _split_file_nodes,
     build_affinity_node_shards,
@@ -97,6 +98,15 @@ def test_scheduling_only_nodes_cannot_own_or_inflate_a_coverage_shard() -> None:
     assert sorted(node for shard in shards for node in shard) == sorted(traced_nodes)
     assert loads == [1.0] * len(traced_nodes)
     assert not SCHEDULING_ONLY_NODE_IDS.intersection(node for shard in shards for node in shard)
+
+
+def test_sandbox_gate_files_never_reach_a_coverage_shard() -> None:
+    gate_nodes = [f"{path}::test_case[{index}]" for index, path in enumerate(sorted(SANDBOX_GATE_FILES))]
+    kept = ["tests/test_guard_benign_false_positive_gate_support.py::test_case"]
+
+    shards, _ = build_affinity_node_shards(gate_nodes + kept, 1, _durations(gate_nodes + kept))
+
+    assert sorted(node for shard in shards for node in shard) == kept
 
 
 def test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_shards() -> None:

@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard import native_supply_chain_eval
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_python_phase12_support import (
@@ -30,7 +31,7 @@ def test_evaluate_package_request_artifact_normalizes_pypi_names_for_bundle_matc
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -62,7 +63,7 @@ def test_evaluate_package_request_artifact_ignores_cross_ecosystem_bundle_matche
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     npm_package = package_fixture(
         name="requests",
         version="2.31.0",
@@ -413,7 +414,7 @@ def test_evaluate_package_request_artifact_resolves_new_python_targets_with_regi
     write_text(workspace_dir / manifest_name, manifest_text)
     write_text(workspace_dir / lockfile_name, lockfile_text.strip() + "\n")
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -428,22 +429,17 @@ def test_evaluate_package_request_artifact_resolves_new_python_targets_with_regi
         ),
         "2026-05-19T00:00:00Z",
     )
-    captured_urls: list[str] = []
-
-    def fake_urlopen_json_with_timeout_retry(*, request, timeout_seconds: int, retry_timeout_seconds: int):
-        captured_urls.append(request.full_url)
-        assert timeout_seconds == 1
-        assert retry_timeout_seconds == 1
-        return {"releases": {"2.30.9": [{}], "2.31.0": [{}]}}
-
-    monkeypatch.setattr(package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
+    monkeypatch.setattr(
+        native_supply_chain_eval,
+        "_test_registry_metadata_override",
+        {"https://pypi.org/pypi/requests/json": {"releases": {"2.30.9": [{}], "2.31.0": [{}]}}},
+    )
 
     artifact = artifact_from_command_fixture(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
     assert result.decision == "block"
     assert result.packages[0]["resolvedVersion"] == "2.31.0"
-    assert any(url.endswith("/requests/json") for url in captured_urls)
 
 
 def test_evaluate_package_request_artifact_matches_transitive_python_lockfile_names_with_pep503_normalization(
@@ -462,7 +458,7 @@ def test_evaluate_package_request_artifact_matches_transitive_python_lockfile_na
         + "\n",
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -493,7 +489,7 @@ def test_evaluate_package_request_artifact_maps_python_advisory_aliases_to_prima
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -525,7 +521,7 @@ def test_evaluate_package_request_artifact_surfaces_yanked_safer_python_version_
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(

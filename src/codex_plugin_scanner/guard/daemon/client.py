@@ -286,6 +286,11 @@ class GuardSurfaceDaemonClient:
         response = self._post("/v1/policy/claim", payload)
         return response.get("claimed") is True
 
+    def open_get(self, path: str, headers: dict[str, str], *, timeout: float) -> http.client.HTTPResponse:
+        """Open an authenticated loopback GET; the caller owns and closes the response."""
+        request = urllib.request.Request(f"{self.daemon_url}{path}", headers=headers, method="GET")
+        return urllib.request.urlopen(request, timeout=timeout)
+
     def _get(
         self,
         path: str,
@@ -323,6 +328,8 @@ class GuardSurfaceDaemonClient:
                     return self._decode_json_response(payload.decode("utf-8"))
             except TimeoutError as retry_error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+            except urllib.error.HTTPError as retry_error:
+                raise self._http_request_error(retry_error, deadline=deadline) from retry_error
             except urllib.error.URLError as retry_error:
                 if isinstance(retry_error.reason, TimeoutError):
                     raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
@@ -380,6 +387,12 @@ class GuardSurfaceDaemonClient:
             if time.monotonic() >= deadline:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out")
             if not chunk:
+                # ``HTTPResponse.read1`` returns ``b""`` at an early EOF instead of
+                # raising, so a short Content-Length body would otherwise be
+                # returned as if complete and skip the caller's truncation retry.
+                missing = getattr(response, "length", None)
+                if type(missing) is int and missing > 0:
+                    raise http.client.IncompleteRead(b"".join(chunks), missing)
                 break
             total_bytes += len(chunk)
             if total_bytes > max_bytes:
