@@ -136,7 +136,7 @@ pub(crate) fn json_list(row: &Row, name: &str) -> StoreResult<Vec<Value>> {
 }
 
 /// `_json_object`.
-fn json_object(row: &Row, name: &str) -> StoreResult<Value> {
+pub(crate) fn json_object(row: &Row, name: &str) -> StoreResult<Value> {
     match parse_cell(row, name)? {
         Some((value @ PyVal::Dict(_), surrogate)) => decoded(&value, surrogate),
         _ => Ok(Value::Null),

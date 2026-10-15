@@ -80,9 +80,6 @@ from .store_approvals import (
     get_approval_request as load_approval_request,
 )
 from .store_approvals import (
-    get_approval_extension_allow_hint,
-)
-from .store_approvals import (
     list_approval_requests as load_approval_requests,
 )
 from .store_approvals import (

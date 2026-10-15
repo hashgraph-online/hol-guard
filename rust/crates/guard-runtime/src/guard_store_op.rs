@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_advisory_cache as advisory_cache;
 use crate::guard_store_approval_backfill;
+use crate::guard_store_approval_metadata as approval_metadata;
 use crate::guard_store_approval_page_reads as approval_pages;
 use crate::guard_store_approval_queue::queue_blocked_approvals;
 use crate::guard_store_approval_reads as approval_reads;
@@ -316,7 +317,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_approval_requests"
         | "list_approval_request_page"
         | "count_approval_requests"
-        | "get_next_pending_request" => Kind::Snapshot,
+        | "get_next_pending_request"
+        | "get_approval_extension_allow_hint"
+        | "approval_desktop_notified_at"
+        | "oldest_approval_request_created_at" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "resolve_matching_approval_requests"
@@ -324,6 +328,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "resolve_one_request_only"
         | "resolve_harness_native_approval_request"
         | "resolve_matching_duplicate_requests"
+        | "mark_approval_desktop_notified"
         | "add_approval_request"
         | "queue_blocked_approvals"
         | "add_native_review_approval_request"
@@ -567,6 +572,18 @@ fn dispatch(
         "count_approval_requests" => approval_pages::count_approval_requests(connection, args),
         "get_next_pending_request" => {
             approval_pages::get_next_pending_request(connection, guard_home, args)
+        }
+        "get_approval_extension_allow_hint" => {
+            approval_metadata::get_approval_extension_allow_hint(connection, args)
+        }
+        "approval_desktop_notified_at" => {
+            approval_metadata::approval_desktop_notified_at(connection, args)
+        }
+        "mark_approval_desktop_notified" => {
+            approval_metadata::mark_approval_desktop_notified(connection, args)
+        }
+        "oldest_approval_request_created_at" => {
+            approval_metadata::oldest_approval_request_created_at(connection, args)
         }
         "resolve_approval_request" => resolve_approval_request(connection, guard_home, args, false),
         "resolve_one_request_only" => resolve_approval_request(connection, guard_home, args, true),

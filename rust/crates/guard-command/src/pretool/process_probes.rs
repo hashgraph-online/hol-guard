@@ -17,6 +17,9 @@
 //!   or a socket directory, a connection string in `--dbname`, and any other
 //!   option.
 
+#[cfg(unix)]
+use crate::pretool::directory_targets::path_trust::{steady_directory, unswappable};
+
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "localhost", "::1"];
 
 /// A PostgreSQL host that never leaves the machine: a loopback name or address,
@@ -304,27 +307,6 @@ fn missing_directory_protected(path: &std::path::Path, uid: u32) -> bool {
             .all(|path| steady_directory(path, uid))
 }
 
-/// Whether nobody else can retarget `path` once checked: each component is this
-/// user's or root's in a resolved [`steady_directory`], and so is each link's target.
-#[cfg(unix)]
-fn unswappable(path: &std::path::Path, uid: u32, depth: u8) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    depth < 8
-        && path.ancestors().all(|entry| {
-            let Some(parent) = entry.parent() else {
-                return true;
-            };
-            std::fs::symlink_metadata(entry).is_ok_and(|metadata| {
-                (metadata.uid() == uid || metadata.uid() == 0)
-                    && (!metadata.file_type().is_symlink()
-                        || std::fs::read_link(entry)
-                            .is_ok_and(|target| unswappable(&parent.join(target), uid, depth + 1)))
-            }) && parent
-                .canonicalize()
-                .is_ok_and(|parent| steady_directory(&parent, uid))
-        })
-}
-
 /// What a `psql` read inherits from the session.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PsqlEnvironment {
@@ -332,17 +314,6 @@ pub struct PsqlEnvironment {
     pub startup_files_absent: bool,
     /// No routing variable is set.
     pub routing_unset: bool,
-}
-
-/// A directory entry, read without following a link, that belongs to this
-/// user or root and that other users cannot rename entries in.
-#[cfg(unix)]
-fn steady_directory(path: &std::path::Path, uid: u32) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::symlink_metadata(path).is_ok_and(|metadata| {
-        (metadata.uid() == uid || metadata.uid() == 0)
-            && (metadata.mode() & 0o022 == 0 || metadata.mode() & 0o1000 != 0)
-    })
 }
 
 /// Variables that change which startup files psql reads; `-X` skips them.

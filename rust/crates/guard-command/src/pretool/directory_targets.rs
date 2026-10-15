@@ -8,6 +8,10 @@
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 
+#[cfg(unix)]
+#[path = "path_trust.rs"]
+pub(in crate::pretool) mod path_trust;
+
 pub(crate) fn safe_directory_target(target: &str) -> bool {
     // Windows spells an absolute directory with backslash separators. Check
     // a drive-absolute target in its forward-slash form; a backslash anywhere
@@ -49,6 +53,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         value
     };
     let supplied = std::path::Path::new(value);
+    // Only a spelling the command anchors itself may name its target through
+    // a link; a relative operand follows the shell's logical `$PWD`.
+    let anchored = supplied.is_absolute();
     let joined;
     let supplied = if supplied.is_absolute() {
         supplied
@@ -58,7 +65,7 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     };
     let canonical = std::fs::canonicalize(supplied).ok()?;
     // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
-    if !absolute_path_spelling_matches(supplied, &canonical)
+    if !absolute_path_spelling_matches(supplied, &canonical, anchored)
         || !canonical.is_dir()
         || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
     {
@@ -108,35 +115,46 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     Some(joined)
 }
 
-fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
+fn absolute_path_spelling_matches(
+    supplied: &std::path::Path,
+    canonical: &std::path::Path,
+    anchored: bool,
+) -> bool {
     if canonical == supplied {
         return true;
     }
     // macOS exposes the root temporary directory through this fixed system
-    // alias. Permit only the exact canonical suffix; deeper symlink aliases
-    // remain rejected by the physical-cwd proof.
+    // alias. Permit the exact canonical suffix.
     #[cfg(target_os = "macos")]
     {
         let alias = std::path::Path::new("/tmp");
-        let Ok(relative) = supplied.strip_prefix(alias) else {
-            return false;
-        };
-        let Ok(alias_canonical) = std::fs::canonicalize(alias) else {
-            return false;
-        };
-        alias_canonical == std::path::Path::new("/private/tmp")
-            && canonical == alias_canonical.join(relative)
+        if let Ok(relative) = supplied.strip_prefix(alias) {
+            if std::fs::canonicalize(alias).is_ok_and(|alias_canonical| {
+                alias_canonical == std::path::Path::new("/private/tmp")
+                    && canonical == alias_canonical.join(relative)
+            }) {
+                return true;
+            }
+        }
+    }
+    // Other links count only when nobody but this user or root can retarget
+    // them, such as `/var -> private/var` or a link in the user's own
+    // directory. A link in a directory others can write stays rejected.
+    #[cfg(unix)]
+    {
+        anchored && path_trust::trusted_link_spelling(supplied, canonical)
     }
     // Windows canonical paths carry the verbatim prefix.
     #[cfg(windows)]
     {
+        let _ = anchored;
         supplied
             .to_str()
             .is_some_and(|text| exact_drive_spelling(text, canonical))
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(unix, windows)))]
     {
-        let _ = (supplied, canonical);
+        let _ = (supplied, canonical, anchored);
         false
     }
 }

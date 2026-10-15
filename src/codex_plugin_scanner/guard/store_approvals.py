@@ -18,9 +18,6 @@ from .native_approval_queue_identity import (
     queue_identity_item,
 )
 from .store_approval_projection import (
-    _json_object as _json_object,
-)
-from .store_approval_projection import (
     _optional_json_object as _optional_json_object,
 )
 from .store_approval_projection import (
@@ -225,18 +222,6 @@ def get_approval_request(
             ):
                 payload["superseded_by_request_id"] = replacement
     return payload
-
-
-def get_approval_extension_allow_hint(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
-    """Return the private queue-time hint; it never rides along on request payloads."""
-
-    if "extension_allow_hint_json" not in _approval_columns(connection):
-        return None
-    row = connection.execute(
-        "select extension_allow_hint_json from approval_requests where request_id = ?",
-        (request_id,),
-    ).fetchone()
-    return _json_object(row[0]) if row is not None else None
 
 
 def _approval_columns(connection: sqlite3.Connection) -> set[str]:

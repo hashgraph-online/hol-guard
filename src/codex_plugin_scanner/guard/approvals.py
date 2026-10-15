@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.metadata
 import logging
@@ -807,7 +808,11 @@ def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> No
         config = None
     if config is not None and not config.desktop_notifications:
         return
-    if store.approval_desktop_notified_at(request.request_id) is not None:
+    try:
+        if store.approval_desktop_notified_at(request.request_id) is not None:
+            return
+    except ApprovalScopeUnavailableError:
+        # The request is already queued; the notification is best effort.
         return
     auth_token = load_guard_daemon_auth_token(store.guard_home)
     approval_url = request.approval_url
@@ -820,11 +825,15 @@ def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> No
             message=_approval_notification_message(request),
             approval_url=approval_url,
         ),
-        on_success=lambda: store.mark_approval_desktop_notified(
-            request.request_id,
-            _now(),
-        ),
+        on_success=lambda: _mark_desktop_notified(store, request.request_id),
     )
+
+
+def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
+    # This process already remembers the notification; a lost marker only
+    # lets another process notify once more.
+    with contextlib.suppress(ApprovalScopeUnavailableError):
+        store.mark_approval_desktop_notified(request_id, _now())
 
 
 def _approval_notification_message(request: _QueuedNotice) -> str:

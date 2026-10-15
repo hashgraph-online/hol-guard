@@ -17,6 +17,9 @@ impl Dirs {
         ));
         fs::create_dir_all(root.join("home")).unwrap();
         fs::create_dir_all(root.join("ws")).unwrap();
+        // A canonical workspace has no symlinked ancestor, and macOS's
+        // temporary directory sits below the `/var` -> `/private/var` link.
+        let root = fs::canonicalize(&root).unwrap();
         Self { root }
     }
 

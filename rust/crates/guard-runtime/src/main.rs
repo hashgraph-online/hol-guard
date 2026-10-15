@@ -264,6 +264,7 @@ mod guard_store_advisory_cache;
 mod guard_store_advisory_cache_vectors_tests;
 mod guard_store_approval_backfill;
 mod guard_store_approval_created;
+mod guard_store_approval_metadata;
 mod guard_store_approval_page_reads;
 mod guard_store_approval_queue;
 mod guard_store_approval_queue_item;

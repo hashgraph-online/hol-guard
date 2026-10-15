@@ -4,7 +4,7 @@ use super::super::tests::{
 use super::{now_ms, PolicySnapshotStore};
 use super::{
     observe_input, DirectLaneDefer, DIRECT_LANE_ACK_DIRECTORY, DIRECT_LANE_ACK_FILE_NAME,
-    DIRECT_LANE_ACK_SCHEMA,
+    DIRECT_LANE_ACK_MAX_LEASE_MS, DIRECT_LANE_ACK_SCHEMA,
 };
 use guard_policy_snapshot::{PolicySnapshotV3, POLICY_SNAPSHOT_PUSH_SCHEMA};
 use serde_json::{json, Value};
@@ -110,7 +110,9 @@ pub(crate) fn write_current_ack(fixture: &Fixture) {
         &fixture.root,
         fixture.snapshot.generation,
         &fixture.snapshot.policy_digest,
-        now_ms().unwrap() + 30_000,
+        // The longest lease the store admits, so a stalled CI runner cannot
+        // expire it mid-test; expiry has its own tests with explicit leases.
+        now_ms().unwrap() + DIRECT_LANE_ACK_MAX_LEASE_MS,
         0o600,
     );
 }

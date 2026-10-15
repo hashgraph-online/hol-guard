@@ -151,6 +151,31 @@ fn other_wrappers_stay_out_of_containment() {
     }
 }
 
+/// The contained sink refuses a relative `cd` into the workspace, so the
+/// edge must not issue a narrower receipt for one: every harness would then
+/// fail the call at the sink with `contained_test_authorization_failed`.
+#[test]
+fn relative_cd_inside_the_workspace_gets_no_narrower_receipt() {
+    let root = fixture();
+    for harness in ["omp", "claude-code", "codex"] {
+        for command in [
+            "cd ./web && ./node_modules/.bin/vite build 2>&1 | tail -15",
+            "cd ./web && bunx vitest run x | tail -20",
+            "cd ./web && bun run build",
+        ] {
+            let result = classify(&root, harness, command);
+            assert!(
+                !result
+                    .reason_code
+                    .ends_with("_readonly_containment_required")
+                    && result.reason_code != "native_node_build_output_containment_required",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+    }
+}
+
 /// Agents step from one checkout into a sibling repository or worktree by
 /// absolute path. The run is contained to that repository, as it would be
 /// from a session started there; a directory outside any repository is not.
