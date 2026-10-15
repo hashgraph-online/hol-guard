@@ -64,8 +64,7 @@ runs:
     # The coverage run executes the same Rust tests as the workspace job.
     # Without bubblewrap 0.10+ the sandbox reports the host as unavailable,
     # and tests that expect a contained run see a review instead.
-    shell: bash
-    run: bash ci/containment/install-bubblewrap.sh
+    uses: ./.github/actions/setup-bubblewrap
     if: inputs.has-token == 'true'
   - name: Generate current-checkout Rust coverage
     shell: bash

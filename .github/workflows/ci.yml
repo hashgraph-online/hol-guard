@@ -203,15 +203,17 @@ jobs:
           } >> "$GITHUB_ENV"
         env:
           SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
-      - name: Provision bubblewrap for the Linux workspace sandbox tests
+      - name: Provision the Linux test linker
         if: matrix.check != 'clippy'
-        # Without it the overlay sandbox tests take the unavailable-host branch
-        # and the live confinement run is skipped.
-        # The test wrapper links with lld; the sandbox needs bubblewrap 0.10+.
+        # The checked test wrapper links with lld. Reuse the runner's linker
+        # when present instead of refreshing apt for an installed tool.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends lld
-          bash ci/containment/install-bubblewrap.sh
+          if ! command -v ld.lld >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends lld
+          fi
+      - uses: ./.github/actions/setup-bubblewrap
+        if: matrix.check != 'clippy'
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
@@ -376,7 +378,7 @@ jobs:
         # Without it every command the sandbox would contain falls back to
         # review, and the gates measure a host that Linux users with
         # bubblewrap never see.
-        run: bash ci/containment/install-bubblewrap.sh
+        uses: ./.github/actions/setup-bubblewrap
       - name: Benign false-positive and Gauntlet replay gates (model-free, native path)
         env:
           SHARD_INDEX: ${{ matrix.shard-index }}
