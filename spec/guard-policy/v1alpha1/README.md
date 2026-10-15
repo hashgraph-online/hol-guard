@@ -16,6 +16,9 @@ GuardPolicy is HOL Guard's portable policy document. The alpha contract is inten
 - [`rfc.md`](rfc.md): public alpha questions and stabilization criteria.
 - [`extensions/`](extensions/): registered extension schemas and their registration records.
 - [`fixtures/manifest.json`](fixtures/manifest.json): valid, invalid, hash, and decision conformance vectors.
+- [`decision.schema.json`](decision.schema.json): the Decision shape printed by `hol-guard policy check` and Policy Studio Explain.
+- [`fixtures/parity/`](fixtures/parity/): recorded events and decisions that both implementations must reproduce. Re-record with `python scripts/record_policy_parity.py` and verify with `--check`.
+- [`docs/policy/`](../../../docs/policy/): the generated schema reference, precedence page, command reference and tutorials.
 
 ## Reference validation
 
@@ -24,6 +27,8 @@ The Python implementation in HOL Guard is independent of the Portal TypeScript i
 ```bash
 hol-guard policy validate ./policy.yaml --json
 hol-guard policy fmt ./policy.yaml --check --json
+hol-guard policy test ./policy.yaml
+hol-guard policy check ./policy.yaml --command "docker ps"
 ```
 
 Run its public conformance suite from a source checkout:

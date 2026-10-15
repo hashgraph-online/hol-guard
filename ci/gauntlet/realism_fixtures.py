@@ -18,6 +18,8 @@ None of it holds a credential, reaches the network or writes outside the fixture
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 DASHBOARD = "dashboard"
@@ -76,6 +78,32 @@ DOCTL_STUB = (
     "esac\n"
 )
 
+DOCTL_STUB_PYTHON = (
+    "import sys\n"
+    "command = sys.argv[1] if len(sys.argv) > 1 else ''\n"
+    "if command == 'version':\n"
+    "    sys.stdout.buffer.write(b'doctl version 1.110.0-release\\n')\n"
+    "elif command == 'apps':\n"
+    "    sys.stdout.buffer.write(b'fixture-app-id    web\\n')\n"
+    "else:\n"
+    "    sys.stderr.buffer.write(b'doctl stand-in: unsupported command\\n')\n"
+    "    sys.exit(2)\n"
+)
+
+
+def write_windows_launcher(bin_dir: Path, name: str, source: str) -> None:
+    """Give a stand-in a ``.cmd`` launcher on Windows, running a Python copy of it.
+
+    Oh My Pi's shell resolves commands through PATHEXT on Windows, so an
+    extensionless script never runs there. Batch arguments are quoted by the
+    launcher, so the Python copy still sees the exact argv.
+    """
+    if os.name != "nt":
+        return
+    _write(bin_dir / f"{name}.py", source)
+    launcher = f'@"{sys.executable}" -I "%~dp0{name}.py" %*\r\n'
+    (bin_dir / f"{name}.cmd").write_text(launcher, encoding="utf-8", newline="")
+
 
 def _write(path: Path, text: str, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,3 +142,4 @@ def borrow_main_modules(main: Path, worktree: Path) -> None:
 def add_home_tools(home: Path) -> None:
     """Install the read-only CLI stand-ins under the home ``.local/bin``."""
     _write(home / LOCAL_BIN / "doctl", DOCTL_STUB, 0o755)
+    write_windows_launcher(home / LOCAL_BIN, "doctl", DOCTL_STUB_PYTHON)

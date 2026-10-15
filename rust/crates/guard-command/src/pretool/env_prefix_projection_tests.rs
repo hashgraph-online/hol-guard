@@ -159,6 +159,7 @@ fn private_temp_settings_project_only_for_review() {
         r#"OUT_DIR="$TMPDIR/report-test" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="${TMPDIR}/report-test" PORT=4173 bunx vitest run a.test.ts"#,
         "OUT_DIR=$TMPDIR/report-test bunx vitest run a.test.ts",
+        r#"OUT_DIR="${TMPDIR:-/tmp}/report-test" bunx vitest run a.test.ts"#,
     ] {
         let reviewed =
             project_reviewed(command, Default::default()).unwrap_or_else(|| panic!("{command}"));
@@ -170,6 +171,9 @@ fn private_temp_settings_project_only_for_review() {
         r#"OUT_DIR="$HOME/report-test" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="$TMPDIRS/x" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="${TMPDIR:-/Users/nobody}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:-/tmpx}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:=/tmp}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:-/tmp/$HOME}/x" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="$TMPDIR/$(id -un)" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="$TMPDIR/*" bunx vitest run a.test.ts"#,
         r#"OUT_DIR='$TMPDIR/x' bunx vitest run a.test.ts"#,

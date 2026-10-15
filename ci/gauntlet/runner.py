@@ -41,6 +41,7 @@ from .fixtures import (
     create_run_root,
     digest_file,
     filesystem_checks,
+    remove_native_cache,
     remove_scratch_checkout,
     scenario_fixture_name,
     scratch_checkout,
@@ -323,6 +324,7 @@ def run_case(
         remove_scratch_checkout(fixture.root)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
+        remove_native_cache(fixture.home)
     if first_contact:
         cleanup_private_temp(case.get("events", []))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)

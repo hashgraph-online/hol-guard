@@ -11,8 +11,8 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
+from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
     approval_index_statements,
     approval_schema_statement,
     bulk_resolve_approval_requests,
@@ -24,13 +24,22 @@ from codex_plugin_scanner.guard.store_approvals import (
     resolve_request_with_queue_result,
 )
 from tests.coverage_ci import under_coverage_scale
+from tests.native_approval_writes import (
+    add_approval_request,
+    native_approval_connection,
+    seed_pending_approval_rows,
+)
 
 
 def _make_conn() -> sqlite3.Connection:
+    return native_approval_connection()
+
+
+def _make_memory_conn() -> sqlite3.Connection:
+    # Pure-SQL scale fixtures seed rows directly and never call the native writer.
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    conn.execute("pragma journal_mode=wal")
     conn.execute(approval_schema_statement())
     for stmt in approval_index_statements():
         conn.execute(stmt)
@@ -80,72 +89,6 @@ def _make_request(
 
 def _insert(conn: sqlite3.Connection, req: GuardApprovalRequest, now: str = "2026-01-01T00:00:00Z") -> str:
     return add_approval_request(conn, req, now)
-
-
-def _bulk_insert_pending(conn: sqlite3.Connection, total: int) -> None:
-    rows = []
-    for index in range(total):
-        timestamp = f"2026-01-01T00:00:00.{index:06d}Z"
-        rows.append(
-            (
-                f"req-{index:06d}",
-                "codex",
-                f"codex:project:tool-{index:06d}",
-                f"tool-{index:06d}",
-                "mcp_server",
-                f"hash-{index:06d}",
-                None,
-                "require-reapproval",
-                "session",
-                '["args"]',
-                "project",
-                "/tmp/config.toml",
-                "ws-a",
-                f"run tool {index:06d}",
-                f"run tool {index:06d}",
-                f"identity-{index:06d}",
-                f"approval-group:v1:{index:064d}",
-                1,
-                timestamp,
-                "stdio",
-                "risk",
-                "[]",
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                f'{{"command":"run tool {index:06d}"}}',
-                None,
-                None,
-                f"hol-guard review req-{index:06d}",
-                f"http://localhost:4455/approve/req-{index:06d}",
-                "pending",
-                None,
-                None,
-                None,
-                timestamp,
-                None,
-            )
-        )
-    conn.executemany(
-        """
-        insert into approval_requests (
-          request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
-          launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
-          transport, risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-          launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
-          review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
-        )
-        values (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        """,
-        rows,
-    )
 
 
 class TestApprovalIndexStatements:
@@ -202,8 +145,8 @@ class TestCursorPagination:
 
 class TestQueueScaleTargets:
     def test_listing_first_queue_page_with_100k_rows_stays_under_100ms(self) -> None:
-        conn = _make_conn()
-        _bulk_insert_pending(conn, 100_000)
+        conn = _make_memory_conn()
+        seed_pending_approval_rows(conn, 100_000)
 
         started = time.perf_counter()
         page = list_pending_approval_summaries(conn, limit=25)
@@ -214,8 +157,8 @@ class TestQueueScaleTargets:
         assert elapsed < 0.1
 
     def test_resolving_one_request_with_100k_rows_stays_under_100ms(self) -> None:
-        conn = _make_conn()
-        _bulk_insert_pending(conn, 100_000)
+        conn = _make_memory_conn()
+        seed_pending_approval_rows(conn, 100_000)
 
         started = time.perf_counter()
         result = resolve_request_with_queue_result(
@@ -234,11 +177,13 @@ class TestQueueScaleTargets:
         assert elapsed < 0.1
 
     def test_resolving_duplicates_stays_within_oauth_source(self) -> None:
-        conn = _make_conn()
+        home = Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-"))
         request = _make_request(artifact_id="codex:project:shared-tool")
-        first_id = add_approval_request(conn, request, "2026-01-01T00:00:00Z", oauth_source="source-a")
+        first_id = GuardStore(home, source="source-a").add_approval_request(request, "2026-01-01T00:00:00Z")
         second = dataclasses.replace(request, request_id=str(uuid.uuid4()))
-        second_id = add_approval_request(conn, second, "2026-01-01T00:00:01Z", oauth_source="source-b")
+        second_id = GuardStore(home, source="source-b").add_approval_request(second, "2026-01-01T00:00:01Z")
+        assert second_id != first_id
+        conn = native_approval_connection(home)
 
         result = resolve_request_with_queue_result(
             conn,
@@ -253,8 +198,8 @@ class TestQueueScaleTargets:
         assert get_approval_request(conn, second_id)["status"] == "pending"
 
     def test_listing_queue_page_without_totals_skips_count_queries(self) -> None:
-        conn = _make_conn()
-        _bulk_insert_pending(conn, 50)
+        conn = _make_memory_conn()
+        seed_pending_approval_rows(conn, 50)
 
         page = list_pending_approval_summaries(conn, limit=10, include_totals=False)
 
@@ -263,8 +208,8 @@ class TestQueueScaleTargets:
         assert "total_count" not in page
 
     def test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows(self) -> None:
-        conn = _make_conn()
-        _bulk_insert_pending(conn, 100_000)
+        conn = _make_memory_conn()
+        seed_pending_approval_rows(conn, 100_000)
 
         started = time.perf_counter()
         page = list_pending_approval_summaries(conn, limit=25, include_totals=False)
@@ -491,14 +436,20 @@ class TestBulkResolve:
 
 class TestMigrationFromOldSchema:
     def test_migration_from_schema_without_indexes(self) -> None:
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-        conn.execute(approval_schema_statement())
+        conn = native_approval_connection()
         req = _make_request()
         add_approval_request(conn, req, "2026-01-01T00:00:00Z")
+        index_query = (
+            "select name from sqlite_master where type = 'index' and tbl_name = 'approval_requests' and sql is not null"
+        )
+        # The store creates every approval index; drop them to start from the
+        # legacy schema the index statements upgrade.
+        for (name,) in conn.execute(index_query).fetchall():
+            conn.execute(f'drop index "{name}"')
+        assert conn.execute(index_query).fetchall() == []
         for stmt in approval_index_statements():
             conn.execute(stmt)
+        assert conn.execute(index_query).fetchall()
         rows = list_approval_requests(conn, status="pending")
         assert len(rows) == 1
 

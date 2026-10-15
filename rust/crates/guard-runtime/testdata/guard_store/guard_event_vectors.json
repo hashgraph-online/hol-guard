@@ -844,13 +844,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": null,
-   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "",
-   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -862,13 +862,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "",
-   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "unknown",
-   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -880,13 +880,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "unknown",
-   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_destructive_command",
-   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -898,13 +898,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_destructive_command",
-   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_package_review",
-   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -916,13 +916,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_package_review",
-   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_network_review",
-   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -934,13 +934,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_network_review",
-   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_file_read_review",
-   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -952,13 +952,13 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_file_read_review",
-   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -970,25 +970,25 @@
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_command_review_required",
-   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_command_review_required",
-   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
    "approval_queued": false,
    "reason": "HOL Guard blocked this action.",
    "reason_code": "native_command_review_required",
-   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
@@ -1006,13 +1006,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": null,
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1024,13 +1024,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "unknown",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1042,13 +1042,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "unknown",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "native_destructive_command",
-   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1060,13 +1060,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "native_destructive_command",
-   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "native_package_review",
-   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1078,13 +1078,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "native_package_review",
-   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "native_network_review",
-   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1096,13 +1096,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "native_network_review",
-   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "native_file_read_review",
-   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1114,13 +1114,13 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "native_file_read_review",
-   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1132,25 +1132,25 @@
    "approval_queued": false,
    "reason": "",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "",
    "reason_code": "native_command_review_required",
-   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
    "reason": "",
    "reason_code": "native_command_review_required",
-   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
    "approval_queued": false,
    "reason": "",
    "reason_code": "native_command_review_required",
-   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
@@ -1168,13 +1168,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": null,
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1186,13 +1186,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "unknown",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1204,13 +1204,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "unknown",
-   "text": "No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "native_destructive_command",
-   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1222,13 +1222,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "native_destructive_command",
-   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "native_package_review",
-   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1240,13 +1240,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "native_package_review",
-   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "native_network_review",
-   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1258,13 +1258,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "native_network_review",
-   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "native_file_read_review",
-   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1276,13 +1276,13 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "native_file_read_review",
-   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1294,25 +1294,25 @@
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "   ",
    "reason_code": "native_command_review_required",
-   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
    "reason": "   ",
    "reason_code": "native_command_review_required",
-   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
    "approval_queued": false,
    "reason": "   ",
    "reason_code": "native_command_review_required",
-   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
@@ -1330,13 +1330,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": null,
-   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "",
-   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1348,13 +1348,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "",
-   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "unknown",
-   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1366,13 +1366,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "unknown",
-   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_destructive_command",
-   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1384,13 +1384,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_destructive_command",
-   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_package_review",
-   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1402,13 +1402,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_package_review",
-   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_network_review",
-   "text": "padded \u00e9 This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1420,13 +1420,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_network_review",
-   "text": "padded \u00e9 This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_file_read_review",
-   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1438,13 +1438,13 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_file_read_review",
-   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1456,25 +1456,25 @@
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_command_review_required",
-   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_command_review_required",
-   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
    "approval_queued": false,
    "reason": "\u3000\u2003 padded \u00e9 \t\n",
    "reason_code": "native_command_review_required",
-   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
@@ -1492,13 +1492,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": null,
-   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "",
-   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1510,13 +1510,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "",
-   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "unknown",
-   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1528,13 +1528,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "unknown",
-   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_destructive_command",
-   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1546,13 +1546,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_destructive_command",
-   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_package_review",
-   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1564,13 +1564,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_package_review",
-   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_network_review",
-   "text": "inner  spaces This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1582,13 +1582,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_network_review",
-   "text": "inner  spaces This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_file_read_review",
-   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1600,13 +1600,13 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_file_read_review",
-   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1618,25 +1618,25 @@
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_command_review_required",
-   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_command_review_required",
-   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
    "approval_queued": false,
    "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
    "reason_code": "native_command_review_required",
-   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
@@ -1654,13 +1654,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": null,
-   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "",
-   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1672,13 +1672,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "",
-   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "unknown",
-   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1690,13 +1690,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "unknown",
-   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_destructive_command",
-   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1708,13 +1708,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_destructive_command",
-   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_package_review",
-   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1726,13 +1726,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_package_review",
-   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_network_review",
-   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1744,13 +1744,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_network_review",
-   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_file_read_review",
-   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1762,13 +1762,13 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_file_read_review",
-   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
@@ -1780,25 +1780,25 @@
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_pre_tool_unknown_review",
-   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": null,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_command_review_required",
-   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   },
   {
    "approval_queued": true,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_command_review_required",
-   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
    "approval_queued": false,
    "reason": "\ud83d\udd12 locked",
    "reason_code": "native_command_review_required",
-   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. No approval is waiting in HOL Guard for this action. Do not retry it or work around the block; continue with a permitted alternative or tell the user what is blocked."
+   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
   }
  ],
  "schema": "guard-store-guard-event-vectors.v1",

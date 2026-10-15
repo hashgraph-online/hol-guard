@@ -93,6 +93,27 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "{input}"
         );
     }
+    // The reason names the missing path, and says where a relative one is
+    // read from.
+    let result = evaluate("omp", &patch(&[put_a, missing]));
+    assert!(
+        result
+            .reason
+            .contains("`project-fix-typo/src/a.ts` does not exist. A relative path is read from the session folder"),
+        "{}",
+        result.reason
+    );
+    let result = evaluate(
+        "omp",
+        &patch(&["[~/project-typo/src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+    );
+    assert!(
+        result
+            .reason
+            .contains("`~/project-typo/src/a.ts` does not exist. Check the path"),
+        "{}",
+        result.reason
+    );
     for input in [
         patch(&["[.env#0AC4]\nPUT 1.=1:\n+TOKEN=changed\n"]),
         patch(&[put_a, "[.env#0AC4]\nPUT >$:\n+EXTRA=1\n"]),

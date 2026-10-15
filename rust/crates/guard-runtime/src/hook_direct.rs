@@ -23,8 +23,9 @@
 //! its sink command, and defers without one. While custom extension
 //! block rules exist, an allowed `PreToolUse` whose command launches a local
 //! CLI reads that CLI's grant as the daemon does and, when the grant blocks
-//! it, answers with the daemon's block; a launch or grant the daemon would
-//! block as unverified still defers.
+//! it, answers with the daemon's block, including the unverified block when
+//! the grant answer cannot be trusted. A launch the daemon rejects as
+//! malformed and a catalog read failure still defer.
 //!
 //! The daemon also records evidence after it answers. An answer is returned
 //! only once that evidence is queued for the daemon to drain.
@@ -351,9 +352,10 @@ fn answer(
     let contained = pre_tool && (request.harness == CLAUDE_CODE || request.harness == ZCODE);
     let sink_command = binding.contained_sink_command.clone().filter(|_| contained);
     let guard_home = request.guard_home.clone();
-    // Without custom rules, the daemon reads a reviewed `PreToolUse` against
-    // the exact-action decisions the user saved.
-    let saved_payload = (pre_tool && !custom_rules && !recording_only).then(|| payload.clone());
+    // The daemon reads a reviewed `PreToolUse` against the exact-action
+    // decisions the user saved once no custom grant applies to its command,
+    // which the saved-decision read checks against the store it reads.
+    let saved_payload = (pre_tool && !recording_only).then(|| payload.clone());
     let envelope = GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: None,

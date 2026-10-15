@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "description": "Events decided against a policy document. decisions.json holds the Decision each must produce; the Python engine and the Policy Studio Explain panel must both reproduce it.",
+  "now": "2026-10-14T12:00:00Z",
+  "documents": {
+    "scopes": "../valid/enforceable-scopes.yaml",
+    "commands": "command-rules.yaml"
+  },
+  "cases": [
+    {
+      "id": "shell-blocked-in-ci",
+      "document": "scopes",
+      "event": {
+        "harness": "codex",
+        "tool": "shell",
+        "workspace": "ci-workspace"
+      }
+    },
+    {
+      "id": "shell-family-alias",
+      "document": "scopes",
+      "event": {
+        "harness": "claude-code",
+        "tool": "tool-action",
+        "workspace": "ci-workspace"
+      }
+    },
+    {
+      "id": "shell-outside-ci-falls-through",
+      "document": "scopes",
+      "event": {
+        "harness": "codex",
+        "tool": "shell"
+      }
+    },
+    {
+      "id": "agent-rule-beats-every-agent-rule",
+      "document": "scopes",
+      "event": {
+        "harness": "codex",
+        "tool": "mcp"
+      }
+    },
+    {
+      "id": "block-publisher-in-cursor",
+      "document": "scopes",
+      "event": {
+        "harness": "cursor",
+        "artifact": "pkg:npm/acme-tool",
+        "publisher": "acme"
+      }
+    },
+    {
+      "id": "block-beats-more-specific-allow",
+      "document": "scopes",
+      "event": {
+        "harness": "codex",
+        "artifact": "pkg:npm/acme-reviewed",
+        "publisher": "acme"
+      }
+    },
+    {
+      "id": "rule-allowed-before-expiry",
+      "document": "scopes",
+      "event": {
+        "harness": "codex",
+        "artifact": "pkg:npm/legacy-tool",
+        "at": "2026-06-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "rule-ignored-after-expiry",
+      "document": "scopes",
+      "event": {
+        "harness": "codex",
+        "artifact": "pkg:npm/legacy-tool",
+        "at": "2026-07-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "command-matches-block",
+      "document": "commands",
+      "command": "docker compose up"
+    },
+    {
+      "id": "command-falls-through",
+      "document": "commands",
+      "command": "git status"
+    }
+  ]
+}

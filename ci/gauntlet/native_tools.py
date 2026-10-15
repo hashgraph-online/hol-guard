@@ -154,8 +154,13 @@ def native_tools_scope_error(
             meta = details.get("meta", {}) if isinstance(details, dict) else {}
             source = meta.get("source", {}) if isinstance(meta, dict) else {}
             resolved = source.get("value") if isinstance(source, dict) else None
+            # Windows agents report the resolved file with backslashes;
+            # post_input_matches checks that whole form against the request.
+            named = resolved
+            if isinstance(named, str) and named.startswith("{{workspace}}\\") and "/" not in named:
+                named = named.replace("\\", "/")
             if path not in delegated_paths and not (
-                resolved in delegated_paths
+                named in delegated_paths
                 and post_input_matches("read", call["args"], {**call["args"], "path": resolved}, result)
             ):
                 return "delegated lookup read outside its requested file"

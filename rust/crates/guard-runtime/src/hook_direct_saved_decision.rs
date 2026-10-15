@@ -133,9 +133,20 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             harness: context.harness,
             artifact_id: &artifact_id,
         };
-        // A custom grant answers before any saved decision or approval.
-        if !store.base()? {
+        if !store.supported()? {
             return Err(HookDirectDefer::SavedDecision);
+        }
+        // A custom grant answers before any saved decision or approval, but
+        // the daemon reads one only for a command that launches a local CLI.
+        if store.grants()?
+            && super::local_cli::launches_local_cli(
+                context.payload,
+                context.workspace,
+                context.home_dir,
+            )
+            .unwrap_or(true)
+        {
+            return Err(HookDirectDefer::LocalCliRules);
         }
         match &token {
             Ok(token) if store.decided(Some(token))? => {
@@ -341,21 +352,26 @@ struct StoreShape<'a> {
 
 impl StoreShape<'_> {
     /// Whether the daemon reads this store's decisions as the resident does:
-    /// a schema it supports and no custom grants.
-    fn base(&self) -> Result<bool, HookDirectDefer> {
+    /// a schema it supports.
+    fn supported(&self) -> Result<bool, HookDirectDefer> {
         let unavailable = |_| HookDirectDefer::SavedDecision;
-        match schema_version(self.connection).map_err(unavailable)? {
-            Some(version) if version <= SUPPORTED_SCHEMA_VERSION => {}
-            _ => return Ok(false),
-        }
+        Ok(matches!(
+            schema_version(self.connection).map_err(unavailable)?,
+            Some(version) if version <= SUPPORTED_SCHEMA_VERSION
+        ))
+    }
+
+    /// Whether the store holds any custom grant or block rule.
+    fn grants(&self) -> Result<bool, HookDirectDefer> {
+        let unavailable = |_| HookDirectDefer::SavedDecision;
         for table in ["local_cli_grant", "local_cli_command_grant"] {
             if table_exists(self.connection, table).map_err(unavailable)?
                 && self.any(&format!("select 1 from {table} limit 1"), &[])?
             {
-                return Ok(false);
+                return Ok(true);
             }
         }
-        Ok(true)
+        Ok(false)
     }
 
     /// The daemon's decision probe for `token`, or for any token when the

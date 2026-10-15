@@ -95,6 +95,8 @@ def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
     scratch = str(scratch_checkout(fixture.root))
     # The scratch leaf does not exist yet, so name its macOS alias directly.
     replacements[scratch] = replacements["/private" + scratch] = "{{scratch}}"
+    # Git for Windows prints the same drive path with forward slashes.
+    replacements[scratch.replace("\\", "/")] = "{{scratch}}"
     # Commands quote each interpolated fixture path. Normalize the entire
     # shell-quoted spelling before redacting raw paths, including apostrophes.
     for value, placeholder in tuple(replacements.items()):

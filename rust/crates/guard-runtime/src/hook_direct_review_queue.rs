@@ -208,9 +208,13 @@ fn silent(
         retry_reuses_approval,
         exact_action_allowable,
     );
+    // Approving a row that is neither bound to the retry nor eligible for an
+    // exact-action Always cannot let the agent run the action, so the reason
+    // does not send the user to approve it.
     let approval_url = request
         .get("approval_url")
         .and_then(Value::as_str)
+        .filter(|_| retry_reuses_approval || exact_action_allowable)
         .map(str::to_owned);
     // The unlinked block renders before the write, so a block the resident
     // cannot render leaves the queue to the daemon.

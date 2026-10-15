@@ -111,10 +111,14 @@ fn identity_expansions_only(segment: &CommandSegmentV1, name: &str) -> bool {
     expansions > 0 && expansions == identity
 }
 
-/// Whether every `$` in `text` is a `$TMPDIR` or `${TMPDIR}` the shell
-/// expands. The sandbox launches its shell with `TMPDIR` set to the run's
-/// private temporary directory, so such a path names the sandbox's own
-/// scratch space rather than a host directory.
+/// `${TMPDIR:-/tmp}` without its `$`.
+pub(in crate::pretool) const PRIVATE_TEMP_WITH_FALLBACK: &str = "{TMPDIR:-/tmp}";
+
+/// Whether every `$` in `text` is a `$TMPDIR`, `${TMPDIR}` or
+/// `${TMPDIR:-/tmp}` the shell expands. The sandbox launches its shell with
+/// `TMPDIR` set to the run's private temporary directory, so such a path
+/// names the sandbox's own scratch space rather than a host directory, and
+/// the `/tmp` fallback is never used there.
 pub(in crate::pretool) fn private_temp_expansions_only(text: &str) -> bool {
     let characters: Vec<char> = text.chars().collect();
     let (mut single, mut double, mut count, mut index) = (false, false, 0usize, 0usize);
@@ -126,8 +130,10 @@ pub(in crate::pretool) fn private_temp_expansions_only(text: &str) -> bool {
             '"' if !single => double = !double,
             '`' if !single => return false,
             '$' if !single => {
-                let rest: String = characters[index..].iter().take(8).collect();
-                let length = if rest.starts_with("{TMPDIR}") {
+                let rest: String = characters[index..].iter().take(14).collect();
+                let length = if rest.starts_with(PRIVATE_TEMP_WITH_FALLBACK) {
+                    PRIVATE_TEMP_WITH_FALLBACK.len()
+                } else if rest.starts_with("{TMPDIR}") {
                     8
                 } else if rest.starts_with("TMPDIR")
                     && !rest

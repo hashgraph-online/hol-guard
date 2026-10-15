@@ -330,10 +330,11 @@ fn literal_word(chars: &[char], token: &ShellToken) -> bool {
     literal_chars(&chars[token.start..token.end])
 }
 
-/// The raw word's only expansions are `$TMPDIR` or `${TMPDIR}` and nothing
-/// in the command rebinds `TMPDIR`. Only a reviewed projection drops such a
-/// setting: the projection never settles below review, and moving it to the
-/// workspace sandbox, which sets `TMPDIR` itself, re-checks the raw command.
+/// The raw word's only expansions are `$TMPDIR`, `${TMPDIR}` or
+/// `${TMPDIR:-/tmp}` and nothing in the command rebinds `TMPDIR`. Only a
+/// reviewed projection drops such a setting: the projection never settles
+/// below review, and moving it to the workspace sandbox, which sets `TMPDIR`
+/// itself, re-checks the raw command.
 fn private_temp_word(chars: &[char], token: &ShellToken) -> bool {
     let word: String = chars[token.start..token.end].iter().collect();
     let command: String = chars.iter().collect();
@@ -342,7 +343,12 @@ fn private_temp_word(chars: &[char], token: &ShellToken) -> bool {
     {
         return false;
     }
+    let fallback = format!(
+        "${}",
+        crate::pretool::workspace_contained::PRIVATE_TEMP_WITH_FALLBACK
+    );
     let rest: Vec<char> = word
+        .replace(&fallback, "")
         .replace("${TMPDIR}", "")
         .replace("$TMPDIR", "")
         .chars()
@@ -507,7 +513,29 @@ pub(super) fn credential_setting(command: &str) -> Option<String> {
     )
 }
 
+/// The heap size when the first code-loading setting is `NODE_OPTIONS` and it
+/// holds only `--max-old-space-size=<MiB>`. That option loads no code, and
+/// `node --max-old-space-size=<MiB> <script>` is a form the read-only sandbox
+/// accepts, so a reason may point the agent to it.
+pub(super) fn node_heap_only_setting(command: &str) -> Option<String> {
+    let (name, value) = leading_assignment(command, |upper| {
+        crate::command_compatibility::code_or_redirect_environment_name(upper)
+    })?;
+    let size = value.strip_prefix("--max-old-space-size=")?;
+    (name.eq_ignore_ascii_case("NODE_OPTIONS")
+        && (1..=6).contains(&size.len())
+        && size.bytes().all(|byte| byte.is_ascii_digit())
+        && size
+            .parse::<u32>()
+            .is_ok_and(|mib| (16..=131072).contains(&mib)))
+    .then(|| size.to_owned())
+}
+
 fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<String> {
+    leading_assignment(command, matches).map(|(name, _)| name)
+}
+
+fn leading_assignment(command: &str, matches: impl Fn(&str) -> bool) -> Option<(String, String)> {
     if command.len() > MAX_PROJECTED_CHARS {
         return None;
     }
@@ -531,7 +559,7 @@ fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<Stri
         if token.value == "env" || token.value == "/usr/bin/env" {
             continue;
         }
-        let Some((name, _)) = shell_assignment(chars.as_slice(), token) else {
+        let Some((name, value)) = shell_assignment(chars.as_slice(), token) else {
             in_prefix = false;
             continue;
         };
@@ -539,7 +567,7 @@ fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<Stri
             && assignment_name_shape(name)
             && matches(&name.to_ascii_uppercase())
         {
-            return Some(name.to_owned());
+            return Some((name.to_owned(), value.to_owned()));
         }
     }
     None

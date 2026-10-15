@@ -110,10 +110,14 @@ def scratch_checkout(fixture_root: Path) -> Path:
     Agents routinely add scratch worktrees straight into the temporary root, outside
     every fixture directory. The name binds to this fixture root's identity, so parallel
     or later cases never share it, and the runner removes it after the case.
+
+    On Windows the temporary root is the fixture user's ``%TEMP%``, which Git Bash
+    mounts as ``/tmp``; a bare ``/tmp`` there is a drive-relative path no shell uses.
     """
     info = fixture_root.stat(follow_symlinks=False)
     seed = f"{fixture_root}:{info.st_dev}:{info.st_ino}:{info.st_ctime_ns}".encode()
-    return Path("/tmp") / f"hg-gauntlet-{hashlib.sha256(seed).hexdigest()[:16]}"
+    root = fixture_root / "home" / "AppData" / "Local" / "Temp" if os.name == "nt" else Path("/tmp")
+    return root / f"hg-gauntlet-{hashlib.sha256(seed).hexdigest()[:16]}"
 
 
 def remove_scratch_checkout(fixture_root: Path) -> None:
@@ -123,8 +127,23 @@ def remove_scratch_checkout(fixture_root: Path) -> None:
         info = scratch.lstat()
     except OSError:
         return
-    if stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid():
+    # Windows has no getuid and reports st_uid 0, so ownership is only checked on POSIX.
+    if stat.S_ISDIR(info.st_mode) and (not hasattr(os, "getuid") or info.st_uid == os.getuid()):
         shutil.rmtree(scratch, ignore_errors=True)
+
+
+def remove_native_cache(home: Path) -> None:
+    """Delete the native addon Oh My Pi unpacks into each case home.
+
+    The Windows addon is about 170 MB, so a full run would otherwise leave gigabytes behind.
+    """
+    natives = home / ".omp" / "natives"
+    try:
+        info = natives.lstat()
+    except OSError:
+        return
+    if stat.S_ISDIR(info.st_mode):
+        shutil.rmtree(natives, ignore_errors=True)
 
 
 def file_metadata(path: Path) -> tuple[int, ...]:

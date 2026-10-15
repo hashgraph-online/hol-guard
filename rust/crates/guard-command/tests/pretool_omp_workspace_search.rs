@@ -264,3 +264,54 @@ fn globs_list_a_linked_worktree_of_a_workspace_repository() {
     write(admin.join("gitdir"), &format!("{}/.git\n", copy.display()));
     assert!(!allowed(&glob(&worktree)));
 }
+
+#[test]
+fn one_level_globs_list_only_the_directory_they_name() {
+    let f = fixture();
+    // A worktree package borrowing another checkout's installed packages.
+    let shared = f.root.join("shared/node_modules");
+    write(shared.join("pkg/index.js"), "synthetic fixture\n");
+    write(f.home.join("app/web/package.json"), "{}\n");
+    std::os::unix::fs::symlink(&shared, f.home.join("app/web/node_modules")).unwrap();
+    write(f.home.join("app/bun.lock"), "synthetic fixture\n");
+    let root = f.home.join("app");
+    let root = root.to_str().unwrap();
+    // Below a literal directory the host runs one segment without recursion,
+    // so with the gitignore off it still never follows the link.
+    for path in [
+        format!("{root}/*lock*"),
+        "./*lock*".to_owned(),
+        "web/*".to_owned(),
+    ] {
+        let input = json!({"path": path, "gitignore": false, "hidden": true, "limit": 20});
+        let result = omp(&f, "app", "glob", input);
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_directory_listing");
+    }
+    // A walk that reaches the link, a selector inside it, or one outside the
+    // session folder still gets the full proof.
+    for path in [
+        format!("{root}/**/*lock*"),
+        // Without a directory the host searches `**/*lock*` from the cwd.
+        "*lock*".to_owned(),
+        "web/*/pkg/*".to_owned(),
+        // The literal directory is the link itself: its canonical path is
+        // outside the session folder.
+        "web/node_modules/*".to_owned(),
+        "~/.ssh/*".to_owned(),
+        "~/*".to_owned(),
+    ] {
+        let input = json!({"path": path, "gitignore": false, "hidden": true});
+        assert!(!allowed(&omp(&f, "app", "glob", input)), "{path}");
+    }
+    // The host's glob schema has no recursion switch; a key it does not
+    // define, or a `pattern` the walk proof covers, keeps the full proof.
+    let path = format!("{root}/*lock*");
+    for input in [
+        json!({"path": path, "gitignore": false, "recursive": true}),
+        json!({"path": path, "gitignore": false, "maxDepth": 8}),
+        json!({"path": path, "gitignore": false, "pattern": "*"}),
+    ] {
+        assert!(!allowed(&omp(&f, "app", "glob", input.clone())), "{input}");
+    }
+}

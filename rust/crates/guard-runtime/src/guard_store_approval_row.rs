@@ -1,5 +1,5 @@
 //! The column values of one approval queue row: `_update_request` and
-//! `_insert_request` of `store_approval_writes.py`, with Python's exact SQL
+//! `_insert_request` of the former Python writer, with Python's exact SQL
 //! and parameter order.
 
 use rusqlite::Connection;

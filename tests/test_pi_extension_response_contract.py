@@ -262,6 +262,21 @@ def test_generated_omp_read_list_result_stays_inline_not_source_ref(tmp_path: Pa
         assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
     assert _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts")["sourceRef"] is not None
 
+    # OMP splits a comma or space list too, and names each part it read.
+    comma_path = "src/a.ts:1-5,src/b.ts:2-3"
+    split = {"displayReadTargets": ["src/a.ts", "src/b.ts"]}
+    assert _run_generated_source_ref_fixture(source, content, comma_path, details=split)["sourceRef"] is None
+    single = {"displayReadTargets": ["src/a.ts"]}
+    assert (
+        _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts", details=single)["sourceRef"] is not None
+    )
+    # Details that are present but not an object cannot vouch for one file.
+    for malformed in ("src/a.ts", ["src/a.ts", "src/b.ts"], 1):
+        assert (
+            _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts", details=malformed)["sourceRef"]
+            is None
+        )
+
 
 def test_generated_omp_selector_review_uses_host_resolved_source_path(tmp_path: Path) -> None:
     source = _generated_source(tmp_path)

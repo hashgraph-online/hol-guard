@@ -248,9 +248,9 @@ mod tests {
         let root = proof_root();
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        let link = root.join("lib");
         #[cfg(unix)]
         {
+            let link = root.join("lib");
             std::os::unix::fs::symlink("/usr/lib", &link).unwrap();
             assert!(!trusted_library_search_path(
                 link.to_str().unwrap(),

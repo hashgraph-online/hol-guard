@@ -404,14 +404,37 @@ fn cd_target(
     let [value] = segment.arguments.as_slice() else {
         return None;
     };
-    if cfg!(windows)
-        || !segment.environment_names.is_empty()
+    if !segment.environment_names.is_empty()
         || !segment.wrapper_chain.is_empty()
         || segment.path_overridden
         || !super::valid_path_text(value)
     {
         return None;
     }
+    entered_directory(value, context)
+}
+
+/// On Windows only a drive-absolute operand is proved: the shell skips the
+/// CDPATH search for it and does not resolve it against its logical
+/// directory. Its parent must be spelled exactly as its canonical path, so
+/// case, short names, junctions and links all stay reviewed, and a `:` past
+/// the drive (an alternate data stream) is refused.
+#[cfg(windows)]
+fn entered_directory(value: &str, _context: super::super::PathContext<'_>) -> Option<PathBuf> {
+    if value.get(2..).is_none_or(|rest| rest.contains(':')) {
+        return None;
+    }
+    let supplied = Path::new(value);
+    let parent = supplied.parent()?;
+    let leaf = supplied.file_name()?;
+    let canonical = std::fs::canonicalize(parent).ok()?;
+    (supplied.is_absolute()
+        && super::super::directory_targets::exact_drive_spelling(parent.to_str()?, &canonical))
+    .then(|| canonical.join(leaf))
+}
+
+#[cfg(not(windows))]
+fn entered_directory(value: &str, context: super::super::PathContext<'_>) -> Option<PathBuf> {
     let declared = Path::new(context.cwd?);
     if !declared.is_absolute() || std::fs::canonicalize(declared).ok()? != declared {
         return None;
