@@ -21,7 +21,7 @@ use crate::pyjson::{self, PyVal};
 /// SHA-256 of the current template with its placeholders in place.
 #[allow(dead_code)] // Read by `tests/test_cursor_native_bridge.py`.
 pub(crate) const CURSOR_SCRIPT_SHA256: &str =
-    "cddf81bce53b9dfdee687223300aa7277bd7800ef7d128b79515e3ff6d22c414";
+    "d22549def06ba725f7a38850c0bdaaa7e7239498ba0d06517752147eecadcbf9";
 
 const MAX_SCRIPT_BYTES: u64 = 256 * 1024;
 /// Each constant line the renderer writes, as `<name> = <value>`.

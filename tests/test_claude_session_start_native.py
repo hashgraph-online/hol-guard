@@ -145,8 +145,8 @@ def test_installer_keeps_the_python_command_without_the_native_lane(
 ) -> None:
     context = _own_home_context(tmp_path, monkeypatch)
     if features is None:
-        monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", lambda _feature: None)
-        monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
+        monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", lambda _feature, **_kwargs: None)
+        monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
     else:
         _use_runtime(monkeypatch, tmp_path / "hol-guard-runtime", features)
 

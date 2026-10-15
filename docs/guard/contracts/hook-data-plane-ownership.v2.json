@@ -480,6 +480,7 @@
     "src/codex_plugin_scanner/guard/native_rich_command_model.py",
     "src/codex_plugin_scanner/guard/native_route_receipt.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+    "src/codex_plugin_scanner/guard/native_runtime_durable.py",
     "src/codex_plugin_scanner/guard/native_context.py",
     "src/codex_plugin_scanner/guard/native_command_effect.py",
     "src/codex_plugin_scanner/guard/native_mode.py",

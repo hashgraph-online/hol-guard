@@ -90,7 +90,7 @@ def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytes
     # Subprocess installers copy os.environ and do not see this monkeypatch.
     # The adapter treats this value as the Python bridge pin.
     monkeypatch.setenv("HOL_GUARD_CODEX_HOOK_BRIDGE", "python")
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda: None)
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda *_args, **_kwargs: None)
 
 
 @pytest.fixture(autouse=True)

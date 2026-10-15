@@ -343,7 +343,7 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
 
 
 def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
+    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     command_parts = adapter._daemon_hook_command_parts(context)
