@@ -110,12 +110,16 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
     }
+    // The MCP stdio session child runs in a process group on unix and in a
+    // kill-on-close JobObject on Windows.
+    if cfg!(any(unix, windows)) {
+        features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
+    }
     if cfg!(unix) {
         features.push("authenticated-unix-resident-v1".into());
         // Features gated cfg(unix) in resident_ops::evaluate_resident_bytes must
         // not be advertised elsewhere, or callers route work the binary cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
-        features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
         // The module is #[cfg(unix)]. A runtime cfg! check still type-checks
         // this path on Windows, where the module is not compiled.
         #[cfg(unix)]

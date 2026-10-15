@@ -25,7 +25,8 @@ pub use windows::ManagedChild;
 #[cfg(windows)]
 pub use windows::{
     attach_suspended_process, capture_managed_child, capture_owned_child, capture_pipes,
-    CaptureCommand, CapturePipes, CapturedOutput, ChildJobGuard, InheritWindow, ResourceLimits,
+    CaptureCommand, CapturePipes, CapturedOutput, ChildJobGuard, ChildTree, InheritWindow,
+    ResourceLimits, CHILD_TREE_CREATION_FLAGS,
 };
 
 #[cfg(windows)]

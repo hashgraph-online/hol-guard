@@ -36,6 +36,14 @@ pub struct FileId {
     id: [u8; 16],
 }
 
+impl FileId {
+    /// Volume serial and file ID as lowercase hex, for identity records.
+    pub fn to_hex(self) -> String {
+        let id: String = self.id.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("{:016x}-{id}", self.volume_serial)
+    }
+}
+
 // `winapi` 0.3.9 defines `FileIdInfo` but not its output structure.
 #[repr(C)]
 struct FileIdInformation {

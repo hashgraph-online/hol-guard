@@ -113,6 +113,8 @@ pub mod launch_identity;
 pub mod launch_identity_binding;
 mod launch_identity_common;
 pub mod launch_identity_environment;
+#[cfg(windows)]
+mod launch_identity_windows;
 pub mod mcp_arguments;
 pub mod mcp_launch_environment;
 pub mod mcp_runtime_evidence;
@@ -715,13 +717,13 @@ pub mod hook_responses;
 pub mod inventory_contract;
 pub mod js_semver;
 pub mod linux_artifact_supply_chain;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod local_mcp_stdio;
 #[cfg(all(unix, test))]
 mod local_mcp_stdio_tests;
 pub mod mcp_decision;
 mod mcp_package_sources;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod mcp_stdio_session;
 pub mod pep440;
 pub mod persistence_rules;

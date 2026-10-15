@@ -90,6 +90,14 @@ name = "shim_admin_vectors"
 path = "tests/shim_admin_vectors.rs"
 
 [[test]]
+name = "mcp_stdio_probe_windows"
+path = "tests/mcp_stdio_probe_windows.rs"
+
+[[test]]
+name = "launch_identity_windows"
+path = "tests/launch_identity_windows.rs"
+
+[[test]]
 name = "pretool_rg_hidden_whitelist"
 path = "tests/pretool_rg_hidden_whitelist.rs"
 

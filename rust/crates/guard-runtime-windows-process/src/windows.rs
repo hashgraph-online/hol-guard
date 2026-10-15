@@ -39,6 +39,8 @@ use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE
 mod bound_open;
 #[path = "windows/capture.rs"]
 mod capture;
+#[path = "windows/child_tree.rs"]
+mod child_tree;
 #[path = "directory_binding.rs"]
 mod directory_binding;
 #[path = "file_identity.rs"]
@@ -57,6 +59,7 @@ pub use capture::{
     capture as capture_managed_child, capture_owned_child, capture_pipes, CaptureCommand,
     CapturePipes, CapturedOutput, InheritWindow,
 };
+pub use child_tree::{ChildTree, CHILD_TREE_CREATION_FLAGS};
 pub use directory_binding::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     path_is_within, PrivateDirectoryBinding,
