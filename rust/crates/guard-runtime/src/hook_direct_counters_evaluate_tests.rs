@@ -14,6 +14,8 @@ fn evaluate_counts_each_answer_and_defer_under_its_harness() {
     payload["hook_env"] = json!({ "HOME": HOME });
     assert_eq!(run(&lane, payload)["outcome"], "answer");
     let elsewhere = payload_elsewhere(&lane);
+    // An overlay keeps the unbound directory waiting for its own publish.
+    std::fs::write(lane.fixture.root.join(".hol-guard.toml"), b"").unwrap();
     assert_eq!(
         deferred(&run(&lane, elsewhere.clone())),
         DirectLaneDefer::WorkspaceUnknown.code()
