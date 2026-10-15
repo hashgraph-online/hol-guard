@@ -16,6 +16,7 @@ from .codex_daemon_hook_auth import (
     _http_json_response,
     _verify_challenge_response,
 )
+from .codex_daemon_hook_transport import _daemon_generation_identity, _with_remaining_hint
 
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
@@ -80,10 +81,12 @@ def authenticated_claude_hook_response(
         connection.timeout = remaining
         if connection.sock is not None:
             connection.sock.settimeout(remaining)
+        # The daemon times the hook from its own arrival, so tell it how long
+        # this client will still wait; it must answer before that.
         connection.request(
             "POST",
             hook_path,
-            body=data.encode("utf-8"),
+            body=_with_remaining_hint(data, deadline).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Connection": "close",
@@ -154,10 +157,6 @@ def _read_hook_response(
     if response.status != 200:
         raise _DaemonResponseError(response.status, text.strip(), authenticated=True)
     return text
-
-
-def _daemon_generation_identity(state: Mapping[str, object]) -> tuple[object, ...]:
-    return tuple(state.get(field) for field in ("state_id", "auth_token_id", "host", "port", "pid", "started_at"))
 
 
 def _event_name(data: str) -> str:

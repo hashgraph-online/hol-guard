@@ -2,14 +2,14 @@
   "authoring_method": "Expected signatures were authored from reviewed native source and host critical floors. Membership counts and hashes use only immutable corpus inputs and explicit variant selectors; native evaluation results are not an authoring input.",
   "groups": [
     {
-      "basis": "host critical capability replay floor blocks the exact native command",
+      "basis": "host critical capability replay floor blocks the exact native command and the native pretool self-protection floor blocks it too",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "block",
+        "native_reason": "native_guard_self_protection",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -68,7 +68,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
+      "basis": "static GitHub GraphQL mutations are attributed to the owning capability instead of unknown uncertainty. That owner floor is review; disabled controls still block.",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
@@ -77,9 +77,7 @@
         "native_floor": "review",
         "native_reason": "native_command_review_required",
         "path_overridden": false,
-        "uncertain_rule_ids": [
-          "command.github.unknown"
-        ]
+        "uncertain_rule_ids": []
       },
       "group_id": "adversarial:graphql|all",
       "membership": {
@@ -204,14 +202,14 @@
       "variant_remainder": 1
     },
     {
-      "basis": "sed sink contains arbitrary output redirection unsupported by inherited parser; selected solely by immutable generator variant modulo four",
+      "basis": "sed sink redirects only to a literal path, so the unmodeled command stays reviewable instead of failing evaluation; host cat pipeline floor requires reapproval, equal to the original oracle; selected solely by immutable generator variant modulo four",
       "expected": {
-        "decision_plane_floor": "block",
-        "evaluation_error": "native_command_evaluation_failed",
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
         "model_confidence": "uncertain",
         "model_uncertainty": "command_redirect_not_yet_supported",
-        "native_floor": "block",
-        "native_reason": "native_command_extension_evaluation_failed",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -226,14 +224,14 @@
       "variant_remainder": 2
     },
     {
-      "basis": "base64 sink contains arbitrary output redirection unsupported by inherited parser; selected solely by immutable generator variant modulo four",
+      "basis": "base64 sink redirects only to a literal path, so the unmodeled command stays reviewable instead of failing evaluation; host cat pipeline floor requires reapproval, equal to the original oracle; selected solely by immutable generator variant modulo four",
       "expected": {
-        "decision_plane_floor": "block",
-        "evaluation_error": "native_command_evaluation_failed",
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
         "model_confidence": "uncertain",
         "model_uncertainty": "command_redirect_not_yet_supported",
-        "native_floor": "block",
-        "native_reason": "native_command_extension_evaluation_failed",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -578,14 +576,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -745,9 +743,7 @@
         "native_floor": "review",
         "native_reason": "native_command_review_required",
         "path_overridden": false,
-        "uncertain_rule_ids": [
-          "command.github.unknown"
-        ]
+        "uncertain_rule_ids": []
       },
       "group_id": "workflow:github-remote:resolve-thread-regression|all",
       "membership": {
@@ -1409,14 +1405,14 @@
   "totals": {
     "below_original_oracle": 0,
     "cases": 51000,
-    "equal_to_original_oracle": 40459,
+    "equal_to_original_oracle": 42516,
     "groups": 58,
     "improved_bounded_git_cases": 50,
     "improved_bounded_git_sources": 2,
     "improved_upstream_benign_cases": 75,
     "improved_upstream_benign_sources": 3,
-    "native_evaluation_errors": 27084,
+    "native_evaluation_errors": 25002,
     "sources": 52,
-    "stronger_than_original_oracle": 10541
+    "stronger_than_original_oracle": 8484
   }
 }

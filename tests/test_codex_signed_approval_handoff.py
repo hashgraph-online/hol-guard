@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.approval_hook_copy import (
     live_hook_approval_context,
 )
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool_review
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 
@@ -254,7 +254,7 @@ def test_codex_native_review_reason_signs_loopback_without_changing_aliases(tmp_
     write_synthetic_daemon_auth_token(guard_home)
     review_url = "http://127.0.0.1:5474/requests/req-native-codex"
 
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "codex",
         {"reason": "HOL Guard paused this action.", "reason_code": "native_pre_tool_review"},
         approval={"request_id": "req-native-codex", "approval_url": review_url},
@@ -269,7 +269,7 @@ def test_codex_native_review_reason_signs_loopback_without_changing_aliases(tmp_
 
 def test_codex_native_review_reason_hides_loopback_when_auth_is_missing(tmp_path: Path) -> None:
     review_url = "http://127.0.0.1:5474/requests/req-native-codex-no-auth"
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "codex",
         {"reason": f"Review this action: {review_url}", "reason_code": "native_pre_tool_review"},
         approval={"request_id": "req-native-codex-no-auth", "approval_url": review_url},
@@ -294,7 +294,7 @@ def test_codex_native_review_reason_hides_loopback_when_signing_fails(
         raise RuntimeError("synthetic signing failure")
 
     monkeypatch.setattr(approval_hook_copy_module, "build_approval_browser_url", raise_signing_error)
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "codex",
         {"reason": f"Review this action: {review_url}", "reason_code": "native_pre_tool_review"},
         approval={"request_id": "req-native-codex-error", "approval_url": review_url},
@@ -309,7 +309,7 @@ def test_codex_native_review_reason_hides_loopback_when_signing_fails(
 
 def test_codex_native_review_reason_leaves_external_url_unchanged(tmp_path: Path) -> None:
     review_url = "https://example.invalid/requests/req-native-codex-external"
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "codex",
         {"reason": "HOL Guard paused this action.", "reason_code": "native_pre_tool_review"},
         approval={"request_id": "req-native-codex-external", "approval_url": review_url},

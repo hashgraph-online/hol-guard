@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.29.0"
+version = "3.45.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -83,6 +83,8 @@ ci-test = [
     "build>=1.5.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
+    "pytest-rerunfailures>=14.0",
     "ruff>=0.15.15",
 ]
 cisco-mcp = [
@@ -139,7 +141,8 @@ packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.sdist]
 # Keep all inputs needed to rebuild the wheel and verify frozen projections.
-# Dashboard assets are already bundled under src; contributor tests live in Git.
+# Dashboard assets are already bundled under src; contributor tests live in Git,
+# as do the Rust integration tests and their fixtures.
 only-include = [
     "src",
     "scripts",
@@ -150,6 +153,11 @@ only-include = [
     "README.md",
     "LICENSE",
 ]
+# The packaged source-compiler build slurps these two vector files into its
+# command-extension build envelope; they are build inputs, not test data.
+[tool.hatch.build.targets.sdist.force-include]
+"rust/crates/guard-command/tests/fixtures/command-source-example.v1.json" = "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json"
+"rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json" = "rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json"
 
 [tool.hatch.build.hooks.custom]
 path = "scripts/build_command_projection_hook.py"
@@ -161,7 +169,6 @@ path = "scripts/build_command_projection_hook.py"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 "contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
-"contributions/extensions" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions"
 
@@ -171,6 +178,12 @@ artifacts = [
     "src/codex_plugin_scanner/guard/schemas/**",
 ]
 exclude = [
+    # Rust integration tests and their fixtures stay in Git; the wheel selects
+    # only src/codex_plugin_scanner, so these patterns only shrink the sdist.
+    "rust/crates/*/tests/**",
+    "rust/crates/*/testdata/**",
+    "contributions/extensions/**",
+    "contracts/extensions/trust-class-map.v1.json",
     "src/codex_plugin_scanner/_native/guard-command-source",
     "src/codex_plugin_scanner/_native/source-compiler-manifest.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",
@@ -210,6 +223,8 @@ markers = [
   "fault_injection: destructive store fault tests; only run with GUARD_FAULT_INJECTION=1",
   "installed: requires verification through an installed package artifact",
   "integration: verifies multiple Guard subsystems together",
+  "native_codex_hook_bridge: installs Codex hooks through the native runtime bridge when it is available",
+  "native_bounded_hook_bridge: installs bounded CLI hooks through the native runtime bridge when it is available",
   "parser: verifies parsing or normalization security semantics",
   "policy: verifies policy composition or enforcement semantics",
   "regression: protects a previously observed defect or security finding",

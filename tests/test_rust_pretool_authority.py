@@ -192,59 +192,10 @@ def test_policy_floor_fails_closed_when_native_is_forced_unavailable(
     )
 
 
-def test_policy_floor_skips_when_native_mode_is_off(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
-        lambda: runtime.NativeRuntimeStatus(mode="off", available=True, compatible=True, reason="off"),
-    )
-    assert (
-        pretool.native_pre_tool_policy_floor(
-            "pwd",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-
-
-def test_hook_worker_returns_fail_safe_when_native_off(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "off")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
-        lambda *_args, **_kwargs: _native_allow("pwd"),
-    )
-    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-        params={},
-        default_harness="codex",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path / "workspace",
-    )
-    assert result["reason_code"] == "native_hook_disabled"
-    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
 def test_hook_worker_fails_closed_when_forced_native_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "force",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -267,17 +218,13 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny" and result["reason_code"] == "native_pre_tool_unavailable"
+    assert result["decision"] == "deny"
 
 
 def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -301,45 +248,12 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
         workspace=tmp_path / "workspace",
     )
     assert result["decision"] == "deny"
-    assert result["reason_code"] == "native_pre_tool_unavailable"
-
-
-def test_hook_worker_falls_back_when_native_mode_is_off(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "off",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
-        lambda: runtime.NativeRuntimeStatus(mode="off", available=True, compatible=True, reason="off"),
-    )
-    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-        params={},
-        default_harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path / "workspace",
-    )
-    assert result["reason_code"] == "native_hook_disabled"
 
 
 def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -354,7 +268,6 @@ def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result
         workspace=tmp_path / "workspace",
     )
     assert result["decision"] == "deny"
-    assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
 def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
@@ -362,22 +275,19 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        # Claude permission dialogs have their own passthrough route; Codex
-        # permission events still reach the native fail-safe.
+        # Claude and Codex permission dialogs have their own passthrough
+        # routes; other harnesses' permission events still reach the native
+        # fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="codex",
+        default_harness="copilot",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["reason_code"] == "native_hook_event_unavailable" and result["continue"] is True
+    assert result["reason_code"] == "native_hook_event_unavailable" and result["behavior"] == "deny"

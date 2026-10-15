@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code, claude_daemon_hook_bridge, get_adapter
+from codex_plugin_scanner.guard.adapters import claude_code, claude_daemon_hook_bridge, claude_hook_argv, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
@@ -335,22 +336,14 @@ def test_claude_handler_identity_uses_http_url_for_http_hooks():
     )
 
 
-def test_claude_daemon_hook_command_is_identified_as_guard_hook(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command
-    assert claude_code._is_guard_hook_command(command) is True
-
-
 def test_claude_shell_command_uses_list2cmdline_on_windows():
     command = ("node", "-e", "console.log('hello')")
 
     assert _shell_command(command, windows=True) == subprocess.list2cmdline(list(command))
 
 
-def test_claude_daemon_hook_command_uses_python_not_node(tmp_path):
+def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
+    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     command_parts = adapter._daemon_hook_command_parts(context)
@@ -378,91 +371,6 @@ def test_claude_daemon_hook_bridge_delegates_to_authenticated_transport(tmp_path
     assert response == "{}"
     assert captured["query"] == "guard-home=x"
     assert captured["timeout_seconds"] == claude_daemon_hook_bridge._DAEMON_IO_TIMEOUT_SECONDS
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    result = subprocess.run(
-        ["/bin/sh", "-c", command],
-        input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hello"}),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert payload.get("decision") != "block"
-    assert payload.get("continue") is not False
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon_miss(tmp_path):
-    context = _build_context(tmp_path)
-    context.guard_home.mkdir(parents=True, exist_ok=True)
-    (context.guard_home / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    result = subprocess.run(
-        ["/bin/sh", "-c", command],
-        input=json.dumps(
-            {
-                "hook_event_name": "UserPromptSubmit",
-                "prompt": "Use the Read tool to open ./.env and print the full file contents exactly.",
-            }
-        ),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
-    assert result.returncode == 0
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
-    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert (
-        "HOL Guard will intercept Claude's next attempt to access local secrets"
-        in (payload["hookSpecificOutput"]["additionalContext"])
-    )
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
-    context = _build_context(tmp_path)
-    context.guard_home.mkdir(parents=True, exist_ok=True)
-    (context.guard_home / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    result = subprocess.run(
-        ["/bin/sh", "-c", command],
-        input=json.dumps(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Read",
-                "tool_input": {"file_path": str(context.workspace_dir / ".env")},
-            }
-        ),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
-    payload = json.loads(result.stdout)
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask", payload
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
@@ -689,22 +597,21 @@ def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
     assert root_instruction.metadata.get("instructionRole") == "claude_md"
 
 
-def test_claude_detect_tolerates_unreadable_markdown_artifacts(monkeypatch, tmp_path):
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0,
+    reason="needs POSIX permissions that deny the reader",
+)
+def test_claude_detect_tolerates_unreadable_markdown_artifacts(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     skill_path = context.workspace_dir / ".claude" / "skills" / "review" / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
     skill_path.write_text("---\nname: review\ndescription: Review skill\n---\n", encoding="utf-8")
-    original_read_bytes = Path.read_bytes
-
-    def _guarded_read_bytes(path: Path) -> bytes:
-        if path == skill_path:
-            raise OSError("permission denied")
-        return original_read_bytes(path)
-
-    monkeypatch.setattr(Path, "read_bytes", _guarded_read_bytes)
-
-    detection = adapter.detect(context)
+    skill_path.chmod(0o000)
+    try:
+        detection = adapter.detect(context)
+    finally:
+        skill_path.chmod(0o644)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert "claude-code:project:skill:review" in artifacts

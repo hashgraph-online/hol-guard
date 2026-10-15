@@ -17,7 +17,6 @@ from urllib.parse import urlparse
 
 import requests
 
-from ..config import resolve_guard_home
 from ..daemon.manager import load_guard_daemon_auth_token
 from ..mdm.network import managed_requests_session
 from ..store import GuardStore
@@ -286,30 +285,6 @@ class GuardBridge:
         except Exception:
             return []
 
-    def _execute_resolution(self, action: str, request_id: str) -> bool:
-        """Resolve requests through the Guard daemon contract."""
-        guard_url = _validate_guard_daemon_url(self.config.guard_url or "http://127.0.0.1:4999")
-        action_path = "approve" if action == "approve" else "block"
-        auth_token = load_guard_daemon_auth_token(self.store.guard_home)
-        if auth_token is None:
-            return False
-        try:
-            response = _DAEMON_SESSION.post(
-                f"{guard_url}/v1/requests/{request_id}/{action_path}",
-                json={
-                    "scope": "artifact",
-                    "reason": "resolved from Guard Bridge",
-                },
-                headers={"X-Guard-Token": auth_token},
-                timeout=30,
-            )
-            if response.status_code != 200:
-                return False
-            payload = response.json()
-            return bool(payload.get("resolved"))
-        except Exception:
-            return False
-
     def run(self) -> None:
         """Run the polling loop."""
         guard_url = _validate_guard_daemon_url(self.config.guard_url or "http://127.0.0.1:4999")
@@ -349,19 +324,3 @@ class GuardBridge:
     def stop(self) -> None:
         """Stop the polling loop."""
         self._running = False
-
-
-def run_bridge(
-    guard_url: str | None = None,
-    poll_interval: int = 10,
-    dry_run: bool = False,
-    store: GuardStore | None = None,
-    backend: NotificationBackend | None = None,
-) -> None:
-    """Run the Guard Bridge daemon."""
-    config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
-    if store is None:
-        store = GuardStore(resolve_guard_home())  # source defaults to "default"
-
-    bridge = GuardBridge(config=config, store=store, backend=backend)
-    bridge.run()

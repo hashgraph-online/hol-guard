@@ -15,6 +15,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Map, Value};
 
+use crate::command_structured_matchers::python_trim;
 pub use crate::signals::parse_risk_confidence;
 
 // ---------------------------------------------------------------------------
@@ -223,10 +224,9 @@ fn action_messages(
 // Coercion helpers (payload_coercion.py) + strict field-set parsers
 // ---------------------------------------------------------------------------
 
-/// `required_string` — non-empty string.
 fn required_string(payload: &Map<String, Value>, key: &str) -> Res<String> {
     match payload.get(key) {
-        Some(Value::String(s)) if !s.trim().is_empty() => Ok(s.clone()),
+        Some(Value::String(s)) if !python_trim(s).is_empty() => Ok(s.clone()),
         _ => err(&format!("{key} must be a non-empty string")),
     }
 }
@@ -268,7 +268,7 @@ fn parse_confidence(v: &Value) -> Res<RiskConfidenceLabel> {
     parse_risk_confidence(v).map_err(|e| DecisionError(e.0.to_string()))
 }
 /// `_parse_signals`.
-fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
+pub fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
     let arr = match v {
         Value::Array(a) => a,
         _ => return err("signals must be a list"),
@@ -299,7 +299,7 @@ fn parse_string_tuple(v: &Value, key: &str) -> Res<Vec<String>> {
     let mut out = Vec::with_capacity(arr.len());
     for item in arr {
         match item {
-            Value::String(s) if !s.trim().is_empty() => out.push(s.clone()),
+            Value::String(s) if !python_trim(s).is_empty() => out.push(s.clone()),
             _ => return err(&format!("{key} must be a list of non-empty strings")),
         }
     }
@@ -321,8 +321,20 @@ fn require_exact_fields(
     missing.sort();
     let mut extra: Vec<&str> = actual.difference(&expected_set).copied().collect();
     extra.sort();
+    let render = |fields: &[&str]| {
+        let fields: Vec<String> = fields
+            .iter()
+            .map(|field| {
+                let quoted = field.replace('\\', "\\\\").replace('\'', "\\'");
+                format!("'{quoted}'")
+            })
+            .collect();
+        format!("[{}]", fields.join(", "))
+    };
     err(&format!(
-        "{context} fields must match schema; missing={missing:?}, extra={extra:?}"
+        "{context} fields must match schema; missing={}, extra={}",
+        render(&missing),
+        render(&extra)
     ))
 }
 /// `_reject_unknown_action_bearing_fields`.
@@ -528,20 +540,27 @@ impl AuthoritativeGuardDecision {
             &authoritative_decision_fields(),
             "authoritative_decision",
         )?;
-        let schema_version = match p.get("schema_version").and_then(Value::as_i64) {
-            Some(v) => v,
-            None => return err("schema_version must be an integer"),
-        };
-        if schema_version != AUTHORITATIVE_DECISION_SCHEMA_VERSION {
-            return err("schema_version must match the authoritative schema version");
+        if p.get("schema_version").and_then(Value::as_f64)
+            != Some(AUTHORITATIVE_DECISION_SCHEMA_VERSION as f64)
+        {
+            return err(&format!(
+                "schema_version must be {AUTHORITATIVE_DECISION_SCHEMA_VERSION}"
+            ));
         }
         let action = parse_guard_action(p.get("action").unwrap_or(&Value::Null))?;
         let source = required_string(p, "source")?;
         let reason = required_string(p, "reason")?;
         let composition_trace = match p.get("composition_trace") {
             Some(Value::Object(m)) => m.clone(),
-            _ => return err("composition_trace must be an object"),
+            _ => return err("composition_trace must be an object with string keys"),
         };
+        if composition_trace
+            .get("final_action")
+            .and_then(Value::as_str)
+            != Some(action.as_str())
+        {
+            return err("composition_trace.final_action must match action");
+        }
         let signals = parse_signals(p.get("signals").unwrap_or(&Value::Null))?;
         let enforcement = match p.get("enforcement") {
             Some(Value::Object(m)) => {
@@ -624,9 +643,17 @@ fn dashboard_detail_from_signals(signals: &[RiskSignalV2], fallback: &str) -> St
 This command sends local secret to {sink_type} without exposing the raw secret in Guard evidence."
         );
     }
+    // Python's `max` keeps the FIRST of equally confident signals; Rust's
+    // `max_by_key` would keep the last, so the tie is broken explicitly.
     let strongest = signals
         .iter()
-        .max_by_key(|item| confidence_rank(item.confidence))
+        .reduce(|best, item| {
+            if confidence_rank(item.confidence) > confidence_rank(best.confidence) {
+                item
+            } else {
+                best
+            }
+        })
         .unwrap();
     strongest.plain_reason.clone()
 }
@@ -708,7 +735,7 @@ pub fn build_authoritative_decision(
     authority_finalized: bool,
     source: &str,
 ) -> Res<AuthoritativeGuardDecision> {
-    if reason.trim().is_empty() {
+    if python_trim(reason).is_empty() {
         return err("reason must be a non-empty string");
     }
     let mut trace = composition_trace.clone();
@@ -748,8 +775,8 @@ pub fn authoritative_decision_from_artifact(
     };
     let decision = match p.get("authoritative_decision") {
         Some(v) if v.is_object() => AuthoritativeGuardDecision::decode(v)?,
-        Some(_) => return err("authoritative_decision must be an object"),
-        None => {
+        Some(value) if !value.is_null() => return err("authoritative_decision must be an object"),
+        _ => {
             if require_authoritative {
                 return err("authoritative_decision is required at the launch boundary");
             }
@@ -761,7 +788,7 @@ pub fn authoritative_decision_from_artifact(
             composition.insert("final_action".into(), Value::String(action.as_str().into()));
             let reason = match p.get("decision_v2_json") {
                 Some(Value::Object(dv2)) => match dv2.get("reason") {
-                    Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
+                    Some(Value::String(s)) if !python_trim(s).is_empty() => s.clone(),
                     _ => action.as_str().to_string(),
                 },
                 _ => action.as_str().to_string(),
@@ -894,11 +921,13 @@ pub fn validate_composition_trace(action: GuardAction, trace: &Map<String, Value
             }
         }
     }
-    let saved_allow_override = current_action == Some(GuardAction::Review)
-        && parsed["saved_action"]
-            .as_str()
-            .and_then(GuardAction::from_canonical)
-            == Some(GuardAction::Allow)
+    let saved_allow_override = matches!(
+        current_action,
+        Some(GuardAction::Review | GuardAction::RequireReapproval)
+    ) && parsed["saved_action"]
+        .as_str()
+        .and_then(GuardAction::from_canonical)
+        == Some(GuardAction::Allow)
         && saved_state_present
         && matches!(action, GuardAction::Allow | GuardAction::Warn);
     let explicit_approval_override = (trusted_override
@@ -1036,7 +1065,10 @@ fn validate_artifact_projection(
             return err("verdict_action must match authoritative action");
         }
     }
-    if let Some(raw) = payload.get("policy_composition") {
+    if let Some(raw) = payload
+        .get("policy_composition")
+        .filter(|value| !value.is_null())
+    {
         let rc = match raw {
             Value::Object(m) => m,
             _ => return err("policy_composition must be an object"),
@@ -1048,7 +1080,10 @@ fn validate_artifact_projection(
             return err("policy_composition must match authoritative composition_trace");
         }
     }
-    if let Some(raw) = payload.get("decision_v2_json") {
+    if let Some(raw) = payload
+        .get("decision_v2_json")
+        .filter(|value| !value.is_null())
+    {
         let rd = match raw {
             Value::Object(m) => m,
             _ => return err("decision_v2_json must be an object"),
@@ -1067,7 +1102,10 @@ fn validate_artifact_projection(
             return err("decision_v2_json must match authoritative decision_v2");
         }
     }
-    if let Some(raw) = payload.get("action_envelope_json") {
+    if let Some(raw) = payload
+        .get("action_envelope_json")
+        .filter(|value| !value.is_null())
+    {
         let env = match raw {
             Value::Object(m) => m,
             _ => return err("action_envelope_json must be an object or null"),
@@ -1207,8 +1245,10 @@ fn validate_artifact_approval_projection(
         return err("composition_trace.trusted_request_override must match outer evidence");
     }
 
-    let saved_allow_reuse = current_action == GuardAction::Review
-        && saved_action == Some(GuardAction::Allow)
+    let saved_allow_reuse = matches!(
+        current_action,
+        GuardAction::Review | GuardAction::RequireReapproval
+    ) && saved_action == Some(GuardAction::Allow)
         && reuse_action == GuardAction::Allow
         && reuse_status == Some("accepted")
         && reuse_reason == APPROVAL_REUSE_ACCEPTED_REASON
@@ -1233,8 +1273,12 @@ fn validate_artifact_approval_projection(
     if let Some(rt) = trace.get("runtime_detector_action") {
         if !rt.is_null() {
             let parsed_runtime_action = parse_guard_action(rt)?;
-            let detector_review_was_approved = parsed_runtime_action == GuardAction::Review
-                && (trusted_applied || saved_allow_reuse);
+            let detector_review_was_approved = (parsed_runtime_action == GuardAction::Review
+                && trusted_applied)
+                || (matches!(
+                    parsed_runtime_action,
+                    GuardAction::Review | GuardAction::RequireReapproval
+                ) && saved_allow_reuse);
             if !detector_review_was_approved {
                 expected_action = most_restrictive_of(expected_action, parsed_runtime_action);
             }

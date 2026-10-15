@@ -588,7 +588,21 @@ def test_document_diff_flags_shorter_restrictive_lifetime() -> None:
     assert difference.broad_relaxing_changes == ("rule-1",)
 
 
-def test_document_diff_compares_mixed_precision_lifetimes_chronologically() -> None:
+@pytest.mark.parametrize(
+    ("previous_expiry", "current_expiry", "relaxed"),
+    [
+        ("2026-07-17T10:00:00.500Z", "2026-07-17T10:00:00Z", True),
+        ("2026-07-17T10:00:00.1Z", "2026-07-17T10:00:00.09Z", True),
+        ("2026-07-17T10:00:00.100000002Z", "2026-07-17T10:00:00.100000001Z", True),
+        ("2026-07-17T10:00:00.100000001Z", "2026-07-17T10:00:00.100000002Z", False),
+        ("2026-07-17T10:00:00.1Z", "2026-07-17T10:00:00.100000000Z", False),
+        ("2026-07-17T10:00:00Z", "2026-07-17T10:00:00.000000000Z", False),
+        ("2026-07-17T10:00:00.999999999Z", "2026-07-17T10:00:01Z", False),
+    ],
+)
+def test_document_diff_compares_mixed_precision_lifetimes_chronologically(
+    previous_expiry: str, current_expiry: str, relaxed: bool
+) -> None:
     baseline_mapping = _policy_document(effect="block").to_mapping()
     baseline_spec = baseline_mapping["spec"]
     assert isinstance(baseline_spec, dict)
@@ -598,7 +612,7 @@ def test_document_diff_compares_mixed_precision_lifetimes_chronologically() -> N
     assert isinstance(baseline_rule, dict)
     baseline_rule["lifetime"] = {
         "mode": "until",
-        "expiresAt": "2026-07-17T10:00:00.500Z",
+        "expiresAt": previous_expiry,
     }
     baseline = GuardPolicyDocument.from_mapping(baseline_mapping)
     candidate_mapping = baseline.to_mapping()
@@ -610,13 +624,13 @@ def test_document_diff_compares_mixed_precision_lifetimes_chronologically() -> N
     assert isinstance(candidate_rule, dict)
     candidate_rule["lifetime"] = {
         "mode": "until",
-        "expiresAt": "2026-07-17T10:00:00Z",
+        "expiresAt": current_expiry,
     }
     candidate = GuardPolicyDocument.from_mapping(candidate_mapping)
 
     difference = diff_policy_documents(baseline, candidate)
 
-    assert difference.broad_relaxing_changes == ("rule-1",)
+    assert difference.broad_relaxing_changes == (("rule-1",) if relaxed else ())
 
 
 def test_document_diff_flags_constrained_relaxing_addition() -> None:

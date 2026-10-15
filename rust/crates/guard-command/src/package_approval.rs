@@ -41,7 +41,7 @@ fn protect_action_for_policy_action(policy_action: &Value) -> GuardAction {
 fn string_value(value: &Value) -> Option<String> {
     value
         .as_str()
-        .filter(|s| !s.trim().is_empty())
+        .filter(|s| !crate::mcp_decision::python_strip(s).is_empty())
         .map(str::to_owned)
 }
 

@@ -18,13 +18,33 @@ use serde::Deserialize;
 use crate::native_command_program::packaged_command_program;
 
 #[cfg(not(guard_source_bootstrap))]
-const EMBEDDED_CATALOG: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json"));
+static EMBEDDED_CATALOG: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json.zst"));
+
+/// The verified-at-build catalog bytes, for read-only projections such as
+/// [`crate::catalog_read_model`] that need fields this module does not type.
 // The bootstrap shadow lib (guard-command-build) produces no packaged output;
 // an empty slice keeps `include_bytes!` valid and `from_embedded` fails closed
 // exactly like the `EMBEDDED_PROGRAM` bootstrap path.
-#[cfg(guard_source_bootstrap)]
-const EMBEDDED_CATALOG: &[u8] = &[];
+pub(crate) fn embedded_catalog_bytes() -> &'static [u8] {
+    #[cfg(not(guard_source_bootstrap))]
+    {
+        static DECODED: OnceLock<Box<[u8]>> = OnceLock::new();
+        DECODED
+            .get_or_init(|| {
+                crate::packaged_blob::decode(
+                    EMBEDDED_CATALOG,
+                    env!("GUARD_PACKAGED_CATALOG_LEN"),
+                    env!("GUARD_PACKAGED_CATALOG_SHA256"),
+                )
+            })
+            .as_ref()
+    }
+    #[cfg(guard_source_bootstrap)]
+    {
+        &[]
+    }
+}
 
 /// One rule's metadata — the fields `GeneratedCommandRule` exposes that the
 /// compiled `ProgramRule` does not carry.
@@ -93,6 +113,10 @@ pub struct CatalogExtension {
     /// `dependencies` — resolver extension-closure input.
     #[serde(default)]
     pub dependencies: Vec<String>,
+    /// `GeneratedCommandExtension.action_classes` — action classes the
+    /// extension owns (`for_action_class`).
+    #[serde(default)]
+    pub action_classes: Vec<String>,
     pub rules: Vec<CatalogRule>,
     pub permissions: Vec<CatalogPermission>,
 }
@@ -128,7 +152,7 @@ impl CommandCatalog {
             catalog_digest: String,
             program_digest: String,
         }
-        let wrapper: Wrapper = serde_json::from_slice(EMBEDDED_CATALOG)
+        let wrapper: Wrapper = serde_json::from_slice(embedded_catalog_bytes())
             .map_err(|_| "command_catalog_decode_failed")?;
         let mut extensions = wrapper.catalog;
         extensions.sort_by(|a, b| a.extension_id.cmp(&b.extension_id));
@@ -237,6 +261,17 @@ impl CommandCatalog {
             .permission_by_rule_id
             .get(&rule_id.trim().to_lowercase())?;
         self.permissions_flat().get(index).copied()
+    }
+
+    /// `for_action_class`: whether any extension owns the action class.
+    pub fn has_action_class_owner(&self, action_class: &str) -> bool {
+        let normalized = action_class.trim().to_lowercase();
+        self.extensions.iter().any(|extension| {
+            extension
+                .action_classes
+                .iter()
+                .any(|action| action.trim().to_lowercase() == normalized)
+        })
     }
 
     /// First non-fallback rule for an action_class (rule_for_action_class).

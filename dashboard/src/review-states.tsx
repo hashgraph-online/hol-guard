@@ -103,7 +103,7 @@ function ReviewCodexResumePanel({ resume, onRetry }: ReviewCodexResumePanelProps
   );
 }
 
-export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void }) {
+export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume, queueReadIncomplete = false }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void; queueReadIncomplete?: boolean }) {
   const protectionHealth = runtime === null ? unavailableProtectionHealth() : protectionHealthFor(runtime);
   const presentation = useProtectionPresentationState(protectionHealth);
   if (runtime === null) {
@@ -132,7 +132,7 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 
   return (
     <div className="space-y-6">
-      <GuardHero
+      {!queueReadIncomplete && <GuardHero
         status={heroStatus}
         headline={presentation === "checking" ? "Checking protection" : "Nothing to review"}
         subheadline={
@@ -140,11 +140,11 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
             ? protectionDetail
             : `No actions need your decision right now. ${protectionDetail}`
         }
-      />
+      />}
 
       <ProofStrip
         items={[
-          { label: "Queue", value: "All clear", tone: "green" },
+          { label: "Queue", value: queueReadIncomplete ? "Incomplete" : "All clear", tone: queueReadIncomplete ? "slate" : "green" },
           { label: "Protection", value: protectionLabel, tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" },
         ]}

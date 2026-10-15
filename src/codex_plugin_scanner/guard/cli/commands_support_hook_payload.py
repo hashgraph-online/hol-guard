@@ -80,7 +80,7 @@ def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None
 
 if TYPE_CHECKING:
     from ..store import GuardStore
-    from ._commands_shared import _GUARD_CLIENT_VERSION, _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
+    from ._commands_shared import _GUARD_CLIENT_VERSION, _now
     from .commands_support_interaction import _attach_primary_approval_link, _preferred_approval_review_url
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
 
@@ -114,6 +114,55 @@ def _load_hook_payload(
     )
     return payload
 
+_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
+_NON_VERDICT_EVENTS = frozenset({"UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse"})
+
+
+def _render_cli(kind: str, harness: str, params: dict[str, object]) -> tuple[str, dict[str, object] | None] | None:
+    from ..native_hook_render import native_render_cli
+
+    return native_render_cli(kind, harness, params)
+
+
+def _fixed_deny(
+    harness: str,
+    event_name: str,
+    policy_action: str,
+    reason: str,
+    *,
+    additional_context: str | None = None,
+    system_message: str | None = None,
+) -> dict[str, object] | None:
+    """The constant document for an outcome the resident could not render.
+
+    A blocking verdict always renders as an explicit block, on every event
+    type. A nonblocking outcome carries no verdict and only forwards its own
+    notice fields, so nothing here ever authorizes an action.
+    """
+
+    if policy_action not in _BLOCKING_ACTIONS:
+        notice: dict[str, object] = {}
+        if system_message:
+            notice["systemMessage"] = system_message
+        if additional_context:
+            notice["hookSpecificOutput"] = {"hookEventName": event_name, "additionalContext": additional_context}
+        return notice or None
+    from ..daemon.hook_fail_closed import fail_closed_response
+
+    text = reason or "HOL Guard blocked this action."
+    document = fail_closed_response(harness, event_name, reason=text, prompt_reason=reason or None)
+    if document and document.get("policy_action") != "allow" and document.get("decision") != "allow":
+        return document
+    reason_code = str((document or {}).get("reason_code") or "native_hook_render_unavailable")
+    return {
+        "continue": True,
+        "decision": "block",
+        "reason": text,
+        "policy_action": "block",
+        "reason_code": reason_code,
+    }
+
+
 def _emit_native_hook_response(
     *,
     harness: str,
@@ -124,116 +173,36 @@ def _emit_native_hook_response(
     system_message: str | None = None,
     output_stream: TextIO | None = None,
 ) -> None:
-    payload: dict[str, object] = {}
-    if isinstance(system_message, str) and system_message.strip():
-        payload["systemMessage"] = system_message.strip()
-    if event_name == "UserPromptSubmit":
-        if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} and not additional_context:
-            payload["decision"] = "block"
-            payload["reason"] = reason
-            if _canonical_harness_name(harness) == "codex":
-                payload["continue"] = False
-                payload["stopReason"] = reason
-                payload["hookSpecificOutput"] = {
-                    "hookEventName": event_name,
-                    "additionalContext": reason,
-                }
-        elif additional_context:
-            payload["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "additionalContext": additional_context,
-            }
-        elif _canonical_harness_name(harness) in {"claude-code", "codex"}:
-            payload["hookSpecificOutput"] = {"hookEventName": event_name}
-        if payload:
-            _write_json_line(payload, output_stream=output_stream)
-        return
-    if event_name in {"Notification", "PermissionRequest"}:
-        if event_name == "PermissionRequest" and policy_action in {"block", "sandbox-required"}:
-            decision: dict[str, object] = {
-                "behavior": "deny",
-                "message": additional_context or reason,
-            }
-            if _canonical_harness_name(harness) != "codex":
-                decision["interrupt"] = False
-            payload["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "decision": decision,
-            }
-            _write_json_line(payload, output_stream=output_stream)
-            return
-        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "codex":
-            if policy_action in {"review", "require-reapproval"}:
-                payload["systemMessage"] = (
-                    "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
-                    "choose allow only if you trust the exact tool action."
-                )
-            if payload:
-                _write_json_line(payload, output_stream=output_stream)
-            return
-        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "claude-code":
-            message = system_message or reason
-            if message:
-                payload["systemMessage"] = message
-            if additional_context:
-                payload["hookSpecificOutput"] = {
-                    "hookEventName": event_name,
-                    "additionalContext": additional_context,
-                }
-            elif message:
-                payload["hookSpecificOutput"] = {"hookEventName": event_name}
-            if payload:
-                _write_json_line(payload, output_stream=output_stream)
-            return
-        if additional_context:
-            payload["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "additionalContext": additional_context,
-            }
-        if payload:
-            _write_json_line(payload, output_stream=output_stream)
-        return
-    if event_name == "PostToolUse":
-        if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-            payload.update({"decision": "block", "reason": reason, "continue": True, "stopReason": reason})
-        else:
-            payload["continue"] = True
-            payload["policy_action"] = policy_action
-            permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
-            if permission_decision is not None:
-                hook_output: dict[str, object] = {
-                    "hookEventName": event_name,
-                    "permissionDecision": permission_decision,
-                }
-                if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
-                    hook_output["permissionDecisionReason"] = reason
-                payload["hookSpecificOutput"] = hook_output
-        _write_json_line(payload, output_stream=output_stream)
-        return
-    permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
-    if harness == "codex" and event_name == "PreToolUse" and permission_decision is None:
-        return
-    hook_specific_output: dict[str, object] = {"hookEventName": event_name}
-    if permission_decision is not None:
-        hook_specific_output["permissionDecision"] = permission_decision
-        if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
-            hook_specific_output["permissionDecisionReason"] = reason
-    payload["hookSpecificOutput"] = hook_specific_output
-    _write_json_line(
-        _hermes_native_or_payload(harness, policy_action, reason, payload),
-        output_stream=output_stream,
-    )
+    canonical = _canonical_harness_name(harness)
+    if canonical == "hermes" and event_name not in _NON_VERDICT_EVENTS:
+        from ..adapters.hermes_runtime_hooks import hermes_native_decision
 
-def _hermes_native_or_payload(
-    harness: str,
-    policy_action: str,
-    reason: str,
-    payload: dict[str, object],
-) -> dict[str, object]:
-    if _canonical_harness_name(harness) != "hermes":
-        return payload
-    from ..adapters.hermes_runtime_hooks import hermes_native_decision
-    return hermes_native_decision(policy_action=policy_action, reason=reason)
+        decision = hermes_native_decision(policy_action=policy_action, reason=reason)
+        _write_json_line(decision, output_stream=output_stream)
+        return
+    params: dict[str, object] = {
+        "canonical_harness": canonical,
+        "event_name": event_name,
+        "policy_action": policy_action,
+        "reason": reason,
+        "additional_context": additional_context,
+        "system_message": system_message,
+    }
+    rendered = _render_cli("cli_response", harness, params)
+    document = (
+        rendered[1]
+        if rendered is not None
+        else _fixed_deny(
+            harness,
+            event_name,
+            policy_action,
+            reason,
+            additional_context=additional_context,
+            system_message=system_message,
+        )
+    )
+    if document:
+        _write_json_line(document, output_stream=output_stream)
 
 
 def _apply_native_edge_envelope_fields(
@@ -381,165 +350,35 @@ def _native_hook_json_document(
 
     Returns ``(document, rc)`` when this call owns the response, ``(None, 0)``
     when the harness contract is silence, and ``None`` when the caller should
-    fall back to the generic envelope or adapter emit paths. The envelope is
-    merged into the protocol document so callers keep policy/evidence fields
-    alongside the harness-facing decision keys.
+    fall back to the generic envelope or adapter emit paths.
     """
     if not getattr(args, "json", False) or event_name == "PostToolUse":
         return None
     canonical = _canonical_harness_name(args.harness)
     if canonical not in {"copilot", "claude-code", "codex"}:
         return None
+    params: dict[str, object] = {
+        "canonical_harness": canonical,
+        "event_name": event_name,
+        "policy_action": policy_action,
+        "reason": reason,
+        "system_message": system_message,
+        "envelope": dict(envelope) if isinstance(envelope, Mapping) else None,
+        "generic_path": generic_path,
+        "native_protocol_payload": native_protocol_payload,
+        "content_flagged": content_flagged,
+        "command_surface": command_surface,
+        "verified_benign": verified_benign,
+    }
+    rendered = _render_cli("cli_document", args.harness, params)
     exit_code = native_hook_verdict_exit_code(canonical, policy_action, event_name)
-    blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    terminal = policy_action in {"block", "sandbox-required"}
-    base = dict(envelope) if isinstance(envelope, Mapping) else {}
-    scanner_evidence = base.get("scanner_evidence")
-    # The generic path always records the baseline pair (approval reuse +
-    # policy composition); only additional *decisional* scanner evidence
-    # warrants the merged evidence-bearing document on the wire. Benign-verified
-    # payloads may still carry audit entries: ignored untrusted hints, relaxed
-    # configured defaults, and embedded-script audit indexes are not flags.
-    def _decisional_evidence(entry: object) -> bool:
-        if not isinstance(entry, Mapping):
-            return True
-        source = entry.get("source")
-        if source in {"approval_reuse", "policy_composition", "embedded_script"}:
-            return False
-        if source == "hook_payload_trust" and entry.get("status") == "ignored":
-            return False
-        if source == "configured_default" and entry.get("status") == "relaxed_verified_benign":
-            return False
-        return not (source == "trusted_local_tool" and entry.get("eligible") is True)
-
-    has_extra_evidence = isinstance(scanner_evidence, list) and any(
-        _decisional_evidence(entry) for entry in scanner_evidence
-    )
-    # Verified-benign relaxations mark the composed warn as a safe fast path:
-    # the configured default was relaxed or a trusted local tool qualified.
-    has_benign_evidence = isinstance(scanner_evidence, list) and any(
-        isinstance(entry, Mapping)
-        and (
-            (entry.get("source") == "configured_default" and entry.get("status") == "relaxed_verified_benign")
-            or (entry.get("source") == "trusted_local_tool" and entry.get("eligible") is True)
-        )
-        for entry in scanner_evidence
-    )
-
-    if canonical == "copilot":
-        if event_name != "PreToolUse":
-            return None
-        if not blocking:
-            if (
-                generic_path
-                and not content_flagged
-                and (policy_action == "allow" or not has_extra_evidence)
-            ):
-                return {"permissionDecision": "allow"}, exit_code
-            base["continue"] = True
-            base["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "permissionDecision": "allow",
-            }
-            return base, exit_code
-        base["continue"] = True
-        base["hookSpecificOutput"] = {
-            "hookEventName": event_name,
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-        return base, exit_code
-
-
-    if event_name == "UserPromptSubmit":
-        if not blocking:
-            base["hookSpecificOutput"] = {"hookEventName": event_name}
-            return base, exit_code
-        if canonical == "codex":
-            # Codex prompt payloads must never echo the submitted prompt back;
-            # emit the protocol document only, carrying the composed action and
-            # the edge reason code as provenance.
-            doc: dict[str, object] = {
-                "decision": "block",
-                "reason": reason,
-                "policy_action": policy_action,
-                "continue": False,
-                "stopReason": reason,
-                "hookSpecificOutput": {
-                    "hookEventName": event_name,
-                    "additionalContext": reason,
-                },
-            }
-            edge_reason_code = base.get("reason_code") or base.get("native_edge_reason_code")
-            if isinstance(edge_reason_code, str) and edge_reason_code.strip():
-                doc["reason_code"] = edge_reason_code
-            if isinstance(system_message, str) and system_message.strip():
-                doc["systemMessage"] = system_message.strip()
-            return doc, exit_code
-        base["decision"] = "block"
-        base["reason"] = reason
-        base["continue"] = True
-        if (
-            terminal
-            and not generic_path
-            and isinstance(system_message, str)
-            and system_message.strip()
-        ):
-            base["systemMessage"] = system_message.strip()
-        return base, exit_code
-
-    if (
-        canonical == "codex"
-        and event_name == "PreToolUse"
-        and native_protocol_payload
-        and generic_path
-        and command_surface
-        and not blocking
-        and (policy_action == "allow" or has_benign_evidence or verified_benign)
-        and _native_hook_permission_decision(policy_action, harness=args.harness) is None
-    ):
-        return None, exit_code
-
-    base["continue"] = True
-    if isinstance(system_message, str) and system_message.strip():
-        base["systemMessage"] = system_message.strip()
-    hook_specific_output: dict[str, object] = {"hookEventName": event_name}
-    if event_name == "PermissionRequest":
-        if terminal:
-            hook_specific_output["decision"] = {"behavior": "deny", "message": reason}
-        elif canonical == "claude-code":
-            if isinstance(system_message, str) and system_message.strip():
-                base["systemMessage"] = system_message.strip()
-        elif policy_action in {"review", "require-reapproval"}:
-            base["systemMessage"] = (
-                "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
-                "choose allow only if you trust the exact tool action."
-            )
-        else:
-            return None, exit_code
-        base["hookSpecificOutput"] = hook_specific_output
-        return base, exit_code
-    if blocking:
-        base["decision"] = "block"
-        base["reason"] = reason
-    permission_decision = _native_hook_permission_decision(policy_action, harness=args.harness)
-    if (
-        permission_decision is None
-        and canonical == "codex"
-        and event_name == "PreToolUse"
-        and not blocking
-    ):
-        permission_decision = "allow"
-    if permission_decision is not None:
-        hook_specific_output["permissionDecision"] = permission_decision
-        if (
-            permission_decision != "allow"
-            or policy_action == "warn"
-            or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower()
-        ):
-            hook_specific_output["permissionDecisionReason"] = reason
-    base["hookSpecificOutput"] = hook_specific_output
-    return base, exit_code
+    if rendered is None:
+        denied = _fixed_deny(args.harness, event_name, policy_action, reason)
+        return (denied, exit_code) if denied is not None else None
+    outcome, document = rendered
+    if outcome == "fallback":
+        return None
+    return (document if outcome == "document" else None), exit_code
 
 
 def _emit_native_hook_json_document(
@@ -580,19 +419,6 @@ def _emit_native_hook_notification_stderr(reason: str) -> None:
     # stderr is the harness notice channel; the reason may carry the
     # ephemeral approval link the operator needs.
     print(reason, file=sys.stderr)  # codeql[py/clear-text-logging-sensitive-data]
-
-def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
-    canonical = _canonical_harness_name(harness)
-    if policy_action in {"block", "sandbox-required"}:
-        return "deny"
-    if policy_action in {"review", "require-reapproval"}:
-        # zcode routes ask to its native permission prompt instead of denying.
-        if canonical in {"codex", "kimi", "grok", "devin"}:
-            return "deny"
-        return "ask"
-    if canonical == "codex":
-        return None
-    return "allow"
 
 def _copilot_hook_permission_decision(policy_action: str) -> str:
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
@@ -889,6 +715,7 @@ def _hook_action_envelope(
     payload: dict[str, object],
     home_dir: Path,
     workspace: Path | None,
+    guard_home: Path | None = None,
 ) -> GuardActionEnvelope | None:
     canonical_harness = _canonical_harness_name(harness)
     if canonical_harness not in _ACTION_ENVELOPE_HARNESSES:
@@ -899,6 +726,7 @@ def _hook_action_envelope(
         payload,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
     )
 
 def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
@@ -913,7 +741,7 @@ __all__ = [
     "_emit_native_hook_response", "_emit_native_post_tool_envelope", "_first_hook_tool_call",
     "_headless_approval_resolver", "_hook_action_envelope", "_hook_command_has_encoded_markers",
     "_load_hook_payload",
-    "_native_hook_json_document", "_native_hook_permission_decision", "_normalize_hook_argument_value",
+    "_native_hook_json_document", "_normalize_hook_argument_value",
     "_normalize_hook_arguments",
     "_normalize_hook_payload", "_open_approval_center", "_public_approval_center_url",
 ]

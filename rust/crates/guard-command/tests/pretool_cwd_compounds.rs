@@ -5,9 +5,13 @@ use serde_json::json;
 
 #[test]
 fn cwd_compounds_validate_reads_and_one_bounded_write() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-fixtures")
-        .join(format!("fixture-{}", std::process::id()));
+        .join(format!("fixture-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");
@@ -21,11 +25,21 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
             ("&& wc -l one.txt", true),
             ("&& cat one.txt | sort -u", true),
             ("&& cat one.txt && head -1 one.txt", true),
-            ("&& cat one.txt; cat one.txt", false),
-            ("&& cat one.txt || cat one.txt", false),
+            // After `;` the read runs in the new directory when `cd` succeeded
+            // and in the original one when it failed, and is proven in both.
+            ("&& cat one.txt; cat one.txt", true),
+            // `||` forks the same way: the alternative runs in the new
+            // directory after a failed read, or in the original one after a
+            // failed `cd`, and is proven in both.
+            ("&& cat one.txt || cat one.txt", true),
+            ("&& cat one.txt; cat alias.txt", false),
+            ("&& cat one.txt; cat .env", false),
+            ("&& cat one.txt; rm one.txt", false),
+            ("&& cat one.txt || cat alias.txt", false),
+            ("&& cat one.txt || rm one.txt", false),
             ("&& cat alias.txt", false),
             ("&& cat .env", false),
-            ("; cat one.txt", false),
+            ("; cat one.txt", true),
             ("|| cat one.txt", false),
             ("| cat one.txt", false),
             ("&& cd .. && cat one.txt", false),
@@ -110,6 +124,7 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
         None,
     );
     assert_ne!(result.minimum_action, "allow");
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -118,9 +133,13 @@ fn cwd_compound_extension_deny_overrides_safe_neighbor() {
     use guard_command::native_command_program::packaged_command_program;
     use guard_contracts::NativeCommandControlBindingV1;
 
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-control-fixtures")
-        .join(format!("fixture-{}", std::process::id()));
+        .join(format!("fixture-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");
@@ -162,4 +181,5 @@ fn cwd_compound_extension_deny_overrides_safe_neighbor() {
             assert_eq!(result.decision, "deny", "{harness}: {command}");
         }
     }
+    std::fs::remove_dir_all(root).unwrap();
 }

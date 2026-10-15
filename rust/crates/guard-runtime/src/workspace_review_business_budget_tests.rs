@@ -9,6 +9,9 @@ use guard_policy_snapshot::business_source_authority::{
 use guard_policy_snapshot::{integrity_mac, policy_digest};
 use serde_json::{json, Value};
 
+#[path = "workspace_review_business_budget_process_tests.rs"]
+mod process_tests;
+
 fn declaration(scope: &str) -> Value {
     json!({"schema":"guard.business-budget.v1","version":1,"id":format!("mail.{scope}"),"scope":scope,
     "windowMs":86400000,"maximumActions":2,"maximumRecipients":100,"maximumRecords":100,"maximumBytes":100000,
@@ -384,6 +387,17 @@ fn declared_allowance_above_128_has_no_event_count_cap() {
         budget[field] = json!(1000000);
     }
     install(&fixture, json!([budget]));
+    // This capacity test performs 129 durable writes. Parallel debug builds
+    // can outlive the shared 60-second fixture; expiry is tested separately.
+    let mut snapshot = fixture.store.current_snapshot().unwrap();
+    snapshot.generation += 1;
+    snapshot.expires_at_ms = snapshot.issued_at_ms + 600_000;
+    snapshot.policy_digest = policy_digest(&snapshot).unwrap();
+    snapshot.integrity.mac = integrity_mac(&snapshot, &fixture.key).unwrap();
+    fixture
+        .store
+        .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
+        .unwrap();
     let now = time(&fixture);
     let input = prepared();
     for index in 0..129 {

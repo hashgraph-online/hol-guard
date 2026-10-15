@@ -2,67 +2,48 @@
 
 from __future__ import annotations
 
-import importlib
-import json
-import re
 import shutil
 import sqlite3
-import sys
 import tempfile
 import threading
 import time
-from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import cast
 
-if TYPE_CHECKING:
-    import tomllib
-else:  # pragma: no cover - runtime compatibility
-    tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
-
-from .action_lattice import coerce_guard_action, normalize_guard_action
+from .action_lattice import normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
-from .config_file_io import read_config_file_bytes
+from .approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS  # noqa: F401 - re-exported
+from .config_constants import VALID_RISK_ACTION_KEYS, VALID_SECURITY_LEVELS
+from .config_file_io import ConfigFileTrustError
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
-from .config_preset_support import apply_named_posture_harness_policy
 from .guard_home_state import database_has_custom_extension_state
+from .harness_posture import (
+    HARNESS_POSTURES_KEY,
+    effective_harness_postures,
+    harness_posture_override,
+    harness_posture_status,
+    harness_watch_auto_revert_due,
+    managed_locks_harness_postures,
+    stricter_risk_action,
+)
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
-from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
-from .presentation_mode import (
-    PRESENTATION_SCHEMA_VERSION,
-    coerce_persisted_presentation_mode,
-    coerce_presentation_mode_write,
-)
+from .models import GuardAction, GuardMode
+from .native_guard_config import load_native_guard_config, update_native_guard_config
+from .presentation_mode import PRESENTATION_SCHEMA_VERSION
+from .protection_events import record_harness_posture_changes_if_needed
 from .protection_posture import (
     DEFAULT_PROTECTION_POSTURE,
     DEFAULT_WATCH_AUTO_REVERT_HOURS,
+    POSTURE_RISK_ACTIONS,
     coerce_loaded_protection_posture,
-    coerce_protection_posture,
-    coerce_watch_auto_revert_hours,
     derive_protection_posture,
-    dual_write_from_posture,
     resolve_posture_defaults,
 )
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
-VALID_UPDATE_CHANNELS = frozenset({"stable", "alpha"})
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def _coerce_watch_entered_at(value: object) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return value.strip()
 
 
 def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None) -> bool:
@@ -82,11 +63,17 @@ def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None
 
 def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) -> GuardConfig:
     config = load_guard_config(guard_home)
-    if not watch_should_auto_revert(config, now=now):
+    revert: dict[str, object] = {}
+    if watch_should_auto_revert(config, now=now):
+        revert["protection_posture"] = "protected"
+    if due_harnesses := harness_watch_auto_revert_due(config, now=now):
+        # A harness reverts to inheriting the baseline posture.
+        revert[HARNESS_POSTURES_KEY] = dict.fromkeys(due_harnesses)
+    if not revert:
         return config
     return update_guard_settings(
         guard_home,
-        {"protection_posture": "protected"},
+        revert,
         event_source="auto-revert",
         skip_approval_gate=True,
     )
@@ -113,57 +100,8 @@ GUARD_HOME_METADATA_FILES = frozenset(
 )
 GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
 GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
-WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
-MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 
-# Hook review controls. The resident worker is the safe production default;
-# operators can explicitly disable it for emergency rollback.
-# These are read from os.environ at call time so tests/daemon can toggle without restart.
-HOOK_FAST_PATH_ENV = "HOL_GUARD_HOOK_FAST_PATH"
-HOOK_SOURCE_REF_ENV = "HOL_GUARD_HOOK_SOURCE_REF"
-HOOK_FAST_PATH_SHADOW_ENV = "HOL_GUARD_HOOK_FAST_PATH_SHADOW"
-
-
-def hook_fast_path_enabled() -> bool:
-    """Whether the daemon should use the resident hook worker for fast-path review."""
-    import os
-
-    return os.environ.get(HOOK_FAST_PATH_ENV, "1") == "1"
-
-
-def hook_source_ref_enabled() -> bool:
-    """Whether the Pi managed extension should generate guard_source_ref."""
-    import os
-
-    return os.environ.get(HOOK_SOURCE_REF_ENV, "0") == "1"
-
-
-def hook_fast_path_shadow_enabled() -> bool:
-    """Whether to evaluate fast path but return legacy behavior (shadow mode)."""
-    import os
-
-    return os.environ.get(HOOK_FAST_PATH_SHADOW_ENV, "0") == "1"
-
-
-VALID_GUARD_ACTIONS = frozenset(GUARD_ACTION_VALUES)
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
-VALID_SECURITY_LEVELS = {"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"}
-VALID_RISK_ACTION_KEYS = {
-    "local_secret_read",
-    "credential_exfiltration",
-    "data_flow_exfiltration",
-    "destructive_shell",
-    "encoded_execution",
-    "network_egress",
-    "prompt_injection",
-    "mcp_dangerous_tool",
-    "malicious_skill",
-    "package_script",
-    "persistence",
-    "guard_bypass",
-    "cloud_advisory",
-    "encoded_exfiltration",
-}
 DEFAULT_SECURITY_LEVEL = "balanced"
 SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
     "relaxed": {
@@ -263,84 +201,11 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
         "encoded_exfiltration": "require-reapproval",
     },
 }
-EDITABLE_GUARD_SETTING_KEYS = frozenset(
-    {
-        "mode",
-        "presentation_mode",
-        "presentation_mode_explicit",
-        "presentation_schema_version",
-        "protection_posture",
-        "protection_posture_explicit",
-        "watch_auto_revert_hours",
-        "security_level",
-        "default_action",
-        "unknown_publisher_action",
-        "changed_hash_action",
-        "new_network_domain_action",
-        "subprocess_action",
-        "risk_actions",
-        "harness_risk_actions",
-        "approval_wait_timeout_seconds",
-        "approval_surface_policy",
-        "blocked_request_mode",
-        "approval_browser_delay_seconds",
-        "approval_browser_immediate_severity",
-        "desktop_notifications",
-        "update_channel",
-        "telemetry",
-        "sync",
-        "billing",
-        "receipt_redaction_level",
-    }
-)
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
-
-VALID_APPROVAL_SURFACE_POLICIES = {"attention-aware", "auto-open-once", "native-only", "approval-center"}
-VALID_APPROVAL_BROWSER_SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
-BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
-WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
-    {
-        "blocked_request_mode",
-        "mode",
-        "presentation_mode",
-        "presentation_mode_explicit",
-        "presentation_schema_version",
-        "presentation_revision",
-        "presentation_density",
-        "display_density",
-        "density",
-        "protection_posture",
-        "watch_auto_revert_hours",
-        "default_action",
-        "unknown_publisher_action",
-        "changed_hash_action",
-        "new_network_domain_action",
-        "subprocess_action",
-        "security_level",
-        "risk_actions",
-        "harness_risk_actions",
-        "harnesses",
-        "publishers",
-        "artifacts",
-    }
-)
 
 
 class GuardHomeMigrationError(RuntimeError):
     """Raised when legacy Guard state cannot be migrated safely."""
-
-
-def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
-    if not isinstance(payload, dict):
-        return {}
-    action_map: dict[str, GuardAction] = {}
-    for key, value in payload.items():
-        if not isinstance(key, str):
-            continue
-        action = _action_map_value(value)
-        resolved_action = normalize_guard_action(action, unknown_action="require-reapproval")
-        action_map[key] = resolved_action
-    return action_map
 
 
 def _coerce_risk_action_map(payload: object) -> dict[str, GuardAction]:
@@ -396,6 +261,8 @@ class GuardConfig:
     protection_posture_explicit: bool = False
     watch_auto_revert_hours: int = DEFAULT_WATCH_AUTO_REVERT_HOURS
     watch_entered_at: str | None = None
+    harness_postures: dict[str, str] | None = None
+    harness_watch_entered_at: dict[str, str] | None = None
     security_level: str = DEFAULT_SECURITY_LEVEL
     default_action: GuardAction = "warn"
     unknown_publisher_action: GuardAction = "review"
@@ -460,6 +327,19 @@ class GuardConfig:
         return None
 
 
+_NATIVE_LOADED_FIELDS = frozenset(field.name for field in fields(GuardConfig)) - frozenset(
+    {
+        "guard_home",
+        "workspace",
+        "managed_policy_status",
+        "managed_policy_hash",
+        "managed_locked_settings",
+        "install_owner",
+        "managed_policy",
+    }
+)
+
+
 def resolve_guard_home(override: str | None = None) -> Path:
     """Resolve the Guard home directory."""
 
@@ -488,17 +368,22 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
     return canonical_home
 
 
-def _read_toml(path: Path, *, require_canonical_directory: bool = False) -> dict[str, object]:
-    contents = read_config_file_bytes(path.parent, path.name, require_canonical_directory=require_canonical_directory)
-    if contents is None:
-        return {}
-    return tomllib.loads(contents.decode("utf-8"))
-
-
 def _coerce_loaded_receipt_redaction_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
         return value
     return "full"
+
+
+def _effective_managed_policy(managed_state: ManagedPolicyState) -> ManagedPolicy | None:
+    if managed_state.policy is None and managed_state.status in {"invalid", "inaccessible", "tampered"}:
+        return fail_closed_managed_policy()
+    return managed_state.policy
+
+
+def _native_managed_input(policy: ManagedPolicy | None) -> dict[str, object] | None:
+    if policy is None:
+        return None
+    return {"settings": policy.settings, "locked_settings": sorted(policy.locked_settings)}
 
 
 def load_guard_config(
@@ -509,123 +394,25 @@ def load_guard_config(
     require_canonical_workspace: bool = False,
     create_home: bool = True,
 ) -> GuardConfig:
-    """Load Guard config from home and workspace overrides."""
+    """Load Guard config from home and workspace overrides through the native runtime."""
 
     if create_home:
         guard_home.mkdir(parents=True, exist_ok=True)
-    home_config = _read_toml(guard_home / "config.toml")
-    workspace_config = _load_workspace_guard_config(workspace, require_canonical=require_canonical_workspace)
-
-    merged = _merge_config_payload(home_config, workspace_config)
     managed_state = managed_policy_state or load_managed_policy()
-    effective_managed_policy = managed_state.policy
-    if effective_managed_policy is None and managed_state.status in {"invalid", "inaccessible", "tampered"}:
-        effective_managed_policy = fail_closed_managed_policy()
-    if effective_managed_policy is not None:
-        merged = apply_managed_policy(merged, effective_managed_policy)
-    loaded_mode = _coerce_loaded_guard_mode(merged.get("mode"), "prompt")
-    loaded_security_level = _coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL))
-    explicit_posture = coerce_loaded_protection_posture(merged.get("protection_posture"))
-    managed_locks_level = (
-        effective_managed_policy is not None and "security_level" in effective_managed_policy.locked_settings
+    effective_managed_policy = _effective_managed_policy(managed_state)
+    loaded = load_native_guard_config(
+        guard_home,
+        workspace,
+        require_canonical_workspace=require_canonical_workspace,
+        managed=_native_managed_input(effective_managed_policy),
     )
-    if managed_locks_level:
-        loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
-        posture_explicit = False
-    elif explicit_posture is not None:
-        loaded_posture = explicit_posture
-        posture_explicit = True
-    else:
-        loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
-        posture_explicit = False
-    legacy_presentation_value = next(
-        (
-            merged.get(key)
-            for key in ("presentation_mode", "presentation_density", "display_density", "density")
-            if merged.get(key) is not None
-        ),
-        None,
-    )
-    persisted_presentation = coerce_persisted_presentation_mode(
-        legacy_presentation_value,
-        explicit=merged.get("presentation_mode_explicit", legacy_presentation_value is not None),
-        schema_version=merged.get("presentation_schema_version", PRESENTATION_SCHEMA_VERSION),
-    )
-    presentation_revision = _coerce_loaded_non_negative_int(merged.get("presentation_revision"), 0)
+    if set(loaded) != _NATIVE_LOADED_FIELDS:
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    loaded["runtime_detector_disabled_ids"] = tuple(cast("list[str]", loaded["runtime_detector_disabled_ids"]))
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
-        mode=("observe" if loaded_posture == "watch" else loaded_mode),
-        presentation_mode=persisted_presentation.value,
-        presentation_mode_explicit=persisted_presentation.explicit,
-        presentation_schema_version=persisted_presentation.schema_version,
-        presentation_revision=presentation_revision,
-        presentation_source=persisted_presentation.source,
-        presentation_diagnostic=persisted_presentation.diagnostic,
-        protection_posture=loaded_posture,
-        protection_posture_explicit=posture_explicit,
-        watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
-        watch_entered_at=_coerce_watch_entered_at(merged.get("watch_entered_at")),
-        default_action=_coerce_loaded_guard_action_or_default(merged.get("default_action"), "warn"),
-        unknown_publisher_action=_coerce_loaded_guard_action_or_default(
-            merged.get("unknown_publisher_action"),
-            "review",
-        ),
-        changed_hash_action=_coerce_loaded_guard_action_or_default(
-            merged.get("changed_hash_action"),
-            "require-reapproval",
-        ),
-        new_network_domain_action=_coerce_loaded_guard_action_or_default(
-            merged.get("new_network_domain_action"),
-            "warn",
-        ),
-        subprocess_action=_coerce_loaded_guard_action_or_default(merged.get("subprocess_action"), "warn"),
-        approval_wait_timeout_seconds=_coerce_loaded_non_negative_int(
-            merged.get("approval_wait_timeout_seconds"),
-            120,
-        ),
-        approval_surface_policy=_coerce_loaded_approval_surface_policy(merged.get("approval_surface_policy")),
-        blocked_request_mode=("ask" if merged.get("blocked_request_mode") == "ask" else "safe-alternative"),
-        approval_browser_delay_seconds=_coerce_loaded_bounded_int(
-            merged.get("approval_browser_delay_seconds"),
-            default=20,
-            maximum=300,
-        ),
-        approval_browser_immediate_severity=_coerce_loaded_approval_browser_severity(
-            merged.get("approval_browser_immediate_severity")
-        ),
-        desktop_notifications=_coerce_loaded_bool(merged.get("desktop_notifications", True)),
-        update_channel=_coerce_loaded_update_channel(merged.get("update_channel")),
-        telemetry=bool(merged.get("telemetry", False)),
-        sync=bool(merged.get("sync", False)),
-        billing=bool(merged.get("billing", False)),
-        runtime_detector_registry=_coerce_loaded_bool(merged.get("runtime_detector_registry", False)),
-        runtime_detector_timeout_ms=_coerce_loaded_positive_int(merged.get("runtime_detector_timeout_ms", 50), 50),
-        runtime_detector_debug_trace=_coerce_loaded_bool(merged.get("runtime_detector_debug_trace", False)),
-        runtime_detector_disabled_ids=_coerce_loaded_string_tuple(merged.get("runtime_detector_disabled_ids")),
-        sandbox_analysis=_coerce_sandbox_analysis(merged.get("sandbox_analysis", "off")),
-        harness_actions=_coerce_action_map(merged.get("harnesses")),
-        publisher_actions=_coerce_action_map(merged.get("publishers")),
-        artifact_actions=_coerce_action_map(merged.get("artifacts")),
-        security_level=loaded_security_level,
-        risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
-        harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
-        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
-            merged.get("receipt_redaction_level"),
-        ),
-        evidence_retain_days=_coerce_loaded_bounded_positive_int(
-            merged.get("evidence_retain_days"),
-            default=90,
-            maximum=3_650,
-        ),
-        receipt_detail_limit=_coerce_loaded_optional_bounded_positive_int(
-            merged.get("receipt_detail_limit"),
-            maximum=1_000_000,
-        ),
-        guard_event_limit=_coerce_loaded_optional_bounded_positive_int(
-            merged.get("guard_event_limit"),
-            maximum=1_000_000,
-        ),
+        **loaded,  # type: ignore[arg-type]
         managed_policy_status=managed_state.status,
         managed_policy_hash=effective_managed_policy.content_hash if effective_managed_policy is not None else None,
         managed_locked_settings=tuple(sorted(effective_managed_policy.locked_settings))
@@ -658,6 +445,11 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "protection_posture": config.protection_posture,
         "protection_posture_explicit": config.protection_posture_explicit,
         "watch_auto_revert_hours": config.watch_auto_revert_hours,
+        "harness_postures": dict(config.harness_postures or {}),
+        "harness_watch_entered_at": dict(config.harness_watch_entered_at or {}),
+        "harness_postures_effective": effective_harness_postures(config),
+        "harness_posture_status": harness_posture_status(config),
+        "harness_postures_locked": managed_locks_harness_postures(config.managed_locked_settings),
         "security_level": config.security_level,
         "default_action": config.default_action,
         "unknown_publisher_action": config.unknown_publisher_action,
@@ -726,100 +518,30 @@ def _update_guard_settings_locked(
 
     if not skip_approval_gate:
         require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
-    current = _read_toml(guard_home / "config.toml")
-    current_config = load_guard_config(guard_home)
-    next_payload = dict(current)
-    presentation_keys = {
-        "presentation_mode",
-        "presentation_mode_explicit",
-        "presentation_schema_version",
-    }
-    presentation_preference_keys = {"presentation_mode", "presentation_mode_explicit"}
-    supplied_presentation = presentation_keys & payload.keys()
-    coerced_presentation: dict[str, object] = {
-        key: _coerce_editable_setting(key, payload[key]) for key in supplied_presentation
-    }
-    has_presentation_preference = bool(presentation_preference_keys & payload.keys())
-    if "presentation_revision" in payload and not has_presentation_preference:
-        raise ValueError("presentation_revision requires a presentation preference change.")
-    requested_presentation_mode = coerced_presentation.get(
-        "presentation_mode",
-        current_config.presentation_mode,
-    )
-    requested_presentation_explicit = coerced_presentation.get(
-        "presentation_mode_explicit",
-        current_config.presentation_mode_explicit,
-    )
-    presentation_change = has_presentation_preference and (
-        requested_presentation_mode != current_config.presentation_mode
-        or requested_presentation_explicit != current_config.presentation_mode_explicit
-    )
-    if presentation_change:
-        expected_revision = payload.get("presentation_revision")
-        if expected_revision is not None and expected_revision != current_config.presentation_revision:
-            raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
-    switching_to_custom_without_overrides = (
-        payload.get("security_level") == "custom" and not {"risk_actions", "harness_risk_actions"} & payload.keys()
-    )
-    if switching_to_custom_without_overrides:
-        next_payload["risk_actions"] = _effective_risk_actions(current_config)
-    next_payload = apply_named_posture_harness_policy(
-        next_payload, payload, valid_security_levels=VALID_SECURITY_LEVELS
-    )
-    for key, value in payload.items():
-        if key not in EDITABLE_GUARD_SETTING_KEYS:
-            continue
-        if key in presentation_keys:
-            if presentation_change:
-                next_payload[key] = coerced_presentation[key]
-            continue
-        next_payload[key] = _coerce_editable_setting(key, value)
-    if presentation_change:
-        next_payload["presentation_mode_explicit"] = True
-        next_payload["presentation_schema_version"] = PRESENTATION_SCHEMA_VERSION
-        next_payload["presentation_revision"] = current_config.presentation_revision + 1
-    incoming_selected_posture = _incoming_selects_protection_posture(
+    previous = update_native_guard_config(
+        guard_home,
+        "settings",
         payload,
-        current_config,
-        next_payload.get("mode", current_config.mode),
-        next_payload.get("security_level", current_config.security_level),
+        managed=_native_managed_input(_effective_managed_policy(load_managed_policy())),
+        cloud_sync_entitled=cloud_sync_entitled,
     )
-    next_payload = _sync_protection_posture_payload(next_payload, current_config, payload)
-    effective_next_payload = next_payload
-    if current_config.managed_policy is not None:
-        effective_next_payload = apply_managed_policy(next_payload, current_config.managed_policy)
-        missing = object()
-        weakened = [
-            key
-            for key in current_config.managed_locked_settings
-            if (requested := _nested_setting_value(next_payload, key, missing)) is not missing
-            and _nested_setting_value(effective_next_payload, key, missing) != requested
-        ]
-        if weakened:
-            raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
-    preserving_existing_sync = (
-        current.get("sync") is True
-        and current_config.sync is True
-        and next_payload.get("sync") is True
-        and (payload.get("mode") != "observe" or effective_next_payload.get("mode") == "observe")
-    )
-    if (
-        next_payload.get("sync") is True
-        and payload.get("sync") is True
-        and not cloud_sync_entitled
-        and not preserving_existing_sync
-    ):
-        raise ValueError("Cloud sync requires a paid team plan.")
-    _write_guard_config(guard_home / "config.toml", next_payload)
+    if previous is None:
+        raise ConfigFileTrustError("native_guard_config_invalid")
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)
     record_posture_change_if_needed(
         guard_home,
-        previous=current_config.protection_posture,
+        previous=previous["previous"],
         next_posture=updated.protection_posture,
-        previous_explicit=current_config.protection_posture_explicit,
+        previous_explicit=previous["previous_explicit"],
         next_explicit=updated.protection_posture_explicit,
-        selected=incoming_selected_posture,
+        selected=previous["selected"],
+        event_source=event_source,
+    )
+    record_harness_posture_changes_if_needed(
+        guard_home,
+        previous=previous["harness_postures"],
+        updated=updated.harness_postures or {},
         event_source=event_source,
     )
     return updated
@@ -834,14 +556,7 @@ def update_guard_update_channel(
     """Persist the local release channel selected from the update surface."""
 
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
-    if not isinstance(update_channel, str) or update_channel not in VALID_UPDATE_CHANNELS:
-        raise ValueError("Update channel must be stable or alpha.")
-    current_config = load_guard_config(guard_home)
-    if "update_channel" in current_config.managed_locked_settings:
-        raise ValueError("Managed policy locks the update channel.")
-    current = _read_toml(guard_home / "config.toml")
-    current["update_channel"] = update_channel
-    _write_guard_config(guard_home / "config.toml", current)
+    _write_guard_config_change(guard_home, "channel", update_channel)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)
     return updated
@@ -855,98 +570,25 @@ def reset_guard_settings(
     """Reset editable local Guard settings while preserving non-dashboard config."""
 
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
-    current = _read_toml(guard_home / "config.toml")
-    next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
-    _write_guard_config(guard_home / "config.toml", next_payload)
+    _write_guard_config_change(guard_home, "reset", None)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)
     return updated
 
 
-def _coerce_editable_setting(key: str, value: object) -> object:
-    if key == "presentation_mode":
-        return coerce_presentation_mode_write(value)
-    if key == "presentation_mode_explicit":
-        if isinstance(value, bool):
-            return value
-        raise ValueError("presentation_mode_explicit must be true or false.")
-    if key == "presentation_schema_version":
-        if value == PRESENTATION_SCHEMA_VERSION:
-            return value
-        raise ValueError("Unsupported presentation schema version.")
-    if key == "mode":
-        if isinstance(value, str) and value in VALID_GUARD_MODES:
-            return value
-        raise ValueError("Invalid Guard mode.")
-    if key == "protection_posture":
-        return coerce_protection_posture(value)
-    if key == "protection_posture_explicit":
-        if isinstance(value, bool):
-            return value
-        raise ValueError("protection_posture_explicit must be true or false.")
-    if key == "watch_auto_revert_hours":
-        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 168:
-            return value
-        raise ValueError("Watch auto-revert hours must be between 0 and 168.")
-    if key == "security_level":
-        return _coerce_security_level(value)
-    if key == "risk_actions":
-        return _coerce_risk_action_payload(value)
-    if key == "harness_risk_actions":
-        return _coerce_harness_risk_action_payload(value)
-    if key.endswith("_action"):
-        if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
-            return value
-        raise ValueError("Invalid Guard action.")
-    if key == "approval_surface_policy":
-        if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
-            return "attention-aware" if value == "auto-open-once" else value
-        raise ValueError("Invalid approval surface policy.")
-    if key == "blocked_request_mode":
-        if isinstance(value, str) and value in {"safe-alternative", "ask"}:
-            return value
-        raise ValueError("Choose safe-alternative or ask for blocked requests.")
-    if key == "approval_browser_delay_seconds":
-        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 300:
-            return value
-        raise ValueError("Browser attention delay must be between 0 and 300 seconds.")
-    if key == "approval_browser_immediate_severity":
-        if isinstance(value, str) and value in VALID_APPROVAL_BROWSER_SEVERITIES:
-            return value
-        raise ValueError("Invalid immediate browser attention severity.")
-    if key == "approval_wait_timeout_seconds":
-        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_APPROVAL_WAIT_TIMEOUT_SECONDS:
-            return value
-        raise ValueError(f"Approval wait timeout must be between 0 and {MAX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds.")
-    if key in {"desktop_notifications", "telemetry", "sync", "billing"}:
-        if isinstance(value, bool):
-            return value
-        raise ValueError(f"{key} must be true or false.")
-    if key == "update_channel":
-        if isinstance(value, str) and value in VALID_UPDATE_CHANNELS:
-            return value
-        raise ValueError("Update channel must be stable or alpha.")
-    if key == "receipt_redaction_level":
-        if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
-            return value
-        raise ValueError(f"Invalid receipt redaction level: {value!r}")
-    raise ValueError(f"Unsupported Guard setting: {key}")
-
-
-def _coerce_security_level(value: object) -> str:
-    if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
-        return value
-    raise ValueError("Invalid Guard security level.")
+def _write_guard_config_change(guard_home: Path, kind: str, value: object) -> None:
+    update_native_guard_config(
+        guard_home,
+        kind,
+        value,
+        managed=_native_managed_input(_effective_managed_policy(load_managed_policy())),
+    )
 
 
 def _coerce_loaded_security_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
         return value
     return DEFAULT_SECURITY_LEVEL
-
-
-def _coerce_loaded_update_channel(value: object) -> str:
-    return value if isinstance(value, str) and value in VALID_UPDATE_CHANNELS else "stable"
 
 
 def _coerce_loaded_guard_mode(value: object, fallback: GuardMode) -> GuardMode:
@@ -974,92 +616,6 @@ def _coerce_loaded_bool(value: object) -> bool:
     return value if isinstance(value, bool) else False
 
 
-def _coerce_loaded_non_negative_int(value: object, fallback: int) -> int:
-    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-        return value
-    return fallback
-
-
-def _coerce_loaded_bounded_int(value: object, *, default: int, maximum: int) -> int:
-    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= maximum:
-        return value
-    return default
-
-
-def _coerce_loaded_bounded_positive_int(value: object, *, default: int, maximum: int) -> int:
-    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= maximum:
-        return value
-    return default
-
-
-def _coerce_loaded_optional_bounded_positive_int(value: object, *, maximum: int) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= maximum:
-        return value
-    return None
-
-
-def _coerce_loaded_approval_surface_policy(value: object) -> str:
-    if value in {"auto-open-once", "approval-center"}:
-        return "attention-aware"
-    if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
-        return value
-    return "attention-aware"
-
-
-def _coerce_loaded_approval_browser_severity(value: object) -> str:
-    if isinstance(value, str) and value in VALID_APPROVAL_BROWSER_SEVERITIES:
-        return value
-    return "critical"
-
-
-def _coerce_loaded_positive_int(value: object, fallback: int) -> int:
-    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-        return value
-    return fallback
-
-
-def _coerce_loaded_string_tuple(value: object) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        return ()
-    return tuple(item for item in value if isinstance(item, str) and item.strip())
-
-
-_VALID_SANDBOX_MODES = {"off", "suspicious", "strict"}
-
-
-def _coerce_sandbox_analysis(value: object) -> str:
-    if isinstance(value, str) and value in _VALID_SANDBOX_MODES:
-        return value
-    return "off"
-
-
-def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
-    if not isinstance(value, dict):
-        raise ValueError("Risk actions must be a table.")
-    action_map: dict[str, GuardAction] = {}
-    for key, action in value.items():
-        if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
-            raise ValueError("Invalid Guard risk action.")
-        resolved_action = coerce_guard_action(action)
-        if resolved_action is None:
-            raise ValueError("Invalid Guard risk action.")
-        action_map[key] = resolved_action
-    return action_map
-
-
-def _coerce_harness_risk_action_payload(value: object) -> dict[str, dict[str, GuardAction]]:
-    if not isinstance(value, dict):
-        raise ValueError("Harness risk actions must be a table.")
-    harness_actions: dict[str, dict[str, GuardAction]] = {}
-    for harness, risk_payload in value.items():
-        if not isinstance(harness, str) or not harness.strip():
-            raise ValueError("Invalid Guard harness.")
-        harness_actions[harness] = _coerce_risk_action_payload(risk_payload)
-    return harness_actions
-
-
 def _posture_or_level_defaults(config: GuardConfig) -> dict[str, GuardAction]:
     managed_locks_level = "security_level" in config.managed_locked_settings
     if config.protection_posture_explicit and not managed_locks_level:
@@ -1078,146 +634,21 @@ def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness:
 
     if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
         return None
-    if isinstance(harness, str) and config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
-    if config.risk_actions is not None and risk_class in config.risk_actions:
-        return config.risk_actions[risk_class]
-    return _posture_or_level_defaults(config).get(risk_class)
-
-
-def _sync_protection_posture_payload(
-    next_payload: dict[str, object],
-    current_config: GuardConfig,
-    incoming: Mapping[str, object],
-) -> dict[str, object]:
-    synced = dict(next_payload)
-    synced.pop("protection_posture_explicit", None)
-    next_level = synced.get("security_level", current_config.security_level)
-    if _incoming_selects_protection_posture(
-        incoming,
-        current_config,
-        synced.get("mode", current_config.mode),
-        next_level,
-    ):
-        posture = coerce_protection_posture(incoming.get("protection_posture"))
-        synced["protection_posture"] = posture
-        dual_mode, dual_level = dual_write_from_posture(
-            posture,
-            current_security_level=str(next_level or current_config.security_level),
-        )
-        if posture == "watch":
-            synced["mode"] = "observe"
-            if current_config.protection_posture != "watch" or not current_config.watch_entered_at:
-                synced["watch_entered_at"] = _utc_now_iso()
-        else:
-            synced.pop("watch_entered_at", None)
-            if "mode" not in incoming:
-                synced["mode"] = dual_mode
-        if "security_level" not in incoming and dual_level is not None:
-            synced["security_level"] = dual_level
-        return synced
-    if "security_level" in incoming and "protection_posture" not in incoming:
-        synced.pop("protection_posture", None)
-        return synced
-    if current_config.protection_posture_explicit:
-        incoming_level = synced.get("security_level", current_config.security_level)
-        incoming_mode = synced.get("mode", current_config.mode)
-        if "security_level" in incoming and incoming_level != current_config.security_level:
-            synced.pop("protection_posture", None)
-            return synced
-        if current_config.protection_posture == "watch" and incoming_mode != "observe":
-            synced.pop("protection_posture", None)
-            return synced
-        synced["protection_posture"] = current_config.protection_posture
-        if current_config.protection_posture == "watch":
-            synced["mode"] = "observe"
-        return synced
-    synced.pop("protection_posture", None)
-    return synced
-
-
-def _incoming_selects_protection_posture(
-    incoming: Mapping[str, object],
-    current_config: GuardConfig,
-    next_mode: object,
-    next_level: object,
-) -> bool:
-    if "protection_posture" not in incoming:
-        return False
-    if incoming.get("protection_posture_explicit") is False:
-        return False
-    if incoming.get("protection_posture_explicit") is True:
-        incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))
-        if not current_config.protection_posture_explicit:
-            return True
-        return incoming_posture != current_config.protection_posture
-    if not {"mode", "security_level", "risk_actions"} & set(incoming):
-        return True
-    incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))
-    derived = derive_protection_posture(next_mode, next_level)
-    if current_config.protection_posture_explicit:
-        return incoming_posture != current_config.protection_posture
-    return incoming_posture != derived
-
-
-def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = _toml_lines_for_table(payload, ())
-    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
-
-
-def _toml_lines_for_table(payload: Mapping[str, object], path: tuple[str, ...]) -> list[str]:
-    lines: list[str] = []
-    scalar_items: list[tuple[str, object]] = []
-    table_items: list[tuple[str, dict[str, object]]] = []
-    for key, value in sorted(payload.items(), key=lambda item: item[0]):
-        nested_table = _string_object_table(value)
-        if nested_table is not None:
-            table_items.append((key, nested_table))
-            continue
-        scalar_items.append((key, value))
-    if path:
-        lines.append(f"[{'.'.join(_toml_key(item) for item in path)}]")
-    for key, value in scalar_items:
-        lines.append(f"{_toml_key(key)} = {_toml_literal(value)}")
-    for key, value in table_items:
-        nested_lines = _toml_lines_for_table(value, (*path, key))
-        if lines and nested_lines:
-            lines.append("")
-        lines.extend(nested_lines)
-    return lines
-
-
-def _toml_key(value: str) -> str:
-    if BARE_TOML_KEY.match(value):
-        return value
-    return json.dumps(value)
-
-
-def _toml_literal(value: object) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        return repr(value)
-    if isinstance(value, str):
-        return json.dumps(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
-    nested_table = _string_object_table(value)
-    if nested_table is not None:
-        return _toml_inline_table(nested_table)
-    return json.dumps(str(value))
-
-
-def _toml_inline_table(value: Mapping[str, object]) -> str:
-    items: list[str] = []
-    for key, item in sorted(value.items(), key=lambda entry: entry[0]):
-        items.append(f"{_toml_key(key)} = {_toml_literal(item)}")
-    return "{ " + ", ".join(items) + " }"
+    harness_actions = (
+        config.harness_risk_actions.get(harness)
+        if isinstance(harness, str) and config.harness_risk_actions is not None
+        else None
+    )
+    if harness_actions is not None and risk_class in harness_actions:
+        resolved = harness_actions[risk_class]
+    elif config.risk_actions is not None and risk_class in config.risk_actions:
+        resolved = config.risk_actions[risk_class]
+    else:
+        resolved = _posture_or_level_defaults(config).get(risk_class)
+    if harness_posture_override(config, harness) == "extra_careful":
+        # A per-harness Extra careful override only ever strengthens.
+        return stricter_risk_action(resolved, POSTURE_RISK_ACTIONS["extra_careful"].get(risk_class))
+    return resolved
 
 
 def overlay_synced_guard_policy(
@@ -1329,23 +760,8 @@ def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
     )
 
 
-def _nested_setting_value(payload: dict[str, object], path: str, missing: object) -> object:
-    current: object = payload
-    for part in path.split("."):
-        if not isinstance(current, dict) or part not in current:
-            return missing
-        current = current[part]
-    return current
-
-
 def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
     return _coerce_loaded_guard_action_or_default(value, fallback)
-
-
-def _string_object_table(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    return {key: item for key, item in value.items() if isinstance(key, str)}
 
 
 def _existing_legacy_guard_home(user_home: Path) -> Path | None:
@@ -1392,10 +808,27 @@ def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> N
             staging_root = Path(temp_dir) / destination.name
             _migrate_guard_home_state(source=source, destination=staging_root)
             if destination.exists():
+                _refuse_live_database_companions(destination)
                 _remove_guard_home_destination(destination)
             shutil.move(str(staging_root), str(destination))
     except OSError:
         raise GuardHomeMigrationError("guard home migration failed") from None
+
+
+def _refuse_live_database_companions(destination: Path) -> None:
+    """Never swap guard.db out from under a non-empty WAL or rollback journal.
+
+    A later checkpoint of the old log would write stale pages into the new
+    database, and another Guard process may still hold the old files open.
+    """
+
+    for suffix in ("-wal", "-journal"):
+        companion = destination / f"guard.db{suffix}"
+        try:
+            if companion.is_file() and companion.stat().st_size > 0:
+                raise GuardHomeMigrationError("guard home has a live database log")
+        except OSError:
+            raise GuardHomeMigrationError("guard home migration failed") from None
 
 
 def _remove_guard_home_destination(path: Path) -> None:
@@ -1441,40 +874,6 @@ def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
 def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
     if time.monotonic() >= deadline:
         raise TimeoutError("guard.db migration timed out")
-
-
-def _load_workspace_guard_config(workspace: Path | None, *, require_canonical: bool = False) -> dict[str, object]:
-    if workspace is None:
-        return {}
-    merged: dict[str, object] = {}
-    for filename in WORKSPACE_CONFIG_FILENAMES:
-        merged = _merge_config_payload(
-            merged,
-            _sanitize_workspace_guard_config(
-                _read_toml(workspace / filename, require_canonical_directory=require_canonical)
-            ),
-        )
-    return merged
-
-
-def _sanitize_workspace_guard_config(payload: dict[str, object]) -> dict[str, object]:
-    return {key: value for key, value in payload.items() if key not in WORKSPACE_BLOCKED_POLICY_KEYS}
-
-
-def _merge_config_payload(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
-    merged = dict(base)
-    for key, value in override.items():
-        existing = merged.get(key)
-        if isinstance(existing, dict) and isinstance(value, dict):
-            nested_existing = {name: nested_value for name, nested_value in existing.items() if isinstance(name, str)}
-            nested_override = {name: nested_value for name, nested_value in value.items() if isinstance(name, str)}
-            if "action" in nested_override or "default_action" in nested_override:
-                nested_existing.pop("action", None)
-                nested_existing.pop("default_action", None)
-            merged[key] = _merge_config_payload(nested_existing, nested_override)
-            continue
-        merged[key] = value
-    return merged
 
 
 def _guard_home_has_state(path: Path) -> bool:

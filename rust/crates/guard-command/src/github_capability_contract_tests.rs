@@ -58,6 +58,16 @@ fn contract_table_matches_python_oracle() {
             "low",
         ),
         (
+            "create_private_remote",
+            "command.github.permission.create-private-remote",
+            "allow",
+            false,
+            None,
+            None,
+            vec![],
+            "low",
+        ),
+        (
             "routine_merge_remote",
             "command.github.permission.routine-merge-remote",
             "allow",

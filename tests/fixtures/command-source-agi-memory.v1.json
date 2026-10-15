@@ -1,0 +1,2214 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "agi-memory vault rewrite command",
+            "agi-memory permanent memory deletion command",
+            "agi-memory vault remote initialisation command",
+            "agi-memory cold-start seeding command",
+            "agi-memory core memory pin command",
+            "agi-memory core memory unpin command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews agi-memory commands that rewrite the canonical memory vault, permanently delete a memory across every synced machine, attach a remote that will receive the whole store, bulk-seed it from git history, or change the invariants injected into later sessions. Reads such as recall, log, inspect, blocks and sync status stay unreviewed.",
+          "ecosystem_ids": [
+            "agi-memory",
+            "agent-memory",
+            "agi-bootstrap",
+            "agent-bootstrap"
+          ],
+          "executables": [
+            "agi-memory",
+            "agent-memory",
+            "agi-bootstrap",
+            "agent-bootstrap"
+          ],
+          "extension_id": "command.agi-memory",
+          "homepage": "https://pypi.org/project/agi-memory/",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "agi-memory command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "agi-memory vault rewrite command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agi-memory sync dedupe`, which rewrites the canonical append-only memory vault in place. It is the only agi-memory operation that rewrites rather than appends, it prunes records it judges redundant, and a similarity key that merges two distinct memories destroys the loser with no undo. Sync invocations carrying unresolved shell expansions are still reviewed through Guard's floor because they cannot prove the dedupe subcommand absent.",
+              "example_command": "agi-memory sync dedupe",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "agi-memory vault deduplication",
+              "permission_id": "command.agi-memory.permission.sync-dedupe",
+              "replacement_permission_id": null,
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Run agi-memory sync status first to see the vault state that dedupe would rewrite.",
+                "Copy ~/.agi-memory/vault (or $AGI_MEMORY_VAULT) before compacting: the vault is the canonical store and the SQLite index is only derived from it.",
+                "Expand shell variables and command substitutions before running agi-memory sync."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "agi-memory permanent memory deletion command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agi-memory delete <id> --hard`, which permanently removes an observation rather than marking it superseded. The delete cascades into the long-term facts promoted from that observation and appends a vault tombstone, so the removal propagates to every other machine sharing the vault on the next sync. Delete invocations carrying unresolved shell expansions are still reviewed through Guard's floor because they cannot prove --hard absent.",
+              "example_command": "agi-memory delete 3 --hard",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "agi-memory permanent memory deletion",
+              "permission_id": "command.agi-memory.permission.delete-hard",
+              "replacement_permission_id": null,
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Run agi-memory inspect <id> first to confirm which memory the id refers to.",
+                "Omit --hard to soft-delete, which marks the observation superseded and is reversible.",
+                "Expand shell variables and command substitutions before running agi-memory delete."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "agi-memory vault remote initialisation command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agi-memory sync init`, which turns the local memory vault into a git repository and attaches a remote. Every memory already in the vault is then pushed to that remote on the next sync, so pointing it at the wrong repository publishes the whole store. With --create-private it also creates a new GitHub repository through the gh CLI.",
+              "example_command": "agi-memory sync init",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "agi-memory vault remote initialisation",
+              "permission_id": "command.agi-memory.permission.sync-init",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run agi-memory sync status first to see whether a remote is already attached.",
+                "Review what the vault already contains before attaching a remote that will receive all of it.",
+                "Confirm the remote is private, since memories often quote source code and internal decisions."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "agi-memory cold-start seeding command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agi-memory bootstrap` and the standalone `agi-bootstrap` script, which parse git history and README.md and bulk-write the result into the memory store. Run against a store that is not empty, or against the wrong repository, this mixes generated memories into curated ones with no marker separating them afterwards.",
+              "example_command": "agi-memory bootstrap",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "agi-memory cold-start memory seeding",
+              "permission_id": "command.agi-memory.permission.bootstrap",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run agi-memory log first to check whether the store already holds memories for this project.",
+                "Pass --repo explicitly so the seeding cannot pick up whichever repository happens to be the cwd.",
+                "Seed with a small --max-commits first and inspect the result before a full run."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "agi-memory core memory pin command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agi-memory pin`, which writes a core-memory block that is injected into the context of every later session for the project. Pinning under an existing key overwrites that block, replacing an invariant later sessions were relying on.",
+              "example_command": "agi-memory pin tls-rule 'TLS v1.3 only'",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "agi-memory core memory pin",
+              "permission_id": "command.agi-memory.permission.pin",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run agi-memory blocks first to see whether the key already holds a different invariant.",
+                "Choose a new key rather than overwriting an existing block."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "agi-memory core memory unpin command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agi-memory unpin`, which removes a core-memory block. Later sessions stop receiving the invariant it held, and nothing in a later session reveals that it was ever there.",
+              "example_command": "agi-memory unpin tls-rule",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "agi-memory core memory unpin",
+              "permission_id": "command.agi-memory.permission.unpin",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run agi-memory blocks first to record the content of the block before removing it.",
+                "Confirm no project rule still depends on the invariant the block carried."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.agi-memory",
+            "url": "https://github.com/kdbhalala/agi-memory"
+          },
+          "reference_urls": [
+            "https://pypi.org/project/agi-memory/",
+            "https://github.com/kdbhalala/agi-memory"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "agi-memory vault rewrite command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agi-memory sync dedupe`, which rewrites the canonical append-only memory vault in place. It is the only agi-memory operation that rewrites rather than appends, it prunes records it judges redundant, and a similarity key that merges two distinct memories destroys the loser with no undo. Sync invocations carrying unresolved shell expansions are still reviewed through Guard's floor because they cannot prove the dedupe subcommand absent.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "sync",
+                        "dedupe"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "sync",
+                        "dedupe"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agi-memory.permission.sync-dedupe",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agi-memory.sync-dedupe",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "required_flags_anywhere": [],
+                              "subcommands": [
+                                "sync",
+                                "dedupe"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "sync",
+                                "dedupe"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "agent-bootstrap",
+                            "agent-memory",
+                            "agi-bootstrap",
+                            "agi-memory",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "agi-memory command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run agi-memory sync status first to see the vault state that dedupe would rewrite.",
+                "Copy ~/.agi-memory/vault (or $AGI_MEMORY_VAULT) before compacting: the vault is the canonical store and the SQLite index is only derived from it.",
+                "Expand shell variables and command substitutions before running agi-memory sync."
+              ],
+              "severity": "critical",
+              "title": "agi-memory vault deduplication"
+            },
+            {
+              "action_classes": [
+                "agi-memory permanent memory deletion command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agi-memory delete <id> --hard`, which permanently removes an observation rather than marking it superseded. The delete cascades into the long-term facts promoted from that observation and appends a vault tombstone, so the removal propagates to every other machine sharing the vault on the next sync. Delete invocations carrying unresolved shell expansions are still reviewed through Guard's floor because they cannot prove --hard absent.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "required_flags_anywhere": [
+                        "--hard"
+                      ],
+                      "subcommands": [
+                        "delete"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "required_flags_anywhere": [
+                        "--hard",
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "delete"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "required_flags_anywhere": [
+                        "--har"
+                      ],
+                      "subcommands": [
+                        "delete"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "required_flags_anywhere": [
+                        "--har",
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "delete"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "required_flags_anywhere": [
+                        "--ha"
+                      ],
+                      "subcommands": [
+                        "delete"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "required_flags_anywhere": [
+                        "--ha",
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "delete"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agi-memory.permission.delete-hard",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agi-memory.delete-hard",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "required_flags_anywhere": [
+                                "--hard"
+                              ],
+                              "subcommands": [
+                                "delete"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "required_flags_anywhere": [
+                                "--hard",
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "delete"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "required_flags_anywhere": [
+                                "--har"
+                              ],
+                              "subcommands": [
+                                "delete"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "required_flags_anywhere": [
+                                "--har",
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "delete"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "required_flags_anywhere": [
+                                "--ha"
+                              ],
+                              "subcommands": [
+                                "delete"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "required_flags_anywhere": [
+                                "--ha",
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "delete"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "agent-bootstrap",
+                            "agent-memory",
+                            "agi-bootstrap",
+                            "agi-memory",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "agi-memory command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run agi-memory inspect <id> first to confirm which memory the id refers to.",
+                "Omit --hard to soft-delete, which marks the observation superseded and is reversible.",
+                "Expand shell variables and command substitutions before running agi-memory delete."
+              ],
+              "severity": "critical",
+              "title": "agi-memory permanent memory deletion"
+            },
+            {
+              "action_classes": [
+                "agi-memory vault remote initialisation command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agi-memory sync init`, which turns the local memory vault into a git repository and attaches a remote. Every memory already in the vault is then pushed to that remote on the next sync, so pointing it at the wrong repository publishes the whole store. With --create-private it also creates a new GitHub repository through the gh CLI.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "options_with_values": [
+                        "--repo-name"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "sync",
+                        "init"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "--repo-name"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "sync",
+                        "init"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agi-memory.permission.sync-init",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agi-memory.sync-init",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "options_with_values": [
+                                "--repo-name"
+                              ],
+                              "required_flags_anywhere": [],
+                              "subcommands": [
+                                "sync",
+                                "init"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "--repo-name"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "sync",
+                                "init"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "agent-bootstrap",
+                            "agent-memory",
+                            "agi-bootstrap",
+                            "agi-memory",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "agi-memory command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run agi-memory sync status first to see whether a remote is already attached.",
+                "Review what the vault already contains before attaching a remote that will receive all of it.",
+                "Confirm the remote is private, since memories often quote source code and internal decisions."
+              ],
+              "severity": "high",
+              "title": "agi-memory vault remote initialisation"
+            },
+            {
+              "action_classes": [
+                "agi-memory cold-start seeding command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agi-memory bootstrap` and the standalone `agi-bootstrap` script, which parse git history and README.md and bulk-write the result into the memory store. Run against a store that is not empty, or against the wrong repository, this mixes generated memories into curated ones with no marker separating them afterwards.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "options_with_values": [
+                        "--max-commits",
+                        "--project",
+                        "--repo"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "bootstrap"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "--max-commits",
+                        "--project",
+                        "--repo"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "bootstrap"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-bootstrap",
+                        "agi-bootstrap"
+                      ],
+                      "options_with_values": [
+                        "--repo",
+                        "--project",
+                        "--max-commits"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "--max-commits",
+                        "--project",
+                        "--repo"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.bootstrap"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agi-memory.permission.bootstrap",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agi-memory.bootstrap",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "options_with_values": [
+                                "--max-commits",
+                                "--project",
+                                "--repo"
+                              ],
+                              "required_flags_anywhere": [],
+                              "subcommands": [
+                                "bootstrap"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "--max-commits",
+                                "--project",
+                                "--repo"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "bootstrap"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-bootstrap",
+                                "agi-bootstrap"
+                              ],
+                              "options_with_values": [
+                                "--repo",
+                                "--project",
+                                "--max-commits"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "--max-commits",
+                                "--project",
+                                "--repo"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.bootstrap"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "agent-bootstrap",
+                            "agent-memory",
+                            "agi-bootstrap",
+                            "agi-memory",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "agi-memory command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run agi-memory log first to check whether the store already holds memories for this project.",
+                "Pass --repo explicitly so the seeding cannot pick up whichever repository happens to be the cwd.",
+                "Seed with a small --max-commits first and inspect the result before a full run."
+              ],
+              "severity": "medium",
+              "title": "agi-memory cold-start memory seeding"
+            },
+            {
+              "action_classes": [
+                "agi-memory core memory pin command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agi-memory pin`, which writes a core-memory block that is injected into the context of every later session for the project. Pinning under an existing key overwrites that block, replacing an invariant later sessions were relying on.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "options_with_values": [
+                        "--category",
+                        "--project",
+                        "-c",
+                        "-p"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "pin"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "--category",
+                        "--project",
+                        "-c",
+                        "-p"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "pin"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agi-memory.permission.pin",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agi-memory.pin",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "options_with_values": [
+                                "--category",
+                                "--project",
+                                "-c",
+                                "-p"
+                              ],
+                              "required_flags_anywhere": [],
+                              "subcommands": [
+                                "pin"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "--category",
+                                "--project",
+                                "-c",
+                                "-p"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "pin"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "agent-bootstrap",
+                            "agent-memory",
+                            "agi-bootstrap",
+                            "agi-memory",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "agi-memory command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run agi-memory blocks first to see whether the key already holds a different invariant.",
+                "Choose a new key rather than overwriting an existing block."
+              ],
+              "severity": "medium",
+              "title": "agi-memory core memory pin"
+            },
+            {
+              "action_classes": [
+                "agi-memory core memory unpin command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agi-memory unpin`, which removes a core-memory block. Later sessions stop receiving the invariant it held, and nothing in a later session reveals that it was ever there.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "agent-memory",
+                        "agi-memory"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "unpin"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "agi_memory.mcp_server",
+                        "unpin"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agi-memory.permission.unpin",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agi-memory.unpin",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "agent-memory",
+                                "agi-memory"
+                              ],
+                              "required_flags_anywhere": [],
+                              "subcommands": [
+                                "unpin"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "agi_memory.mcp_server",
+                                "unpin"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "agent-bootstrap",
+                            "agent-memory",
+                            "agi-bootstrap",
+                            "agi-memory",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "agi-memory command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run agi-memory blocks first to record the content of the block before removing it.",
+                "Confirm no project rule still depends on the invariant the block carried."
+              ],
+              "severity": "medium",
+              "title": "agi-memory core memory unpin"
+            }
+          ],
+          "safer_alternatives": [
+            "Run agi-memory sync status or agi-memory blocks first to see what the destructive command would change."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.agi-memory",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "agi-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dedupe",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agent-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dedupe-alias",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "python -m agi_memory.mcp_server sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dedupe-py",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "python3 -m agi_memory.mcp_server sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dedupe-py3",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory sync $ACTION",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dedupe-exp",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory sync $(echo dedupe)",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "dedupe-sub",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory sync status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "sync-status",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agent-memory sync status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "sync-status-alias",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory sync",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "sync-bare",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory delete 3 --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-hard",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete #3 --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-hard-hash",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete --hard 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-hard-first",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3 --har",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-har",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3 --ha",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-ha",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agent-memory delete 3 --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-alias",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "python -m agi_memory.mcp_server delete 3 --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "del-py",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3 $FLAGS",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "del-exp",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3 \"$FLAGS\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "del-exp-q",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3 ${FLAGS}",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "del-exp-br",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3 `echo --hard`",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "del-bt",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "del-soft",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory delete #3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "del-soft-hash",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory sync init",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init",
+      "rule_id": "command.agi-memory.sync-init"
+    },
+    {
+      "command": "agi-memory sync init git@github.com:me/vault.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-url",
+      "rule_id": "command.agi-memory.sync-init"
+    },
+    {
+      "command": "agi-memory sync init --create-private --repo-name my-vault",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-private",
+      "rule_id": "command.agi-memory.sync-init"
+    },
+    {
+      "command": "agent-memory sync init",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-alias",
+      "rule_id": "command.agi-memory.sync-init"
+    },
+    {
+      "command": "agi-memory bootstrap",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "boot",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agi-memory bootstrap --repo . --max-commits 50",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "boot-opts",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agent-memory bootstrap --project other-app",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "boot-alias",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agi-bootstrap",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "boot-direct",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agent-bootstrap --repo ../other-repo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "boot-direct-alias",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "python -m agi_memory.bootstrap --repo .",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "boot-py",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agi-memory pin tls-rule 'TLS v1.3 only'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin",
+      "rule_id": "command.agi-memory.pin"
+    },
+    {
+      "command": "agi-memory pin tls-rule 'TLS v1.3 only' --category architecture",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin-cat",
+      "rule_id": "command.agi-memory.pin"
+    },
+    {
+      "command": "agi-memory pin tls-rule 'TLS v1.3 only' -p my-app",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin-p",
+      "rule_id": "command.agi-memory.pin"
+    },
+    {
+      "command": "agent-memory pin tls-rule 'TLS v1.3 only'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin-alias",
+      "rule_id": "command.agi-memory.pin"
+    },
+    {
+      "command": "agi-memory unpin tls-rule",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "unpin",
+      "rule_id": "command.agi-memory.unpin"
+    },
+    {
+      "command": "agent-memory unpin tls-rule",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "unpin-alias",
+      "rule_id": "command.agi-memory.unpin"
+    },
+    {
+      "command": "agi-memory --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory delete --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "del-help",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory pin --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "pin-help",
+      "rule_id": "command.agi-memory.pin"
+    },
+    {
+      "command": "agi-memory unpin --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "unpin-help",
+      "rule_id": "command.agi-memory.unpin"
+    },
+    {
+      "command": "agi-memory sync --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "sync-help",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory bootstrap --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "boot-help",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agi-bootstrap --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "boot-direct-help",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agent-bootstrap --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "boot-alias-help",
+      "rule_id": "command.agi-memory.bootstrap"
+    },
+    {
+      "command": "agi-memory sync dedupe --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dedupe-help",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory delete 3 --hard --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "del-hard-help",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "agi-memory recall 'why sqlite'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "recall",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory recall 'why sqlite' --deep",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "recall-deep",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory log --limit 20",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "log",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory inspect 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inspect",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory blocks",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "blocks",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory timeline",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "timeline",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory structure src/",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "structure",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory callers verify_token",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "callers",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory dependencies verify_token",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "deps",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory impact src/auth.py",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "impact",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agent-memory log",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "log-alias",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "agi-memory outcome completed",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "outcome",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "exec agi-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "exec agent-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec-alias",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "xargs agi-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "xargs -n 1 agi-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-n",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "xargs -n 1 python -m agi_memory.mcp_server sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-py",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    },
+    {
+      "command": "exec agi-memory delete 3 --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec-del",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "xargs -n 1 agi-memory delete 3 --hard",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-del",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "exec agi-memory delete 3 $FLAGS",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec-exp",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "xargs -n 1 agi-memory delete 3 ${FLAGS}",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-exp",
+      "rule_id": "command.agi-memory.delete-hard"
+    },
+    {
+      "command": "echo agi-memory sync dedupe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agi-memory"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "echo",
+      "rule_id": "command.agi-memory.sync-dedupe"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

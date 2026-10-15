@@ -184,11 +184,8 @@ def test_analysis_helpers_and_tests_have_protected_ownership_and_ci_coverage() -
     for path in paths:
         assert path in contract["protected_change_globs"]
         assert path in owner["paths"]
-    workflow = yaml.safe_load((root / ".github/workflows/decision-critical-io.yml").read_text())
-    step = next(
-        item
-        for item in workflow["jobs"]["io-ownership"]["steps"]
-        if "tests/test_rust_io_ownership_gate.py" in item.get("run", "")
-    )
-    assert "tests/test_rust_io_ownership_cache.py" in step["run"]
-    assert not step.get("continue-on-error")
+    workflow = yaml.safe_load((root / ".github/workflows/nightly-native.yml").read_text())
+    steps = workflow["jobs"]["linux-native"]["steps"]
+    for script in ("scripts/ci/rust_io_ownership_gate.py", "scripts/ci/rust_io_privacy_gate.py"):
+        step = next(item for item in steps if script in item.get("run", ""))
+        assert not step.get("continue-on-error")

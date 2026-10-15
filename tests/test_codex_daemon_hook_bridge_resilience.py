@@ -253,7 +253,11 @@ def test_main_starts_daemon_once_then_retries_hook(
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(prompt)))
 
     assert bridge.main(**config) == 0
-    assert fallback_calls == [json.dumps(prompt)]
+    assert len(fallback_calls) == 1
+    forwarded = json.loads(fallback_calls[0])
+    # The bridge stamps its own execution environment before any route sees the input.
+    assert isinstance(forwarded.pop("guard_execution_environment"), dict)
+    assert forwarded == prompt
     assert json.loads(capsys.readouterr().out) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
@@ -353,6 +357,45 @@ def test_daemon_rpc_budget_stays_below_approval_wait(monkeypatch: pytest.MonkeyP
     assert overloaded is False
     assert integrity_failed is True
     assert seen == [float(bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS)]
+
+
+@pytest.mark.parametrize(
+    ("event_name", "expected_cap"),
+    [
+        ("UserPromptSubmit", bridge_flow._DAEMON_PROMPT_RPC_TIMEOUT_SECONDS),
+        ("PreToolUse", bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS),
+        (None, bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS),
+    ],
+)
+def test_prompt_rpc_gets_cold_workspace_budget(
+    monkeypatch: pytest.MonkeyPatch, event_name: str | None, expected_cap: float
+) -> None:
+    seen: list[float] = []
+
+    def fake_daemon(**kwargs: object) -> None:
+        timeout = kwargs["timeout_seconds"]
+        assert isinstance(timeout, float)
+        seen.append(timeout)
+        raise OSError("down")
+
+    monkeypatch.setattr(bridge_flow, "_daemon_response", fake_daemon)
+    monkeypatch.setattr(bridge_flow, "_trusted_launch_for_fallback", lambda **_kwargs: (None, True))
+
+    bridge_flow.bridge_review_response(
+        state_path="state.json",
+        fallback_command=["/bin/echo", "fallback"],
+        start_command=["/bin/echo", "start"],
+        query="probe",
+        data="{}",
+        deadline=time.monotonic() + 300,
+        manifest_path="hooks.manifest.json",
+        config_json="{}",
+        event_name=event_name,
+    )
+
+    assert seen == [float(expected_cap)]
+    assert bridge_flow._DAEMON_PROMPT_RPC_TIMEOUT_SECONDS == 10.0
+    assert bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS == 4.0
 
 
 def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:

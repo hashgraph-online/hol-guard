@@ -1,0 +1,1193 @@
+[
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjBlNWVkMzU0NTlkYjBhZDE4MjE3YTY4NmI1ZGE4NzA0ZDM0Y2NkNDUyMGFjYWU4NDA5ODBkNDlhYjg0OWY1NjYiLCJwb2xpY3kiOiI3MzY0NDdmMDNmN2EyZjBiMmM2MWQ3OGM0OTYyMWU3YWU0ODgyMWViN2YxMjE3M2FhN2VhNjQxMzMyNTRjMTNiIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "allow",
+   "matched_advisory_ids": []
+  },
+  "name": "basic_no_config",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm",
+     "targets": [
+      {
+       "alias": "left-pad",
+       "ecosystem": "npm",
+       "package_name": "left-pad",
+       "raw_spec": "left-pad@1.3.0",
+       "raw_spec_hash": "rsh1",
+       "requested_specifier": "1.3.0",
+       "source_url": "https://registry.npmjs.org/left-pad"
+      }
+     ]
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [
+     {
+      "dependencyPath": "root>left-pad",
+      "ecosystem": "npm",
+      "name": "left-pad",
+      "namespace": null,
+      "packageManager": "npm",
+      "requestedVersion": "1.3.0",
+      "resolvedVersion": "1.3.0"
+     }
+    ],
+    "policy_action": "allow",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6ImI4MzdjNmIzMjlkM2NiODQ2YTE0NmU5ODgxNDU0ZGY3MjMxOTgxMGVlOWU1NWQwYWM2YTRiYmI5ODM5YmRiZjYiLCJwb2xpY3kiOiJmZTJiZWQ1ZDVmYjc3NmE1YWM1Njk3ZWQwMzVkYWE3OTdiZTk4YzcwNmFhNDNhODcxOTljNTNkNjEwYzI1ZjdhIiwic2FuZGJveCI6ImM2NWNiYzcyYTE1MjZmZWZjMjQwMWE1MDBmM2QyODZkZjY1MjI1N2Y5NTg4YjhjZWI1MjJiMGU1Y2MzZGY5MjUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "review",
+   "matched_advisory_ids": []
+  },
+  "name": "config_review_override",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm",
+     "targets": [
+      {
+       "alias": "left-pad",
+       "ecosystem": "npm",
+       "package_name": "left-pad",
+       "raw_spec": "left-pad@1.3.0",
+       "raw_spec_hash": "rsh1",
+       "requested_specifier": "1.3.0",
+       "source_url": "https://registry.npmjs.org/left-pad"
+      }
+     ]
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "artifact_override": "review",
+    "available": true,
+    "effective_package_script_action": "warn",
+    "global_package_script_action": "warn",
+    "harness": "codex",
+    "harness_override": null,
+    "harness_package_script_action": null,
+    "managed_locked_settings": [],
+    "managed_policy_hash": null,
+    "managed_policy_status": "absent",
+    "mode": "prompt",
+    "publisher_override": null,
+    "resolved_override": "review",
+    "security_level": "balanced"
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "warn",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "off"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjQ4NjZlN2Q2Y2Y0NGFjM2IzZTQyNDgzMGU1MjhkNzY5Y2U2NzBlMGZkMTE2ZGNjMDc4MjE2ODA2MzFjODA2NjAiLCJwb2xpY3kiOiI1MzhlMDQzNDlmZTk4YmRkNGVlNDk1ZDExNmNlNzYxNjQ4NDM1MmM4NGJiNTY4MWM0M2E4ZDA3MzcxNTM3ZjlmIiwic2FuZGJveCI6IjdhNWZiYmRiMjhiM2E5ZGRhMGQ5ODEyY2NhNDYxNTJjMmJkZTEwNmQyZDFlODdmYjM4N2M1NDJlY2FiYzg1NTQiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "sandbox-required",
+   "matched_advisory_ids": []
+  },
+  "name": "config_sandbox_required",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "pnpm",
+     "targets": [
+      {
+       "alias": "left-pad",
+       "ecosystem": "npm",
+       "package_name": "left-pad",
+       "raw_spec": "left-pad@1.3.0",
+       "raw_spec_hash": "rsh1",
+       "requested_specifier": "1.3.0",
+       "source_url": "https://registry.npmjs.org/left-pad"
+      }
+     ]
+    },
+    "name": "npm install",
+    "publisher": "acme",
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "artifact_override": null,
+    "available": true,
+    "effective_package_script_action": "warn",
+    "global_package_script_action": "warn",
+    "harness": "codex",
+    "harness_override": null,
+    "harness_package_script_action": null,
+    "managed_locked_settings": [],
+    "managed_policy_hash": null,
+    "managed_policy_status": "absent",
+    "mode": "prompt",
+    "publisher_override": "sandbox-required",
+    "resolved_override": "sandbox-required",
+    "security_level": "balanced"
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "allow",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "enabled"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjU2MjliZDQyMTMxYWU3NDgwNDIwMzE2YzYyYWNjZmJhNTA1YWRmMDYwNGY4NTk3YzBmYmU3N2Y5YmE4OWYxMjUiLCJwb2xpY3kiOiI0YTYxYTY0MmMyZjFkNmM2YzNmYmVhYTJkODk3N2U0Zjg1Mjc3Yjg2MWU0OTUxZWVlZWZiZGNjYTIyOTVjMTE4Iiwic2FuZGJveCI6ImM2NWNiYzcyYTE1MjZmZWZjMjQwMWE1MDBmM2QyODZkZjY1MjI1N2Y5NTg4YjhjZWI1MjJiMGU1Y2MzZGY5MjUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "block",
+   "matched_advisory_ids": []
+  },
+  "name": "config_harness_block_managed",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm"
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "artifact_override": null,
+    "available": true,
+    "effective_package_script_action": "require-reapproval",
+    "global_package_script_action": "require-reapproval",
+    "harness": "codex",
+    "harness_override": "block",
+    "harness_package_script_action": null,
+    "managed_locked_settings": [
+     "a",
+     "b"
+    ],
+    "managed_policy_hash": "mh",
+    "managed_policy_status": "locked",
+    "mode": "prompt",
+    "publisher_override": null,
+    "resolved_override": "block",
+    "security_level": "strict"
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "review",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "off"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjU2MjliZDQyMTMxYWU3NDgwNDIwMzE2YzYyYWNjZmJhNTA1YWRmMDYwNGY4NTk3YzBmYmU3N2Y5YmE4OWYxMjUiLCJwb2xpY3kiOiJkNTc4M2Y5OTU4MWQ4MzJmODBhMzA5YjlhMjE4ZDZkY2YxNWU1YzNiMWVkYjdhMzY5ODUzZGM1M2U4OWFhOTNjIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "review",
+   "matched_advisory_ids": []
+  },
+  "name": "legacy_ask_alias",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm"
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "ask",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjU2MjliZDQyMTMxYWU3NDgwNDIwMzE2YzYyYWNjZmJhNTA1YWRmMDYwNGY4NTk3YzBmYmU3N2Y5YmE4OWYxMjUiLCJwb2xpY3kiOiI2Y2EyNWEzNmQ3OGMyNDZiNmQ5NWE2NGQ2M2MxNDhlMDRmNGI2N2FhNGE5ODZlMDY3MTBlNTU5NzI3ZTFiYTUxIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "block",
+   "matched_advisory_ids": []
+  },
+  "name": "unknown_action_blocks",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm"
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "weird",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjllNWE5Y2JhYWQzZDczYWJiZGU1YmFlMDNkZDVjYmNhZTYyYWY2ZDBjZTRjNGY3MTFmMDU3Y2M4MGRkNTVjYTQiLCJpZGVudGl0eSI6IjBlNWVkMzU0NTlkYjBhZDE4MjE3YTY4NmI1ZGE4NzA0ZDM0Y2NkNDUyMGFjYWU4NDA5ODBkNDlhYjg0OWY1NjYiLCJwb2xpY3kiOiI3MzY0NDdmMDNmN2EyZjBiMmM2MWQ3OGM0OTYyMWU3YWU0ODgyMWViN2YxMjE3M2FhN2VhNjQxMzMyNTRjMTNiIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "allow",
+   "matched_advisory_ids": []
+  },
+  "name": "manifests_and_lockfiles",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "lockfile_paths": [
+      "package-lock.json",
+      "nope.lock"
+     ],
+     "manifest_paths": [
+      "package.json",
+      "missing.json",
+      "../escape.json",
+      "/abs/package.json",
+      "sub/package.json"
+     ],
+     "package_manager": "npm",
+     "targets": [
+      {
+       "alias": "left-pad",
+       "ecosystem": "npm",
+       "package_name": "left-pad",
+       "raw_spec": "left-pad@1.3.0",
+       "raw_spec_hash": "rsh1",
+       "requested_specifier": "1.3.0",
+       "source_url": "https://registry.npmjs.org/left-pad"
+      }
+     ]
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [
+     {
+      "dependencyPath": "root>left-pad",
+      "ecosystem": "npm",
+      "name": "left-pad",
+      "namespace": null,
+      "packageManager": "npm",
+      "requestedVersion": "1.3.0",
+      "resolvedVersion": "1.3.0"
+     }
+    ],
+    "policy_action": "allow",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {
+   "package-lock.json": "{\"lockfileVersion\":3}",
+   "package.json": "{\"name\":\"a\"}",
+   "sub/package.json": "{\"name\":\"b\"}"
+  }
+ },
+ {
+  "advisory_rows": [
+   {
+    "id": "GHSA-0001",
+    "package_url": "pkg:npm/left-pad@1.3.0"
+   },
+   {
+    "id": "other",
+    "package": "nope"
+   }
+  ],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjA3NTEwYTE1YmUwNzRmMzc0YmJkYTg5YzUzZDI2NzlmNzI4ZjkwNDQwZDMxNGY2YzAyYWZiODNiMGY5NTVmY2MiLCJwb2xpY3kiOiI0NWQ2ZGZjOTMzZjkxNDE4Y2M2OGY0MDg5NTk0YTc0NzEzYjgwMTg4YmY5ZThmOTU3YzEzNDE3NGY0YzQ3YWUwIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "review",
+   "matched_advisory_ids": [
+    "GHSA-0001"
+   ]
+  },
+  "name": "advisory_feed_launch_additional",
+  "request": {
+   "additional_current_action": "review",
+   "additional_policy_context": {
+    "kind": "extra",
+    "n": 1
+   },
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm",
+     "targets": [
+      {
+       "alias": "left-pad",
+       "ecosystem": "npm",
+       "package_name": "left-pad",
+       "raw_spec": "left-pad@1.3.0",
+       "raw_spec_hash": "rsh1",
+       "requested_specifier": "1.3.0",
+       "source_url": "https://registry.npmjs.org/left-pad"
+      }
+     ]
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "warn",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": "exc-1",
+    "matched_rule_id": "rule-1",
+    "packages": [
+     {
+      "dependencyPath": "root>left-pad",
+      "ecosystem": "npm",
+      "name": "left-pad",
+      "namespace": null,
+      "packageManager": "npm",
+      "requestedVersion": "1.3.0",
+      "resolvedVersion": "1.3.0"
+     }
+    ],
+    "policy_action": "warn",
+    "policy_version": "p1",
+    "reasons": [
+     {
+      "code": "advisory",
+      "message": "m",
+      "severity": "high"
+     }
+    ]
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "feed_snapshot_hash": "feed-hash-1",
+   "launch_identity": {
+    "argv_sha256": "abababababababababababababababababababababababababababababababab",
+    "wrapper_resolution": {
+     "reuse_nonce": "n1",
+     "status": "unproven"
+    }
+   },
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6ImIyODNjYzIzNDJlNzQ2OTA5ZTdmMzQwY2FjYzA0MTliZDkzOWExMGQ3ZWJiYzc4ODFiYjhmNTY0ZWJhN2YxNDMiLCJwb2xpY3kiOiJmMDBiYTdiM2EwMzM2ZDk2NWY2NjdiNTNiZTZmMzMwMzVjYTlmZTVmNWFhZmU4MDJmZWViMmU3YzdmODIwZDFjIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "allow",
+   "matched_advisory_ids": []
+  },
+  "name": "launch_non_mapping_wrapper",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm"
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "allow",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "launch_identity": {
+    "argv_sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "wrapper_resolution": "bogus"
+   },
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6ImQ5ODcwZWFiNTQ3ZTdlMTE2NjhhZTI5MTgwOWUwODI5ODNjNjU5N2FkOTQwMDE1ZmMxZmVmMTBiNmJjYzFkZWIiLCJwb2xpY3kiOiJjMTAwZjFhNmUxNjNiNWZlNWJhMjFkYTdiZDRmZjNkNDEwY2U0NjkzYWRhYTk1OTJlZWU4ZjFiNTVmZDA0OWEwIiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "allow",
+   "matched_advisory_ids": []
+  },
+  "name": "unicode_and_blank_strings",
+  "request": {
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "  \u2003",
+     "targets": [
+      {
+       "alias": "\u001c",
+       "ecosystem": "npm",
+       "package_name": "r\u00e9sum\u00e9",
+       "raw_spec": " x ",
+       "raw_spec_hash": "",
+       "requested_specifier": "\u00a0",
+       "source_url": "https://example.com/\u00fc"
+      },
+      {
+       "ecosystem": "npm",
+       "package_name": "p",
+       "source_url_hash": "preset"
+      },
+      "not-a-dict"
+     ]
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [
+     {
+      "ecosystem": "npm",
+      "name": " \u001f",
+      "resolvedVersion": "1"
+     },
+     "bad"
+    ],
+    "policy_action": "allow",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ },
+ {
+  "advisory_rows": [],
+  "expected": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzZmE3NzNlMjg2MGZjYzU5N2RjNTAxMDRjZThmMGFmN2VhNTAyZmZkNGY3ZTJjMDQ3YTljMWYxNzE4ZTI1ZGM1IiwiY29udGVudCI6IjdmNjQ0MDI5NDIyNDUzZTY2YjY1MWEyNWQwZWI1OTMxNGVkNGU1NTQ5M2Y3OWY5NDU3NGRjODAzZWNjNWQzYTAiLCJpZGVudGl0eSI6IjU2MjliZDQyMTMxYWU3NDgwNDIwMzE2YzYyYWNjZmJhNTA1YWRmMDYwNGY4NTk3YzBmYmU3N2Y5YmE4OWYxMjUiLCJwb2xpY3kiOiJmZWY4NjJkNjdlZjU0NzAzMjFhN2JiNDQ2YThhZTk2MzRhODE2NDkxMzdlYTg5YmRkNDZjNDFmZjIyNWFhYmU1Iiwic2FuZGJveCI6IjdkZDAyMWU4MTVhNTExMDgwOTVjYzY1N2ExNTMxNzc3MGYxZTI0MWJlZjU2ZDA0MTZlMGFiODhmOGM3Yjg0ZmUiLCJ2ZXJzaW9uIjoxfQ",
+   "current_action": "require-reapproval",
+   "matched_advisory_ids": []
+  },
+  "name": "additional_action_only",
+  "request": {
+   "additional_current_action": "require-reapproval",
+   "artifact": {
+    "args": [
+     "install",
+     "left-pad"
+    ],
+    "artifact_id": "command:npm-install",
+    "artifact_type": "package_request",
+    "command": "npm",
+    "config_path": "hol-guard.toml",
+    "harness": "codex",
+    "metadata": {
+     "package_manager": "npm"
+    },
+    "name": "npm install",
+    "publisher": null,
+    "source_scope": "project",
+    "transport": null,
+    "url": null
+   },
+   "config_policy": {
+    "available": false
+   },
+   "evaluation": {
+    "bundle_version": "b1",
+    "decision": "allow",
+    "enforcement": "local",
+    "entitlement_state": "free",
+    "exception_id": null,
+    "matched_rule_id": null,
+    "packages": [],
+    "policy_action": "warn",
+    "policy_version": "p1",
+    "reasons": []
+   },
+   "execution_context": {
+    "components": [
+     {
+      "digest": "d1",
+      "name": "exact_workspace"
+     },
+     {
+      "digest": "d2",
+      "name": "package_manager_executable"
+     },
+     {
+      "digest": "d3",
+      "name": "repository_identity"
+     },
+     {
+      "digest": "d4",
+      "name": "workspace_identity"
+     },
+     {
+      "digest": "d5",
+      "name": "manifests_and_lockfiles"
+     },
+     {
+      "digest": "d6",
+      "name": "workspace_configuration"
+     },
+     {
+      "digest": "d7",
+      "name": "environment_policy"
+     },
+     {
+      "digest": "d8",
+      "name": "lifecycle_hooks_overrides_and_patches"
+     },
+     {
+      "digest": "d9",
+      "name": "registry_and_proxy_configuration"
+     }
+    ],
+    "digest": "ctx-digest-0001",
+    "version": 2
+   },
+   "extension_control_digest": "ext-control-digest-pinned-0001",
+   "sandbox_analysis": "unknown"
+  },
+  "workspace_files": {}
+ }
+]

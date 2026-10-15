@@ -36,7 +36,10 @@ uv run --no-sync python scripts/prepare_extension_contribution.py \
 ```
 
 The command validates the exact source/fixture binding through native evaluation with zero target
-command execution and synchronizes the checked-in projections. Follow it with the handoff check:
+command execution and generates that extension's public JSON record. Include this record in the
+same contribution PR: it preserves the public metadata, publisher links, and contribution evidence.
+Runtime projections go to ignored build directories; this command does not update the shared
+directory catalogs or unrelated public descriptors. Follow it with the handoff check:
 
 ```sh
 uv run --no-sync hol-guard extensions handoff --repo . \
@@ -48,9 +51,15 @@ Here, `<slug>` is the extension ID without the `command.` prefix. For example,
 `command.cloud.aws` uses `command-source-cloud.aws.v1.json`.
 
 Use `--check` with the preparation command to verify an already prepared change. Optional public
-credit, upstream, and claim-readiness metadata belongs in
+credit, upstream, and explicit authority overrides belong in
 `contributions/extension-listings/command.<name>.json`; it is documented in
 [publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+
+Required CI verifies public descriptors against the committed source before generating runtime
+files, so a missing or stale record fails the original contribution PR. After merges, the existing
+publication workflow builds an immutable directory snapshot automatically; no follow-up publication
+PR is needed. `--publish-directory` is reserved for a complete publication preview in CI or a
+maintainer workspace.
 
 When a ready-for-review PR has a mechanical source, fixture, schema, or generated-projection
 problem, Gitar can apply the deterministic repair. It does not choose matcher semantics, trust
@@ -103,7 +112,7 @@ review kit with [Extension Builder](../extension-builder/README.md).
 | `contributions/command-sources/command.<name>.json` | Authoritative metadata, permissions, rules, safe variants, and typed native matcher trees |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command cases, synthetic controls, expected actions, and rule/segment observations |
 | `contracts/extensions/trust/command.<name>.v1.json` | Separately reviewed per-extension trust binding; community contributions are external |
-| `contracts/extensions/trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; never committed or edited by hand |
+| `contracts/extensions/build-trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; never committed or edited by hand |
 | `contributions/extensions/command.<name>.json` | Maintainer-generated v2 descriptor, including source identity |
 | `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Maintainer-generated native program and catalog; the build also updates package resource copies |
 | `contributions/extension-listings/<contribution-id>.json` | Optional public presentation and reviewed numeric GitHub claimant IDs |
@@ -225,8 +234,10 @@ Community command extensions remain **external** and off until a local administr
 them on a device. A source merge is followed by the normal release and installed-platform
 qualification; local compilation or an offline fixture pass does not establish release availability.
 
-For a public publisher profile, follow [publisher metadata](publisher-metadata.md). Optional
-listing sidecars carry the separately reviewed `maintainerGithubIds` mapping. The post-merge
-claim notice can direct newly accepted claimants to Extension Studio, but PR authorship and
-opening an onboarding link do not grant a claim. Profile management never promotes runtime
-trust, activates protection, or implies upstream ownership.
+For a public publisher profile, follow [publisher metadata](publisher-metadata.md). The
+verified PR that first introduces an external contribution establishes its initial
+claimant automatically. The post-merge claim notice links that contributor to Extension
+Studio; no separate listing PR is required. Optional listing sidecars carry public
+presentation and reviewed authority overrides. Later fixes and onboarding links cannot
+grant ownership. Profile management never promotes runtime trust, activates protection,
+or implies upstream ownership.

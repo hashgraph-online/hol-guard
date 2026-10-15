@@ -1,8 +1,7 @@
-"""Enterprise networking facade for Guard managed HTTP clients and diagnostics."""
+"""Enterprise networking facade for Guard managed HTTP clients."""
 
 from __future__ import annotations
 
-from .network_diagnostics import NetworkDiagnostic, ProxyDiagnostic, diagnose_endpoint
 from .network_transport import (
     ManagedNetworkError,
     active_network_policy,
@@ -15,10 +14,7 @@ from .network_transport import (
 
 __all__ = [
     "ManagedNetworkError",
-    "NetworkDiagnostic",
-    "ProxyDiagnostic",
     "active_network_policy",
-    "diagnose_endpoint",
     "managed_opener",
     "managed_requests_session",
     "managed_ssl_context",

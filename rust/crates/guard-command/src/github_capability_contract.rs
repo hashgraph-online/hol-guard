@@ -8,6 +8,7 @@ pub enum GitHubCommandCapability {
     ReadLocal,
     ReadRemote,
     ProposeRemote,
+    CreatePrivateRemote,
     RoutineMergeRemote,
     RoutineReviewThreadRemote,
     RoutineWorkflowRemote,
@@ -27,10 +28,11 @@ pub enum GitHubCommandCapability {
 }
 
 impl GitHubCommandCapability {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::ReadLocal,
         Self::ReadRemote,
         Self::ProposeRemote,
+        Self::CreatePrivateRemote,
         Self::RoutineMergeRemote,
         Self::RoutineReviewThreadRemote,
         Self::RoutineWorkflowRemote,
@@ -54,6 +56,7 @@ impl GitHubCommandCapability {
             Self::ReadLocal => "read_local",
             Self::ReadRemote => "read_remote",
             Self::ProposeRemote => "propose_remote",
+            Self::CreatePrivateRemote => "create_private_remote",
             Self::RoutineMergeRemote => "routine_merge_remote",
             Self::RoutineReviewThreadRemote => "routine_review_thread_remote",
             Self::RoutineWorkflowRemote => "routine_workflow_remote",
@@ -79,22 +82,23 @@ impl GitHubCommandCapability {
             Self::ReadLocal => 0,
             Self::ReadRemote => 1,
             Self::ProposeRemote => 2,
-            Self::RoutineMergeRemote => 3,
-            Self::RoutineReviewThreadRemote => 4,
-            Self::RoutineWorkflowRemote => 5,
-            Self::WriteLocal => 6,
-            Self::MaintainRemote => 7,
-            Self::ContentRemote => 8,
-            Self::MergeRemote => 9,
-            Self::AdminMergeRemote => 10,
-            Self::PublishRemote => 11,
-            Self::WorkflowRemote => 12,
-            Self::ForceRemote => 13,
-            Self::DeleteRemote => 14,
-            Self::SecretRemote => 15,
-            Self::AccessRemote => 16,
-            Self::MutateRemote => 17,
-            Self::Unknown => 18,
+            Self::CreatePrivateRemote => 3,
+            Self::RoutineMergeRemote => 4,
+            Self::RoutineReviewThreadRemote => 5,
+            Self::RoutineWorkflowRemote => 6,
+            Self::WriteLocal => 7,
+            Self::MaintainRemote => 8,
+            Self::ContentRemote => 9,
+            Self::MergeRemote => 10,
+            Self::AdminMergeRemote => 11,
+            Self::PublishRemote => 12,
+            Self::WorkflowRemote => 13,
+            Self::ForceRemote => 14,
+            Self::DeleteRemote => 15,
+            Self::SecretRemote => 16,
+            Self::AccessRemote => 17,
+            Self::MutateRemote => 18,
+            Self::Unknown => 19,
         }
     }
 }
@@ -125,6 +129,7 @@ const fn capability_floor(capability: GitHubCommandCapability) -> GuardAction {
         GitHubCommandCapability::ReadLocal
         | GitHubCommandCapability::ReadRemote
         | GitHubCommandCapability::ProposeRemote
+        | GitHubCommandCapability::CreatePrivateRemote
         | GitHubCommandCapability::RoutineMergeRemote
         | GitHubCommandCapability::RoutineReviewThreadRemote => GuardAction::Allow,
         GitHubCommandCapability::RoutineWorkflowRemote => GuardAction::RequireReapproval,
@@ -205,6 +210,16 @@ static CONTRACTS: &[GitHubCapabilityContract] = &[
         "pull-request proposal",
         false,
         "gh pr create --title \"Fix login\" --body \"Summary\"",
+        None,
+    ),
+    contract(
+        C::CreatePrivateRemote,
+        "create-private-remote",
+        None,
+        None,
+        "new private repository",
+        false,
+        "gh repo create todo-app --private --source=.",
         None,
     ),
     contract(
@@ -486,32 +501,19 @@ pub fn github_cli_invocation_is_help(normalized: &[String]) -> bool {
 pub fn combine_github_assessments(
     assessments: &[GitHubCommandAssessment],
 ) -> Option<GitHubCommandAssessment> {
-    if assessments.is_empty() {
-        return None;
+    match assessments {
+        [] => None,
+        [single] => Some(single.clone()),
+        _ => {
+            let capabilities: Vec<GitHubCommandCapability> = assessments
+                .iter()
+                .flat_map(|a| a.capabilities.iter().copied())
+                .collect();
+            Some(github_assessment(
+                &capabilities,
+                "github.shell.combined-capabilities",
+                "The shell composition contains multiple GitHub capabilities.",
+            ))
+        }
     }
-    let mut capabilities: Vec<GitHubCommandCapability> = assessments
-        .iter()
-        .flat_map(|a| a.capabilities.iter().copied())
-        .collect();
-    capabilities.sort_by_key(|c| c.rank());
-    capabilities.dedup();
-    let strongest = assessments
-        .iter()
-        .map(|a| a.capability)
-        .max_by_key(|c| c.rank())
-        .unwrap();
-    Some(GitHubCommandAssessment {
-        capability: strongest,
-        reason_code: assessments
-            .iter()
-            .map(|a| a.reason_code.clone())
-            .collect::<Vec<_>>()
-            .join(";"),
-        detail: assessments
-            .iter()
-            .map(|a| a.detail.clone())
-            .collect::<Vec<_>>()
-            .join(";"),
-        capabilities,
-    })
 }

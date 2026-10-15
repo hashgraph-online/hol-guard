@@ -121,7 +121,7 @@ fn covers_generic_action_classes_and_dangerous_process_floor() {
             PreToolActionTypeV1::McpTool,
         ),
         (
-            json!({"toolName": "web_fetch", "url": "https://example.com/docs"}),
+            json!({"toolName": "web_fetch", "url": "http://10.0.0.5/docs"}),
             PreToolActionTypeV1::Network,
         ),
         (
@@ -485,4 +485,69 @@ fn allows_one_non_sensitive_file_read() {
     assert_eq!(credentials.minimum_action, "review");
     let aliased = generic(json!({"toolName": "read_file", "path": "/./proc/self/environ"}));
     assert_eq!(aliased.minimum_action, "review");
+}
+
+fn web_fetch(url: &str) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope(
+        "zcode",
+        "PreToolUse",
+        &json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "WebFetch",
+            "tool_input": {"url": url, "prompt": "Return the raw JSON body"}
+        }),
+    )
+}
+
+#[test]
+fn plain_public_web_fetch_is_low_risk_so_the_network_floor_decides() {
+    let result = web_fetch("https://status.example.test/api/health");
+    assert_eq!(result.action.action_type, PreToolActionTypeV1::Network);
+    assert_eq!(result.minimum_action, "allow");
+    assert_eq!(result.reason_code, "native_plain_web_request");
+    let search =
+        generic(json!({"tool_name": "WebSearch", "tool_input": {"query": "rust release notes"}}));
+    assert_eq!(search.minimum_action, "allow");
+}
+
+#[test]
+fn risky_web_fetch_shapes_keep_the_network_review() {
+    let long = format!("https://status.example.test/{}", "a".repeat(2100));
+    for url in [
+        "https://user:pw@status.example.test/",
+        "ftp://status.example.test/x",
+        "http://127.0.0.1:8080/",
+        "http://10.1.2.3/",
+        "http://169.254.169.254/latest/meta-data",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://printer.local/",
+        "https://status.example.test/?token=abc",
+        "https://status.example.test/?api_key=abc",
+        "https://status.example.test/?X-Amz-Signature=abc&sig=1",
+        long.as_str(),
+    ] {
+        let result = web_fetch(url);
+        assert_eq!(result.minimum_action, "review", "{url}");
+        assert_eq!(result.reason_code, "native_network_review", "{url}");
+    }
+    for extra in [
+        json!({"method": "POST"}),
+        json!({"body": "x=1"}),
+        json!({"headers": {"x-a": "b"}}),
+    ] {
+        let mut input = json!({"url": "https://status.example.test/", "prompt": "p"});
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        let result = generic(json!({"tool_name": "WebFetch", "tool_input": input}));
+        assert_eq!(result.minimum_action, "review");
+    }
+    let get = generic(
+        json!({"tool_name": "WebFetch", "tool_input": {"url": "https://status.example.test/", "method": "get"}}),
+    );
+    assert_eq!(get.minimum_action, "allow");
+    let generic_http =
+        generic(json!({"tool_name": "http_request", "url": "https://status.example.test/"}));
+    assert_eq!(generic_http.minimum_action, "review");
 }

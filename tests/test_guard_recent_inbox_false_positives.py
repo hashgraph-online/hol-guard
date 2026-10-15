@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
+
+
+@pytest.fixture(autouse=True)
+def _native_package_intents(package_intent_native, native_mcp_probe, tmp_path: Path) -> None:
+    native_mcp_probe(tmp_path / ".hol-guard")
 
 
 def _artifact(command: str, *, home: Path, workspace: Path):

@@ -251,11 +251,6 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
     bindings_dir.mkdir(parents=True, exist_ok=True)
     binding_path.write_text(json.dumps(binding, indent=2, sort_keys=True) + "\n")
-    trust_map_path = root / "contracts/extensions/trust-class-map.v1.json"
-    baseline_trust_map = trust_map_path.read_bytes()
-    # The committed aggregate is a projection of the bindings; keep it in sync so
-    # the consistency gate does not reject the temporary fixture binding.
-    trust_map_path.write_text(json.dumps(_trust_with_external(root, EXTENSION_ID), indent=2) + "\n")
     fixture = {
         "schema": "guard.command-extension-fixtures.v1",
         "build": {
@@ -345,7 +340,6 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     source_path.unlink()
     fixture_path.unlink()
     binding_path.unlink()
-    trust_map_path.write_bytes(baseline_trust_map)
     build()
     verify()
     require(export() == baseline and not descriptor.exists(), "source removal did not restore the original inventory")

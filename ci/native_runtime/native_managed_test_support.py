@@ -23,7 +23,8 @@ def managed_runtime(tmp_path: Path) -> Iterator[tuple[Path, Path]]:
         tempfile.TemporaryDirectory(prefix="hol-guard-managed-runtime-", dir=Path.home()) if os.name == "nt" else None
     )
     guard_home = Path(state_root.name) if state_root is not None else tmp_path / "guard-home"
-    (guard_home / "native-runtime").mkdir(mode=0o700, parents=True)
+    guard_home.mkdir(mode=0o700, exist_ok=True)
+    (guard_home / "native-runtime").mkdir(mode=0o700)
     try:
         yield runtime, guard_home
     finally:

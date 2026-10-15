@@ -15,13 +15,8 @@ from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_g
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
-from codex_plugin_scanner.guard.runtime.command_verified_read_candidates import verified_read_candidate_operation
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.launch_identity_binding import (
-    RuleVersionBinding,
-    observe_launch_identity_binding,
-)
 from codex_plugin_scanner.guard.runtime.verified_github_reads import try_read_verified_public_github_pull_request
 from codex_plugin_scanner.guard.runtime.verified_read_execution import try_execute_verified_local_read
 from tests.guard_command_corpus import iter_benign_corpus
@@ -37,6 +32,11 @@ def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
     (repository / ".git").mkdir()
     _ = (repository / ".git" / "HEAD").write_text("ref: refs/heads/test\n", encoding="utf-8")
     return workspace, repository, cwd
+
+
+def _requires_read_proof(evaluation: object) -> bool:
+    reasons = evaluation.decision_plane.reasons
+    return any(reason.reason_code == "verified-read-proof-required" for reason in reasons)
 
 
 def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() -> None:
@@ -73,7 +73,7 @@ def test_raw_shell_candidates_never_mint_positive_proof(tmp_path: Path) -> None:
     )
     for command in commands:
         evaluation = real_native_command_evaluation(command, cwd=cwd, home_dir=home).evaluation
-        assert verified_read_candidate_operation(evaluation.command) is not None
+        assert _requires_read_proof(evaluation)
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
 
@@ -86,7 +86,7 @@ def test_raw_search_without_cwd_evidence_retains_approval_floor(tmp_path: Path) 
 
     evaluation = real_native_command_evaluation("rg -n GuardAction src", cwd=missing, home_dir=home).evaluation
 
-    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert _requires_read_proof(evaluation)
     assert evaluation.decision_plane.action == "require-reapproval"
     assert evaluation.decision_plane.proof_routes == frozenset()
     assert any(reason.reason_code == "critical.local-script-execution" for reason in evaluation.decision_plane.reasons)
@@ -97,7 +97,7 @@ def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
         "git diff --check", cwd=Path("workspace"), home_dir=Path("home")
     ).evaluation
 
-    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert _requires_read_proof(evaluation)
     assert evaluation.minimum_action == "review"
     assert evaluation.decision_plane.action == "review"
     assert evaluation.decision_plane.proof_routes == frozenset()
@@ -351,25 +351,3 @@ def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, mo
     second = read_once()
 
     assert first.proof.binding_digest != second.proof.binding_digest
-
-
-def test_proof_apis_do_not_accept_syntax_proof_or_transport_injection(tmp_path: Path) -> None:
-    local_parameters = inspect.signature(try_execute_verified_local_read).parameters
-    github_parameters = inspect.signature(try_read_verified_public_github_pull_request).parameters
-    assert "proof" not in local_parameters and "receipt" not in local_parameters
-    assert "proof" not in github_parameters and "transport" not in github_parameters
-
-    workspace, repository, cwd = _workspace(tmp_path)
-    command = real_native_command_evaluation("pwd", cwd=cwd).evaluation.command
-    observation = observe_launch_identity_binding(
-        command=command,
-        workspace=workspace,
-        repository=repository,
-        working_directory=cwd,
-        policy_version="verified-read-test.v1",
-        rules=(RuleVersionBinding("command.verified-read.test", "1.0.0"),),
-        launch_env={"PATH": os.environ.get("PATH", "")},
-    )
-    assert observation.can_issue_positive_proof is False
-    assert observation.unresolved_requirements == observation.required_requirements
-    assert real_native_command_evaluation("pwd").evaluation.decision_plane.proof_routes == frozenset()

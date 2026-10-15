@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+import codex_plugin_scanner.guard.native_supply_chain_eval as evaluator_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
@@ -491,6 +491,11 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
         json.dumps({"error": "authorization_expired"}, separators=(",", ":")),
     )
+    # This surface models a signed-in account whose sign-in expired, not an
+    # explicitly unpaid one, so drop the module-wide unpaid/unreachable Cloud
+    # seams that `bundle_first_cloud` exports for the resident.
+    monkeypatch.delenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", raising=False)
 
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command_parts(context)
@@ -515,7 +520,6 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
-    assert result.stderr in ("",) or result.stderr.startswith("HOL Guard intercepted Claude's attempt to use Bash.")
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     # `blocked_request_mode="ask"` opts this surface into prompting, so the

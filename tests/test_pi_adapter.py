@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,18 +12,13 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
-    _codex_tool_output_request_summary,
-    _codex_tool_output_runtime_reason,
-    _codex_tool_output_runtime_summary,
-)
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import classify_secret_content
 from codex_plugin_scanner.guard.store import GuardStore
@@ -175,7 +171,7 @@ class TestPiDetect:
         assert result.harness == "pi"
         assert any(path.endswith(".pi/agent/settings.json") for path in result.config_paths)
         artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
-        assert f"pi:pi-global:package:{stable_suffix('npm:@demo/pi-tools@1.2.3')}" in artifact_ids
+        assert f"pi:pi-global:package:{hashlib.sha256(b'npm:@demo/pi-tools@1.2.3').hexdigest()[:16]}" in artifact_ids
         assert "pi:pi-global:extension:demo.ts" in artifact_ids
         assert "pi:pi-global:skill:skills/ship" in artifact_ids
         assert "pi:pi-global:prompt:review.md" in artifact_ids
@@ -360,7 +356,10 @@ class TestPiInstall:
         assert "sourceFileRefForPostToolUse" in text
         assert "isVirtualSourcePath" in text
         assert "isAbsoluteSourcePath" not in text
-        assert "if (!path || isVirtualSourcePath(path)) return null;" in text
+        assert (
+            "if (!path || isVirtualSourcePath(path) || isJsonQueryPath(path) || isPathListRead(path)) return null;"
+            in text
+        )
         assert "text_excerpt: toolOutput" in text
         assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
         assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
@@ -944,48 +943,12 @@ class TestPiRuntime:
 
         assert artifact is None
 
-    def test_pi_focused_pytest_messages_label_pi_runtime(self) -> None:
-        assert _codex_tool_output_request_summary(
-            harness_label="Pi",
-            tool_name="Bash",
-            command_text=(
-                "python3 -m pytest "
-                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-                "test_release_checklist_references_smoke_evidence -q 2>&1"
-            ),
-            local_secret_source=None,
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Pi tool `Bash` ran focused pytest, merged stderr into stdout while running "
-            "`python3 -m pytest "
-            "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-            "test_release_checklist_references_smoke_evidence -q 2>&1`, and the captured output "
-            "looked credential-like."
-        )
-        assert _codex_tool_output_runtime_summary(
-            None,
-            harness_label="Pi",
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Focused pytest merged stderr into stdout and emitted credential-looking output before "
-            "it reached Pi. Pytest can execute repository-controlled code, so this could be a real "
-            "local secret."
-        )
-        assert _codex_tool_output_runtime_reason(
-            None,
-            harness_label="Pi",
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Guard stopped this pytest output because pytest executes repository-controlled code, "
-            "and merging stderr into stdout can forward real local secrets to Pi. If you only need "
-            "the exit status, rerun without `2>&1` or keep stderr out of model-visible output."
-        )
-
     def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard-home")
+        # Provisioning the resident's verifier key writes a fake keyring beside
+        # the guard home. The shell context below hashes this directory, so
+        # provision before the first request instead of between the two.
+        assert ensure_resident_prerequisite(tmp_path / "guard-home")
         command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
 
         def queue_for(output: str) -> list[dict[str, object]]:

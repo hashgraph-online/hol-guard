@@ -372,6 +372,13 @@ pub fn classify_github_cli(args: &[String]) -> GitHubCommandAssessment {
             "The command creates a pull-request proposal without merging or changing repository controls.",
         );
     }
+    if top_level == "repo" && subcommand == "create" && private_repo_create(&tail) {
+        return assessment(
+            Cap::CreatePrivateRemote,
+            "github.command.private-repository-creation",
+            "The command creates a new private repository owned by the signed-in account.",
+        );
+    }
     if lookup(MAINTENANCE_SUBCOMMANDS, &top_level)
         .map(|t| t.contains(&subcommand.as_str()))
         .unwrap_or(false)
@@ -523,6 +530,84 @@ fn pr_create_has_static_inline_content(args: &[String]) -> bool {
     }
     has_explicit_option_value(args, "--title", "-t")
         && has_explicit_option_value(args, "--body", "-b")
+}
+
+/// `gh repo create NAME --private`, optionally connecting the current
+/// directory as a remote. The repository is new, private and owned by the
+/// signed-in account, so nothing that exists changes and nothing becomes
+/// public. `--push` stays at review: gh would run `git push` itself, outside
+/// the proof that admits a plain `git push`. Owners, templates, clones, teams,
+/// visibility other than private and every other option stay at review too.
+pub(crate) fn private_repo_create(args: &[String]) -> bool {
+    const FLAGS: &[&str] = &[
+        "--private",
+        "--add-readme",
+        "--disable-issues",
+        "--disable-wiki",
+    ];
+    const VALUED: &[&str] = &[
+        "--description",
+        "-d",
+        "--source",
+        "-s",
+        "--remote",
+        "-r",
+        "--gitignore",
+        "-g",
+        "--license",
+        "-l",
+    ];
+    if has_dynamic_value(args) {
+        return false;
+    }
+    let mut name: Option<&str> = None;
+    let mut private = false;
+    let mut index = 0;
+    while let Some(token) = args.get(index) {
+        index += 1;
+        if !token.starts_with('-') {
+            if name.replace(token).is_some() {
+                return false;
+            }
+            continue;
+        }
+        let (option, attached) = match token.split_once('=') {
+            Some((option, value)) if option.starts_with("--") => (option, Some(value)),
+            _ => (token.as_str(), None),
+        };
+        if FLAGS.contains(&option) {
+            if attached.is_some() {
+                return false;
+            }
+            private |= option == "--private";
+            continue;
+        }
+        if !VALUED.contains(&option) {
+            return false;
+        }
+        let value = match attached {
+            Some(value) => value,
+            None => match args.get(index) {
+                Some(value) => {
+                    index += 1;
+                    value.as_str()
+                }
+                None => return false,
+            },
+        };
+        let bounded = match option {
+            "--source" | "-s" => matches!(value, "." | "./"),
+            "--description" | "-d" => !value.starts_with('@'),
+            _ => repository_component_re().is_match(value),
+        };
+        if !bounded {
+            return false;
+        }
+    }
+    private
+        && name.is_some_and(|name| {
+            repository_component_re().is_match(name) && !matches!(name, "." | "..")
+        })
 }
 
 /// `static_markdown_pr_body_file_operand` (:321).
@@ -1007,7 +1092,7 @@ pub fn classify_github_auth(normalized: &[String]) -> Option<GitHubCommandAssess
     }
     if sub == "status" {
         return Some(assessment(
-            Cap::ReadLocal,
+            Cap::ReadRemote,
             "github.command.local-auth-read",
             "The command reads local CLI auth state.",
         ));
@@ -1045,6 +1130,7 @@ const API_OPTIONS_WITH_VALUES: &[&str] = &[
     "-p",
 ];
 const API_BOOLEAN_OPTIONS: &[&str] = &[
+    "--allow-escape-sequences",
     "--include",
     "--paginate",
     "--silent",
@@ -1441,7 +1527,12 @@ pub fn classify_github_api(args: &[String]) -> GitHubCommandAssessment {
         );
     }
     let method = parsed.method.as_deref().map(|m| m.to_uppercase());
-    if endpoint.eq_ignore_ascii_case("graphql") {
+    // `gh api /graphql` is the same endpoint as `gh api graphql`.
+    if endpoint
+        .strip_prefix('/')
+        .unwrap_or(endpoint)
+        .eq_ignore_ascii_case("graphql")
+    {
         return classify_graphql(&parsed, method.as_deref(), args);
     }
     if parsed
@@ -1539,7 +1630,7 @@ fn routine_review_thread_arguments_are_static(args: &[String]) -> bool {
         let token = &args[index];
         if token == "--jq" {
             jq_count += 1;
-            if jq_count > 1 || index + 1 >= args.len() || args[index + 1] != ".data" {
+            if jq_count > 1 || index + 1 >= args.len() || !jq_is_plain_path(&args[index + 1]) {
                 return false;
             }
             index += 2;
@@ -1547,7 +1638,7 @@ fn routine_review_thread_arguments_are_static(args: &[String]) -> bool {
         }
         if let Some(v) = token.strip_prefix("--jq=") {
             jq_count += 1;
-            if jq_count > 1 || v != ".data" {
+            if jq_count > 1 || !jq_is_plain_path(v) {
                 return false;
             }
             index += 1;
@@ -1578,18 +1669,19 @@ fn routine_review_thread_arguments_are_static(args: &[String]) -> bool {
             Some(p) => (value[..p].to_string(), true, value[p + 1..].to_string()),
             None => (value.clone(), false, String::new()),
         };
-        if !field_sep || (name != "query" && name != "threadId") {
+        if !field_sep || name.is_empty() {
             return false;
         }
         field_names.push(name);
     }
-    field_names.iter().filter(|n| n.as_str() == "query").count() == 1
-        && field_names
-            .iter()
-            .filter(|n| n.as_str() == "threadId")
-            .count()
-            <= 1
+    // `is_routine_review_thread_resolution` binds the one non-query field to
+    // the document's declared variable.
+    field_names.iter().filter(|n| n.as_str() == "query").count() == 1 && field_names.len() <= 2
 }
+
+#[path = "github_review_thread_jq.rs"]
+mod review_thread_jq;
+use review_thread_jq::jq_is_plain_path;
 
 // ---------------------------------------------------------------------------
 // github_graphql_capabilities.py
@@ -1636,13 +1728,14 @@ const CONTENT_MUTATIONS: &[&str] = &[
     "updatePullRequestReviewComment",
 ];
 
-const REVIEW_THREAD_SELECTION: &str = "(?:id\\s+isResolved|isResolved\\s+id|id|isResolved)";
+const REVIEW_THREAD_SELECTION: &str =
+    "(?:id(?:\\s*,\\s*|\\s+)isResolved|isResolved(?:\\s*,\\s*|\\s+)id|id|isResolved)";
 
 fn routine_review_thread_literal_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r#"\A\s*mutation\s*\{{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"PRRT_[A-Za-z0-9_-]{{8,}}"\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
+            r#"\A\s*mutation\s*\{{\s*(?:un)?resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"PRRT_[A-Za-z0-9_-]{{8,}}"\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
         ))
         .unwrap()
     })
@@ -1651,7 +1744,7 @@ fn routine_review_thread_variable_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r#"\A\s*mutation\s*\(\s*\$threadId\s*:\s*ID!\s*\)\s*\{{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*\$threadId\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
+            r#"\A\s*mutation\s*\(\s*\$(?P<declared>[_A-Za-z][_0-9A-Za-z]*)\s*:\s*ID!\s*\)\s*\{{\s*(?:un)?resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*\$(?P<used>[_A-Za-z][_0-9A-Za-z]*)\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
         ))
         .unwrap()
     })
@@ -1786,6 +1879,16 @@ pub fn classify_graphql_document(document: &str) -> GitHubCommandAssessment {
 }
 
 /// `_graphql_mutation_capabilities` (:137).
+/// Whether a document is one mutation whose root fields were all read
+/// exactly. A fragment or an unreadable selection makes the classifier fall
+/// back to a generic mutation, which must not stand in for a narrower grant.
+pub fn graphql_mutation_fields_proven(document: &str) -> bool {
+    let sanitized = strip_strings_and_comments(document);
+    !word_re("fragment").is_match(&sanitized)
+        && top_level_operations(&sanitized).is_some_and(|operations| operations == ["mutation"])
+        && root_fields_of(&sanitized).is_some_and(|fields| !fields.is_empty())
+}
+
 fn graphql_mutation_capabilities(field: &str) -> Vec<Cap> {
     if MAINTENANCE_MUTATIONS.contains(&field) {
         return vec![Cap::MaintainRemote];
@@ -1835,13 +1938,21 @@ pub fn is_routine_review_thread_resolution(document: &str, fields: &[(String, St
     if routine_review_thread_literal_re().is_match(document) {
         return fields.len() == 1;
     }
+    // The variable may carry any name, but it must be the one declared `ID!`
+    // variable and the only other field.
+    let Some(variable) = routine_review_thread_variable_re()
+        .captures(document)
+        .filter(|captures| captures["declared"] == captures["used"])
+        .map(|captures| captures["declared"].to_owned())
+    else {
+        return false;
+    };
     let thread_ids: Vec<&str> = fields
         .iter()
-        .filter(|(n, _)| n == "threadId")
+        .filter(|(n, _)| *n == variable)
         .map(|(_, v)| v.as_str())
         .collect();
-    routine_review_thread_variable_re().is_match(document)
-        && fields.len() == 2
+    fields.len() == 2
         && thread_ids.len() == 1
         && routine_review_thread_value_re().is_match(thread_ids[0])
 }

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Build one platform-specific HOL Guard wheel from the verified pure wheel.
 
-The native runtime and optional declarative source compiler are injected into
-``codex_plugin_scanner/_native``. The source wheel is never modified in place,
-and this builder refuses any project other than ``hol-guard``. It rewrites only
-wheel metadata required by the platform artifact plus RECORD hashes.
+The native runtime is injected into ``codex_plugin_scanner/_native``. The
+runtime also hosts the declarative source compiler, so a verified manifest
+binds the compiler identity to the runtime bytes instead of shipping a second
+executable. The source wheel is never modified in place, and this builder
+refuses any project other than ``hol-guard``. It rewrites only wheel metadata
+required by the platform artifact plus RECORD hashes.
 """
 
 from __future__ import annotations
@@ -27,7 +29,6 @@ from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
 _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
-_MAX_SOURCE_COMPILER_BYTES = 128 * 1024 * 1024
 _MAX_SOURCE_WHEEL_BYTES = 256 * 1024 * 1024
 _MAX_SOURCE_ENTRY_BYTES = 64 * 1024 * 1024
 _MAX_SOURCE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
@@ -250,27 +251,6 @@ def _load_runtime(path: Path) -> bytes:
         return runtime
 
 
-def _load_source_compiler(path: Path) -> bytes:
-    """Read a release-built source compiler with runtime-equivalent file checks."""
-    with _open_regular_file(path, max_bytes=_MAX_SOURCE_COMPILER_BYTES, label="source compiler") as handle:
-        metadata = os.fstat(handle.fileno())
-        if os.name != "nt":
-            mode = stat.S_IMODE(metadata.st_mode)
-            if mode & 0o022:
-                raise NativeWheelError("source compiler is group/world writable")
-            if not mode & stat.S_IXUSR:
-                raise NativeWheelError("source compiler is not owner-executable")
-        compiler = handle.read(_MAX_SOURCE_COMPILER_BYTES + 1)
-        after = os.fstat(handle.fileno())
-        if len(compiler) > _MAX_SOURCE_COMPILER_BYTES:
-            raise NativeWheelError("source compiler size is outside the accepted release bounds")
-        if (metadata.st_size, metadata.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-            raise NativeWheelError("source compiler changed while being read")
-        if len(compiler) != metadata.st_size:
-            raise NativeWheelError("source compiler could not be read completely")
-        return compiler
-
-
 def _packaged_program_digest(source: SourceWheel) -> str:
     """Read the program identity carried by the pure wheel's package data."""
     program_bytes = source.entries.get(_NATIVE_PROGRAM_PATH)
@@ -445,7 +425,6 @@ def build_native_wheel(
     target: str,
     source_sha: str,
     rule_digest: str,
-    source_compiler: Path | None = None,
     implementation_digest: str | None = None,
     base_program_digest: str | None = None,
 ) -> Path:
@@ -460,19 +439,15 @@ def build_native_wheel(
         raise NativeWheelError("source SHA must be a lowercase 40-character Git SHA")
     if not _SHA64_RE.fullmatch(rule_digest):
         raise NativeWheelError("rule digest must be a lowercase SHA-256 hex digest")
-    if (source_compiler is None) != (implementation_digest is None) or (source_compiler is None) != (
-        base_program_digest is None
-    ):
-        raise NativeWheelError(
-            "source compiler, implementation digest, and base program digest must be supplied together"
-        )
+    if (implementation_digest is None) != (base_program_digest is None):
+        raise NativeWheelError("implementation digest and base program digest must be supplied together")
     if implementation_digest is not None and not _SHA64_RE.fullmatch(implementation_digest):
         raise NativeWheelError("implementation digest must be a lowercase SHA-256 hex digest")
-    if source_compiler is not None and not _SHA64_RE.fullmatch(base_program_digest or ""):
-        raise NativeWheelError("base program digest must be supplied with the source compiler")
+    if base_program_digest is not None and not _SHA64_RE.fullmatch(base_program_digest):
+        raise NativeWheelError("base program digest must be a lowercase SHA-256 hex digest")
 
     source = _load_source_wheel(source_wheel, version=version)
-    if source_compiler is not None and base_program_digest != _packaged_program_digest(source):
+    if base_program_digest is not None and base_program_digest != _packaged_program_digest(source):
         raise NativeWheelError("base program digest must match the packaged native command program")
     runtime_bytes = _verify_runtime_provenance(
         runtime,
@@ -482,9 +457,6 @@ def build_native_wheel(
     )
     runtime_name = "hol-guard-runtime.exe" if platform_tag.startswith("win") else "hol-guard-runtime"
     runtime_path = f"{_NATIVE_DIR}/{runtime_name}"
-    source_compiler_bytes = _load_source_compiler(source_compiler) if source_compiler is not None else None
-    source_compiler_name = "guard-command-source.exe" if platform_tag.startswith("win") else "guard-command-source"
-    source_compiler_path = f"{_NATIVE_DIR}/{source_compiler_name}"
 
     entries = dict(source.entries)
     modes = dict(source.modes)
@@ -508,9 +480,11 @@ def build_native_wheel(
     entries[_RUNTIME_MANIFEST_PATH] = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
     modes[runtime_path] = 0o755
     modes[_RUNTIME_MANIFEST_PATH] = 0o644
-    if source_compiler_bytes is not None and implementation_digest is not None:
+    if implementation_digest is not None:
+        # The runtime hosts the source compiler, so the packaged compiler
+        # manifest binds the compiler identity to the runtime executable bytes.
         source_compiler_manifest = {
-            "schema": "hol-guard-native-source-compiler.v1",
+            "schema": "hol-guard-native-source-compiler.v2",
             "protocol_version": 1,
             "package_version": version,
             "target": target,
@@ -518,14 +492,13 @@ def build_native_wheel(
             "source_sha": source_sha,
             "implementation_digest": implementation_digest,
             "base_program_digest": base_program_digest,
-            "compiler_sha256": hashlib.sha256(source_compiler_bytes).hexdigest(),
-            "compiler_size": len(source_compiler_bytes),
+            "executable": runtime_name,
+            "compiler_sha256": runtime_sha256,
+            "compiler_size": len(runtime_bytes),
         }
-        entries[source_compiler_path] = source_compiler_bytes
         entries[_SOURCE_COMPILER_MANIFEST_PATH] = (
             json.dumps(source_compiler_manifest, sort_keys=True, separators=(",", ":")) + "\n"
         ).encode()
-        modes[source_compiler_path] = 0o755
         modes[_SOURCE_COMPILER_MANIFEST_PATH] = 0o644
     modes[source.wheel_path] = 0o644
     entries[source.record_path] = _record_content(entries, record_path=source.record_path)
@@ -547,7 +520,6 @@ def main() -> int:
     parser.add_argument("--target", required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--rule-digest", required=True)
-    parser.add_argument("--source-compiler", type=Path)
     parser.add_argument("--implementation-digest")
     parser.add_argument("--base-program-digest")
     args = parser.parse_args()
@@ -560,7 +532,6 @@ def main() -> int:
         target=args.target,
         source_sha=args.source_sha,
         rule_digest=args.rule_digest,
-        source_compiler=args.source_compiler,
         implementation_digest=args.implementation_digest,
         base_program_digest=args.base_program_digest,
     )

@@ -6,8 +6,9 @@ import hashlib
 import os
 import re
 import time
-from collections.abc import Iterator
-from itertools import pairwise
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
+from itertools import islice, pairwise
 from pathlib import Path
 from typing import Final
 
@@ -18,7 +19,7 @@ from .contained_execution_common import (
     containment_binding_digest as _binding_digest,
 )
 from .containment_contract import ContainmentInput
-from .secret_sensitivity import classify_secret_path
+from .secret_sensitivity import classify_secret_path, classify_secret_paths_batch
 
 _MAX_FILES: Final = 20_000
 _MAX_BYTES: Final = 256 * 1024 * 1024
@@ -67,14 +68,18 @@ def complete_workspace_snapshot(
     directories = [(canonical_workspace, _directory_identity(canonical_workspace))]
     while directories:
         directory, expected_identity = directories.pop()
-        for entry in _bounded_entries(directory, expected_identity, started_at, visited_entries):
+        for entry, secret_match in _classified_entries(
+            directory, expected_identity, canonical_workspace, started_at, visited_entries
+        ):
             path = directory / entry.name
             relative = path.relative_to(canonical_workspace)
             lowered_parts = tuple(part.lower() for part in relative.parts)
             if any(part in _SKIPPED_STATE_NAMES for part in lowered_parts):
                 exclusions.append((relative.as_posix(), "protected-state"))
                 continue
-            if _is_protected(relative, is_directory=entry.is_dir(follow_symlinks=False)):
+            if _is_protected(
+                relative, is_directory=entry.is_dir(follow_symlinks=False), secret_path_protected=secret_match
+            ):
                 if exclude_protected:
                     exclusions.append((relative.as_posix(), "protected-content"))
                     continue
@@ -128,14 +133,23 @@ def reject_external_node_modules(workspace: Path) -> None:
         raise ValueError("external Node dependencies require Guard review")
 
 
+@contextmanager
 def _bounded_entries(
     directory: Path,
     expected_identity: tuple[int, int],
     started_at: float,
     visited_entries: list[int],
-) -> Iterator[os.DirEntry[str]]:
+) -> Generator[Iterator[os.DirEntry[str]], None, None]:
     if os.name == "nt":
-        yield from _bounded_windows_entries(directory, expected_identity, started_at, visited_entries)
+        try:
+            if _directory_identity(directory) != expected_identity:
+                raise ValueError("workspace directory identity changed during discovery")
+            with os.scandir(directory) as entries:
+                yield _counted_entries(entries, started_at, visited_entries)
+            if _directory_identity(directory) != expected_identity:
+                raise ValueError("workspace directory identity changed during discovery")
+        except OSError as exc:
+            raise ValueError("workspace snapshot discovery failed") from exc
         return
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -147,34 +161,22 @@ def _bounded_entries(
         if (metadata.st_dev, metadata.st_ino) != expected_identity:
             raise ValueError("workspace directory identity changed during discovery")
         with os.scandir(descriptor) as entries:
-            for entry in entries:
-                visited_entries[0] += 1
-                _check_discovery_budget(started_at, visited_entries[0])
-                yield entry
+            yield _counted_entries(entries, started_at, visited_entries)
     except OSError as exc:
         raise ValueError("workspace snapshot discovery failed") from exc
     finally:
         os.close(descriptor)
 
 
-def _bounded_windows_entries(
-    directory: Path,
-    expected_identity: tuple[int, int],
+def _counted_entries(
+    entries: Iterator[os.DirEntry[str]],
     started_at: float,
     visited_entries: list[int],
 ) -> Iterator[os.DirEntry[str]]:
-    try:
-        if _directory_identity(directory) != expected_identity:
-            raise ValueError("workspace directory identity changed during discovery")
-        with os.scandir(directory) as entries:
-            for entry in entries:
-                visited_entries[0] += 1
-                _check_discovery_budget(started_at, visited_entries[0])
-                yield entry
-        if _directory_identity(directory) != expected_identity:
-            raise ValueError("workspace directory identity changed during discovery")
-    except OSError as exc:
-        raise ValueError("workspace snapshot discovery failed") from exc
+    for entry in entries:
+        visited_entries[0] += 1
+        _check_discovery_budget(started_at, visited_entries[0])
+        yield entry
 
 
 def _snapshot_file_digest(path: Path, expected: os.stat_result) -> str:
@@ -202,10 +204,42 @@ def _snapshot_file_digest(path: Path, expected: os.stat_result) -> str:
         os.close(descriptor)
 
 
-def _is_protected(relative: Path, *, is_directory: bool = False) -> bool:
+def _classified_entries(
+    directory: Path,
+    expected_identity: tuple[int, int],
+    workspace: Path,
+    started_at: float,
+    visited_entries: list[int],
+) -> Iterator[tuple[os.DirEntry[str], bool]]:
+    with _bounded_entries(directory, expected_identity, started_at, visited_entries) as entries:
+        while batch := list(islice(entries, 128)):
+            relatives = [(directory / entry.name).relative_to(workspace) for entry in batch]
+            eligible = [
+                index
+                for index, relative in enumerate(relatives)
+                if not any(part.lower() in _SKIPPED_STATE_NAMES for part in relative.parts)
+            ]
+            matches = (
+                classify_secret_paths_batch(
+                    [relatives[index].as_posix() for index in eligible],
+                    deadline_monotonic=started_at + _DISCOVERY_TIMEOUT_SECONDS,
+                )
+                if eligible
+                else []
+            )
+            protected = dict(zip(eligible, (match is not None for match in matches), strict=True))
+            _check_discovery_budget(started_at, visited_entries[0])
+            yield from ((entry, protected.get(index, False)) for index, entry in enumerate(batch))
+
+
+def _is_protected(relative: Path, *, is_directory: bool = False, secret_path_protected: bool | None = None) -> bool:
     """Protect dependency content; exempt only generic words in package directory names."""
 
-    if classify_secret_path(relative.as_posix()) is not None:
+    if (
+        classify_secret_path(relative.as_posix()) is not None
+        if secret_path_protected is None
+        else secret_path_protected
+    ):
         return True
     package_directory_expected = False
     in_dependency_tree = False

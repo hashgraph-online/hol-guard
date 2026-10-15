@@ -74,7 +74,9 @@ CLI fallback:
    - `hol-guard package-shims install --manager npm --manager pip --json`
 3. Repair missing or tampered shims:
    - `hol-guard package-shims repair --manager npm --json`
-4. Remove a selected shim:
+4. Prove the shim intercepts installs from the current shell:
+   - `hol-guard package-shims test --manager npm --json`
+5. Remove a selected shim:
    - `hol-guard package-shims uninstall --manager npm --json`
 
-If status reports `path_repair_required`, prepend the returned shim directory to PATH using the shell hint in the JSON payload, then restart the shell before testing again.
+If the test reports `path_repair_required`, prepend the returned shim directory to PATH using the shell hint in the JSON payload, then restart the shell before testing again. The CLI test checks the calling shell's PATH. The dashboard Test button checks the Guard block in your shell profiles instead, because the background daemon does not load them.

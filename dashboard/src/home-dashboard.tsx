@@ -31,6 +31,7 @@ import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 import { WatchProtectionBanner } from "./watch-protection-banner";
+import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
 import { updateSettings } from "./guard-api";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
@@ -183,7 +184,8 @@ export function HomeWorkspace(props: {
   }, [props.onClearPolicies]);
 
   const handleTurnProtectionOn = useCallback(() => {
-    void updateSettings({ protection_posture: "protected" })
+    const current = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
+    void updateSettings(current === null ? { protection_posture: "protected" } : turnProtectionOnUpdate(current))
       .then(async () => {
         await props.onRefreshRuntime?.();
         props.onOpenSettings();
@@ -193,7 +195,7 @@ export function HomeWorkspace(props: {
         showToast(message);
         props.onOpenSettings();
       });
-  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
+  }, [props.onOpenSettings, props.onRefreshRuntime, props.runtime, showToast]);
 
   const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setClearPassword(event.target.value);
@@ -320,11 +322,12 @@ export function HomeWorkspace(props: {
   }
 
   if (!snapshot) return null;
+  const watchBanner = watchBannerModel(snapshot);
 
   return (
     <div className="space-y-6">
-      {snapshot.protection_posture === "watch" ? (
-        <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
+      {watchBanner !== null ? (
+        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
       ) : null}
       {shareOpen && analyticsState.kind === "ready" ? (
         <EvidenceInsightsShareModal

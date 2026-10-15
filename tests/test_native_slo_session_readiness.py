@@ -68,22 +68,21 @@ def test_startup_failure_records_bounded_capacity_before_cleanup(monkeypatch, ca
     def stats() -> dict[str, object]:
         events.append("stats")
         return {
-            "configured": 2,
-            "workers": 1,
-            "ready": 0,
-            "busy": 0,
-            "target": 1,
-            "timeouts": True,
-            "failures": -1,
-            "restarts": 2**32,
-            "reason_codes": {"private detail": 1},
+            "active": 1,
+            "active_limit": 2,
+            "queued": 0,
+            "queued_limit": 4,
+            "expired": True,
+            "cancelled": -1,
+            "retained_bytes": 2**32,
+            "rejected": {"private detail": 1},
             "unexpected": "private value",
         }
 
     session.daemon = cast(
         session_module.GuardDaemonServer,
         SimpleNamespace(
-            _server=SimpleNamespace(hook_process_runner=SimpleNamespace(stats=stats)),
+            _server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=stats)),
         ),
     )
     monkeypatch.setattr(session, "start", fail_start)
@@ -98,7 +97,7 @@ def test_startup_failure_records_bounded_capacity_before_cleanup(monkeypatch, ca
     assert captured.out == ""
     assert json.loads(captured.err) == {
         "schema": "hol-guard.native-startup-failure.v1",
-        "workers": {"configured": 2, "workers": 1, "ready": 0, "busy": 0, "target": 1},
+        "workers": {"active": 1, "active_limit": 2, "queued": 0, "queued_limit": 4},
     }
 
 
@@ -116,7 +115,7 @@ def test_startup_diagnostic_failure_preserves_original_failure_and_cleanup(monke
     session.daemon = cast(
         session_module.GuardDaemonServer,
         SimpleNamespace(
-            _server=SimpleNamespace(hook_process_runner=SimpleNamespace(stats=fail_stats)),
+            _server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=fail_stats)),
         ),
     )
     monkeypatch.setattr(session, "start", fail_start)

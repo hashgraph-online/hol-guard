@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import argparse
 
-from ._commands_shared import *
+from ...argparse_utils import FriendlyArgumentParser
+from ..models import GUARD_ACTION_VALUES
+from .commands_parser_approvals import add_approval_parser
+from .commands_parser_constants import DEFAULT_ALIAS_NAME, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
 
 def _configure_run_parsers(
@@ -38,7 +41,7 @@ def _configure_guard_local_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     pytest_contained_parser = guard_subparsers.add_parser("pytest-contained", help=argparse.SUPPRESS)
-    pytest_contained_parser.add_argument("--workspace", required=True)
+    pytest_contained_parser.add_argument("--workspace", default=None)
     pytest_contained_parser.add_argument("--cwd")
     pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
     pytest_contained_parser.add_argument("--read-only-workspace", action="store_true")
@@ -46,7 +49,11 @@ def _configure_guard_local_parsers(
 
     contained_hook_parser = guard_subparsers.add_parser("execute-contained-test", help=argparse.SUPPRESS)
     _add_guard_common_args(contained_hook_parser)
-    contained_hook_parser.add_argument("--harness", choices=("omp", "zcode"), default="omp")
+    contained_hook_parser.add_argument(
+        "--harness",
+        choices=("omp", "pi", "zcode", "claude-code", "codex"),
+        default="omp",
+    )
     contained_hook_parser.add_argument("--request-file", required=True)
     contained_hook_parser.add_argument("--request-sha256", required=True)
     contained_hook_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
@@ -199,12 +206,12 @@ def _configure_guard_local_parsers(
 
     package_shims_parser = guard_subparsers.add_parser(
         "package-shims",
-        help="Install, repair, inspect, or remove package-manager PATH shims routed through Guard protect",
+        help="Install, repair, inspect, test, or remove package-manager PATH shims routed through Guard protect",
     )
     package_shims_parser.add_argument(
         "package_shims_command",
         nargs="?",
-        choices=("install", "repair", "status", "uninstall"),
+        choices=("install", "repair", "status", "test", "uninstall"),
         default="status",
     )
     package_shims_parser.add_argument(

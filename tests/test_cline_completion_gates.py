@@ -19,11 +19,7 @@ from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cli
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
-from codex_plugin_scanner.guard.product_model import (
-    CANONICAL_HARNESS_VALUES,
-    SUPPORTED_HARNESS_VALUES,
-    export_product_model_v1,
-)
+from codex_plugin_scanner.guard.product_model import CANONICAL_HARNESS_VALUES, SUPPORTED_HARNESS_VALUES
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -103,18 +99,6 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
     assert "cline" in CANONICAL_HARNESS_VALUES
     assert "cline" in SUPPORTED_HARNESS_VALUES
-
-
-def test_checked_product_schema_matches_exported_cline_membership() -> None:
-    schema_path = (
-        Path(__file__).parents[1] / "src" / "codex_plugin_scanner" / "guard" / "schemas" / "guard_product_model_v1.json"
-    )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    exported = export_product_model_v1()
-    assert schema["canonical_harnesses"] == exported["canonical_harnesses"]
-    assert schema["supported_harnesses"] == exported["supported_harnesses"]
-    assert "cline" in schema["canonical_harnesses"]
-    assert "cline" in schema["supported_harnesses"]
 
 
 def test_apps_parser_accepts_every_cline_transport_surface() -> None:

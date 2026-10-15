@@ -16,19 +16,28 @@ guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
+guard-scanner = { path = "../guard-scanner" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+caseless.workspace = true
+regex.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
+rsa.workspace = true
 rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
+toml_edit = "0.22.27"
+saphyr-parser.workspace = true
+unicode-normalization = "0.1.25"
 zeroize = "1.9.0"
 aes.workspace = true
 base64ct.workspace = true
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 cbc.workspace = true
 hmac.workspace = true
 sha2.workspace = true
@@ -40,7 +49,7 @@ sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user"] }
+nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 guard-seatbelt = { path = "../guard-seatbelt" }
@@ -48,10 +57,17 @@ libproc = "0.14.11"
 security-framework = "3.7.0"
 
 [target.'cfg(windows)'.dependencies]
+guard-contained-process = { path = "../guard-contained-process" }
 windows-permissions.workspace = true
 
 [target.'cfg(all(unix, target_os = "linux"))'.dependencies]
 seccompiler = "0.5.0"
+landlock = "=0.4.7"
+capctl = "=0.2.4"
+
+[dev-dependencies]
+base64.workspace = true
+tempfile = "3.10"
 
 [lints]
 workspace = true

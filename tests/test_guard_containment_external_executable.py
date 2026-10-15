@@ -2,20 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import stat
-import sys
 from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import contained_workspace_write_execution as write_module
-from codex_plugin_scanner.guard.contained_workspace_write_execution import (
-    try_execute_contained_workspace_write,
-)
 from codex_plugin_scanner.guard.runtime import contained_execution_common as common_module
 from codex_plugin_scanner.guard.runtime import containment_executor as executor_module
 from codex_plugin_scanner.guard.runtime.containment_contract import (
@@ -23,11 +16,6 @@ from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentPolicy,
     ContainmentRequest,
 )
-from codex_plugin_scanner.guard.runtime.containment_health import (
-    CONTAINMENT_POLICY_CONTRACT_DIGEST,
-    ContainmentHealthEvidence,
-)
-from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 
 
 def _write_executable(path: Path, content: bytes) -> None:
@@ -317,52 +305,3 @@ def test_external_executable_replacement_during_pin_fails_closed(
 
     with pytest.raises(ValueError, match="pinned executable copy failed identity verification"):
         _ = _pin_executable(request, containment_root)
-
-
-@pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS sandbox backend")
-def test_macos_external_ruff_formats_inside_snapshot(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    resolved_ruff = shutil.which("ruff")
-    if resolved_ruff is None:
-        pytest.skip("requires an installed Ruff executable")
-    ruff = Path(resolved_ruff).resolve(strict=True)
-    if str(ruff).startswith(("/System/", "/usr/", "/bin/", "/sbin/")):
-        pytest.skip("requires a Ruff executable outside immutable system prefixes")
-
-    workspace = (tmp_path / "workspace").resolve()
-    workspace.mkdir()
-    source = workspace / "module.py"
-    _ = source.write_text("value=1\n", encoding="utf-8")
-    guard_home = (tmp_path / "guard-home").resolve()
-    guard_home.mkdir()
-    fingerprint = hashlib.sha256(b"runtime").hexdigest()
-
-    def load_health(_home: Path) -> tuple[ContainmentHealthEvidence, str]:
-        return (
-            ContainmentHealthEvidence(
-                backend=ContainmentBackend.MACOS_SANDBOX,
-                backend_digest=executor_module.file_sha256("/usr/bin/sandbox-exec"),
-                policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
-                daemon_fingerprint=fingerprint,
-                runtime_fingerprint=fingerprint,
-                probe_at=datetime.now(timezone.utc).isoformat(),
-                probe_enforced=True,
-            ),
-            fingerprint,
-        )
-
-    monkeypatch.setattr(write_module, "_load_current_containment_health", load_health)
-    result = try_execute_contained_workspace_write(
-        "format-write",
-        workspace=workspace,
-        guard_home=guard_home,
-        source="module.py",
-        target="module.py",
-        environment={"PATH": str(ruff.parent)},
-    )
-
-    assert result is not None
-    assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
-    assert source.read_text(encoding="utf-8") == "value = 1\n"

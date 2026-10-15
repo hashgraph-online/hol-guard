@@ -23,10 +23,10 @@ path outside the conservative fast set escalates to full.
 # branch name, never used as a diff anchor.
 Lanes
 -----
-- ``data``: ``contributions/**`` plus ``contracts/**`` schema/test data. Escalates
-  to full whenever the same PR also touches code, workflows, trust, activation,
-  or packaging — the planner cannot prove a data-only diff is benign in that case.
-- ``full``: everything else, plus any data PR that mixes code/workflow changes.
+- ``data``: extension listing/catalog metadata (including icons) and portable
+  test fixtures. Authored command/MCP policies, descriptors, manifests, and
+  schemas carry protection authority and always require the full lane.
+- ``full``: everything else, including deletions and mixed data/code diffs.
 """
 
 from __future__ import annotations
@@ -50,16 +50,13 @@ SHA_RE = re.compile(r"[0-9a-f]{40}")
 LANE_DATA = "data"
 LANE_FULL = "full"
 
-# Paths that make a change "data-only". These are authored sources and their
-# schemas/fixtures — the fast lane validates their invariants without the full
-# native/Python fan-out. Everything NOT matching fast set escalates to full.
-_DATA_PREFIXES = (
-    "contributions/",
-    "contracts/mcp-servers/",
-)
+# Only listing metadata and portable fixtures are covered by the fast lane.
+# Do not classify policy sources from their JSON contents or import PR code:
+# new/unknown contribution directories must fail closed.
 _DATA_GLOBS = (
+    re.compile(r"^contributions/extension-listings/[^/]+\.json$"),
     re.compile(r"^tests/fixtures/command-source-.*\.v1\.json$"),
-    re.compile(r"^tests/fixtures/extension-listings/"),
+    re.compile(r"^tests/fixtures/extension-listings/[^/]+\.json$"),
     re.compile(r"^tests/fixtures/mcp-server-.*\.v1\.json$"),
 )
 
@@ -80,6 +77,8 @@ _ESCALATE_ALWAYS = (
     # packaging lists, and schemas carry security semantics; changes there take
     # the full lane (maintainer regen PRs intentionally stay full).
     re.compile(r"^contracts/extensions/"),
+    re.compile(r"^contributions/(command-sources|extensions|authoring|mcp-servers)/"),
+    re.compile(r"^contracts/mcp-servers/"),
     re.compile(r"^docs/"),
     re.compile(r"^\.[^/]+$"),
 )
@@ -105,8 +104,7 @@ class Plan:
 
 
 def _is_data_path(path: str) -> bool:
-    if any(path.startswith(prefix) for prefix in _DATA_PREFIXES):
-        return True
+    # This allowlist intentionally excludes authored protection policies.
     return any(pattern.match(path) for pattern in _DATA_GLOBS)
 
 
@@ -134,7 +132,7 @@ def plan(base: str, head: str, *, root: Path) -> Plan:
         dst_mode = parts[1] if len(parts) > 1 else ""
         status = parts[4][:1] if len(parts) > 4 else ""
         files.append(path)
-        if status != "D" and dst_mode != "100644":
+        if status == "D" or dst_mode != "100644":
             unsafe.append(path)
     files = sorted(set(files))
     result = Plan(base=base, head=head, changed=files)
@@ -147,7 +145,7 @@ def plan(base: str, head: str, *, root: Path) -> Plan:
     for path in unsafe:
         result.lanes = [LANE_FULL]
         result.data_only = False
-        result.escalate_reason = f"unsafe-file-mode: {path}"
+        result.escalate_reason = f"unsafe-file-mode-or-deletion: {path}"
         return result
     for path in files:
         reason = _escalates(path)

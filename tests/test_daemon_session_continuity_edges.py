@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
-from codex_plugin_scanner.guard.adapters.cline_bridge import plugin_after_tool_replacement
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _is_copilot_permission_request,
 )
@@ -20,10 +19,6 @@ from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     hook_event_is_permission_request,
 )
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    post_tool_fail_safe_response,
-    post_tool_native_block_response,
-)
 
 
 def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
@@ -39,28 +34,6 @@ def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(
     assert denied["continue"] is True
 
 
-def test_cline_after_tool_transport_miss_passes_through_original_result() -> None:
-    assert plugin_after_tool_replacement("") is None
-    assert plugin_after_tool_replacement("not json") is None
-    blocked = plugin_after_tool_replacement('{"decision":"block","reason":"secret"}')
-    assert blocked is not None
-    assert blocked["result"]["isError"] is True
-
-
-def test_post_tool_fail_safe_continues_the_turn() -> None:
-    payload = post_tool_fail_safe_response("claude-code", reason="worker exploded")
-    assert payload["continue"] is True
-    assert payload.get("decision") != "block"
-
-
-def test_successful_post_tool_block_withholds_without_stopping() -> None:
-    payload = post_tool_native_block_response(reason="credential-looking output")
-    assert payload["decision"] == "block"
-    assert payload["model_output_action"] == "block"
-    assert payload["continue"] is True
-    assert payload["hookSpecificOutput"]["additionalContext"] == "credential-looking output"
-
-
 def test_old_cursor_hooks_deny_empty_stdin_without_baked_event() -> None:
     allow, code = cursor_unparseable_input_permission("")
     assert code == 2
@@ -70,13 +43,13 @@ def test_old_cursor_hooks_deny_empty_stdin_without_baked_event() -> None:
     assert deny["permission"] == "deny"
 
 
-def test_native_off_pretool_denies_without_watch(tmp_path: Path) -> None:
+def test_native_unavailable_pretool_denies_without_watch(tmp_path: Path) -> None:
     payload = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",
         event_name="PreToolUse",
-        reason_code="native_hook_disabled",
-        reason="native off",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
@@ -85,10 +58,10 @@ def test_native_off_pretool_denies_without_watch(tmp_path: Path) -> None:
         {"hook_event_name": "PermissionRequest"},
         harness="claude-code",
         event_name="PermissionRequest",
-        reason_code="native_hook_disabled",
-        reason="native off",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
     )
-    assert permission["continue"] is True
+    assert permission["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     daemon_miss = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",
@@ -358,7 +331,7 @@ def test_bounded_cli_failure_uses_fail_closed_pretool_responses() -> None:
 
 
 def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
-    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _daemon_response_to_native
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
 
     stdout, _stderr, code = _daemon_response_to_native(
         {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"},

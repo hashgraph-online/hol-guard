@@ -24,7 +24,6 @@ from .native_runtime_resilience import (
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
-_PRETOOL_GENERIC_AUTHORITY_FEATURE = "pre-tool-generic-authority-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PRETOOL_RESULT_KEYS = {
     "schema",
@@ -199,22 +198,24 @@ def review_pre_tool_native(
     cwd: Path | None,
     home_dir: Path | None,
     timeout_seconds: float = 0.5,
+    record_health: bool = True,
 ) -> dict[str, Any] | None:
-    """Return the Rust PreToolUse decision, or None when native cannot decide."""
+    """Return the Rust PreToolUse decision, or None when native cannot decide.
+
+    ``record_health=False`` is for advisory callers running on a shortened
+    budget: their timeouts and overloads must not feed resident backoff.
+    """
     del cwd, home_dir
     status = native_runtime_status()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
         or _PRETOOL_AUTHORITY_FEATURE not in status.capabilities.features
         or timeout_seconds <= 0
     ):
-        if status.mode in {"auto", "force"}:
-            return record_native_hook_result("native_fail_safe", None)
-        return None
+        return record_native_hook_result("native_fail_safe", None)
     timeout_seconds = min(timeout_seconds, 1.0)
     deadline_started = time.monotonic()
     deadline_monotonic = deadline_started + timeout_seconds
@@ -252,17 +253,20 @@ def review_pre_tool_native(
             except (UnicodeDecodeError, json.JSONDecodeError):
                 payload = None
             if _native_error(payload) == "native_overloaded":
-                native_record_overload(status.identity.sha256, guard_home)
+                if record_health:
+                    native_record_overload(status.identity.sha256, guard_home)
                 return record_native_hook_result("native_fail_safe", None)
             decoded = _decode_pre_tool(payload, command=command)
             if decoded is not None:
-                native_record_resident_success(status.identity.sha256, guard_home)
+                if record_health:
+                    native_record_resident_success(status.identity.sha256, guard_home)
                 return record_native_hook_result("native_resident", decoded)
-        native_record_resident_failure(
-            status.identity.sha256,
-            guard_home,
-            reason="native_pre_tool_resident_unavailable",
-        )
+        if record_health:
+            native_record_resident_failure(
+                status.identity.sha256,
+                guard_home,
+                reason="native_pre_tool_resident_unavailable",
+            )
     return record_native_hook_result("native_fail_safe", None)
 
 
@@ -285,9 +289,6 @@ def native_pre_tool_policy_floor(
         if action == "review" and native.get("reason_code") == "native_git_helper_context_review":
             return None
         return action if action in {"allow", "review", "block"} else "block"
-    status = native_runtime_status()
-    if status.mode in {"off", "shadow"}:
-        return None
     return "block"
 
 

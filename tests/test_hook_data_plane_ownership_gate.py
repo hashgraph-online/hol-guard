@@ -161,7 +161,6 @@ def test_self_protected_contract_requires_an_owner(monkeypatch: pytest.MonkeyPat
 def _copy_pretool_graph_sources(root: Path) -> None:
     for relative in (
         "src/codex_plugin_scanner/guard/daemon/server.py",
-        "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py",
@@ -173,38 +172,6 @@ def _copy_pretool_graph_sources(root: Path) -> None:
 
 def test_pretool_graph_gate_covers_server_entrypoint_and_cli() -> None:
     assert MODULE._graph_failures(ROOT) == []
-
-
-def test_pretool_graph_gate_rejects_unguarded_server_legacy_escape(tmp_path: Path) -> None:
-    _copy_pretool_graph_sources(tmp_path)
-    server = tmp_path / "src/codex_plugin_scanner/guard/daemon/server.py"
-    source = server.read_text(encoding="utf-8")
-    marker = "            if _native_mode_requires_rust():\n                self._write_json(\n"
-    assert marker in source
-    server.write_text(
-        source.replace(marker, "            if False:\n                self._write_json(\n", 1),
-        encoding="utf-8",
-    )
-
-    failures = MODULE._graph_failures(tmp_path)
-
-    assert any("server execute path" in failure for failure in failures)
-
-
-def test_pretool_graph_gate_rejects_resident_python_cli_escape(tmp_path: Path) -> None:
-    _copy_pretool_graph_sources(tmp_path)
-    entrypoint = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"
-    source = entrypoint.read_text(encoding="utf-8")
-    marker = "        worker_payload = worker.review_http_payload(\n"
-    assert marker in source
-    entrypoint.write_text(
-        source.replace(marker, "        worker_payload = _run_guard_hook_command(\n", 1),
-        encoding="utf-8",
-    )
-
-    failures = MODULE._graph_failures(tmp_path)
-
-    assert any("resident entrypoint can still reach the Python CLI" in failure for failure in failures)
 
 
 def test_pretool_graph_gate_rejects_cli_normalization_before_native(tmp_path: Path) -> None:
@@ -219,41 +186,17 @@ def test_pretool_graph_gate_rejects_cli_normalization_before_native(tmp_path: Pa
     assert any("normalizes payload before native authority" in failure for failure in failures)
 
 
-def test_authority_workflow_is_always_selected() -> None:
-    source = (ROOT / ".github" / "workflows" / "rust-authority-ownership.yml").read_text(encoding="utf-8")
-    trigger = source.split("permissions:", maxsplit=1)[0]
+def test_authority_job_diffs_against_the_base_with_full_history() -> None:
+    source = (ROOT / ".github" / "workflows" / "nightly-native.yml").read_text(encoding="utf-8")
 
-    assert "pull_request:\n    branches: [main]" in trigger
-    assert "paths:" not in trigger
-    assert "paths-ignore:" not in trigger
+    assert "rust_authority_ownership_gate.py" in source
     assert "--base-ref" in source
     assert "fetch-depth: 0" in source
 
 
-def test_native_wheel_workflow_selects_protected_native_changes() -> None:
-    source = (ROOT / ".github" / "workflows" / "native-wheel-ci.yml").read_text(encoding="utf-8")
-    trigger = source.split("permissions:", maxsplit=1)[0]
+def test_nightly_native_workflow_keeps_the_installed_default_proof() -> None:
+    source = (ROOT / ".github" / "workflows" / "nightly-native.yml").read_text(encoding="utf-8")
 
-    assert "pull_request:\n    branches: [main, release/3.2]" in trigger
-    assert "paths:" in trigger
-    assert "paths-ignore:" not in trigger
-    for path in (
-        "rust/**",
-        "ci/native_runtime/**",
-        "contracts/extensions/**",
-        "contributions/**",
-        "src/codex_plugin_scanner/guard/*native*.py",
-        "src/codex_plugin_scanner/guard/runtime_transition*.py",
-        "src/codex_plugin_scanner/guard/adapters/*native*.py",
-        "scripts/ci/**",
-        "scripts/build_command_projection_hook.py",
-        "scripts/build_native_command_program.py",
-        "scripts/build_native_hol_guard_wheel.py",
-        ".github/actions/stage-command-projections/**",
-        "pyproject.toml",
-        "uv.lock",
-    ):
-        assert f'- "{path}"' in trigger
     assert "HOL_GUARD_HOOK_FAST_PATH" in source
     assert "probe_native_default_auto.py --json native-default-auto.json" in source
 
@@ -261,8 +204,8 @@ def test_native_wheel_workflow_selects_protected_native_changes() -> None:
 @pytest.fixture
 def workflow_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for relative in (
-        ".github/workflows/rust-authority-ownership.yml",
-        ".github/workflows/native-wheel-ci.yml",
+        ".github/workflows/nightly-native.yml",
+        ".github/workflows/rust-runtime-performance.yml",
         "scripts/ci/native-proof-environment.sh",
     ):
         destination = tmp_path / relative
@@ -312,7 +255,7 @@ def test_authority_workflow_gate_rejects_missing_cleanup_helper(workflow_sources
 def test_authority_workflow_gate_requires_sourcing_in_each_proof_shell(
     workflow_sources: Path, job_id: str, replacement: str
 ) -> None:
-    workflow = workflow_sources / ".github/workflows/native-wheel-ci.yml"
+    workflow = workflow_sources / ".github/workflows/nightly-native.yml"
     before, job = workflow.read_text(encoding="utf-8").split(f"\n  {job_id}:\n", maxsplit=1)
     job = job.replace(
         "source scripts/ci/native-proof-environment.sh", f"{replacement} scripts/ci/native-proof-environment.sh", 1
@@ -324,7 +267,7 @@ def test_authority_workflow_gate_requires_sourcing_in_each_proof_shell(
 
 
 def test_authority_workflow_gate_rejects_cleanup_after_default_proof(workflow_sources: Path) -> None:
-    workflow = workflow_sources / ".github/workflows/native-wheel-ci.yml"
+    workflow = workflow_sources / ".github/workflows/nightly-native.yml"
     source = workflow.read_text(encoding="utf-8")
     helper = "          source scripts/ci/native-proof-environment.sh\n"
     probe = (
@@ -341,7 +284,7 @@ def test_authority_workflow_gate_rejects_cleanup_after_default_proof(workflow_so
 def test_authority_workflow_gate_rejects_cleanup_omitted_from_any_proof(
     workflow_sources: Path, call_index: int
 ) -> None:
-    workflow = workflow_sources / ".github/workflows/native-wheel-ci.yml"
+    workflow = workflow_sources / ".github/workflows/nightly-native.yml"
     source = workflow.read_text(encoding="utf-8")
     call = "          source scripts/ci/native-proof-environment.sh\n"
     sections = source.split(call)
@@ -354,7 +297,7 @@ def test_authority_workflow_gate_rejects_cleanup_omitted_from_any_proof(
 
 @pytest.mark.parametrize("operation", [")", "export HOL_GUARD_NATIVE=off"])
 def test_authority_workflow_gate_rejects_cleanup_lost_before_proof(workflow_sources: Path, operation: str) -> None:
-    workflow = workflow_sources / ".github/workflows/native-wheel-ci.yml"
+    workflow = workflow_sources / ".github/workflows/nightly-native.yml"
     source = workflow.read_text(encoding="utf-8")
     call = "          source scripts/ci/native-proof-environment.sh\n"
     replacement = ("          (\n" if operation == ")" else "") + call + f"          {operation}\n"
@@ -365,7 +308,7 @@ def test_authority_workflow_gate_rejects_cleanup_lost_before_proof(workflow_sour
 
 
 def test_authority_workflow_gate_rejects_missing_windows_cleanup(workflow_sources: Path) -> None:
-    workflow = workflow_sources / ".github/workflows/native-wheel-ci.yml"
+    workflow = workflow_sources / ".github/workflows/nightly-native.yml"
     source = workflow.read_text(encoding="utf-8")
     source = source.replace(
         "Remove-Item Env:HOL_GUARD_HOOK_FAST_PATH -ErrorAction",
@@ -379,7 +322,7 @@ def test_authority_workflow_gate_rejects_missing_windows_cleanup(workflow_source
 
 
 def test_authority_workflow_gate_rejects_default_proof_only_in_comments(workflow_sources: Path) -> None:
-    workflow = workflow_sources / ".github/workflows/native-wheel-ci.yml"
+    workflow = workflow_sources / ".github/workflows/nightly-native.yml"
     source = workflow.read_text(encoding="utf-8")
     source = source.replace(
         ".venv/bin/python ci/native_runtime/probe_native_default_auto.py",

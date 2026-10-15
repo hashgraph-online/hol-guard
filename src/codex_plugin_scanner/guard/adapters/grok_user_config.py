@@ -98,6 +98,30 @@ def prepare_user_config_text(
     """Merge permissions, compatibility and identical backup hooks without table duplication."""
     document = tomlkit.parse(existing_text)
     _remove_owned(document, previous_state)
+    # A different Guard home has its own ownership record, but shares Grok's
+    # user config. Retire only missing generated clients for the same user.
+    from ..cli.grok_hook_validation import is_missing_grok_hook_command
+
+    existing_hooks = document.get("hooks")
+    if isinstance(existing_hooks, Mapping):
+        for event in ("PreToolUse", *OBSERVE_HOOK_EVENTS):
+            groups = existing_hooks.get(event)
+            if not isinstance(groups, list):
+                continue
+            for index in range(len(groups) - 1, -1, -1):
+                group = groups[index]
+                handlers = group.get("hooks") if isinstance(group, Mapping) else None
+                command = (
+                    handlers[0].get("command")
+                    if isinstance(handlers, list) and len(handlers) == 1 and isinstance(handlers[0], Mapping)
+                    else None
+                )
+                if (
+                    isinstance(command, str)
+                    and _owned_hook(group, command)
+                    and is_missing_grok_hook_command(command, hook_command)
+                ):
+                    del groups[index]
     created_keys: list[str] = []
     for key in ("permission", "compat", "hooks"):
         if key not in document:

@@ -4,7 +4,6 @@ use serde_json::json;
 #[test]
 fn non_inspection_git_commands_keep_their_existing_review_floor() {
     for command in [
-        "cd workspace/repo && git branch --show-current",
         "cd workspace/repo && git rev-parse --show-toplevel",
         "cd workspace/repo && git apply --check workspace/change.patch",
         "cd workspace/repo && git add src/app.py && git commit -m 'fixture' 2>&1",
@@ -23,6 +22,7 @@ fn non_inspection_git_commands_keep_their_existing_review_floor() {
 #[test]
 fn unverified_git_inspections_still_require_fresh_approval() {
     for command in [
+        "cd workspace/repo && git branch --show-current",
         "cd workspace/repo && git status --short",
         "cd workspace/repo && git diff --check",
         "cd workspace/repo && git log -5 --oneline",

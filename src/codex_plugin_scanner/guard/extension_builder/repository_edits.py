@@ -23,7 +23,6 @@ if TYPE_CHECKING or sys.version_info >= (3, 11):
 else:  # pragma: no cover - exercised by the Python 3.10 CI job
     tomllib = importlib.import_module("tomli")
 
-TRUST_PATH = "contracts/extensions/trust-class-map.v1.json"
 BINDINGS_DIR = "contracts/extensions/trust"
 STAGING_PATH = "scripts/release/stage_guard_cloud_review_artifacts.py"
 PYPROJECT_PATH = "pyproject.toml"
@@ -166,12 +165,21 @@ def edit_pyproject(content: str, metadata: Metadata) -> str:
         lines[index] += newline
     insertion = index + 1
     for source, destination in _artifact_mappings(metadata):
+        if any(
+            existing_source != source and existing_destination == destination
+            for existing_source, existing_destination in mapping.items()
+        ):
+            raise conflict("Another wheel inclusion already owns this contribution destination.")
         if source in mapping:
             if mapping[source] != destination:
                 raise conflict("An existing wheel inclusion points this contribution at a different destination.")
             continue
-        if destination in mapping.values():
-            raise conflict("Another wheel inclusion already owns this contribution destination.")
+        source_directory = source.rsplit("/", 1)[0]
+        destination_directory = destination.rsplit("/", 1)[0]
+        if source_directory in mapping:
+            if mapping[source_directory] != destination_directory:
+                raise conflict("An existing wheel directory inclusion points at a different destination.")
+            continue
         lines.insert(insertion, f"{json.dumps(source)} = {json.dumps(destination)}{newline}")
         insertion += 1
     updated = "".join(lines)

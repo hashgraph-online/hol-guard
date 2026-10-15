@@ -17,6 +17,7 @@ enum Status {
     AttemptStarted,
     ApiAccepted,
     Unconfirmed,
+    NotAttempted,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq)]
@@ -103,6 +104,34 @@ impl Journal {
         Ok(self)
     }
 
+    pub(super) fn start_unlocked(mut self, store: &PolicySnapshotStore) -> Result<Self, String> {
+        if self.record.status != Status::Claimed {
+            return Err(INVALID.into());
+        }
+        self.transition_unlocked(store, Status::AttemptStarted, None)?;
+        Ok(self)
+    }
+
+    pub(super) fn finish_unlocked(
+        mut self,
+        store: &PolicySnapshotStore,
+        acknowledgement: Option<String>,
+    ) -> Result<(), String> {
+        if self.record.status != Status::AttemptStarted
+            || acknowledgement.as_deref().is_some_and(|v| {
+                !super::super::super::workspace_review_claim_index::valid_digest(v)
+            })
+        {
+            return Err(INVALID.into());
+        }
+        let status = if acknowledgement.is_some() {
+            Status::ApiAccepted
+        } else {
+            Status::Unconfirmed
+        };
+        self.transition_unlocked(store, status, acknowledgement)
+    }
+
     pub(super) fn finish(
         mut self,
         store: &PolicySnapshotStore,
@@ -123,7 +152,25 @@ impl Journal {
         self.transition(store, status, acknowledgement)
     }
 
+    pub(super) fn refuse_unlocked(mut self, store: &PolicySnapshotStore) -> Result<(), String> {
+        if self.record.status != Status::AttemptStarted {
+            return Err(INVALID.into());
+        }
+        self.transition_unlocked(store, Status::NotAttempted, None)
+    }
+
     fn transition(
+        &mut self,
+        store: &PolicySnapshotStore,
+        status: Status,
+        acknowledgement: Option<String>,
+    ) -> Result<(), String> {
+        super::super::super::approval_enrollment::with_transition_lock(store.state_base(), || {
+            self.transition_unlocked(store, status, acknowledgement)
+        })
+    }
+
+    fn transition_unlocked(
         &mut self,
         store: &PolicySnapshotStore,
         status: Status,
@@ -137,17 +184,15 @@ impl Journal {
         {
             return Err(INVALID.into());
         }
-        super::super::super::approval_enrollment::with_transition_lock(store.state_base(), || {
-            if read(&self.path, &self.root)?.as_deref() != Some(self.expected.as_slice()) {
-                return Err("native_business_attempt_changed".into());
-            }
-            self.record.status = status;
-            self.record.acknowledgement_binding = acknowledgement;
-            let bytes = encode(&self.record)?;
-            persist(&self.path, &self.root, &bytes)?;
-            self.expected = bytes;
-            Ok(())
-        })
+        if read(&self.path, &self.root)?.as_deref() != Some(self.expected.as_slice()) {
+            return Err("native_business_attempt_changed".into());
+        }
+        self.record.status = status;
+        self.record.acknowledgement_binding = acknowledgement;
+        let bytes = encode(&self.record)?;
+        persist(&self.path, &self.root, &bytes)?;
+        self.expected = bytes;
+        Ok(())
     }
 }
 

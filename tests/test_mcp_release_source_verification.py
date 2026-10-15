@@ -232,6 +232,46 @@ def test_publication_requires_completed_package_and_release_jobs(branch: str, co
     assert fixture.calls == [f"/repos/{REPOSITORY}/actions/runs/12345/attempts/1/jobs?per_page=100&page=1"]
 
 
+def _alpha_job(name: str, conclusion: str = "success") -> dict[str, object]:
+    return {"name": name, "run_id": RUN["id"], "head_sha": SHA, "status": "completed", "conclusion": conclusion}
+
+
+@pytest.mark.parametrize("main_jobs_listed", [True, False])
+@pytest.mark.parametrize("alpha_conclusion", ["success", "failure"])
+def test_main_ref_alpha_publication_is_not_a_main_publication(main_jobs_listed: bool, alpha_conclusion: str) -> None:
+    """A main-ref dispatch that only published an alpha never authorizes MCP registry or MCPB consumers."""
+    fixture = GitHubFixture()
+    alpha = [_alpha_job(name, alpha_conclusion) for name in sorted(verifier._PUBLICATION_JOBS["release/3.0"])]
+    main = [_alpha_job(name, "skipped") for name in sorted(verifier._PUBLICATION_JOBS["main"]) if main_jobs_listed]
+    fixture.jobs = {"total_count": len(main) + len(alpha), "jobs": [*main, *alpha]}
+    assert (
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+        )
+        is False
+    )
+
+
+def test_main_publication_still_completes_alongside_listed_alpha_jobs() -> None:
+    """Skipped alpha jobs next to successful main jobs keep the stable release authorized."""
+    fixture = GitHubFixture()
+    alpha = [_alpha_job(name, "skipped") for name in sorted(verifier._PUBLICATION_JOBS["release/3.0"])]
+    fixture.jobs = {"total_count": 4, "jobs": [*fixture.jobs["jobs"], *alpha]}
+    assert verifier.publication_completed(
+        fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+    )
+
+
+def test_main_ref_run_with_no_publication_jobs_still_fails_closed() -> None:
+    """The alpha exemption needs an actual alpha job; an empty job list is still an error."""
+    fixture = GitHubFixture()
+    fixture.jobs = {"total_count": 0, "jobs": []}
+    with pytest.raises(ValueError):
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+        )
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -288,7 +328,16 @@ def test_gate_executes_only_trusted_default_branch_verification_code() -> None:
 def test_pull_request_validation_is_separate_from_privileged_triggers() -> None:
     """Unmerged bundles are validated only under the ordinary read-only pull_request event."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/mcpb-validation.yml").read_text())
-    assert workflow[True] == {"pull_request": {"branches": ["main", "release/3.0"]}}
+    assert workflow[True] == {
+        "pull_request": {
+            "branches": ["main", "release/3.0"],
+            "paths": [
+                "distributions/mcpb/**",
+                ".github/tools/mcpb-cli/**",
+                ".github/workflows/mcpb-validation.yml",
+            ],
+        }
+    }
     assert workflow["permissions"] == {"contents": "read"}
     job = workflow["jobs"]["validate"]
     assert "permissions" not in job

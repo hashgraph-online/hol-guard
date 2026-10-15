@@ -6,13 +6,8 @@ import base64
 import errno
 import hashlib
 import hmac
-import inspect
 import json
-import logging
-import math
-import mimetypes
 import os
-import platform
 import secrets
 import select
 import socket
@@ -27,102 +22,29 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, BinaryIO, ClassVar, TypeAlias, TypedDict, TypeGuard, cast
-from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
+from typing import Any, BinaryIO, ClassVar, TypeAlias, TypedDict, cast
+from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from ...version import __version__
-from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
 from ..approval_gate import (
     ApprovalGateError,
-    begin_totp_enrollment,
-    confirm_totp_enrollment,
-    disable_totp,
     require_high_risk,
 )
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
-from ..approval_gate import public_config as approval_gate_public_config
-from ..approval_gate import (
-    revoke_cooldown as revoke_approval_gate_cooldown,
-)
-from ..approval_gate import (
-    update_settings as update_approval_gate_settings,
-)
-from ..approval_gate import (
-    validate_settings_update as validate_approval_gate_settings,
-)
-from ..approval_scope_support import (
-    APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX,
-    IneligibleApprovalScopeError,
-    StaleApprovalScopeContractError,
-    request_scope_contract_payload,
-    resolve_request_scope_selection,
-)
-from ..approvals import (
-    ApprovalRequestAlreadyResolvedError,
-    ApprovalRequestNotFoundError,
-    apply_approval_resolution,
-    build_approval_browser_url,
-    build_runtime_snapshot,
-    bulk_allow_read_only_once,
-)
 from ..browser_opener import open_browser_url
-from ..cli.connect_flow import (
-    CONNECT_SYNC_AUTH_CONTEXT_KEY,
-    _build_sync_auth_context,
-    _persist_oauth_local_credentials,
-    exchange_guard_authorization_code,
-    resolve_connect_url,
-    resolve_guard_oauth_client_config,
-    start_guard_browser_session,
-)
-from ..cli.connect_sync_result import (
-    apply_guard_connect_sync_result,
-    failed_browser_connect_flow_state,
-    headless_sync_retry_summary,
-)
-from ..cli.install_commands import (
-    apply_managed_install,
-    build_harness_setup_plan,
-    build_harness_verification,
-    list_harness_setup_items,
-    uninstall_confirmation_token,
-)
-from ..cli.update_commands import build_guard_update_status_payload
-from ..cloud_exception_requests import (
-    CloudExceptionRequestError,
-    fetch_cloud_exception_requests,
-    submit_cloud_exception_request,
-)
-from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
-from ..codex_resume import get_request_resume_status, retry_request_resume
 from ..config import (
-    VALID_RECEIPT_REDACTION_LEVELS,
-    GuardConfig,
-    editable_guard_settings,
     load_guard_config,
-    reset_guard_settings,
-    update_guard_settings,
-    update_guard_update_channel,
-)
-from ..desktop_notifications import (
-    desktop_notification_setup_payload,
-    ensure_desktop_notification_setup,
-    macos_notification_guidance,
 )
 from ..directory_path_authority import (
     DirectoryPathTrustError,
     trusted_guard_directory_roots,
     validate_guard_directory_path,
-    validated_owned_temporary_workspace,
 )
 from ..fork_safety import forget_in_child
-from ..harness_disconnect_gate import require_harness_disconnect_gate
-from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
     DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS,
@@ -132,128 +54,63 @@ from ..local_dashboard_session import (
     PROTECTION_REPAIR_DASHBOARD_SURFACE,
     build_local_dashboard_session_token,
 )
-from ..local_supply_chain import (
-    build_workspace_audit_payload,
-    managed_install_audit_workspace_dirs,
-    resolve_package_firewall_entitlement_with_refresh,
-    resolve_supply_chain_audit_workspace_dir,
-    sync_supply_chain_cloud_state,
-)
-from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import (
-    DECISION_SCOPE_VALUES,
-    DecisionScope,
     GuardRuntimeRegistration,
-    PolicyDecision,
-    format_local_http_origin,
 )
-from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
+from ..native_codex_binding_capture import start_codex_binding_capture_writer
+from ..native_daemon_handler import (
+    HandlerDecision,
+    NativeDaemonHandlerError,
+    native_events_cursor,
+)
+from ..native_daemon_route import (
+    NativeDaemonRouteError,
+    native_origin_decision,
+    native_route_facts,
+    native_session_authorize,
+    native_strict_loopback_origin,
+)
+from ..native_guard_store import NativeGuardStoreUnavailable
+from ..native_resident_revival import native_route_unavailable_body
+from ..native_resident_watchdog import start_native_resident_watchdog
+from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
-from ..package_firewall_entitlement import (
-    package_firewall_action_states,
-    package_firewall_available_actions,
-    package_firewall_block_details,
-    package_firewall_operation_allowed,
-    reconcile_connect_state_with_oauth_entitlement,
-    resolve_package_firewall_entitlement,
-)
-from ..package_firewall_receipts import package_firewall_receipt_metadata
-from ..package_shim_status import record_package_shim_audit_result
-from ..policy_bundle_activation import activate_with_reason
-from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
-from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
-from ..policy_bundle_trusted_keys import (
-    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
-    policy_bundle_keyring_payload,
-    validate_synced_policy_bundle,
-)
-from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
-from ..project_folder_picker import (
-    ProjectFolderPickerBusyError,
-    ProjectFolderPickerUnavailableError,
-    choose_project_folder,
-)
-from ..protection_posture import protection_is_off
-from ..receipts.manager import build_receipt
+from ..path_resolution_cache import cached_realpath
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
-from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
-from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.command_shadow_evaluation import (
-    CommandShadowCohort,
-    CommandShadowControl,
-    baseline_command_shadow_proposal,
-    build_command_shadow_observation,
-)
-from ..runtime.extension_control_authority import ExtensionControlAuthorityError, ExtensionControlAuthorityView
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntime,
     ExtensionControlRuntimeSnapshot,
-    current_extension_control_snapshot,
 )
 from ..runtime.isolation_provider import load_managed_provider_registry
 from ..runtime.local_temp_paths import trusted_temporary_root_for_path
-from ..runtime.native_command_evaluation import evaluate_command_native
-from ..runtime.network_status import build_network_status, project_network_supervisor_health
+from ..runtime.network_status import project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
-    GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
-    _build_policy_bundle_decisions,
-    _daemon_version_supported,
-    _guard_device_metadata,
-    _persist_cloud_receipt_redaction_level,
-    _policy_bundle_acceptance_checkpoint,
-    _policy_bundle_cloud_exception_items,
-    _policy_bundle_downgrade_reference,
-    _policy_bundle_is_version_downgrade,
-    _requeue_cloud_review_privacy_projection,
-    _reset_cloud_receipt_redaction_authority,
     _resolve_guard_sync_auth_context,
-    _validate_cached_policy_bundle,
-    prepare_guard_cloud_connect_authorization,
-    repair_guard_cloud_connect_storage,
-    sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_artifact_reconciliation import (
     reconcile_runtime_artifacts,
-    repair_failing_managed_harness_hooks,
-)
-from ..shims import (
-    activate_package_shims,
-    package_shim_dashboard_status,
-    package_shim_status,
-    package_shim_supported_managers,
-    probe_package_shim_intercepts,
-    uninstall_package_shims,
 )
 from ..sqlite_recovery import quarantined_store_summary
-from ..sqlite_tuning import sqlite_connect_timeout_override
-from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
-from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
     clear_evidence,
-    count_evidence,
-    evidence_record_to_dict,
-    export_evidence_csv,
-    export_evidence_json,
-    list_evidence,
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
-from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
+from . import repair_self_check
 from .aibom_inventory_persist import persist_aibom_inventory_context
+from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
+from .audit_persistence import WRITTEN as AUDIT_WRITTEN
+from .audit_persistence import AuditPersistence
 from .bounded_http import BoundedThreadingHTTPServer
+from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from .command_activity_api import (
-    handle_command_activity_analytics,
-    handle_command_activity_diagnostics,
-    handle_command_activity_feedback,
-    handle_command_activity_list,
-    handle_command_extensions,
     parse_command_activity_event_cursor,
     stream_command_activity_events,
 )
@@ -263,14 +120,7 @@ from .command_queue_worker import (
     start_command_queue_worker,
     stop_command_queue_worker,
 )
-from .dashboard_reconnect import (
-    DASHBOARD_RECONNECT_PROTOCOL_VERSION,
-    consume_dashboard_reconnect_challenge,
-    dashboard_reconnect_challenge_identity,
-    issue_dashboard_reconnect_challenge,
-    prepare_dashboard_reconnect_authorization,
-)
-from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
+from .dashboard_bundle import pin_dashboard_bundle
 from .diagnostics import DaemonDiagnostics
 from .discovery import (
     DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
@@ -279,99 +129,87 @@ from .discovery import (
     load_authenticated_daemon_state,
     load_daemon_discovery_key,
 )
-from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
-from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
-from .hook_process_runner import HookProcessRunner
+from .extension_control_api import ExtensionControlApiService
+from .extension_discovery_read import (
+    DISCOVERY_EVENTS_PATH,
+    DISCOVERY_RENDERS_PATH,
+    DISCOVERY_UNAVAILABLE,
+    DiscoveryReadError,
+    discovery_placement_projection,
+    discovery_rollout_enabled,
+    relay_discovery_measurement,
+)
+from .hook_managed_install_state import _hook_harness_is_unmanaged
+from .hook_policy_admission import prepare_native_hook_policy
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
-from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
-from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiService
-from .local_cli_http import handle_local_cli_list, handle_local_cli_post
-from .managed_controls_api import managed_policy_rows
-from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
-    load_guard_daemon_auth_token,
+    current_guard_daemon_source_root,
+    ensure_guard_daemon_auth_token,
     release_guard_daemon_owner_lock,
-    repair_approval_center_locator,
     write_guard_daemon_state,
-)
-from .protection_repair_retry import containment_repair_outcome, incomplete_protection_repair_payload
-from .protection_repair_stages import (
-    harness_hooks_repair_reason,
-    integrity_repair_reasons,
-    record_incomplete_protection_repair,
-    repair_daemon_registration,
 )
 from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
-from .runtime_hook_deadline import RuntimeHookDeadline
+from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline, remaining_hint_from_payload
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
+from .server_common import (
+    _LOGGER,
+    _build_local_url,
+    _now,
+)
+from .server_control_cloud_connect import _CloudConnectRoutes
+from .server_control_cloud_sync import (
+    _managed_controls_publish_for,
+    _run_headless_cloud_sync_with_optional_publish,
+)
+from .server_control_headless import (
+    _HeadlessRoutes,
+)
+from .server_control_health import _ControlHealthRoutes
+from .server_control_misc import _ControlMiscRoutes
+from .server_control_operations import _ControlOperationRoutes
+from .server_control_policy import _ControlPolicyRoutes
+from .server_control_repair import _RepairSettingsRoutes
+from .server_control_routes_post import _ControlPostRoutes
+from .server_control_supply_chain import _SupplyChainRoutes
+from .server_control_sync import _ControlSyncRoutes
+from .server_dashboard_records_read import _DashboardRecordsReadRoutes
+from .server_dashboard_runtime_read import _DashboardRuntimeReadRoutes
+from .server_dashboard_support import _DashboardSupportRoutes
 from .service_lifecycle import (
     begin_service,
     contain_failed_service_start,
-    enable_full_capacity_for_generation,
     start_serve_thread,
     startup_generation_is_current,
 )
+from .sponsored_discovery_settings import (
+    sponsored_discovery_allowed,
+    sponsored_discovery_measurement_allowed,
+    sponsored_discovery_settings,
+    update_sponsored_discovery_settings,
+)
+from .startup_phase import flush_pending_phases, record_phase_since, timed_phase
 
-_LOGGER = logging.getLogger(__name__)
+# Local daemon routes. The Cloud paths stay in the read module and are the
+# only paths relayed upstream.
+_LOCAL_DISCOVERY_PREFIX = "/v1/discovery/extensions/"
+_LOCAL_DISCOVERY_PLACEMENTS = "/v1/discovery/extensions/placements"
+_LOCAL_DISCOVERY_SETTINGS = "/v1/discovery/extensions/settings"
+_LOCAL_DISCOVERY_MEASUREMENT = {
+    "/v1/discovery/extensions/renders": DISCOVERY_RENDERS_PATH,
+    "/v1/discovery/extensions/events": DISCOVERY_EVENTS_PATH,
+}
 
-_HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
-_HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
-_AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
-_REMOTE_REVIEW_POST_ROUTES = {
-    "/v1/command-queue/worker/refresh",
-    "/v1/requests/bulk-allow-once",
-}
-_SUPPLY_CHAIN_PACKAGE_ACTIONS = {
-    "activate",
-    "install",
-    "repair",
-    "test",
-    "audit",
-    "sync",
-    "remove",
-    "uninstall",
-    "connect",
-    "open-shell",
-}
-_SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS = 1_500
-_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
-_EXTENSION_CONTROL_PATHS = frozenset(
-    {
-        "/v1/extension-controls/preview",
-        "/v1/extension-controls/test",
-        "/v1/extension-controls/inspect",
-        "/v1/extension-controls/apply",
-        "/v1/extension-controls/refresh",
-        "/v1/extension-controls/recover-authority",
-        "/v1/extension-controls/acknowledge-degraded",
-    }
-)
-_LOCAL_CLI_PATHS = frozenset(
-    {
-        "/v1/local-clis/preview",
-        "/v1/local-clis/apply",
-        "/v1/local-clis/recognize",
-        "/v1/local-clis/discover",
-        "/v1/local-clis/provider-actions",
-        "/v1/local-clis/provider-workflows",
-        "/v1/local-clis/registry-search",
-        "/v1/local-clis/registry-setup",
-        "/v1/local-clis/refresh-job",
-        "/v1/local-clis/skills",
-        "/v1/local-clis/mcp-skills",
-    }
-)
 
 
 class _HookPathValidationError(ValueError):
@@ -381,50 +219,6 @@ class _HookPathValidationError(ValueError):
         parameter_slug = parameter.replace("-", "_")
         super().__init__(f"invalid_hook_{parameter_slug}_path")
         self.code = f"invalid_hook_{parameter_slug}_path"
-
-
-def _headless_cloud_sync_store_key(store: GuardStore) -> str:
-    return str(store.guard_home.expanduser().resolve())
-
-
-def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
-    """Return a lightweight snapshot dict including package manager shim coverage."""
-    status = package_shim_status(context)
-    return {
-        "package_manager_coverage": {
-            "detected_managers": status.get("detected_managers", []),
-            "path_active": status.get("active_managers", []),
-            "shims_installed": status.get("active_managers", []),
-            "undetected_managers": status.get("undetected_managers", []),
-            "unsupported_managers": [],
-        }
-    }
-
-
-def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
-    return value in DECISION_SCOPE_VALUES
-
-
-def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
-
-
-def _safe_int(value: object) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value if value >= 0 else 0
-    return 0
-
-
-class _CursorReceiptContext(TypedDict):
-    action_scope: str
-    artifact_name: str
-    capabilities_summary: str
-    changed_capability: str
-    scanner_evidence: dict[str, object]
-    source_scope: str
-    summary: dict[str, object]
 
 
 _MAX_CONCURRENT_DAEMON_REQUESTS = 32
@@ -448,7 +242,6 @@ _MAX_CONCURRENT_RUNTIME_HOOKS = 32
 _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
-_RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
 _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
@@ -456,6 +249,8 @@ _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
 _DAEMON_CONTROL_ADMISSION_WAIT_SECONDS = 1.0
 _DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS = 0.025
 _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS = 5.0
+# A watchdog tick may be inside a cold-start resident request (5s plus a 10s spawn allowance).
+_NATIVE_RESIDENT_WATCHDOG_STOP_JOIN_TIMEOUT_SECONDS = 16.0
 _DAEMON_CONTROL_PATHS = frozenset(
     {
         "/v1/healthz/details",
@@ -472,21 +267,8 @@ _DAEMON_CRITICAL_PATHS = frozenset(
 
 
 def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
-    raw_seconds = payload.pop("guard_remaining_seconds", None)
-    raw_milliseconds = payload.pop("guard_remaining_ms", None)
-    if (
-        isinstance(raw_seconds, (int, float))
-        and not isinstance(raw_seconds, bool)
-        and math.isfinite(float(raw_seconds))
-    ):
-        return float(raw_seconds)
-    if (
-        isinstance(raw_milliseconds, (int, float))
-        and not isinstance(raw_milliseconds, bool)
-        and math.isfinite(float(raw_milliseconds))
-    ):
-        return float(raw_milliseconds) / 1000.0
-    return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
+    hint = remaining_hint_from_payload(payload, pop=True)
+    return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS if hint is None else hint
 
 
 def _codex_live_replay_authority(
@@ -523,6 +305,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     runtime_started_at: str
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
+    idle_shutdown_claimed: bool
     start_monotonic: float
     active_stream_clients: int
     active_stream_clients_lock: threading.Lock
@@ -530,6 +313,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
     onefile_extraction_status: dict[str, object] | None
+    repair_self_check_status: dict[str, object] | None
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
@@ -556,7 +340,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     hook_harness_rejected: dict[str, int]
     hook_capacity_lock: threading.Lock
     runtime_hook_scheduler: RuntimeHookScheduler
-    runtime_hook_process_scheduler: RuntimeHookScheduler
     runtime_hook_evidence_writer: RuntimeHookEvidenceWriter
     request_capacity: threading.BoundedSemaphore
     request_capacity_limit: int
@@ -579,7 +362,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     unclassified_connections_lock: threading.Lock
     unclassified_watchdog_stop: threading.Event
     unclassified_watchdog_thread: threading.Thread | None
-    hook_process_runner: HookProcessRunner
     runtime_heartbeat: RuntimeHeartbeatWriter
     general_request_executor: _BoundedRequestExecutor
     control_request_executor: _BoundedRequestExecutor
@@ -587,6 +369,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
     denial_audit_lock: threading.Lock
+    audit_persistence: AuditPersistence
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
     home_dir: Path
@@ -607,6 +390,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def server_close(self) -> None:
         _ = self._stop_request_executors()
+        audit_persistence = getattr(self, "audit_persistence", None)
+        if audit_persistence is not None:
+            audit_persistence.close()
         hook_worker = getattr(self, "hook_worker", None)
         if hook_worker is not None:
             with suppress(Exception):
@@ -648,6 +434,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.workspace_dir = workspace_dir.resolve(strict=False) if workspace_dir is not None else None
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
+        self.idle_shutdown_claimed = False
         self.start_monotonic = time.monotonic()
         self.active_stream_clients = 0
         self.active_stream_clients_lock = threading.Lock()
@@ -655,10 +442,14 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.diagnostics = diagnostics
         self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
         self.auth_audit_windows = {}
+        self.audit_persistence = AuditPersistence(
+            store, diagnostics, attempt_timeout_seconds=_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS
+        )
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
         self.onefile_extraction_status = None
+        self.repair_self_check_status = None
         self.guard_cloud_connect_state = None
         self.guard_cloud_connect_state_lock = threading.Lock()
         self.guard_cloud_browser_session_lock = threading.Lock()
@@ -687,11 +478,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             active_limit=_MAX_CONCURRENT_RUNTIME_HOOKS,
             per_harness_active_limit=_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
         )
-        self.runtime_hook_process_scheduler = RuntimeHookScheduler(
-            active_limit=0,
-            per_harness_active_limit=_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
-            retained_bytes_limit=1,
-        )
         self.request_capacity_limit = _MAX_CONCURRENT_DAEMON_REQUESTS
         self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
         self.connection_capacity_limit = _MAX_CONCURRENT_DAEMON_CONNECTIONS
@@ -713,9 +499,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.unclassified_connections_lock = threading.Lock()
         self.unclassified_watchdog_stop = threading.Event()
         self.unclassified_watchdog_thread = None
-        self.hook_process_runner = HookProcessRunner(guard_home=store.guard_home)
-        self.hook_process_runner.set_capacity_listener(self.runtime_hook_process_scheduler.set_active_limit)
-        self.runtime_hook_process_scheduler.set_queue_listener(self.hook_process_runner.notify_queued_work)
         self.runtime_heartbeat = RuntimeHeartbeatWriter(
             store=store,
             session_id=runtime_session_id,
@@ -730,15 +513,18 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         super().__init__(server_address, handler_class)
 
     def _initialize_request_services(self) -> None:
+        from .hook_direct_counters import bind_hook_counter_sink
         from .hook_worker import HookWorker
 
         try:
             self.hook_worker = HookWorker(
                 store=self.store,
                 workspace=self.workspace_dir,
+                home_dir=self.home_dir,
                 activity_writer=self.runtime_hook_evidence_writer,
                 capture_writer=self.codex_binding_capture_writer,
             )
+            bind_hook_counter_sink(self.hook_worker, getattr(self, "diagnostics", None))
             self.extension_control_runtime = ExtensionControlRuntime(
                 self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
@@ -775,7 +561,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
             if self.codex_binding_capture_writer is not None:
                 self.codex_binding_capture_writer.stop_capture()
-            _ = self.hook_process_runner.close_contained()
             raise
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
@@ -871,11 +656,28 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 with self.request_capacity_lock:
                     self.normal_connections.discard(id(request_socket))
             return
+        # Admission and the idle watchdog's shutdown claim share this lock, so a
+        # request is either counted before the claim or refused here, never
+        # admitted into a server that is closing.
+        with self.request_capacity_lock:
+            closing = self.idle_shutdown_claimed
+            if closing:
+                self.rejected_requests += 1
+            else:
+                self.active_requests += 1
+                self.last_activity_monotonic = time.monotonic()
+        if closing:
+            try:
+                self.shutdown_request(request_socket)
+            finally:
+                self.connection_capacity.release()
+                self._guard_release_request()
+                with self.request_capacity_lock:
+                    self.normal_connections.discard(id(request_socket))
+            return
         with suppress(OSError):
             request_socket.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
         self._register_unclassified_connection(request_socket, accepted_at=accepted_at)
-        with self.request_capacity_lock:
-            self.active_requests += 1
         if pending:
             # Do not serialize partial-header waits on the accept thread.
             # These sockets still own both outer permits; the existing bounded
@@ -977,6 +779,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.normal_connections.discard(id(request))
             if was_active:
                 self.active_requests -= 1
+                # The idle clock starts when the last request finishes, not when it started.
+                self.last_activity_monotonic = time.monotonic()
             capacity_kind = self.request_capacity_kinds.pop(id(request), None)
         if capacity_kind is not None:
             self._request_capacity_for_kind(capacity_kind).release()
@@ -1238,6 +1042,12 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         capacity = self._request_capacity_for_kind(capacity_kind)
         with self.request_capacity_lock:
             previous_kind = self.request_capacity_kinds.pop(id(request), None)
+            if previous_kind is not None and id(request) in self.request_accepted_at:
+                # A follow-up request on a kept-alive connection (the hook POST
+                # after its identity challenge) starts its own admission clock.
+                # Charging it the challenge round trip left loaded hosts with
+                # too little of the hook budget to finish the review.
+                self.request_accepted_at[id(request)] = time.monotonic()
         if previous_kind is not None:
             self._request_capacity_for_kind(previous_kind).release()
         admitted = (
@@ -1287,6 +1097,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.store.guard_home,
             self.daemon_port(),
             self.auth_token,
+            write_auth_token=False,
             host=self.daemon_host(),
             state_id=self.runtime_session_id,
             started_at=self.runtime_started_at,
@@ -1319,1252 +1130,31 @@ _ROOT_STATIC_FILES = {
 }
 
 
-_RUNTIME_HOOK_ENV_ALLOWLIST = frozenset(
-    {
-        "HOL_GUARD_MANAGED_CURSOR_HOOK",
-        "HOL_GUARD_CURSOR_APPROVAL_BINDING",
-        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF",
-        "CURSOR_PROJECT_DIR",
-        "CURSOR_VERSION",
-        "CURSOR_TRACE_ID",
-        "CURSOR_SESSION_ID",
-        "CURSOR_TRANSCRIPT_PATH",
-    }
-)
-
-
-def _runtime_hook_env_overlay_from_payload(payload: Mapping[str, object]) -> dict[str, str]:
-    raw_overlay = payload.get("hook_env")
-    if not isinstance(raw_overlay, Mapping):
-        return {}
-    overlay: dict[str, str] = {}
-    for key, value in raw_overlay.items():
-        if not isinstance(key, str) or key not in _RUNTIME_HOOK_ENV_ALLOWLIST:
-            continue
-        if isinstance(value, str) and value:
-            overlay[key] = value
-    return overlay
-
-
 _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
 _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
-_HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
-_HEADLESS_APP_ACTIONS = {
-    "connect": ("install", "install"),
-    "repair": ("repair", "repair"),
-    "disconnect": ("remove", "uninstall"),
-    "status": ("status", "verify"),
-    "test": ("scan", "verify"),
-}
-_CLOUD_APP_DASHBOARD_SESSION_ACTIONS = {
-    "connect": frozenset({"connect", "status", "test"}),
-    "repair": frozenset({"repair", "status", "test"}),
-    "status": frozenset({"status"}),
-    "test": frozenset({"status", "test"}),
-}
-_HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
-
-
-def _headless_safe_failure_reasons() -> dict[str, str]:
-    return {
-        "offline": "Local Guard daemon is unavailable.",
-        "timeout": "Local Guard daemon did not answer before the browser timeout.",
-        "unauthorized": "Dashboard session is missing or stale.",
-        "unsupported": "Harness is not supported by this daemon.",
-        "confirmation_required": "Remove actions need the harness confirmation phrase.",
-    }
-
-
-def _supply_chain_package_action_error_response(
-    *,
-    operation: str,
-    error: Exception,
-) -> tuple[int, dict[str, object]]:
-    if isinstance(error, GuardSyncAuthorizationExpiredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_reconnect_required",
-                "message": str(error).strip() or "Guard Cloud authorization expired.",
-                "operation": operation,
-            },
-        )
-    if isinstance(error, GuardSyncNotConfiguredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_connect_required",
-                "message": str(error).strip() or "Guard Cloud workspace is not connected.",
-                "operation": operation,
-            },
-        )
-    if isinstance(error, GuardSyncNotAvailableError):
-        payload: dict[str, object] = {
-            "error": "supply_chain_sync_unavailable",
-            "message": str(error).strip() or "Supply-chain sync is not available on this device.",
-            "operation": operation,
-        }
-        if error.retryable:
-            payload["retryable"] = True
-        return (503, payload)
-    message = str(error).strip() or "Guard supply-chain bundle sync failed."
-    return (
-        502,
-        {
-            "error": "supply_chain_sync_failed",
-            "message": message,
-            "operation": operation,
-        },
-    )
-
-
-def _cloud_app_dashboard_session_actions(action_path: str) -> frozenset[str]:
-    return _CLOUD_APP_DASHBOARD_SESSION_ACTIONS.get(action_path, frozenset({action_path}))
-
-
-def _headless_detection_status_to_app_status(value: object) -> str:
-    status_map = {
-        "protected": "protected",
-        "found": "observed",
-        "not_found": "inactive",
-    }
-    return status_map.get(str(value), "unknown")
-
-
-def _headless_error_payload(
-    *,
-    code: str,
-    message: str,
-    retryable: bool,
-    detail: str | None = None,
-) -> dict[str, object]:
-    error_payload: dict[str, object] = {
-        "code": code,
-        "message": message,
-        "retryable": retryable,
-    }
-    if detail:
-        error_payload["detail"] = detail
-    payload: dict[str, object] = {
-        "status": "failed",
-        "error": error_payload,
-    }
-    return payload
-
-
-def _headless_action_error_payload(
-    *,
-    operation: str,
-    error_code: str,
-) -> tuple[int, dict[str, object]]:
-    error_details = {
-        "missing_harness": (
-            400,
-            "Choose an app before retrying.",
-            False,
-        ),
-        "unknown_harness": (
-            404,
-            "This app is not supported by local Guard.",
-            False,
-        ),
-        "confirmation_required": (
-            409,
-            "Disconnect needs the local confirmation phrase before Guard removes protection.",
-            False,
-        ),
-        "unsupported_operation": (
-            400,
-            "This version of local Guard cannot run the requested app action.",
-            False,
-        ),
-    }
-    known_error = error_details.get(error_code)
-    if known_error is not None:
-        status, message, retryable = known_error
-        return status, _headless_error_payload(
-            code=error_code,
-            message=message,
-            retryable=retryable,
-        )
-    operation_code = "proof_failed" if operation == "scan" else f"{operation}_failed"
-    operation_label = "connection check" if operation == "scan" else operation
-    return 400, _headless_error_payload(
-        code=operation_code,
-        message=f"Guard could not finish the {operation_label}.",
-        retryable=True,
-    )
-
-
-def _headless_app_status_from_result(*, operation: str, result: dict[str, object]) -> str:
-    if operation in {"install", "repair"}:
-        managed_install = result.get("managed_install")
-        if isinstance(managed_install, dict) and bool(managed_install.get("active")):
-            return "protected"
-        return "unknown"
-    if operation == "remove":
-        managed_install = result.get("managed_install")
-        if isinstance(managed_install, dict) and managed_install.get("active") is False:
-            return "inactive"
-        return "unknown"
-    verification = result.get("verification")
-    if isinstance(verification, dict):
-        if bool(verification.get("installed")):
-            return "protected"
-        if bool(verification.get("command_available")) or bool(verification.get("config_paths")):
-            return "observed"
-        return "inactive"
-    return "unknown"
-
-
-def _headless_action_state_payload(
-    *,
-    harness: str,
-    operation: str,
-    result: dict[str, object],
-    receipt: dict[str, object],
-) -> dict[str, object]:
-    app_status = _headless_app_status_from_result(operation=operation, result=result)
-    if operation == "install":
-        outcome = "app_connected"
-        message = f"{harness} is connected through local Guard."
-        proof_status = "pending"
-    elif operation == "repair":
-        outcome = "app_repaired"
-        message = f"{harness} protection was refreshed."
-        proof_status = "pending"
-    elif operation == "remove":
-        outcome = "app_disconnected"
-        message = f"{harness} protection was removed."
-        proof_status = "not_applicable"
-    elif operation == "scan":
-        proof_passed = app_status == "protected"
-        # Keep protocol values stable for Cloud clients; user-facing copy below avoids jargon.
-        outcome = "proof_passed" if proof_passed else "proof_failed"
-        message = (
-            f"{harness} connection check passed. Guard sees local protection."
-            if proof_passed
-            else f"{harness} connection check finished, but Guard does not see active local protection yet."
-        )
-        proof_status = "passed" if proof_passed else "failed"
-    else:
-        outcome = "status_checked"
-        message = f"{harness} status checked."
-        proof_status = "not_applicable"
-    return {
-        "app_status": app_status,
-        "message": message,
-        "outcome": outcome,
-        "proof_status": proof_status,
-        "receipt_summary": {
-            "id": receipt.get("id"),
-            "operation": receipt.get("operation"),
-            "status": receipt.get("status"),
-            "timestamp": receipt.get("timestamp"),
-        },
-        "retryable": operation in {"install", "repair", "scan"},
-    }
-
-
-def _run_headless_cloud_sync(
-    *,
-    store: GuardStore,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-) -> dict[str, object]:
-    recorded_at = _now()
-    summary: dict[str, object]
-
-    def _perform_sync() -> dict[str, object]:
-        auth_context = _resolve_guard_sync_auth_context(store)
-        if managed_controls_publish is None:
-            sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
-                store,
-                auth_context,
-            )
-        else:
-            sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
-                store,
-                auth_context,
-                managed_controls_publish,
-            )
-        supply_chain_payload = _sync_supply_chain_cloud_state_with_optional_auth_context(
-            store,
-            auth_context,
-        )
-        latest_state = store.get_latest_guard_connect_state(now=recorded_at) or {}
-        request_id = latest_state.get("request_id") if isinstance(latest_state, dict) else None
-        store.record_latest_guard_connect_sync_success(
-            sync_payload=sync_payload,
-            now=recorded_at,
-            request_id=request_id if isinstance(request_id, str) and request_id else None,
-        )
-        return {
-            "status": "synced",
-            "synced_at": sync_payload.get("synced_at"),
-            "receipts_stored": sync_payload.get("receipts_stored", 0),
-            "runtime_session_id": sync_payload.get("runtime_session_id"),
-            "runtime_session_synced_at": sync_payload.get("runtime_session_synced_at"),
-            "runtime_sessions_visible": sync_payload.get("runtime_sessions_visible"),
-            "supply_chain": supply_chain_payload,
-        }
-
-    def _safe_storage_repair() -> dict[str, object]:
-        try:
-            return repair_guard_cloud_connect_storage(store)
-        except Exception as repair_error:
-            return {
-                "cleared_stale_sign_in": False,
-                "existing_sign_in_valid": False,
-                "repaired_storage": False,
-                "repair_error": str(repair_error),
-            }
-
-    try:
-        summary = _perform_sync()
-    except GuardSyncAuthorizationExpiredError as error:
-        auth_error = error
-        repair = _safe_storage_repair()
-        if repair.get("existing_sign_in_valid"):
-            try:
-                summary = _perform_sync()
-            except GuardSyncAuthorizationExpiredError as retry_error:
-                auth_error = retry_error
-            except GuardSyncNotConfiguredError as retry_error:
-                return headless_sync_retry_summary(
-                    store,
-                    status="not_configured",
-                    error=retry_error,
-                    repair=repair,
-                    recorded_at=recorded_at,
-                    record_retry=True,
-                )
-            except GuardSyncNotAvailableError as retry_error:
-                return headless_sync_retry_summary(
-                    store,
-                    status="not_available",
-                    error=retry_error,
-                    repair=repair,
-                    recorded_at=recorded_at,
-                )
-            except Exception as retry_error:
-                return headless_sync_retry_summary(
-                    store,
-                    status="pending",
-                    error=retry_error,
-                    repair=repair,
-                    recorded_at=recorded_at,
-                )
-            else:
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
-            now=recorded_at,
-            reason=str(auth_error),
-        )
-        summary = {
-            "status": "auth_expired",
-            "message": str(auth_error),
-            "authorization_repair": repair,
-        }
-    except GuardSyncNotConfiguredError as error:
-        config_error = error
-        repair = _safe_storage_repair()
-        if repair.get("existing_sign_in_valid"):
-            try:
-                summary = _perform_sync()
-            except GuardSyncAuthorizationExpiredError as retry_error:
-                return headless_sync_retry_summary(
-                    store,
-                    status="auth_expired",
-                    error=retry_error,
-                    repair=repair,
-                    recorded_at=recorded_at,
-                    record_retry=True,
-                )
-            except GuardSyncNotConfiguredError as retry_error:
-                config_error = retry_error
-            except GuardSyncNotAvailableError as retry_error:
-                return headless_sync_retry_summary(
-                    store,
-                    status="not_available",
-                    error=retry_error,
-                    repair=repair,
-                    recorded_at=recorded_at,
-                )
-            except Exception as retry_error:
-                return headless_sync_retry_summary(
-                    store,
-                    status="pending",
-                    error=retry_error,
-                    repair=repair,
-                    recorded_at=recorded_at,
-                )
-            else:
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
-            now=recorded_at,
-            reason=str(config_error),
-        )
-        summary = {
-            "status": "not_configured",
-            "message": str(config_error),
-            "authorization_repair": repair,
-        }
-    except GuardSyncNotAvailableError as error:
-        summary = {
-            "status": "not_available",
-            "message": str(error),
-        }
-    except Exception as error:
-        summary = {
-            "status": "pending",
-            "message": str(error),
-        }
-    store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-    return summary
-
-
-def _run_headless_cloud_sync_with_optional_publish(
-    *,
-    store: GuardStore,
-    managed_controls_publish: Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None,
-) -> dict[str, object]:
-    try:
-        sync_parameters = inspect.signature(_run_headless_cloud_sync).parameters
-    except (TypeError, ValueError):
-        sync_parameters = {}
-    if managed_controls_publish is not None and "managed_controls_publish" in sync_parameters:
-        return _run_headless_cloud_sync(
-            store=store,
-            managed_controls_publish=managed_controls_publish,
-        )
-    return _run_headless_cloud_sync(store=store)
-
-
-def _managed_controls_publish_for(
-    server: object,
-) -> Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None:
-    runtime = getattr(server, "extension_control_runtime", None)
-    publish = getattr(runtime, "publish_after_commit", None)
-    if not callable(publish):
-        return None
-    return cast(Callable[[ExtensionControlAuthorityView, Callable[[], None]], object], publish)
-
-
-def _queue_headless_cloud_sync(
-    *,
-    store: GuardStore,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-) -> dict[str, object]:
-    if store.get_cloud_sync_profile() is None:
-        with suppress(Exception):
-            repair_guard_cloud_connect_storage(store)
-    if store.get_cloud_sync_profile() is None:
-        return {
-            "status": "not_configured",
-            "message": "Cloud sync is not paired on this machine.",
-        }
-    store_key = _headless_cloud_sync_store_key(store)
-    with _HEADLESS_CLOUD_SYNC_STATE_LOCK:
-        if store_key in _HEADLESS_CLOUD_SYNC_IN_FLIGHT:
-            return {
-                "status": "in_progress",
-                "message": "Cloud sync already running.",
-            }
-        # Short-circuit obvious overlap; sync_local_guard_cloud_proof() still owns the real lock.
-        if store.cloud_sync_in_progress():
-            return {
-                "status": "in_progress",
-                "message": "Cloud sync already running.",
-            }
-        _HEADLESS_CLOUD_SYNC_IN_FLIGHT.add(store_key)
-
-    def _run_and_finalize() -> None:
-        try:
-            _run_headless_cloud_sync_with_optional_publish(
-                store=store,
-                managed_controls_publish=managed_controls_publish,
-            )
-        finally:
-            with _HEADLESS_CLOUD_SYNC_STATE_LOCK:
-                _HEADLESS_CLOUD_SYNC_IN_FLIGHT.discard(store_key)
-
-    threading.Thread(
-        target=_run_and_finalize,
-        daemon=True,
-        name="guard-headless-app-cloud-sync",
-    ).start()
-    return {
-        "status": "queued",
-        "message": "Cloud sync started.",
-    }
-
-
-def _queue_headless_cloud_sync_with_optional_publish(
-    *, store: GuardStore, managed_controls_publish: Callable[..., object] | None
-) -> dict[str, object]:
-    return queue_sync_with_optional_publish(
-        store=store, queue_sync=_queue_headless_cloud_sync, managed_controls_publish=managed_controls_publish
-    )
-
-
-def _maybe_queue_first_cloud_sync(
-    *,
-    store: GuardStore,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-) -> dict[str, object] | None:
-    return maybe_queue_first_cloud_sync(
-        store=store,
-        queue_sync=_queue_headless_cloud_sync,
-        repair_connect=repair_guard_cloud_connect_storage,
-        now=_now,
-        managed_controls_publish=managed_controls_publish,
-    )
-
-
-def _package_firewall_connect_url(store: GuardStore) -> str:
-    profile = store.get_cloud_sync_profile()
-    sync_url = profile.get("sync_url") if isinstance(profile, dict) else None
-    if isinstance(sync_url, str) and sync_url.strip():
-        parsed = urlparse(sync_url)
-        if parsed.scheme and parsed.netloc:
-            return f"{parsed.scheme}://{parsed.netloc}/guard/connect"
-    return "https://hol.org/guard/connect"
-
-
-def _package_firewall_connect_needs_repair(store: GuardStore, reason: str) -> bool:
-    if reason == "guard_cloud_reconnect_required":
-        return True
-    oauth_health = store.get_oauth_local_credential_health()
-    return bool(oauth_health.get("configured"))
-
-
-def _package_firewall_connect_action_label(reason: str, *, repair_copy: bool = False) -> str:
-    if reason == "guard_cloud_reconnect_required" or repair_copy:
-        return "Repair Guard Cloud access"
-    return "Connect HOL Guard Cloud"
-
-
-def _copy_package_firewall_connect_state(server: _GuardDaemonHttpServer) -> dict[str, object] | None:
-    with server.package_firewall_connect_state_lock:
-        current = server.package_firewall_connect_state
-        return dict(current) if isinstance(current, dict) else None
-
-
-def _set_package_firewall_connect_state(server: _GuardDaemonHttpServer, state: dict[str, object] | None) -> None:
-    with server.package_firewall_connect_state_lock:
-        server.package_firewall_connect_state = dict(state) if isinstance(state, dict) else None
-
-
-def _guard_cloud_connect_state_is_in_flight(state: dict[str, object] | None) -> TypeGuard[dict[str, object]]:
-    return isinstance(state, dict) and str(state.get("state") or "") in {"starting", "running"}
-
-
-def _begin_package_firewall_connect_state(
-    server: _GuardDaemonHttpServer,
-    starting_state: dict[str, object],
-) -> tuple[bool, dict[str, object]]:
-    with server.guard_cloud_browser_session_lock:
-        current = _copy_package_firewall_connect_state(server)
-        if _guard_cloud_connect_state_is_in_flight(current):
-            return False, dict(current)
-        current = _copy_guard_cloud_connect_state(server)
-        if _guard_cloud_connect_state_is_in_flight(current):
-            return False, dict(current)
-        _set_package_firewall_connect_state(server, starting_state)
-        return True, dict(starting_state)
-
-
-def _default_package_firewall_connect_flow(
-    *,
-    store: GuardStore,
-    reason: str,
-) -> dict[str, object]:
-    connect_url = _package_firewall_connect_url(store)
-    repair_copy = _package_firewall_connect_needs_repair(store, reason)
-    action_label = _package_firewall_connect_action_label(reason, repair_copy=repair_copy)
-    if repair_copy:
-        title = "Repair Guard Cloud access to restore package firewall"
-        detail = (
-            "Guard already has package-firewall coverage for this machine, but the local cloud authorization is not "
-            "usable right now. Repair it here and Guard will unlock the firewall again."
-        )
-    else:
-        title = "Connect HOL Guard Cloud to enable package firewall"
-        detail = (
-            "Guard continues running locally. Connect HOL Guard Cloud here so the daemon can verify "
-            "package-firewall access before it changes package-manager routing."
-        )
-    return {
-        "state": "idle",
-        "title": title,
-        "detail": detail,
-        "action_label": action_label,
-        "connect_url": connect_url,
-        "authorize_url": None,
-        "browser_opened": None,
-        "request_id": None,
-        "poll_after_ms": None,
-    }
-
-
-def _activate_package_firewall_runtime(context: HarnessContext) -> tuple[int, dict[str, object]]:
-    status = package_shim_status(context)
-    installed_managers = status.get("installed_managers")
-    if not isinstance(installed_managers, list) or not installed_managers:
-        return (
-            409,
-            {
-                "error": "activation_requires_installed_shims",
-                "message": "Protect a package manager before activating this Guard session.",
-            },
-        )
-    activation = activate_package_shims(
-        context,
-        managers=tuple(str(manager) for manager in installed_managers),
-        repair=True,
-    )
-    repaired_status = activation.get("package_shims")
-    if isinstance(repaired_status, dict):
-        status = repaired_status
-    proof = probe_package_shim_intercepts(
-        context,
-        managers=(str(installed_managers[0]),),
-        allow_inactive_path=True,
-        timeout_seconds=10,
-    )
-    if not bool(proof.get("intercept_proved")):
-        return (
-            409,
-            {
-                "error": "shim_verification_failed",
-                "message": ("Guard could not verify the installed package shim. Repair protection and try again."),
-                "package_shims": package_shim_status(context),
-                "proof": proof,
-            },
-        )
-    return (
-        200,
-        {
-            "status": "verified",
-            "message": (
-                "Guard verified the installed package shim directly. Open a new terminal or source the matching "
-                "shell profile to use it. Restart AI apps only when they run package managers, because existing "
-                "app processes do not inherit a terminal PATH change."
-            ),
-            "package_shims": package_shim_status(context),
-            "proof": proof,
-        },
-    )
-
-
-def _repair_detected_package_shims(context: HarnessContext) -> dict[str, object]:
-    current = package_shim_status(context)
-    installed_values = current.get("installed_managers")
-    detected_values = current.get("detected_managers")
-    current_installed = installed_values if isinstance(installed_values, list) else []
-    current_detected = detected_values if isinstance(detected_values, list) else []
-    managers = tuple(
-        dict.fromkeys(
-            [
-                *[str(value) for value in current_installed],
-                *[str(value) for value in current_detected],
-            ]
-        )
-    )
-    if not managers:
-        raise RuntimeError("no detected package managers")
-    result = activate_package_shims(context, managers=managers, repair=False)
-    verified = package_shim_status(context)
-    verified_installed_values = verified.get("installed_managers")
-    verified_detected_values = verified.get("detected_managers")
-    verified_installed = verified_installed_values if isinstance(verified_installed_values, list) else []
-    verified_detected = verified_detected_values if isinstance(verified_detected_values, list) else []
-    installed = {str(value) for value in verified_installed}
-    detected = {str(value) for value in verified_detected}
-    manager_details = verified.get("manager_details")
-    invalid_integrity = (
-        [detail for detail in manager_details if isinstance(detail, dict) and detail.get("integrity") != "ok"]
-        if isinstance(manager_details, list)
-        else ["missing manager details"]
-    )
-    if not detected.issubset(installed) or verified.get("missing_managers") or invalid_integrity:
-        raise RuntimeError("package shim verification failed")
-    return result
-
-
-def _resolve_package_firewall_connect_flow(
-    *,
-    server: _GuardDaemonHttpServer,
-    entitlement: dict[str, object],
-) -> dict[str, object] | None:
-    reason = str(entitlement.get("reason") or "").strip().lower()
-    if reason not in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
-        return None
-    package_current = _copy_package_firewall_connect_state(server)
-    cloud_current = _copy_guard_cloud_connect_state(server)
-    if _guard_cloud_connect_state_is_in_flight(cloud_current):
-        current = cloud_current
-    elif package_current is not None:
-        current = package_current
-    else:
-        current = cloud_current
-    if current is None:
-        return _default_package_firewall_connect_flow(store=server.store, reason=reason)
-    state = str(current.get("state") or "idle")
-    flow = {
-        **_default_package_firewall_connect_flow(store=server.store, reason=reason),
-        **current,
-    }
-    if state in {"starting", "running"}:
-        flow["title"] = "Finish Guard Cloud sign-in in your browser"
-        browser_opened = flow.get("browser_opened") is True
-        flow["detail"] = (
-            "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this page will "
-            "unlock package-firewall controls automatically."
-            if browser_opened
-            else (
-                "HOL Guard is opening the secure sign-in flow in your browser."
-                if state == "starting"
-                else (
-                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                    "not open automatically."
-                )
-            )
-        )
-        flow["poll_after_ms"] = _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS
-        return flow
-    if state == "failed":
-        flow["title"] = "Guard Cloud sign-in needs attention"
-        flow["poll_after_ms"] = None
-        return flow
-    return flow
-
-
-def _copy_guard_cloud_connect_state(server: _GuardDaemonHttpServer) -> dict[str, object] | None:
-    with server.guard_cloud_connect_state_lock:
-        current = server.guard_cloud_connect_state
-        return dict(current) if isinstance(current, dict) else None
-
-
-def _set_guard_cloud_connect_state(server: _GuardDaemonHttpServer, state: dict[str, object] | None) -> None:
-    with server.guard_cloud_connect_state_lock:
-        server.guard_cloud_connect_state = dict(state) if isinstance(state, dict) else None
-
-
-def _begin_guard_cloud_connect_state(
-    server: _GuardDaemonHttpServer,
-    starting_state: dict[str, object],
-) -> tuple[bool, dict[str, object]]:
-    with server.guard_cloud_browser_session_lock:
-        current = _copy_guard_cloud_connect_state(server)
-        if _guard_cloud_connect_state_is_in_flight(current):
-            return False, dict(current)
-        current = _copy_package_firewall_connect_state(server)
-        if _guard_cloud_connect_state_is_in_flight(current):
-            return False, dict(current)
-        _set_guard_cloud_connect_state(server, starting_state)
-        return True, dict(starting_state)
-
-
-def _guard_cloud_connect_repair_mode_from_health(oauth_health: dict[str, object]) -> bool:
-    return bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded"
-
-
-def _guard_cloud_connect_repair_mode(store: GuardStore) -> bool:
-    return _guard_cloud_connect_repair_mode_from_health(store.get_oauth_local_credential_health())
-
-
-def _guard_cloud_connect_required_for_insights(store: GuardStore) -> bool:
-    oauth_health = store.get_oauth_local_credential_health()
-    if _guard_cloud_connect_repair_mode_from_health(oauth_health):
-        return True
-    if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "healthy":
-        return store.get_cloud_sync_profile() is None
-    return True
-
-
-def _default_guard_cloud_connect_flow(*, store: GuardStore, repair_mode: bool) -> dict[str, object]:
-    connect_url = _package_firewall_connect_url(store)
-    action_label = "Repair Guard Cloud access" if repair_mode else "Connect Guard Cloud"
-    if repair_mode:
-        title = "Repair Guard Cloud access to publish insights"
-        detail = (
-            "Guard Cloud sign-in on this machine needs repair before it can publish a public share link. "
-            "Start local connect here and finish approval in your browser."
-        )
-    else:
-        title = "Connect Guard Cloud to publish insights"
-        detail = (
-            "Local Guard remains available. Connect Guard Cloud here so the daemon can publish "
-            "a public share link with preview image support."
-        )
-    return {
-        "state": "idle",
-        "title": title,
-        "detail": detail,
-        "action_label": action_label,
-        "connect_url": connect_url,
-        "authorize_url": None,
-        "browser_opened": None,
-        "request_id": None,
-        "poll_after_ms": None,
-        "purpose": "insights_share",
-    }
-
-
-def _resolve_guard_cloud_connect_flow(*, server: _GuardDaemonHttpServer, store: GuardStore) -> dict[str, object] | None:
-    if not _guard_cloud_connect_required_for_insights(store):
-        return None
-    repair_mode = _guard_cloud_connect_repair_mode(store)
-    cloud_current = _copy_guard_cloud_connect_state(server)
-    package_current = _copy_package_firewall_connect_state(server)
-    current = package_current if _guard_cloud_connect_state_is_in_flight(package_current) else cloud_current
-    if current is None:
-        return _default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode)
-    state = str(current.get("state") or "idle")
-    flow = {
-        **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
-        **current,
-    }
-    if state in {"starting", "running"}:
-        flow["title"] = "Finish Guard Cloud sign-in in your browser"
-        browser_opened = flow.get("browser_opened") is True
-        flow["detail"] = (
-            "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this modal will "
-            "unlock public sharing automatically."
-            if browser_opened
-            else (
-                "HOL Guard is opening the secure sign-in flow in your browser."
-                if state == "starting"
-                else (
-                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                    "not open automatically."
-                )
-            )
-        )
-        flow["poll_after_ms"] = _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS
-        return flow
-    if state == "failed":
-        flow["title"] = "Guard Cloud sign-in needs attention"
-        flow["poll_after_ms"] = None
-        return flow
-    return flow
-
-
-def _guard_cloud_connect_succeeded(store: GuardStore) -> bool:
-    return not _guard_cloud_connect_required_for_insights(store)
-
-
-def _sync_supply_chain_cloud_state_with_optional_auth_context(
-    store: GuardStore,
-    auth_context: dict[str, object] | None,
-    *,
-    workspace_dir: Path | None = None,
-) -> dict[str, object]:
-    try:
-        parameters = inspect.signature(sync_supply_chain_cloud_state).parameters
-    except (TypeError, ValueError):
-        parameters = {}
-    kwargs: dict[str, Any] = {}
-    if auth_context is not None and "auth_context" in parameters:
-        kwargs["auth_context"] = auth_context
-    if workspace_dir is not None and "workspace_dir" in parameters:
-        kwargs["workspace_dir"] = workspace_dir
-    return sync_supply_chain_cloud_state(store, **kwargs)
-
-
-def _sync_local_guard_cloud_proof_with_optional_auth_context(
-    store: GuardStore,
-    auth_context: dict[str, object] | None,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-) -> dict[str, object]:
-    try:
-        parameters = inspect.signature(sync_local_guard_cloud_proof).parameters
-    except (TypeError, ValueError):
-        parameters = {}
-    if (
-        auth_context is not None
-        and "auth_context" in parameters
-        and managed_controls_publish is not None
-        and "managed_controls_publish" in parameters
-    ):
-        return sync_local_guard_cloud_proof(
-            store,
-            auth_context=auth_context,
-            managed_controls_publish=managed_controls_publish,
-        )
-    if auth_context is not None and "auth_context" in parameters:
-        return sync_local_guard_cloud_proof(store, auth_context=auth_context)
-    if managed_controls_publish is not None and "managed_controls_publish" in parameters:
-        return sync_local_guard_cloud_proof(
-            store,
-            managed_controls_publish=managed_controls_publish,
-        )
-    return sync_local_guard_cloud_proof(store)
-
-
-def _finalize_daemon_guard_connect_payload(
-    *,
-    store: GuardStore,
-    connect_url: str,
-    payload: dict[str, object],
-    now: str,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-) -> dict[str, object]:
-    sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
-    resolved_sync_auth_context = sync_auth_context if isinstance(sync_auth_context, dict) else None
-    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
-    sync_url = f"{allowed_origin}/api/guard/receipts/sync"
-    dashboard_url = f"{allowed_origin}/guard"
-    payload.setdefault("connect_url", normalized_connect_url)
-    payload.setdefault("sync_url", sync_url)
-    payload.setdefault("dashboard_url", dashboard_url)
-    payload.setdefault("inbox_url", f"{dashboard_url}/inbox")
-    payload.setdefault("fleet_url", f"{dashboard_url}/protect")
-    if str(payload.get("status") or "") != "connected":
-        return payload
-    store.clear_cloud_sync_state_for_reconnect(
-        now=now,
-        managed_controls_publish=managed_controls_publish,
-    )
-    latest_state = store.record_guard_connect_pairing_completed(
-        sync_url=sync_url,
-        allowed_origin=allowed_origin,
-        now=now,
-    )
-    payload.update(
-        {
-            "status": str(latest_state.get("status") or payload.get("status") or "connected"),
-            "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
-            "completed_at": latest_state.get("completed_at") or now,
-            "latest_connect_state": latest_state,
-        }
-    )
-    oauth_health = store.get_oauth_local_credential_health()
-    if store.get_cloud_sync_profile() is None and (
-        oauth_health.get("state") == "degraded" or not oauth_health.get("configured")
-    ):
-        repair_message = (
-            "Guard Cloud authorization did not persist locally. "
-            "Start Guard Cloud connect again to repair local sign-in."
-        )
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
-            now=now,
-            reason=repair_message,
-        )
-        payload.update(
-            {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": repair_message,
-                "repair_message": repair_message,
-                "latest_connect_state": store.get_effective_guard_connect_state(now=now),
-            }
-        )
-        return payload
-    if store.get_cloud_sync_profile() is None:
-        payload["sync_attempted"] = False
-        return payload
-    payload["sync_attempted"] = True
-    try:
-        sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
-            store,
-            resolved_sync_auth_context,
-            managed_controls_publish,
-        )
-    except GuardSyncNotAvailableError as error:
-        payload = apply_guard_connect_sync_result(
-            store,
-            payload,
-            now=now,
-            error=error,
-            recorded_status="connected",
-            recorded_milestone="sync_not_available",
-            repair_message=str(error),
-        )
-        reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
-        if reconciled_state is not None:
-            payload["milestone"] = str(reconciled_state.get("milestone") or "first_sync_pending")
-            payload["latest_connect_state"] = reconciled_state
-        return payload
-    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-        return apply_guard_connect_sync_result(
-            store,
-            payload,
-            now=now,
-            error=error,
-            recorded_status="retry_required",
-            recorded_milestone="first_sync_failed",
-            repair_message="Run Guard Cloud connect again to refresh local authorization.",
-            payload_status="retry_required",
-        )
-    except (RuntimeError, TimeoutError) as error:
-        return apply_guard_connect_sync_result(
-            store,
-            payload,
-            now=now,
-            error=error,
-            recorded_status="connected",
-            recorded_milestone="first_sync_pending",
-            repair_message=(
-                "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
-                "the daemon is running."
-            ),
-            payload_status="connected",
-        )
-    latest_state = store.record_latest_guard_connect_sync_success(
-        sync_payload=sync_payload,
-        now=str(sync_payload.get("synced_at") or now),
-        request_id=str(latest_state.get("request_id") or ""),
-    )
-    payload.update(
-        {
-            "status": "connected",
-            "milestone": "first_sync_succeeded",
-            "sync_succeeded": True,
-            "sync": sync_payload,
-            "last_sync_at": sync_payload.get("synced_at"),
-            "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
-        }
-    )
-    try:
-        payload["supply_chain"] = _sync_supply_chain_cloud_state_with_optional_auth_context(
-            store,
-            resolved_sync_auth_context,
-        )
-    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
-        payload["supply_chain_error"] = str(error)
-    return payload
-
-
-def _complete_browser_oauth_connect(
-    *,
-    store: GuardStore,
-    session: Any,
-    connect_url: str,
-    browser_opened: bool,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None),
-) -> dict[str, object]:
-    _, allowed_origin = resolve_connect_url(connect_url)
-    oauth_client = resolve_guard_oauth_client_config(allowed_origin)
-    callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-    if callback is None or callback.code is None:
-        raise RuntimeError("Guard OAuth callback missing authorization code.")
-    token_result = exchange_guard_authorization_code(
-        token_endpoint=oauth_client.token_endpoint,
-        client_id=oauth_client.client_id,
-        code=callback.code,
-        redirect_uri=session.redirect_uri,
-        code_verifier=session.pkce_verifier,
-        dpop_key_material=session.dpop_key_material,
-    )
-    if token_result.refresh_token is None:
-        raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
-    timestamp = _now()
-    _persist_oauth_local_credentials(
-        store=store,
-        issuer=oauth_client.issuer,
-        client_id=oauth_client.client_id,
-        refresh_token=token_result.refresh_token,
-        dpop_key_material=session.dpop_key_material,
-        grant_id=token_result.grant_id,
-        **token_result.target_binding(),
-        supply_chain_entitlement=token_result.supply_chain_entitlement,
-        workspace_id=token_result.workspace_id,
-        runtime_id="hol-guard",
-        runtime_label="HOL Guard CLI",
-        access_token=token_result.access_token,
-        access_token_expires_at=token_result.access_token_expires_at,
-        now=timestamp,
-    )
-    sync_url = f"{allowed_origin}/api/guard/receipts/sync"
-    return _finalize_daemon_guard_connect_payload(
-        store=store,
-        connect_url=connect_url,
-        payload={
-            "status": "connected",
-            "connect_mode": "browser_oauth",
-            "browser_opened": browser_opened,
-            "authorize_url": session.authorize_url,
-            "redirect_uri": session.redirect_uri,
-            "grant_id": token_result.grant_id,
-            "machine_id": token_result.machine_id,
-            "workspace_id": token_result.workspace_id,
-            "connect_url": connect_url,
-            "sync_url": sync_url,
-            "_guard_sync_auth_context": _build_sync_auth_context(
-                access_token=token_result.access_token,
-                dpop_key_material=session.dpop_key_material,
-                sync_url=sync_url,
-            ),
-        },
-        now=timestamp,
-        managed_controls_publish=managed_controls_publish,
-    )
-
-
-_PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
-
-
-def _repair_command_activity_persistence_health(store: GuardStore) -> str | None:
-    """Probe command-evidence persistence; return the reason it could not run.
-
-    A probe that cannot evaluate the native policy engine proves nothing, so it
-    must not mutate persistence health. Real probe failures still surface through
-    ``probe_command_activity_persistence``.
-    """
-
-    snapshot = current_extension_control_snapshot()
-    if snapshot is None:
-        try:
-            snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-                store.read_extension_control_authority_for_registry(
-                    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-                    read_only=True,
-                )
-            )
-        except Exception:
-            snapshot = None
-    try:
-        evaluation = (
-            evaluate_command_native(
-                _PROTECTION_REPAIR_PROBE_COMMAND,
-                guard_home=store.guard_home,
-                extension_control_snapshot=snapshot,
-            )
-            if snapshot is not None
-            else None
-        )
-    except Exception:
-        evaluation = None
-    if evaluation is None:
-        return "native_evaluation_unavailable"
-    occurred_at = datetime.now(timezone.utc)
-    activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
-    decision_reason = ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
-    evidence = build_pre_hook_evidence(
-        evaluation,
-        CommandActivityDecisionFacts(
-            policy_action="allow",
-            decision_reason_code=decision_reason,
-            prompted=False,
-            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
-            receipt_id=None,
-        ),
-        activity_id=activity_id,
-        occurred_at=occurred_at,
-        harness="codex",
-        request_correlation=None,
-    )
-    shadow = None
-    shadow_evaluation_succeeded = True
-    try:
-        shadow = build_command_shadow_observation(
-            evaluation,
-            authoritative_action="allow",
-            proposal=baseline_command_shadow_proposal(evaluation),
-            activity_id=activity_id,
-            occurred_at=occurred_at,
-            control=CommandShadowControl(
-                enabled=True,
-                kill_switch=False,
-                release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
-                disabled_cohorts=frozenset(),
-                sample_basis_points=10_000,
-            ),
-        )
-    except (RuntimeError, TypeError, ValueError):
-        shadow = None
-        shadow_evaluation_succeeded = False
-    store.probe_command_activity_persistence(
-        evidence,
-        shadow=shadow,
-        shadow_evaluation_succeeded=shadow_evaluation_succeeded,
-    )
-    return None
 
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
 
-_CONTAINMENT_HEALTH_CACHE_SECONDS = 10.0
 
-
-def cached_containment_health(
-    server: _GuardDaemonHttpServer,
-    *,
-    force_refresh: bool,
-    probe: Callable[[], dict[str, object]],
-) -> dict[str, object] | None:
-    """Return containment health without holding the cache lock across the probe.
-
-    A fresh cache is shared. When the cache is due, one caller runs the probe
-    and everyone else keeps the previous payload. Callers only wait together
-    when no payload exists yet.
-    """
-
-    arrived_generation: int | None = None
-    probe_generation = 0
-    while True:
-        with server.containment_health_cache_lock:
-            if arrived_generation is None:
-                arrived_generation = server.containment_health_generation
-            cached = server.containment_health_cache
-            age = time.monotonic() - server.containment_health_cache_monotonic
-            if cached is not None and age <= _CONTAINMENT_HEALTH_CACHE_SECONDS and not force_refresh:
-                return dict(cached)
-            if server.containment_health_refreshing:
-                if cached is not None and not force_refresh:
-                    return dict(cached)
-                event = server.containment_health_refresh_event
-                run_probe = False
-            else:
-                event = threading.Event()
-                server.containment_health_refresh_event = event
-                server.containment_health_refreshing = True
-                server.containment_health_generation += 1
-                probe_generation = server.containment_health_generation
-                run_probe = True
-        if not run_probe:
-            event.wait()
-            with server.containment_health_cache_lock:
-                done = server.containment_health_completed_generation
-                if force_refresh and arrived_generation is not None and done <= arrived_generation:
-                    continue
-                return None if server.containment_health_cache is None else dict(server.containment_health_cache)
-        break
-    payload: dict[str, object] | None = None
-    failed = False
-    try:
-        payload = probe()
-    except (OSError, RuntimeError, TypeError, ValueError):
-        payload = None
-        failed = True
-    except BaseException:
-        failed = True
-        raise
-    finally:
-        with server.containment_health_cache_lock:
-            if failed or payload is not None:
-                server.containment_health_cache = None if payload is None else dict(payload)
-                server.containment_health_cache_monotonic = time.monotonic()
-            server.containment_health_refreshing = False
-            server.containment_health_completed_generation = probe_generation
-            event.set()
-    return None if payload is None else dict(payload)
-
-
-class _GuardDaemonHandler(BaseHTTPRequestHandler):
+class _GuardDaemonHandler(
+    _DashboardRuntimeReadRoutes,
+    _DashboardRecordsReadRoutes,
+    _DashboardSupportRoutes,
+    _ControlPostRoutes,
+    _SupplyChainRoutes,
+    _CloudConnectRoutes,
+    _HeadlessRoutes,
+    _ControlMiscRoutes,
+    _RepairSettingsRoutes,
+    _ControlPolicyRoutes,
+    _ControlSyncRoutes,
+    _ControlOperationRoutes,
+    _ControlHealthRoutes,
+    BaseHTTPRequestHandler,
+):
     _MAX_BODY_BYTES = 1_000_000
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -2585,7 +1175,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         headers = self._cors_headers_for_request(
             allow_methods="GET, POST, DELETE, OPTIONS",
-            allow_headers=("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"),
+            allow_headers=(
+                "Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"
+            ),
         )
         if headers is None:
             self._write_empty(status=403)
@@ -2630,7 +1222,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if parsed.path == "/healthz":
@@ -2653,7 +1245,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
-            self._stream_events(_int_query_value(parsed.query, "cursor"))
+            cursor_decision = self._native_handler_decision(
+                lambda: native_events_cursor(parsed.query, guard_home=store.guard_home)
+            )
+            if cursor_decision is None:
+                return
+            self._stream_events(cursor_decision.fields["cursor"])
             return
         if parsed.path == "/v1/command-activity/events":
             if self._query_has_guard_token(parsed.query):
@@ -2673,389 +1270,73 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             stream_command_activity_events(self, cursor)
             return
+        if parsed.path.startswith("/v2/"):
+            # /v2/ is outside the /v1/ prefix check below; authenticate it
+            # explicitly before any metadata or ETag comparison.
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if parsed.path.startswith(CATALOG_V2_PREFIX):
+                daemon = self._daemon_server()
+                serve_catalog_read_v2(
+                    self,
+                    path=parsed.path,
+                    query=parsed.query,
+                    if_none_match=self.headers.get("If-None-Match"),
+                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+                    catalog_digest=daemon.extension_control_api.catalog_digest,
+                )
+                return
+            self._write_json({"error": "not_found"}, status=404)
+            return
+        if parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX):
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not discovery_rollout_enabled():
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
+                return
+            if parsed.path == _LOCAL_DISCOVERY_SETTINGS:
+                store = self.server.store  # type: ignore[attr-defined]
+                self._write_json(sponsored_discovery_settings(store))
+                return
+            if parsed.path != _LOCAL_DISCOVERY_PLACEMENTS:
+                self._write_json({"error": "not_found"}, status=404)
+                return
+            # Sponsored discovery is user/managed gated; a disabled preference
+            # still answers a valid policy-blocked projection rather than an
+            # error, so the dashboard can distinguish opt-out from failure.
+            store = self.server.store  # type: ignore[attr-defined]
+            allowed = sponsored_discovery_allowed(store)
+            result = discovery_placement_projection(
+                guard_home=store.guard_home,
+                policy_allowed=allowed,
+            )
+            if result is None:
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=501)
+                return
+            if result.error_code is not None:
+                self._write_json({"error": result.error_code}, status=result.status)
+                return
+            if result.body is None:
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
+                return
+            self._write_discovery_body(result.body)
+            return
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path == "/v1/extension-controls/catalog":
-            try:
-                catalog = self._daemon_server().extension_control_api.catalog()
-            except ExtensionControlApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(catalog, extra_headers={"Cache-Control": "no-store"})
+        if self._serve_dashboard_runtime_read(parsed, path_parts, store):
             return
-        if parsed.path == "/v1/extension-controls/effective":
-            self._write_json(
-                self._daemon_server().extension_control_api.effective(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-        if parsed.path == "/v1/extension-controls/history":
-            try:
-                history = self._daemon_server().extension_control_api.history()
-            except ExtensionControlApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(history, extra_headers={"Cache-Control": "no-store"})
-            return
-        if parsed.path == "/v1/local-clis":
-            handle_local_cli_list(self)
-            return
-        if parsed.path == "/v1/capabilities":
-            self._handle_capabilities()
-            return
-        if parsed.path == "/v1/network/status":
-            self._write_json(
-                build_network_status(
-                    supervisor_health=self._daemon_server().network_supervisor.health(
-                        now_epoch_ms=int(time.time() * 1000)
-                    )
-                ),
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-        if parsed.path == "/v1/runtime/containment-health":
-            self._write_json(
-                {"containment_health": self._containment_health_payload(force_refresh=True)},
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-        if parsed.path == "/v1/sessions":
-            self._write_json({"items": store.list_guard_sessions(limit=200)})
-            return
-        if parsed.path == "/v1/runtime":
-            _maybe_queue_first_cloud_sync(
-                store=store,
-                managed_controls_publish=_managed_controls_publish_for(self._daemon_server()),
-            )
-            config = load_guard_config(store.guard_home)
-            daemon_server = self._daemon_server()
-            include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
-            snapshot = build_runtime_snapshot(
-                store=store,
-                approval_center_url=format_local_http_origin(
-                    daemon_server.daemon_host(),
-                    daemon_server.daemon_port(),
-                ),
-                active_request_id=self._query_string(parsed.query, "active_request_id"),
-                include_items=self._query_bool(parsed.query, "include_items", default=True),
-                receipt_limit=25 if include_receipts else 0,
-                containment_health=self._containment_health_payload(),
-                serving_runtime={
-                    "session_id": daemon_server.runtime_session_id,
-                    "daemon_host": daemon_server.runtime_host,
-                    "daemon_port": daemon_server.daemon_port(),
-                    "started_at": daemon_server.runtime_started_at,
-                    "last_heartbeat_at": _now(),
-                },
-            )
-            self._write_json(
-                {
-                    **snapshot,
-                    "security_level": config.security_level,
-                    "operator_health": self._operator_health_payload(),
-                }
-            )
-            return
-        if parsed.path == "/v1/harnesses":
-            context = self._harness_context({})
-            self._write_json({"items": list_harness_setup_items(context, self.server.store)})  # type: ignore[attr-defined]
-            return
-        if parsed.path == "/v1/supply-chain/package-shims":
-            self._handle_supply_chain_package_firewall_status()
-            return
-        if parsed.path == "/v1/cloud/connect":
-            self._handle_guard_cloud_connect_status()
-            return
-        if parsed.path == "/v1/supply-chain/entitlement":
-            self._write_json(self._supply_chain_entitlement())
-            return
-        if parsed.path == "/v1/supply-chain/bundle":
-            self._handle_get_supply_chain_bundle()
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
-            self._handle_cloud_app_handoff(path_parts[2], parsed.query)
-            return
-        if parsed.path == "/v1/inventory":
-            from ..adapters.contracts import HARNESS_CONTRACTS
-
-            inventory_items = store.list_inventory()
-            installed_harnesses = {str(item.get("harness", "")) for item in inventory_items}
-            from ..protection_capabilities import capability_for
-
-            contracts_index: dict[str, dict[str, object]] = {}
-            for contract in HARNESS_CONTRACTS:
-                payload: dict[str, object] = {
-                    "install_aliases": list(contract.install_aliases),
-                    "event_surfaces": list(contract.event_surfaces),
-                    "native_approval": contract.native_approval,
-                    "browser_fallback": contract.browser_fallback,
-                    "resume_support": contract.resume_support,
-                    "known_blind_spots": contract.known_blind_spots,
-                }
-                capability = capability_for(contract.harness)
-                if capability is not None:
-                    payload.update(capability.to_dict())
-                contracts_index[contract.harness] = payload
-            enriched: list[dict[str, object]] = []
-            for item in inventory_items:
-                harness_name = str(item.get("harness", ""))
-                contract = contracts_index.get(harness_name, {})
-                enriched.append({**item, "contract": contract})
-            uninstalled = [
-                {
-                    "harness": c.harness,
-                    "status": "unknown",
-                    "contract": contracts_index[c.harness],
-                }
-                for c in HARNESS_CONTRACTS
-                if c.harness not in installed_harnesses
-            ]
-            self._write_json({"items": enriched, "available": uninstalled})
-            return
-        if parsed.path == "/v1/settings/export":
-            config = load_guard_config(store.guard_home)
-            self._write_json(_settings_export_payload(config))
-            return
-        if parsed.path == "/v1/settings":
-            from ..config import maybe_auto_revert_watch
-
-            config = maybe_auto_revert_watch(store.guard_home)
-            self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
-            return
-        if parsed.path == "/v1/cloud-review":
-            from .cloud_review_settings import cloud_review_settings_status
-
-            self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
-            return
-        if parsed.path == "/v1/update/status":
-            self._write_json(
-                merge_dashboard_update_progress(
-                    store.guard_home,
-                    build_guard_update_status_payload(guard_home=store.guard_home),
-                ),
-                extra_headers={"Cache-Control": "no-store, max-age=0"},
-            )
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
-            self._handle_session_resume(path_parts[2])
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
-            if not self._header_token_is_valid():
-                self._write_json(
-                    {"error": "unauthorized"},
-                    status=401,
-                    extra_headers=self._cors_headers_for_request(),
-                )
-                return
-            self._handle_request_resume_read(path_parts[2])
-            return
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "operations"]:
-            operation = store.get_guard_operation(path_parts[2])
-            if operation is None:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            self._write_json(operation)
-            return
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
-            self._handle_mcp_policy_request_get(path_parts[3])
-            return
-        if parsed.path == "/v1/events":
-            self._write_json({"items": store.list_events_after(_int_query_value(parsed.query, "cursor"), limit=200)})
-            return
-        if parsed.path == "/v1/requests":
-            self._handle_requests_list(parsed.query)
-            return
-        if parsed.path == "/v1/command-activity":
-            handle_command_activity_list(self, parsed.query)
-            return
-        if parsed.path == "/v1/command-activity/analytics":
-            handle_command_activity_analytics(self, parsed.query)
-            return
-        if parsed.path == "/v1/command-activity/diagnostics":
-            handle_command_activity_diagnostics(self)
-            return
-        if parsed.path == "/v1/command-extensions":
-            handle_command_extensions(self, parsed.query)
-            return
-        if parsed.path == "/v1/connect/state":
-            self._write_legacy_pairing_disabled()
-            return
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
-            approval = store.get_approval_request(path_parts[2])
-            if approval is None:
-                self._write_json(
-                    {
-                        "error": "not_found",
-                        "recovery": {
-                            "code": "request_unknown",
-                            "title": "This request is no longer waiting.",
-                            "body": "The request was either already resolved or expired. You can close this tab.",
-                            "queue_url": self._local_queue_url(),
-                        },
-                    },
-                    status=404,
-                )
-                return
-            self._write_json(approval)
-            return
-        if parsed.path == "/v1/receipts":
-            query = parse_qs(parsed.query)
-            harness_q = query.get("harness", [None])[-1]
-            limit_q = query.get("limit", ["200"])[-1]
-            try:
-                limit_v = min(max(int(limit_q), 1), 500)
-            except (ValueError, TypeError):
-                limit_v = 200
-            self._write_json(
-                {
-                    "items": store.list_receipts(
-                        limit=limit_v,
-                        harness=harness_q if isinstance(harness_q, str) and harness_q else None,
-                    )
-                }
-            )
-            return
-        if parsed.path == "/v1/receipts/analytics":
-            query = parse_qs(parsed.query)
-            activity_days_q = query.get("activity_days", ["90"])[-1]
-            trend_days_q = query.get("trend_days", ["7"])[-1]
-            top_limit_q = query.get("top_limit", ["10"])[-1]
-            try:
-                activity_days = min(max(int(activity_days_q), 1), 366)
-            except (ValueError, TypeError):
-                activity_days = 90
-            try:
-                trend_days = min(max(int(trend_days_q), 1), activity_days)
-            except (ValueError, TypeError):
-                trend_days = 7
-            try:
-                top_limit = min(max(int(top_limit_q), 1), 50)
-            except (ValueError, TypeError):
-                top_limit = 10
-            self._write_json(
-                store.receipt_analytics(
-                    activity_days=activity_days,
-                    trend_days=trend_days,
-                    top_limit=top_limit,
-                )
-            )
-            return
-        if parsed.path == "/v1/receipts/latest":
-            query = parse_qs(parsed.query)
-            harness = query.get("harness", [None])[-1]
-            artifact_id = query.get("artifact_id", [None])[-1]
-            if not isinstance(harness, str) or not harness or not isinstance(artifact_id, str) or not artifact_id:
-                self._write_json({"error": "missing_receipt_query"}, status=400)
-                return
-            receipt = store.get_latest_receipt(harness, artifact_id)
-            if receipt is None:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            self._write_json(receipt)
-            return
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "receipts"]:
-            receipt = store.get_receipt(path_parts[2])
-            if receipt is None:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            self._write_json(receipt)
-            return
-        if parsed.path == "/v1/policy":
-            query = parse_qs(parsed.query)
-            harness = query.get("harness", [None])[-1]
-            harness_filter = harness if isinstance(harness, str) else None
-            self._write_json(
-                {
-                    "items": managed_policy_rows(store, harness_filter),
-                    "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),
-                }
-            )
-            return
-        if parsed.path == "/v1/policy/cloud-exceptions":
-            query = parse_qs(parsed.query)
-            harness = query.get("harness", [None])[-1]
-            harness_filter = harness if isinstance(harness, str) else None
-            self._write_json({"items": store.list_cloud_exceptions(harness=harness_filter)})
-            return
-        if parsed.path == "/v1/policy/cloud-exception-requests":
-            self._handle_cloud_exception_request_list()
-            return
-        if parsed.path == "/v1/evidence":
-            query = parse_qs(parsed.query)
-            harness_q = query.get("harness", [None])[-1]
-            category_q = query.get("category", [None])[-1]
-            severity_q = query.get("severity", [None])[-1]
-            before_q = query.get("before", [None])[-1]
-            limit_q = query.get("limit", ["100"])[-1]
-            try:
-                limit_v = min(max(int(limit_q), 1), 500)
-            except (ValueError, TypeError):
-                limit_v = 100
-            with store._connect() as conn:
-                records = list_evidence(
-                    conn,
-                    harness=harness_q if isinstance(harness_q, str) else None,
-                    category=category_q if isinstance(category_q, str) else None,
-                    severity=severity_q if isinstance(severity_q, str) else None,
-                    before_cursor=before_q if isinstance(before_q, str) else None,
-                    limit=limit_v,
-                    include_details=False,
-                )
-                total = count_evidence(
-                    conn,
-                    harness=harness_q if isinstance(harness_q, str) else None,
-                    category=category_q if isinstance(category_q, str) else None,
-                    severity=severity_q if isinstance(severity_q, str) else None,
-                )
-            self._write_json(
-                {
-                    "items": [evidence_record_to_dict(record) for record in records],
-                    "total": total,
-                }
-            )
-            return
-        if parsed.path == "/v1/evidence/export":
-            query = parse_qs(parsed.query)
-            format_q = query.get("format", ["json"])[-1]
-            with store._connect() as conn:
-                if format_q == "json":
-                    export_body = export_evidence_json(conn, limit=10_000)
-                    content_type = "application/json"
-                elif format_q == "csv":
-                    export_body = export_evidence_csv(conn, limit=10_000)
-                    content_type = "text/csv; charset=utf-8"
-                else:
-                    self._write_json({"error": "invalid_export_format"}, status=400)
-                    return
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.end_headers()
-            self.wfile.write(export_body.encode("utf-8"))
-            return
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "artifacts", path_parts[2]] and path_parts[3] == "diff":
-            query = parse_qs(parsed.query)
-            harness = query.get("harness", [None])[-1]
-            if not isinstance(harness, str) or not harness:
-                self._write_json({"error": "missing_harness"}, status=400)
-                return
-            diff = store.get_latest_diff(harness, unquote(path_parts[2]))
-            if diff is None:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            self._write_json(diff)
-            return
-        if parsed.path == "/v1/read-state":
-            self._write_json({"ids": store.get_read_state()})
-            return
-        if parsed.path in _ROOT_STATIC_FILES:
-            self._write_static_asset(parsed.path.removeprefix("/"))
-            return
-        if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
-            self._write_static_asset(parsed.path.removeprefix("/"))
-            return
-        if self._is_dashboard_route(parsed.path):
-            self._write_dashboard_shell()
+        if self._serve_dashboard_records_read(parsed, path_parts, store):
             return
         self.send_response(404)
         self.end_headers()
@@ -3063,8 +1344,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
-        path_parts = [part for part in parsed.path.split("/") if part]
-        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if not self._header_token_is_valid():
@@ -3113,6 +1393,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json({"error": "not_found"}, status=404)
 
+    @scoped_hook_post
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
@@ -3120,13 +1401,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/v1/connect/requests", "/v1/connect/complete", "/v1/connect/result"}:
             self._write_legacy_pairing_disabled()
             return
-        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS and not self._header_token_is_valid():
+        try:
+            route = native_route_facts("POST", parsed.path, guard_home=self._route_home())
+        except NativeDaemonRouteError:
+            self._write_json(native_route_unavailable_body(), status=503)
+            return
+        discovery_post = parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX)
+        if discovery_post and self._query_has_guard_token(parsed.query):
+            self._record_query_token_rejection()
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS:
+        if (route.route_class != "none" or discovery_post) and not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if route.route_class != "none" or discovery_post:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -3142,6 +1433,55 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "request_body_too_large": 413,
             }.get(body_error, 400)
             self._write_json({"error": body_error}, status=status)
+            return
+        if parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX):
+            if not discovery_rollout_enabled():
+                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
+                return
+            store = self.server.store  # type: ignore[attr-defined]
+            upstream = _LOCAL_DISCOVERY_MEASUREMENT.get(parsed.path)
+            if upstream is not None:
+                # Consent-gated relay: measurement off still allows discovery
+                # but emits no render/event POSTs and no persistent identity.
+                if not sponsored_discovery_measurement_allowed(store):
+                    self._write_json({"error": "measurement_disabled"}, status=403)
+                    return
+                if not isinstance(payload, dict):
+                    self._write_json({"error": "invalid_request"}, status=400)
+                    return
+                # Only the strictly parsed, bounded JSON moves upstream: no
+                # local credential, identifier, or inventory is attached.
+                raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                try:
+                    status, body = relay_discovery_measurement(path=upstream, payload=raw)
+                except DiscoveryReadError as error:
+                    self._write_json({"error": error.code}, status=error.status)
+                    return
+                self._write_json_bytes(
+                    escape_json_for_html(body),
+                    status=status,
+                    extra_headers={"Cache-Control": "no-store"},
+                )
+                return
+            if parsed.path == _LOCAL_DISCOVERY_SETTINGS:
+                update = payload if isinstance(payload, dict) else {}
+                enabled = update.get("sponsored_discovery_enabled")
+                measurement = update.get("sponsored_discovery_measurement_enabled")
+                if enabled is not None and not isinstance(enabled, bool):
+                    self._write_json({"error": "invalid_request"}, status=400)
+                    return
+                if measurement is not None and not isinstance(measurement, bool):
+                    self._write_json({"error": "invalid_request"}, status=400)
+                    return
+                settings = update_sponsored_discovery_settings(
+                    store,
+                    sponsored_discovery_enabled=enabled if isinstance(enabled, bool) else None,
+                    sponsored_discovery_measurement_enabled=measurement if isinstance(measurement, bool) else None,
+                    now=datetime.now(timezone.utc).isoformat(),
+                )
+                self._write_json(settings)
+                return
+            self._write_json({"error": "not_found"}, status=404)
             return
         if parsed.path == "/v1/healthz/verify":
             nonce = self._optional_string(payload.get("nonce")) if payload else None
@@ -3171,8 +1511,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_dashboard_reconnect_verify(payload)
             return
         proof_authorized = challenge_auth(parsed.path, payload, self._consume_codex_daemon_challenge)
-        requires_token = self._requires_header_token(parsed.path, path_parts)
-        if not request_auth(requires_token, proof_authorized, payload, self._header_token_is_valid):
+        if not request_auth(route.requires_header_token, proof_authorized, payload, self._header_token_is_valid):
             if (
                 len(path_parts) == 4
                 and path_parts[:2] == ["v1", "requests"]
@@ -3203,405 +1542,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=401,
             )
             return
-        if parsed.path in _EXTENSION_CONTROL_PATHS:
-            try:
-                if parsed.path.endswith("/test"):
-                    response = self._daemon_server().extension_control_api.test_command(payload)
-                elif parsed.path.endswith("/inspect"):
-                    response = self._daemon_server().extension_control_api.inspect_command(payload)
-                elif parsed.path.endswith("/preview"):
-                    response = self._daemon_server().extension_control_api.preview(payload)
-                elif parsed.path.endswith("/apply"):
-                    response = self._daemon_server().extension_control_api.apply(payload)
-                elif parsed.path.endswith("/acknowledge-degraded"):
-                    response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
-                elif parsed.path.endswith("/recover-authority"):
-                    response = self._daemon_server().extension_control_api.recover_authority(
-                        payload,
-                        require_fresh_totp=self._request_uses_protection_repair_session(),
-                    )
-                else:
-                    response = self._daemon_server().extension_control_api.refresh()
-            except ExtensionControlApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(response, extra_headers={"Cache-Control": "no-store"})
-            return
-        if parsed.path in _LOCAL_CLI_PATHS:
-            handle_local_cli_post(self, parsed.path, payload)
-            return
-        if parsed.path == "/v1/initialize":
-            self._handle_initialize(payload)
-            return
-        if parsed.path == "/v1/command-activity/feedback":
-            handle_command_activity_feedback(self, payload)
-            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
             self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
             self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])
             return
-        if parsed.path == "/v1/clients/attach":
-            self._handle_client_attach(payload)
-            return
-        if parsed.path == "/v1/clients/heartbeat":
-            self._handle_client_heartbeat(payload)
-            return
-        if parsed.path == "/v1/sessions/start":
-            self._handle_session_start(payload)
-            return
-        if parsed.path == "/v1/operations/start":
-            self._handle_operation_start(payload)
-            return
-        if parsed.path == "/v1/operations/block":
-            self._handle_operation_block(payload)
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] == "items":
-            self._handle_operation_item(path_parts[2], payload)
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] == "status":
-            self._handle_operation_status(path_parts[2], payload)
-            return
-        if parsed.path == "/v1/policy/decisions":
-            self._handle_policy_upsert(payload)
-            return
-        if parsed.path == "/v1/policy/resolve":
-            self._handle_policy_resolve(payload)
-            return
-        if parsed.path == "/v1/policy/claim":
-            self._handle_policy_claim(payload)
-            return
-        if parsed.path == "/v1/policy/clear":
-            self._handle_policy_clear(payload)
-            return
-        if parsed.path == "/v1/requests/clear":
-            self._handle_requests_clear(payload)
-            return
-        if parsed.path == "/v1/requests/bulk-allow-once":
-            self._handle_bulk_allow_read_once(payload)
-            return
-        if parsed.path == "/v1/policy/sync":
-            self._handle_headless_policy_sync(payload)
-            return
-        if parsed.path == "/v1/policy/cloud-exception-requests":
-            self._handle_cloud_exception_request_create(payload)
-            return
-        if parsed.path == "/v1/command-queue/worker/refresh":
-            self._handle_command_queue_worker_refresh()
-            return
-        if parsed.path == "/v1/cloud-review":
-            self._handle_cloud_review_settings(payload)
-            return
-        if parsed.path == "/v1/read-state":
-            self._handle_read_state_update(payload)
-            return
-        if parsed.path == "/v1/protection/repair/approval-gate/setup":
-            self._handle_protection_repair_approval_gate_setup(payload)
-            return
-        if parsed.path == "/v1/settings":
-            self._handle_settings_update(payload)
-            return
-        if parsed.path == "/v1/settings/import":
-            self._handle_settings_import(payload)
-            return
-        if parsed.path == "/v1/settings/reset":
-            self._handle_settings_reset(payload)
-            return
-        if parsed.path == "/v1/approval-gate/cooldown/revoke":
-            self._handle_approval_gate_cooldown_revoke(payload)
-            return
-        if parsed.path == "/v1/approval-gate/totp/enroll":
-            self._handle_approval_gate_totp_enroll(payload)
-            return
-        if parsed.path == "/v1/approval-gate/totp/verify":
-            self._handle_approval_gate_totp_verify(payload)
-            return
-        if parsed.path == "/v1/approval-gate/totp/disable":
-            self._handle_approval_gate_totp_disable(payload)
-            return
-        if parsed.path == "/v1/daemon/repair":
-            result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
-            self._write_json(result)
-            return
-        if parsed.path == "/v1/protection/repair":
-            self._handle_protection_repair(payload)
-            return
-        if parsed.path == "/v1/supply-chain/repair":
-            self._run_package_firewall_mutation("repair_all", lambda: self._handle_supply_chain_repair(payload))
-            return
-        if parsed.path == "/v1/insights/share":
-            self._handle_insights_share_publish(payload)
-            return
-        if parsed.path == "/v1/cloud/connect":
-            self._handle_guard_cloud_connect_start()
-            return
-        if parsed.path == "/v1/update/reconnect/prepare":
-            self._handle_dashboard_reconnect_prepare()
-            return
-        if parsed.path == "/v1/update/channel":
-            self._handle_update_channel(payload)
-            return
-        if parsed.path == "/v1/update":
-            self._handle_dashboard_update(payload)
-            return
-        if parsed.path == "/v1/notifications/setup":
-            self._handle_notification_setup(payload)
-            return
-        if (
-            len(path_parts) == 4
-            and path_parts[:3] == ["v1", "audit", "remediations"]
-            and path_parts[3] in _AUDIT_REMEDIATION_ACTIONS
-        ):
-            self._handle_audit_remediation(path_parts[3], payload)
-            return
-        if (
-            len(path_parts) == 4
-            and path_parts[:3] == ["v1", "supply-chain", "package-shims"]
-            and path_parts[3] in _SUPPLY_CHAIN_PACKAGE_ACTIONS
-        ):
-            action = path_parts[3]
-
-            def handle_package_action() -> None:
-                self._handle_supply_chain_package_firewall_action(action, payload)
-
-            if action in {"install", "repair", "uninstall", "remove", "activate", "open-shell", "sync"}:
-                self._run_package_firewall_mutation(action, handle_package_action)
-            else:
-                handle_package_action()
-            return
-        if parsed.path == "/v1/supply-chain/choose-folder":
-            self._handle_supply_chain_choose_folder()
-            return
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
-            action = path_parts[2]
-            if action == "sync":
-                self._run_package_firewall_mutation(
-                    action,
-                    lambda: self._handle_supply_chain_package_firewall_action(action, payload),
-                )
-            else:
-                self._handle_supply_chain_package_firewall_action(action, payload)
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
-            self._handle_harness_action(path_parts[2], path_parts[3], payload)
-            return
-        if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
-            self._write_legacy_cloud_handoff_disabled()
-            return
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"]:
-            self._handle_headless_app_action(path_parts[2], payload)
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
-            self._handle_request_resume_retry(path_parts[2])
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "live-decision":
-            self._handle_codex_live_decision(path_parts[2], payload)
-            return
-        if len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision":
-            self._handle_mcp_policy_decision(path_parts[3], payload)
-            return
-        request_id, action, matched = self._resolve_request_action(path_parts, payload)
-        if not matched:
-            self.send_response(404)
-            self.end_headers()
-            return
-        if action is None:
-            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
-            return
-        if request_id is None:
-            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
-            return
-        scope = payload.get("scope")
-        if not isinstance(scope, str) or not scope.strip():
-            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
-            return
-        scope_contract_version_value = payload.get("scope_contract_version")
-        if scope_contract_version_value is not None and (
-            not isinstance(scope_contract_version_value, str) or not scope_contract_version_value.strip()
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
-            return
-        scope_contract_version = (
-            scope_contract_version_value.strip() if isinstance(scope_contract_version_value, str) else None
-        )
-        if scope_contract_version is not None and (
-            not scope_contract_version.startswith(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX)
-            or not scope_contract_version.removeprefix(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX).isdigit()
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
-            return
-        scope_contract_digest_value = payload.get("scope_contract_digest")
-        if scope_contract_digest_value is not None and (
-            not isinstance(scope_contract_digest_value, str) or not scope_contract_digest_value.strip()
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
-            return
-        scope_contract_digest = (
-            scope_contract_digest_value.strip() if isinstance(scope_contract_digest_value, str) else None
-        )
-        if scope_contract_digest is not None and (
-            len(scope_contract_digest) != 64
-            or any(character not in "0123456789abcdef" for character in scope_contract_digest)
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
-            return
-        try:
-            existing_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
-            if isinstance(existing_request, dict):
-                scope_selection = resolve_request_scope_selection(
-                    existing_request,
-                    action=action,
-                    requested_scope=scope.strip(),
-                    contract_version=scope_contract_version,
-                    contract_digest=scope_contract_digest,
-                )
-                if existing_request.get("status") != "pending":
-                    if (
-                        existing_request.get("resolution_action") == action
-                        and existing_request.get("resolution_scope") == scope_selection.applied_scope
-                    ):
-                        self._write_json(
-                            {
-                                "resolved": True,
-                                "idempotent": True,
-                                "resolved_request": existing_request,
-                                "requested_scope": scope_selection.requested_scope,
-                                "applied_scope": scope_selection.applied_scope,
-                                **request_scope_contract_payload(existing_request),
-                            }
-                        )
-                        return
-                    raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
-            persist_policy = self._approval_persist_policy(payload)
-            updated = apply_approval_resolution(
-                store=self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
-                action=action,
-                scope=scope.strip(),
-                workspace=self._optional_string(payload.get("workspace")),
-                reason=self._optional_string(payload.get("reason")),
-                return_queue_result=True,
-                resolve_scope_matches=True,
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-                persist_policy=persist_policy,
-                scope_contract_version=scope_contract_version,
-                scope_contract_digest=scope_contract_digest,
-                mcp_grant_target=payload.get("mcp_grant_target"),
-                mcp_grant_duration=payload.get("mcp_grant_duration"),
-                local_tool_grant_target=payload.get("local_tool_grant_target"),
-                local_tool_grant_duration=payload.get("local_tool_grant_duration"),
-            )
-        except ApprovalRequestNotFoundError:
-            self._write_json(
-                {
-                    "resolved": False,
-                    "error": "not_found",
-                    "recovery": {
-                        "code": "request_unknown",
-                        "title": "This request is no longer waiting.",
-                        "body": "The request was either already resolved or expired. You can close this tab.",
-                        "queue_url": self._local_queue_url(),
-                    },
-                },
-                status=404,
-            )
-            return
-        except ApprovalRequestAlreadyResolvedError:
-            resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
-            if isinstance(resolved_request, dict):
-                try:
-                    replay_selection = resolve_request_scope_selection(
-                        resolved_request,
-                        action=action,
-                        requested_scope=scope.strip(),
-                        contract_version=scope_contract_version,
-                        contract_digest=scope_contract_digest,
-                    )
-                except StaleApprovalScopeContractError as error:
-                    self._write_stale_approval_scope_error(error)
-                    return
-                except IneligibleApprovalScopeError as error:
-                    self._write_ineligible_approval_scope_error(error)
-                    return
-                except ValueError as error:
-                    self._write_json({"resolved": False, "error": str(error)}, status=400)
-                    return
-                if (
-                    resolved_request.get("resolution_action") == action
-                    and resolved_request.get("resolution_scope") == replay_selection.applied_scope
-                ):
-                    self._write_json(
-                        {
-                            "resolved": True,
-                            "idempotent": True,
-                            "resolved_request": resolved_request,
-                            "requested_scope": replay_selection.requested_scope,
-                            "applied_scope": replay_selection.applied_scope,
-                            **request_scope_contract_payload(resolved_request),
-                        }
-                    )
-                    return
-            self._write_json(
-                {
-                    "resolved": False,
-                    "error": "already_resolved",
-                    "recovery": {
-                        "code": "request_resolved",
-                        "title": "This request has already been resolved.",
-                        "body": (
-                            "If the action is blocked and you believe it should be allowed, "
-                            "you can re-submit from your AI assistant."
-                        ),
-                        "queue_url": self._local_queue_url(),
-                    },
-                },
-                status=409,
-            )
-            return
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error, resolved=False)
-            return
-        except StaleApprovalScopeContractError as error:
-            self._write_stale_approval_scope_error(error)
-            return
-        except IneligibleApprovalScopeError as error:
-            self._write_ineligible_approval_scope_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"resolved": False, "error": str(error)}, status=400)
-            return
-        normalized_scope = scope.strip()
-        item = updated.get("item")
-        harness_str = str(item.get("harness", "")) if isinstance(item, dict) else ""
-        self.server.store.add_event(  # type: ignore[attr-defined]
-            "approval_resolved",
-            {"request_id": request_id, "action": action, "scope": normalized_scope, "harness": harness_str},
-            _now(),
-        )
-        harness = str(updated.get("harness", ""))
-        resolved_harness = harness_str or harness
-        copy = _build_resolution_copy(action, resolved_harness)
-        updated, copy = apply_local_approval_continuation(
-            store=self.server.store,  # type: ignore[attr-defined]
-            updated=updated,
-            request_id=request_id,
-            action=action,
-            harness=resolved_harness,
-            copy=copy,
-            now=_now,
-        )
-        updated["copy"] = copy
-        updated["retry_hint"] = copy["body"]
-        self._write_json(updated)
+        self._dispatch_control_post(parsed, path_parts, payload, route)
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return
-
-    def _local_queue_url(self) -> str:
-        host = self._daemon_server().daemon_host()
-        port = self._daemon_server().daemon_port()
-        return _build_local_url(host, port, "/#/inbox")
 
     def _load_request_body(self) -> tuple[dict[str, object], str | None]:
         if self.headers.get("Transfer-Encoding") is not None:
@@ -3658,2466 +1608,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             remaining -= len(chunk)
         return b"".join(chunks), None
 
-    def _handle_capabilities(self) -> None:
-        context = self._harness_context({})
-        items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
-        supported = []
-        failure_reasons = _headless_safe_failure_reasons()
-        for item in items:
-            harness = item.get("harness")
-            if not isinstance(harness, str):
-                continue
-            supported.append(
-                {
-                    "display_name": item.get("display_name"),
-                    "harness": harness,
-                    "status": _headless_detection_status_to_app_status(item.get("status")),
-                    "command_available": bool(item.get("command_available")),
-                    "headless_actions": list(_HEADLESS_OPERATIONS[:-1]),
-                    "safe_failure_reasons": failure_reasons,
-                }
-            )
-        self._write_json(
-            {
-                "auth_state": "dashboard_session" if self._dashboard_session_token_is_valid() else "local_token",
-                "command_available": any(bool(item.get("command_available")) for item in items),
-                "daemon": {
-                    "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
-                    "package_version": __version__,
-                    "platform": platform.system().lower() or "unknown",
-                },
-                "headless_api": {
-                    "execution_mode": "guard_cloud_command_queue",
-                    "operations": list(_HEADLESS_OPERATIONS),
-                },
-                "package_firewall_api": {
-                    "execution_mode": "guard_cloud_command_queue",
-                    "operations": ["status", "connect", "install", "repair", "test", "audit", "sync", "remove"],
-                },
-                "safe_failure_reasons": _headless_safe_failure_reasons(),
-                "supported_harnesses": sorted(item["harness"] for item in supported),
-                "items": supported,
-            }
-        )
-
-    def _latest_cloud_sync_snapshot(self) -> dict[str, object]:
-        latest_payload = self.server.store.get_sync_payload("headless_app_sync_summary")  # type: ignore[attr-defined]
-        if not isinstance(latest_payload, dict):
-            latest_payload = self.server.store.get_sync_payload("sync_summary")  # type: ignore[attr-defined]
-        if isinstance(latest_payload, dict):
-            return dict(latest_payload)
-        return {}
-
-    def _headless_reconnect_payload(
-        self,
-        *,
-        cloud_sync: dict[str, object],
-        location_id: str | None,
-    ) -> dict[str, object]:
-        runtime_summary = self.server.store.get_sync_payload("runtime_session_summary")  # type: ignore[attr-defined]
-        runtime = runtime_summary if isinstance(runtime_summary, dict) else {}
-        latest_cloud_sync = self._latest_cloud_sync_snapshot()
-        cloud_sync_status = self._optional_string(cloud_sync.get("status")) or "unknown"
-        if cloud_sync_status in {"queued", "in_progress"}:
-            reconciliation_status = cloud_sync_status
-        elif cloud_sync_status == "auth_expired":
-            reconciliation_status = "auth_expired"
-        elif cloud_sync_status == "not_configured":
-            reconciliation_status = "not_configured"
-        elif cloud_sync_status == "synced":
-            reconciliation_status = "synced"
-        else:
-            reconciliation_status = "pending"
-        return {
-            "correlation_id": str(uuid.uuid4()),
-            "freshness": {
-                "last_receipt_sync_at": self._optional_string(latest_cloud_sync.get("synced_at")),
-                "last_runtime_sync_at": (
-                    self._optional_string(runtime.get("runtime_session_synced_at"))
-                    or self._optional_string(runtime.get("synced_at"))
-                ),
-                "local_guard_online_at": self._optional_string(runtime.get("local_guard_online_at")),
-            },
-            "latest_cloud_sync": latest_cloud_sync,
-            "local_identity": {
-                "daemon_id": self._optional_string(runtime.get("runtime_device_id")),
-                "daemon_version": __version__,
-                "hostname": platform.node() or None,
-                "ip_address": None,
-                "private_ip_address": None,
-                "public_ip_address": None,
-            },
-            "location_id": location_id,
-            "reconciliation_status": reconciliation_status,
-        }
-
-    def _headless_app_action_payload(
-        self,
-        *,
-        action_path: str,
-        payload: dict[str, object],
-    ) -> tuple[int, dict[str, object]]:
-        try:
-            mapping = _HEADLESS_APP_ACTIONS[action_path]
-        except KeyError:
-            return _headless_action_error_payload(
-                operation=action_path,
-                error_code="unsupported_operation",
-            )
-        operation, harness_action = mapping
-        harness = self._optional_string(payload.get("harness"))
-        if harness is None:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code="missing_harness",
-            )
-        try:
-            adapter = get_adapter(harness)
-        except ValueError:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code="unknown_harness",
-            )
-        try:
-            surface = self._cursor_headless_surface(payload) if adapter.harness == "cursor" else None
-        except ValueError:
-            error_payload = _headless_error_payload(
-                code="invalid_cursor_surface",
-                message="Choose Cursor editor or CLI before retrying this local action.",
-                retryable=False,
-            )
-            error = error_payload["error"]
-            if isinstance(error, dict):
-                error["app_id"] = "cursor"
-                error["surface"] = self._optional_string(payload.get("surface")) or ""
-            return 400, error_payload
-        context = self._harness_context(payload)
-        try:
-            if harness_action == "verify":
-                verification_action = "status" if action_path == "status" else "test"
-                result = build_harness_verification(
-                    adapter.harness,
-                    context,
-                    self.server.store,  # type: ignore[attr-defined]
-                    surface=surface,
-                    action=verification_action,
-                )
-            else:
-                result = self._run_headless_managed_action(adapter.harness, harness_action, payload, context)
-        except ApprovalGateError as error:
-            return error.status, error.to_payload()
-        except ValueError as error:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code=str(error),
-            )
-        location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
-            payload.get("locationId")
-        )
-        receipt = self._record_headless_receipt(
-            harness=adapter.harness,
-            operation=operation,
-            payload=payload,
-            result=result,
-            location_id=location_id,
-            workspace_id=self._optional_string(payload.get("workspace_id")),
-            cloud_sync={"status": "pending"},
-        )
-        cloud_sync = _queue_headless_cloud_sync_with_optional_publish(
-            store=self.server.store,
-            managed_controls_publish=_managed_controls_publish_for(self.server),
-        )
-        receipt["cloud_sync"] = cloud_sync
-        return 200, {
-            "cloud_sync": cloud_sync,
-            "harness": adapter.harness,
-            "operation": operation,
-            "result": result,
-            "receipt": receipt,
-            "state": _headless_action_state_payload(
-                harness=adapter.harness,
-                operation=operation,
-                result=result,
-                receipt=receipt,
-            ),
-            "reconnect": self._headless_reconnect_payload(
-                cloud_sync=cloud_sync,
-                location_id=location_id,
-            ),
-            "status": "completed",
-        }
-
-    def _handle_cloud_app_handoff(self, harness: str, query_string: str) -> None:
-        _ = (harness, query_string)
-        self._write_legacy_cloud_handoff_disabled()
-
-    def _handle_headless_app_action(self, action_path: str, payload: dict[str, object]) -> None:
-        status, payload = self._headless_app_action_payload(action_path=action_path, payload=payload)
-        self._write_json(payload, status=status)
-
-    def _run_headless_managed_action(
-        self,
-        harness: str,
-        action: str,
-        payload: dict[str, object],
-        context: HarnessContext,
-    ) -> dict[str, object]:
-        surface = self._cursor_headless_surface(payload) if harness == "cursor" else None
-        if action == "uninstall":
-            expected_confirmation = uninstall_confirmation_token(harness)
-            confirmation = self._optional_string(payload.get("confirmation_phrase")) or self._optional_string(
-                payload.get("confirmation_token")
-            )
-            if confirmation != expected_confirmation:
-                raise ValueError("confirmation_required")
-            require_harness_disconnect_gate(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                payload,
-                harness=harness,
-            )
-        install_command = "uninstall" if action == "uninstall" else "install"
-        return apply_managed_install(
-            install_command,
-            harness,
-            False,
-            context,
-            self.server.store,  # type: ignore[attr-defined]
-            self._optional_string(payload.get("workspace_id")),
-            _now(),
-            surface=surface,
-        )
-
-    def _handle_headless_policy_sync(self, payload: dict[str, object]) -> None:
-        harness = self._optional_string(payload.get("harness"))
-        if harness is None:
-            self._write_json({"error": "missing_harness"}, status=400)
-            return
-        try:
-            adapter = get_adapter(harness)
-        except ValueError:
-            self._write_json({"error": "unknown_harness"}, status=404)
-            return
-        try:
-            approval_gate_grant = require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="policy_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
-        policy_bundle = self._policy_memory_payload(payload.get("policy_bundle") or payload.get("policyBundle"))
-        validated_policy_bundle: dict[str, object] | None = None
-        validated_policy_bundle_delivery: dict[str, object] | None = None
-        managed_controls_policy: ParsedManagedControlsPolicy | None = None
-        managed_controls_capabilities = frozenset[str]()
-        applied_bundle_hash = applied_bundle_version = cast(str | None, None)
-        if not policy_memory and not policy_bundle:
-            self._write_json({"error": "missing_policy_memory"}, status=400)
-            return
-        if policy_memory:
-            self._write_json({"error": "unsupported_policy_memory_contract"}, status=400)
-            return
-        if policy_bundle:
-            validated_policy_bundle, rejection_reason, trusted_policy_bundle_keys = validate_synced_policy_bundle(
-                policy_bundle,
-                stored_keyring=self.server.store.get_sync_payload("policy_bundle_keyring"),  # type: ignore[attr-defined]
-                sync_payload=payload if isinstance(payload, dict) else None,
-                supply_chain_keyring=self.server.store.get_sync_payload("supply_chain_bundle_keyring"),  # type: ignore[attr-defined]
-                managed_keyring_provenance=self.server.store.get_sync_payload(  # type: ignore[attr-defined]
-                    MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY
-                ),
-                expected_workspace_id=self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
-            )
-            existing_policy_bundle, _existing_bundle_error = _validate_cached_policy_bundle(
-                self.server.store,  # type: ignore[attr-defined]
-                self.server.store.get_sync_payload("policy_bundle"),  # type: ignore[attr-defined]
-            )
-            if validated_policy_bundle is None:
-                resolved_reason = rejection_reason or "invalid_policy_bundle"
-                error_payload: dict[str, object] = {"error": resolved_reason}
-                remediation = policy_bundle_rejection_message(resolved_reason)
-                if remediation is not None:
-                    error_payload["message"] = remediation
-                self._write_json(error_payload, status=400)
-                return
-            if not _daemon_version_supported(validated_policy_bundle):
-                self._write_json({"error": "unsupported_daemon_version"}, status=400)
-                return
-            if not policy_bundle_is_enforceable(validated_policy_bundle):
-                self._write_json(
-                    {
-                        "error": "inactive_rollout_state",
-                        "message": policy_bundle_rejection_message("inactive_rollout_state"),
-                    },
-                    status=400,
-                )
-                return
-            if _policy_bundle_is_version_downgrade(
-                _policy_bundle_downgrade_reference(self.server.store, existing_policy_bundle),  # type: ignore[attr-defined]
-                validated_policy_bundle,
-            ):
-                self._write_json({"error": "bundle_version_downgrade"}, status=400)
-                return
-            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
-            if validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                (
-                    managed_controls_policy,
-                    managed_controls_capabilities,
-                    validated_policy_bundle_delivery,
-                    managed_error,
-                ) = daemon_managed_controls_candidate(
-                    store=self.server.store,  # type: ignore[attr-defined]
-                    payload=payload,
-                    policy_bundle=validated_policy_bundle,
-                    device_id=device_id,
-                )
-                if managed_error is not None:
-                    self._write_json({"error": managed_error}, status=400)
-                    return
-            applied_at = _now()
-            signed_remote_decisions = _build_policy_bundle_decisions(
-                validated_policy_bundle,
-                device_id=device_id,
-                device_name=device_name,
-            )
-            policy_bundle_ack = policy_bundle_acknowledgement_payload(
-                device_id=device_id,
-                device_name=device_name,
-                policy_bundle=validated_policy_bundle,
-                synced_at=applied_at,
-                delivery=validated_policy_bundle_delivery,
-            )
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                self.server.store,  # type: ignore[attr-defined]
-                sync_exceptions=[],
-                policy_bundle=validated_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-                device_id=device_id,
-            )
-            try:
-                activated, activation_rejection_reason = activate_with_reason(
-                    self.server.store.apply_policy_bundle_authority,  # type: ignore[attr-defined]
-                    signed_remote_decisions,
-                    applied_at,
-                    policy_bundle=validated_policy_bundle,
-                    policy_bundle_keyring=policy_bundle_keyring_payload(
-                        trusted_policy_bundle_keys,
-                        workspace_id=self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
-                    ),
-                    cloud_exceptions=cloud_exception_items,
-                    policy_bundle_ack=policy_bundle_ack,
-                    policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(validated_policy_bundle),
-                    update_last_good=True,
-                    policy_bundle_last_error={},
-                    managed_controls_policy=managed_controls_policy,
-                    managed_controls_negotiated_capabilities=managed_controls_capabilities,
-                    managed_controls_delivery=validated_policy_bundle_delivery,
-                    managed_controls_publish=_managed_controls_publish_for(self.server),
-                    approval_gate_grant=approval_gate_grant,
-                    remote_write_authorized=True,
-                )
-            except (ExtensionControlAuthorityError, ValueError):
-                self._write_json({"error": "managed_runtime_publish_failed"}, status=503)
-                return
-            if activated is None:
-                self._write_json({"error": activation_rejection_reason}, status=400)
-                return
-            receipt_redaction_level = validated_policy_bundle.get("receiptRedactionLevel")
-            if isinstance(receipt_redaction_level, str) and receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                _persist_cloud_receipt_redaction_level(
-                    self.server.store,  # type: ignore[attr-defined]
-                    level=receipt_redaction_level,
-                    synced_at=applied_at,
-                )
-            else:
-                _reset_cloud_receipt_redaction_authority(  # type: ignore[arg-type]
-                    self.server.store,  # type: ignore[attr-defined]
-                    synced_at=applied_at,
-                )
-            applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
-            applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
-        self._write_json(
-            {
-                "bundle_hash": applied_bundle_hash,
-                "bundle_version": applied_bundle_version,
-                "harness": adapter.harness,
-                "operation": "policy_sync",
-                "status": "completed",
-            }
-        )
-
-    def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
-        if action != "package_shim_path":
-            self._write_json({"error": "unsupported_remediation", "operation": action}, status=404)
-            return
-        manager = self._optional_string(payload.get("manager"))
-        if manager is None:
-            self._write_json({"error": "missing_manager", "operation": action}, status=400)
-            return
-        managers, manager_error = self._supply_chain_managers({"managers": [manager]})
-        if manager_error is not None:
-            self._write_json({"error": manager_error, "operation": action}, status=400)
-            return
-        entitlement = self._supply_chain_entitlement()
-        if not bool(entitlement["allowed"]):
-            status, error_code, message = package_firewall_block_details(entitlement)
-            current_status = package_shim_status(self._supply_chain_context(payload))
-            self._write_json(
-                {
-                    "available_actions": package_firewall_available_actions(
-                        entitlement,
-                        has_installed_managers=bool(current_status.get("installed_managers")),
-                    ),
-                    "entitlement": entitlement,
-                    "error": error_code,
-                    "message": message,
-                    "operation": action,
-                },
-                status=status,
-            )
-            return
-        context = self._supply_chain_context(payload)
-        try:
-            require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="supply_chain_firewall",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            activation_result = activate_package_shims(context, managers=managers)
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": str(error), "operation": action}, status=400)
-            return
-        result = {
-            "manager": manager,
-            **activation_result,
-        }
-        receipt_overrides = package_firewall_receipt_metadata(
-            operation=action,
-            result=result,
-            managers=(manager,),
-            workspace_dir=context.workspace_dir,
-        )
-        scanner_evidence = receipt_overrides.get("scanner_evidence")
-        receipt = self._record_headless_receipt(
-            harness="package-firewall",
-            operation=action,
-            payload=payload,
-            result=result,
-            workspace_id=self._optional_string(payload.get("workspace_id"))
-            or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
-            policy_decision=self._optional_string(receipt_overrides.get("policy_decision")),
-            capabilities_summary=self._optional_string(receipt_overrides.get("capabilities_summary")),
-            artifact_name=self._optional_string(receipt_overrides.get("artifact_name")),
-            scanner_evidence_extra=scanner_evidence if _is_string_object_dict(scanner_evidence) else None,
-        )
-        self._write_json(
-            {
-                "entitlement": entitlement,
-                "operation": action,
-                "receipt": receipt,
-                "result": result,
-                "status": "completed",
-            }
-        )
-
-    def _handle_supply_chain_package_firewall_status(self) -> None:
-        entitlement = self._supply_chain_entitlement()
-        status = package_shim_dashboard_status(self._harness_context({}))
-        audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
-        self._write_json(
-            {
-                "actions": package_firewall_action_states(
-                    entitlement,
-                    has_installed_managers=bool(status.get("installed_managers")),
-                ),
-                "audit_workspace_dir": (str(audit_workspace_dir) if audit_workspace_dir is not None else None),
-                "cli_fallback": {
-                    "connect": "hol-guard connect",
-                    "install": "hol-guard package-shims install --json",
-                    "status": "hol-guard package-shims status --json",
-                    "remove": "hol-guard package-shims uninstall --json",
-                },
-                "connect_flow": self._supply_chain_connect_flow(entitlement),
-                "entitlement": entitlement,
-                "operation": "status",
-                "status": "completed",
-                "supported_managers": list(package_shim_supported_managers()),
-                "package_shims": status,
-            }
-        )
-
-    def _handle_supply_chain_repair(self, payload: dict[str, object]) -> None:
-        if not self._enforce_package_firewall_rate_limit("repair", payload):
-            return
-
-        try:
-            require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="supply_chain_firewall",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
-        entitlement = self._supply_chain_entitlement()
-        context = self._supply_chain_context(payload)
-        current_status = package_shim_status(context)
-        if not package_firewall_operation_allowed(
-            entitlement,
-            "repair",
-            has_installed_managers=bool(current_status.get("installed_managers")),
-        ):
-            status, error_code, message = package_firewall_block_details(entitlement)
-            self._write_json(
-                {
-                    "entitlement": entitlement,
-                    "error": error_code,
-                    "message": message,
-                    "operation": "repair_all",
-                },
-                status=status,
-            )
-            return
-        result = coordinate_supply_chain_repair(
-            repair_package_shims=lambda: _repair_detected_package_shims(context),
-            activate_runtime=lambda: _activate_package_firewall_runtime(context),
-            sync_intelligence=lambda: repair_sync_intelligence(
-                self.server.store,  # type: ignore[attr-defined]
-                workspace_dir=context.workspace_dir,
-            ),
-        )
-        receipt = self._record_headless_receipt(
-            harness="package-firewall",
-            operation="repair_all",
-            payload=payload,
-            result=result,
-            workspace_id=self._optional_string(payload.get("workspace_id"))
-            or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
-        )
-        self._write_json(
-            {
-                "entitlement": entitlement,
-                "operation": "repair_all",
-                "receipt": receipt,
-                "result": result,
-                "status": "completed" if result["repaired"] is True else "incomplete",
-            }
-        )
-
-    def _handle_supply_chain_package_firewall_action(self, action: str, payload: dict[str, object]) -> None:
-        if action == "connect":
-            self._handle_supply_chain_package_firewall_connect()
-            return
-        operation = "remove" if action == "uninstall" else action
-        if operation == "open-shell":
-            operation = "activate"
-        if not self._enforce_package_firewall_rate_limit(operation, payload):
-            return
-        entitlement = self._supply_chain_entitlement()
-        try:
-            context = self._supply_chain_context(
-                payload,
-                reject_invalid_explicit=operation == "audit",
-            )
-        except ValueError as error:
-            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
-            return
-        current_status = package_shim_status(context)
-        if not package_firewall_operation_allowed(
-            entitlement,
-            operation,
-            has_installed_managers=bool(current_status.get("installed_managers")),
-        ):
-            status, error_code, message = package_firewall_block_details(entitlement)
-            self._write_json(
-                {
-                    "available_actions": package_firewall_available_actions(
-                        entitlement,
-                        has_installed_managers=bool(current_status.get("installed_managers")),
-                    ),
-                    "entitlement": entitlement,
-                    "error": error_code,
-                    "message": message,
-                    "operation": operation,
-                },
-                status=status,
-            )
-            return
-        managers, manager_error = self._supply_chain_managers(payload)
-        if manager_error is not None:
-            self._write_json({"error": manager_error, "operation": operation}, status=400)
-            return
-        try:
-            if operation in {"install", "repair", "remove", "test", "sync"}:
-                require_high_risk(
-                    self.server.store.guard_home,  # type: ignore[attr-defined]
-                    purpose="supply_chain_firewall",
-                    approval_gate_input=approval_gate_input_from_mapping(payload),
-                )
-            if operation == "activate":
-                status, response = _activate_package_firewall_runtime(context)
-                self._write_json(response, status=status)
-                return
-            result = self._run_supply_chain_package_action(operation, context, managers)
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
-            return
-        except Exception as error:
-            status, error_payload = _supply_chain_package_action_error_response(
-                operation=operation,
-                error=error,
-            )
-            self._write_json(error_payload, status=status)
-            return
-        receipt_overrides = package_firewall_receipt_metadata(
-            operation=operation,
-            result=result,
-            managers=managers,
-            workspace_dir=context.workspace_dir,
-            store=self.server.store,  # type: ignore[attr-defined]
-        )
-        scanner_evidence = receipt_overrides.get("scanner_evidence")
-        receipt = self._record_headless_receipt(
-            harness="package-firewall",
-            operation=operation,
-            payload=payload,
-            result=result,
-            workspace_id=self._optional_string(payload.get("workspace_id"))
-            or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
-            policy_decision=self._optional_string(receipt_overrides.get("policy_decision")),
-            capabilities_summary=self._optional_string(receipt_overrides.get("capabilities_summary")),
-            artifact_name=self._optional_string(receipt_overrides.get("artifact_name")),
-            scanner_evidence_extra=scanner_evidence if _is_string_object_dict(scanner_evidence) else None,
-        )
-        response_status = "completed"
-        if operation == "audit":
-            audit_status = result.get("audit_status")
-            if audit_status == "incomplete":
-                response_status = "incomplete"
-        response_payload: dict[str, object] = {
-            "entitlement": entitlement,
-            "operation": operation,
-            "receipt": receipt,
-            "result": result,
-            "status": response_status,
-        }
-        if operation == "audit":
-            cloud_sync = _queue_headless_cloud_sync_with_optional_publish(
-                store=self.server.store,
-                managed_controls_publish=_managed_controls_publish_for(self.server),
-            )
-            receipt["cloud_sync"] = cloud_sync
-            response_payload["cloud_sync"] = cloud_sync
-        self._write_json(response_payload)
-
-    def _run_supply_chain_package_action(
-        self,
-        operation: str,
-        context: HarnessContext,
-        managers: tuple[str, ...] | None,
-    ) -> dict[str, object]:
-        store = self.server.store  # type: ignore[attr-defined]
-        if operation == "install":
-            return activate_package_shims(context, managers=managers)
-        if operation == "repair":
-            return activate_package_shims(context, managers=managers, repair=True)
-        if operation == "remove":
-            return uninstall_package_shims(context, managers=managers)
-        if operation == "test":
-            return probe_package_shim_intercepts(
-                context,
-                managers=managers,
-                workspace_dir=context.workspace_dir,
-            )
-        if operation == "audit":
-            if context.workspace_dir is None:
-                raise ValueError("workspace_dir_required")
-            config = load_guard_config(store.guard_home)
-            now = datetime.now(timezone.utc).isoformat()
-            audit_payload, exit_code = build_workspace_audit_payload(
-                command_name="audit",
-                config=config,
-                now=now,
-                sbom_paths=(),
-                store=store,
-                workspace_dir=context.workspace_dir,
-            )
-            audit_payload["exit_code"] = exit_code
-            if exit_code == 0:
-                record_package_shim_audit_result(context, audited_at=now)
-            return audit_payload
-        if operation == "sync":
-            return _sync_supply_chain_cloud_state_with_optional_auth_context(
-                self.server.store,  # type: ignore[attr-defined]
-                None,
-                workspace_dir=context.workspace_dir,
-            )
-        raise ValueError("unsupported_supply_chain_operation")
-
-    def _handle_supply_chain_choose_folder(self) -> None:
-        try:
-            selected = choose_project_folder()
-        except ProjectFolderPickerBusyError:
-            self._write_json(
-                {
-                    "error": "folder_picker_busy",
-                    "message": "A folder selection is already open.",
-                    "operation": "choose-folder",
-                },
-                status=409,
-            )
-            return
-        except ProjectFolderPickerUnavailableError:
-            self._write_json(
-                {
-                    "error": "folder_picker_unavailable",
-                    "message": "Folder selection is unavailable. Paste a project folder path instead.",
-                    "operation": "choose-folder",
-                },
-                status=503,
-            )
-            return
-        if selected is None:
-            self._write_json({"cancelled": True, "operation": "choose-folder", "workspace_dir": None})
-            return
-        try:
-            resolved = self._resolve_supply_chain_workspace_dir(
-                {"workspace_dir": selected},
-                reject_invalid_explicit=True,
-            )
-        except ValueError as error:
-            self._write_json(self._supply_chain_value_error_payload("choose-folder", str(error)), status=400)
-            return
-        if resolved is None:
-            self._write_json(
-                self._supply_chain_value_error_payload("choose-folder", "workspace_dir_invalid"),
-                status=400,
-            )
-            return
-        self._write_json(
-            {
-                "cancelled": False,
-                "operation": "choose-folder",
-                "workspace_dir": str(resolved),
-            }
-        )
-
-    def _resolve_supply_chain_workspace_dir(
-        self,
-        payload: dict[str, object],
-        *,
-        reject_invalid_explicit: bool = False,
-    ) -> Path | None:
-        allowed_roots = (
-            Path.home().resolve(),
-            Path.cwd().resolve(),
-            Path(tempfile.gettempdir()).resolve(),
-        )
-        managed_workspace_dirs = managed_install_audit_workspace_dirs(self.server.store)  # type: ignore[attr-defined]
-        return resolve_supply_chain_audit_workspace_dir(
-            workspace_dir_value=payload.get("workspace_dir"),
-            workspace_value=payload.get("workspace"),
-            allowed_roots=allowed_roots,
-            managed_workspace_dirs=managed_workspace_dirs,
-            reject_invalid_explicit=reject_invalid_explicit,
-        )
-
-    def _supply_chain_context(
-        self,
-        payload: dict[str, object],
-        *,
-        reject_invalid_explicit: bool = False,
-    ) -> HarnessContext:
-        workspace_dir = self._resolve_supply_chain_workspace_dir(
-            payload,
-            reject_invalid_explicit=reject_invalid_explicit,
-        )
-        return HarnessContext(
-            home_dir=Path.home().resolve(),
-            workspace_dir=workspace_dir,
-            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
-        )
-
-    @staticmethod
-    def _supply_chain_value_error_payload(operation: str, error_code: str) -> dict[str, object]:
-        error_payload: dict[str, object] = {"error": error_code, "operation": operation}
-        if error_code == "workspace_dir_required":
-            error_payload["message"] = (
-                "Guard needs a project folder with package manifests before it can run the workspace audit. "
-                "Choose a local project folder and try again."
-            )
-        elif error_code == "workspace_dir_invalid":
-            error_payload["message"] = (
-                "Guard could not use the selected project folder. Choose an existing local folder and try again."
-            )
-        return error_payload
-
-    @staticmethod
-    def _supply_chain_managers(payload: dict[str, object]) -> tuple[tuple[str, ...] | None, str | None]:
-        managers_value = payload.get("managers")
-        if managers_value is None:
-            return None, None
-        if not isinstance(managers_value, list) or not all(isinstance(manager, str) for manager in managers_value):
-            return None, "invalid_managers"
-        supported = set(package_shim_supported_managers())
-        normalized = [manager.strip().lower() for manager in managers_value if manager.strip()]
-        if len(normalized) != len(set(normalized)):
-            return None, "duplicate_manager"
-        managers = tuple(normalized)
-        if not managers:
-            return None, "invalid_managers"
-        if not set(managers).issubset(supported):
-            return None, "unsupported_manager"
-        return managers, None
-
-    def _supply_chain_entitlement(self) -> dict[str, object]:
-        server = self.server  # type: ignore[attr-defined]
-        with server.guard_cloud_browser_session_lock:
-            cloud_connect = _copy_guard_cloud_connect_state(server)
-            package_connect = _copy_package_firewall_connect_state(server)
-            if _guard_cloud_connect_state_is_in_flight(cloud_connect) or _guard_cloud_connect_state_is_in_flight(
-                package_connect
-            ):
-                return resolve_package_firewall_entitlement(server.store)
-            return resolve_package_firewall_entitlement_with_refresh(server.store)
-
-    def _handle_get_supply_chain_bundle(self) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
-        workspace_id = store.get_cloud_workspace_id()
-        wrapper = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
-        bundle = wrapper.get("bundle") if isinstance(wrapper, dict) else None
-        self._write_json({"bundle": bundle})
-
-    def _supply_chain_connect_flow(self, entitlement: dict[str, object]) -> dict[str, object] | None:
-        return _resolve_package_firewall_connect_flow(server=self.server, entitlement=entitlement)  # type: ignore[arg-type]
-
-    def _handle_supply_chain_package_firewall_connect(self) -> None:
-        entitlement = self._supply_chain_entitlement()
-        reason = str(entitlement.get("reason") or "").strip().lower()
-        if reason not in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
-            self._write_json(
-                {
-                    "error": "guard_cloud_connect_not_required",
-                    "entitlement": entitlement,
-                    "message": "Guard Cloud connect is not required for package firewall on this machine.",
-                },
-                status=409,
-            )
-            return
-        store = self.server.store  # type: ignore[attr-defined]
-        connect_url = _package_firewall_connect_url(store)
-        action_label = _package_firewall_connect_action_label(
-            reason,
-            repair_copy=_package_firewall_connect_needs_repair(store, reason),
-        )
-        request_id = f"guard-connect-{uuid.uuid4().hex}"
-        starting_state = {
-            **_default_package_firewall_connect_flow(store=store, reason=reason),
-            "state": "starting",
-            "title": "Opening Guard Cloud sign-in",
-            "detail": "HOL Guard is opening the secure sign-in flow in your browser.",
-            "action_label": action_label,
-            "authorize_url": None,
-            "browser_opened": None,
-            "request_id": request_id,
-            "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
-        }
-        started, current = _begin_package_firewall_connect_state(  # type: ignore[arg-type]
-            self.server,
-            starting_state,
-        )
-        if not started:
-            self._write_json(current, status=202)
-            return
-        try:
-            prepare_guard_cloud_connect_authorization(store)
-            device = store.get_device_metadata()
-            session = start_guard_browser_session(
-                connect_url=connect_url,
-                machine_id=str(device["installation_id"]),
-                machine_label=str(device["device_label"]),
-            )
-            browser_opened = open_browser_url(session.authorize_url)
-        except Exception as error:
-            failure = {
-                **_default_package_firewall_connect_flow(store=store, reason=reason),
-                "state": "failed",
-                "detail": str(error),
-                "browser_opened": False,
-                "poll_after_ms": None,
-            }
-            _set_package_firewall_connect_state(self.server, failure)  # type: ignore[arg-type]
-            self._write_json(failure, status=500)
-            return
-
-        running_state = {
-            **_default_package_firewall_connect_flow(store=store, reason=reason),
-            "state": "running",
-            "title": "Finish Guard Cloud sign-in in your browser",
-            "detail": (
-                "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this page will "
-                "unlock package-firewall controls automatically."
-                if browser_opened
-                else (
-                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                    "not open automatically."
-                )
-            ),
-            "action_label": action_label,
-            "authorize_url": session.authorize_url,
-            "browser_opened": browser_opened,
-            "request_id": request_id,
-            "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
-        }
-        _set_package_firewall_connect_state(self.server, running_state)  # type: ignore[arg-type]
-
-        def _complete_connect() -> None:
-            try:
-                payload = _complete_browser_oauth_connect(
-                    store=store,
-                    session=session,
-                    connect_url=connect_url,
-                    browser_opened=browser_opened,
-                    managed_controls_publish=_managed_controls_publish_for(self.server),
-                )
-                resolved_entitlement = resolve_package_firewall_entitlement(store)
-                resolved_reason = str(resolved_entitlement.get("reason") or "")
-                if bool(resolved_entitlement.get("allowed")) or resolved_reason == "paid_guard_cloud_required":
-                    _set_package_firewall_connect_state(self.server, None)  # type: ignore[arg-type]
-                    return
-                repair_message = str(
-                    payload.get("repair_message") or payload.get("sync_error") or "Guard Cloud connect did not finish."
-                )
-                _set_package_firewall_connect_state(  # type: ignore[arg-type]
-                    self.server,
-                    failed_browser_connect_flow_state(running_state, detail=repair_message),
-                )
-            except Exception as error:
-                _set_package_firewall_connect_state(  # type: ignore[arg-type]
-                    self.server,
-                    failed_browser_connect_flow_state(running_state, detail=str(error)),
-                )
-            finally:
-                session.close()
-
-        threading.Thread(
-            target=_complete_connect,
-            daemon=True,
-            name="guard-package-firewall-connect",
-        ).start()
-        self._write_json(running_state, status=202)
-
-    def _handle_guard_cloud_connect_status(self) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
-        connect_flow = _resolve_guard_cloud_connect_flow(server=self.server, store=store)  # type: ignore[arg-type]
-        self._write_json(
-            {
-                "connect_required": connect_flow is not None,
-                "connect_flow": connect_flow,
-                "dashboard_url": _package_firewall_connect_url(store).removesuffix("/connect"),
-            }
-        )
-
-    def _handle_guard_cloud_connect_start(self) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
-        if not _guard_cloud_connect_required_for_insights(store):
-            self._write_json(
-                {
-                    "error": "guard_cloud_connect_not_required",
-                    "connect_required": False,
-                    "connect_flow": None,
-                    "dashboard_url": _package_firewall_connect_url(store).removesuffix("/connect"),
-                    "message": "Guard Cloud connect is not required to publish insights from this machine.",
-                },
-                status=409,
-            )
-            return
-        repair_mode = _guard_cloud_connect_repair_mode(store)
-        connect_url = _package_firewall_connect_url(store)
-        action_label = "Repair Guard Cloud access" if repair_mode else "Connect Guard Cloud"
-        request_id = f"guard-connect-{uuid.uuid4().hex}"
-        starting_state = {
-            **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
-            "state": "starting",
-            "title": "Opening Guard Cloud sign-in",
-            "detail": "HOL Guard is opening the secure sign-in flow in your browser.",
-            "action_label": action_label,
-            "authorize_url": None,
-            "browser_opened": None,
-            "request_id": request_id,
-            "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
-        }
-        started, current = _begin_guard_cloud_connect_state(self.server, starting_state)  # type: ignore[arg-type]
-        if not started:
-            self._write_json({"connect_required": True, "connect_flow": current}, status=202)
-            return
-        try:
-            prepare_guard_cloud_connect_authorization(store)
-            device = store.get_device_metadata()
-            session = start_guard_browser_session(
-                connect_url=connect_url,
-                machine_id=str(device["installation_id"]),
-                machine_label=str(device["device_label"]),
-            )
-            browser_opened = open_browser_url(session.authorize_url)
-        except Exception as error:
-            failure = {
-                **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
-                "state": "failed",
-                "detail": str(error),
-                "browser_opened": False,
-                "poll_after_ms": None,
-            }
-            _set_guard_cloud_connect_state(self.server, failure)  # type: ignore[arg-type]
-            self._write_json(
-                {"connect_required": True, "connect_flow": failure, "message": str(error)},
-                status=500,
-            )
-            return
-
-        running_state = {
-            **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
-            "state": "running",
-            "title": "Finish Guard Cloud sign-in in your browser",
-            "detail": (
-                "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this modal will "
-                "unlock public sharing automatically."
-                if browser_opened
-                else (
-                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                    "not open automatically."
-                )
-            ),
-            "action_label": action_label,
-            "authorize_url": session.authorize_url,
-            "browser_opened": browser_opened,
-            "request_id": request_id,
-            "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
-        }
-        _set_guard_cloud_connect_state(self.server, running_state)  # type: ignore[arg-type]
-
-        def _complete_connect() -> None:
-            try:
-                payload = _complete_browser_oauth_connect(
-                    store=store,
-                    session=session,
-                    connect_url=connect_url,
-                    browser_opened=browser_opened,
-                    managed_controls_publish=_managed_controls_publish_for(self.server),
-                )
-                if _guard_cloud_connect_succeeded(store):
-                    _set_guard_cloud_connect_state(self.server, None)  # type: ignore[arg-type]
-                    return
-                repair_message = str(
-                    payload.get("repair_message") or payload.get("sync_error") or "Guard Cloud connect did not finish."
-                )
-                _set_guard_cloud_connect_state(  # type: ignore[arg-type]
-                    self.server,
-                    failed_browser_connect_flow_state(running_state, detail=repair_message),
-                )
-            except Exception as error:
-                _set_guard_cloud_connect_state(  # type: ignore[arg-type]
-                    self.server,
-                    failed_browser_connect_flow_state(running_state, detail=str(error)),
-                )
-            finally:
-                session.close()
-
-        threading.Thread(
-            target=_complete_connect,
-            daemon=True,
-            name="guard-cloud-connect",
-        ).start()
-        self._write_json({"connect_required": True, "connect_flow": running_state}, status=202)
-
-    @staticmethod
-    def _policy_memory_payload(value: object) -> dict[str, object]:
-        if isinstance(value, dict):
-            return dict(value)
-        if isinstance(value, str) and value.strip():
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError:
-                return {}
-            return parsed if isinstance(parsed, dict) else {}
-        return {}
-
-    def _record_headless_receipt(
-        self,
-        *,
-        harness: str,
-        location_id: str | None = None,
-        operation: str,
-        payload: dict[str, object],
-        result: dict[str, object],
-        workspace_id: str | None,
-        cloud_sync: dict[str, object] | None = None,
-        policy_decision: str | None = None,
-        capabilities_summary: str | None = None,
-        artifact_name: str | None = None,
-        scanner_evidence_extra: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        cursor_receipt_context = self._cursor_receipt_context(
-            harness=harness,
-            operation=operation,
-            payload=payload,
-            result=result,
-            cloud_sync=cloud_sync,
-        )
-        material = json.dumps(
-            {
-                "harness": harness,
-                "location_id": location_id,
-                "operation": operation,
-                "result_keys": sorted(result.keys()),
-                "cursor": cursor_receipt_context,
-                "workspace_id": workspace_id,
-            },
-            sort_keys=True,
-        )
-        artifact_hash = stable_digest_hex(material.encode("utf-8"))
-        changed_capabilities = [] if operation in {"status", "scan"} else [operation]
-        artifact_id = f"headless:{harness}:{operation}"
-        resolved_artifact_name = artifact_name or f"Headless {operation}"
-        resolved_capabilities_summary = capabilities_summary or f"Guard local daemon completed headless {operation}."
-        source_scope = "local-daemon"
-        resolved_policy_decision = policy_decision or "allow"
-        scanner_evidence: dict[str, object] = {
-            "operation": operation,
-            "location_id": location_id,
-            "workspace_id": workspace_id,
-            "status": "completed",
-        }
-        if scanner_evidence_extra is not None:
-            scanner_evidence.update(scanner_evidence_extra)
-        if cursor_receipt_context is not None:
-            artifact_id = str(cursor_receipt_context["action_scope"])
-            resolved_artifact_name = str(cursor_receipt_context["artifact_name"])
-            resolved_capabilities_summary = str(cursor_receipt_context["capabilities_summary"])
-            source_scope = str(cursor_receipt_context["source_scope"])
-            changed_capabilities = [str(cursor_receipt_context["changed_capability"])]
-            scanner_evidence.update(cursor_receipt_context["scanner_evidence"])
-        receipt = build_receipt(
-            harness=harness,
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            policy_decision=resolved_policy_decision,
-            capabilities_summary=resolved_capabilities_summary,
-            changed_capabilities=changed_capabilities,
-            provenance_summary="Guard Cloud local daemon API",
-            artifact_name=resolved_artifact_name,
-            source_scope=source_scope,
-            scanner_evidence=(scanner_evidence,),
-            approval_source="guard-cloud-headless",
-        )
-        self.server.store.add_receipt(receipt)  # type: ignore[attr-defined]
-        summary: dict[str, object] = {
-            "id": receipt.receipt_id,
-            "operation": operation,
-            "status": "completed",
-            "timestamp": receipt.timestamp,
-        }
-        if cursor_receipt_context is not None:
-            summary.update(cursor_receipt_context["summary"])
-        return summary
-
-    def _cursor_headless_surface(self, payload: dict[str, object]) -> str | None:
-        surface = self._optional_string(payload.get("surface")) or self._optional_string(payload.get("editor_or_cli"))
-        if surface is None:
-            return None
-        if surface not in {"editor", "cli"}:
-            raise ValueError("invalid_cursor_surface")
-        return surface
-
-    def _cursor_receipt_context(
-        self,
-        *,
-        harness: str,
-        operation: str,
-        payload: dict[str, object],
-        result: dict[str, object],
-        cloud_sync: dict[str, object] | None,
-    ) -> _CursorReceiptContext | None:
-        if harness != "cursor":
-            return None
-        action_payload = result.get("cursor_action")
-        action_dict = action_payload if isinstance(action_payload, dict) else {}
-        surface = (
-            self._optional_string(action_dict.get("surface"))
-            or self._optional_string(payload.get("surface"))
-            or self._optional_string(payload.get("editor_or_cli"))
-            or "editor"
-        )
-        action = self._optional_string(action_dict.get("action")) or operation
-        evidence = action_dict.get("evidence")
-        evidence_dict = evidence if isinstance(evidence, dict) else {}
-        action_scope = self._optional_string(evidence_dict.get("actionScope")) or f"cursor:{surface}:{action}"
-        cloud_sync_status = "pending"
-        if isinstance(cloud_sync, dict):
-            cloud_sync_status = self._optional_string(cloud_sync.get("status")) or cloud_sync_status
-        surface_label = "CLI" if surface == "cli" else "editor"
-        scanner_evidence: dict[str, object] = {
-            "action_scope": action_scope,
-            "cloud_sync_status": cloud_sync_status,
-            "cursor_status": self._optional_string(action_dict.get("status")) or "unknown",
-            "editor_or_cli": surface,
-            "error_reason": self._optional_string(payload.get("error_reason")),
-        }
-        summary: dict[str, object] = {
-            "action_scope": action_scope,
-            "cloud_sync": dict(cloud_sync) if isinstance(cloud_sync, dict) else {"status": cloud_sync_status},
-            "editor_or_cli": surface,
-        }
-        return {
-            "action_scope": action_scope,
-            "artifact_name": f"Cursor {surface_label} {action}",
-            "capabilities_summary": f"Guard local daemon completed Cursor {surface_label} {action}.",
-            "changed_capability": f"{surface}:{action}",
-            "scanner_evidence": scanner_evidence,
-            "source_scope": f"cursor:{surface}",
-            "summary": summary,
-        }
-
-    def _handle_policy_clear(self, payload: dict[str, object]) -> None:
-        harness = self._optional_string(payload.get("harness"))
-        source = self._optional_string(payload.get("source"))
-        scope = self._optional_string(payload.get("scope"))
-        artifact_id = self._optional_string(payload.get("artifact_id"))
-        artifact_hash = self._optional_string(payload.get("artifact_hash"))
-        workspace = self._optional_string(payload.get("workspace"))
-        publisher = self._optional_string(payload.get("publisher"))
-        try:
-            clear_all = self._optional_bool(payload.get("all"), default=False)
-            artifact_id_is_null = self._optional_bool(payload.get("artifact_id_is_null"), default=False)
-            artifact_hash_is_null = self._optional_bool(payload.get("artifact_hash_is_null"), default=False)
-        except ValueError:
-            self._write_json({"error": "invalid_clear_payload", "cleared": 0}, status=400)
-            return
-        if scope is not None and scope not in {"artifact", "workspace", "publisher", "harness", "global"}:
-            self._write_json({"error": "invalid_scope", "cleared": 0, "scope": scope}, status=400)
-            return
-        if clear_all and harness is not None:
-            self._write_json(
-                {
-                    "error": "choose_all_or_harness",
-                    "cleared": 0,
-                    "harness": harness,
-                    "source": source,
-                },
-                status=400,
-            )
-            return
-        if not clear_all and harness is None:
-            self._write_json({"error": "missing_harness_or_all", "cleared": 0}, status=400)
-            return
-        try:
-            approval_gate_grant = require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="policy_clear",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
-                None if clear_all else harness,
-                source,
-                scope=scope,
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                artifact_id_is_null=artifact_id_is_null,
-                artifact_hash_is_null=artifact_hash_is_null,
-                workspace=workspace,
-                publisher=publisher,
-                approval_gate_grant=approval_gate_grant,
-            )
-        except ApprovalGateError as error:
-            payload = error.to_payload()
-            payload["cleared"] = 0
-            self._write_json(payload, status=error.status)
-            return
-        self._write_json(
-            {
-                "cleared": cleared,
-                "harness": None if clear_all else harness,
-                "source": source,
-                "scope": scope,
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-                "artifact_id_is_null": artifact_id_is_null,
-                "artifact_hash_is_null": artifact_hash_is_null,
-                "workspace": workspace,
-                "publisher": publisher,
-            }
-        )
-
-    def _handle_requests_clear(self, payload: dict[str, object]) -> None:
-        status = self._optional_string(payload.get("status")) or "pending"
-        harness = self._optional_string(payload.get("harness"))
-        if status not in {"pending", "resolved"}:
-            self._write_json({"error": "invalid_status", "cleared": 0, "status": status}, status=400)
-            return
-        try:
-            require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="queue_clear",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            cleared = self.server.store.clear_approval_requests(  # type: ignore[attr-defined]
-                harness=harness,
-                status=status,
-            )
-        except ApprovalGateError as error:
-            payload = error.to_payload()
-            payload["cleared"] = 0
-            payload["status"] = status
-            self._write_json(payload, status=error.status)
-            return
-        self._write_json({"cleared": cleared, "status": status, "harness": harness})
-
-    def _handle_bulk_allow_read_once(self, payload: dict[str, object]) -> None:
-        request_ids = payload.get("request_ids")
-        if not isinstance(request_ids, list) or len(request_ids) == 0:
-            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
-            return
-        normalized_ids = [str(item).strip() for item in request_ids if isinstance(item, str) and str(item).strip()]
-        if len(normalized_ids) == 0:
-            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
-            return
-        try:
-            result = bulk_allow_read_only_once(
-                store=self.server.store,  # type: ignore[attr-defined]
-                request_ids=normalized_ids,
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ValueError as error:
-            if str(error) == "bulk_approve_gate_required":
-                self._write_json(
-                    {"error": str(error), "resolved_count": 0, "failed": []},
-                    status=403,
-                )
-                return
-            self._write_json(
-                {"error": str(error), "resolved_count": 0, "failed": []},
-                status=400,
-            )
-            return
-        except ApprovalGateError as error:
-            error_payload = error.to_payload()
-            error_payload.setdefault("resolved_count", 0)
-            error_payload.setdefault("failed", [])
-            self._write_json(error_payload, status=error.status)
-            return
-        self._write_json(result)
-
-    def _harness_context(self, payload: dict[str, object]) -> HarnessContext:
-        del payload
-        return HarnessContext(
-            home_dir=Path.home().resolve(),
-            workspace_dir=None,
-            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
-        )
-
-    def _handle_harness_action(self, harness: str, action: str, payload: dict[str, object]) -> None:
-        if action not in {"install", "verify", "repair", "uninstall"}:
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        context = self._harness_context(payload)
-        if action == "verify":
-            try:
-                self._write_json(build_harness_verification(harness, context, self.server.store))  # type: ignore[attr-defined]
-            except ValueError as error:
-                self._write_json({"error": str(error)}, status=404)
-            return
-        try:
-            dry_run = self._optional_bool(payload.get("dry_run"), default=True)
-        except ValueError:
-            self._write_json({"error": "invalid_dry_run"}, status=400)
-            return
-        try:
-            adapter = get_adapter(harness)
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=404)
-            return
-        if action == "uninstall":
-            expected_confirmation = uninstall_confirmation_token(adapter.harness)
-            confirmation = self._optional_string(payload.get("confirmation_phrase")) or self._optional_string(
-                payload.get("confirmation_token")
-            )
-            if confirmation != expected_confirmation:
-                self._write_json(
-                    {
-                        "error": "confirmation_required",
-                        "harness": adapter.harness,
-                        "confirmation_phrase": expected_confirmation,
-                        "confirm_command": (
-                            f"hol-guard apps disconnect {adapter.harness} --confirm {expected_confirmation}"
-                        ),
-                    },
-                    status=400,
-                )
-                return
-        if dry_run:
-            self._write_json(build_harness_setup_plan(action, adapter.harness, context, dry_run=True))
-            return
-        if action == "uninstall":
-            try:
-                require_harness_disconnect_gate(
-                    self.server.store.guard_home,  # type: ignore[attr-defined]
-                    payload,
-                    harness=adapter.harness,
-                )
-            except ApprovalGateError as error:
-                self._write_approval_gate_error(error)
-                return
-        install_command = "uninstall" if action == "uninstall" else "install"
-        try:
-            result = apply_managed_install(
-                install_command,
-                adapter.harness,
-                False,
-                context,
-                self.server.store,  # type: ignore[attr-defined]
-                str(context.workspace_dir) if context.workspace_dir is not None else None,
-                _now(),
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        except RuntimeError:
-            _LOGGER.exception("Guard could not complete %s repair for %s", action, adapter.harness)
-            self._write_json(
-                {
-                    "error": "harness_repair_failed",
-                    "harness": adapter.harness,
-                    "message": (
-                        f"Guard could not repair {adapter.harness} protection. "
-                        "Open this app's repair details and retry that protection layer. "
-                        "Your existing protection settings were preserved."
-                    ),
-                },
-                status=409,
-            )
-            return
-        self._write_json({"harness": adapter.harness, "action": action, "dry_run": False, **result})
-
-    def _handle_notification_setup(self, payload: dict[str, object]) -> None:
-        del payload
-        host = self._daemon_server().daemon_host()
-        port = self._daemon_server().daemon_port()
-        approval_url = _build_local_url(host, port, "/approvals/notification-preview")
-        try:
-            result = ensure_desktop_notification_setup(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                approval_url=approval_url,
-                force=True,
-            )
-        except Exception as error:
-            self._write_json({"error": str(error)}, status=500)
-            return
-        guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
-        self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
-
-    def _handle_requests_list(self, query_string: str) -> None:
-        limit = self._query_limit(query_string, default=200, maximum=200)
-        if limit is None:
-            self._write_json({"error": "invalid_limit"}, status=400)
-            return
-        status = self._query_string(query_string, "status") or "pending"
-        if status == "all":
-            status_filter = None
-        elif status in {"pending", "resolved"}:
-            status_filter = status
-        else:
-            self._write_json({"error": "invalid_status"}, status=400)
-            return
-        include_totals = self._query_bool(query_string, "include_totals", default=True)
-        try:
-            page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
-                status=status_filter,
-                limit=limit,
-                cursor=self._query_string(query_string, "cursor"),
-                harness=self._query_string(query_string, "harness"),
-                search=self._query_string(query_string, "search"),
-                include_totals=include_totals,
-            )
-        except InvalidApprovalCursorError:
-            self._write_json(
-                {
-                    "error": "invalid_cursor",
-                    "recovery": {
-                        "code": "refresh_queue",
-                        "title": "Refresh the blocked action list.",
-                        "body": "The queue position expired. Refresh the Review Queue to continue.",
-                    },
-                },
-                status=400,
-            )
-            return
-        self._write_json(page)
-
-    @staticmethod
-    def _optional_bool(value: object, *, default: bool) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"true", "1", "yes", "on"}:
-                return True
-            if normalized in {"false", "0", "no", "off", ""}:
-                return False
-        raise ValueError("invalid boolean value")
-
-    def _approval_persist_policy(self, payload: dict[str, object]) -> bool | None:
-        if "persist_policy" in payload:
-            return True if self._optional_bool(payload.get("persist_policy"), default=False) else None
-        if "remember" in payload:
-            return True if self._optional_bool(payload.get("remember"), default=False) else None
-        return None
-
-    def _write_stale_approval_scope_error(self, error: StaleApprovalScopeContractError) -> None:
-        self._write_json(
-            {"resolved": False, "error": str(error), **error.contract.to_dict()},
-            status=409,
-        )
-
-    def _write_ineligible_approval_scope_error(self, error: IneligibleApprovalScopeError) -> None:
-        self._write_json(
-            {
-                "resolved": False,
-                "error": str(error),
-                "action": error.action,
-                "requested_scope": error.requested_scope,
-                **error.contract.to_dict(),
-            },
-            status=422,
-        )
-
     def _write_approval_gate_error(self, error: ApprovalGateError, *, resolved: bool | None = None) -> None:
         payload = error.to_payload()
         if resolved is not None:
             payload["resolved"] = resolved
         self._write_json(payload, status=error.status)
-
-    def _handle_insights_share_publish(self, payload: dict[str, object]) -> None:
-        include_top_artifacts = self._optional_bool(payload.get("includeTopArtifacts"), default=False)
-        show_display_name = self._optional_bool(payload.get("showDisplayName"), default=False)
-        display_name_value = payload.get("displayName")
-        display_name = display_name_value.strip()[:120] if isinstance(display_name_value, str) else None
-        store = self.server.store  # type: ignore[attr-defined]
-        try:
-            result = publish_insights_share(
-                store,
-                include_top_artifacts=include_top_artifacts,
-                show_display_name=show_display_name,
-                display_name=display_name,
-            )
-        except Exception as error:
-            message = str(error).strip() or "Unable to publish Guard insights share."
-            self._write_json({"error": "insights_share_failed", "message": message}, status=502)
-            return
-        self._write_json(result)
-
-    def _handle_cloud_exception_request_list(self) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
-        try:
-            result = fetch_cloud_exception_requests(store)
-        except CloudExceptionRequestError as error:
-            message = str(error).strip() or "Unable to load Guard Cloud exception requests."
-            self._write_json({"error": "cloud_exception_request_list_failed", "message": message}, status=error.status)
-            return
-        except Exception as error:
-            message = str(error).strip() or "Unable to load Guard Cloud exception requests."
-            self._write_json({"error": "cloud_exception_request_list_failed", "message": message}, status=502)
-            return
-        self._write_json(result)
-
-    def _handle_cloud_exception_request_create(self, payload: dict[str, object]) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
-        try:
-            result = submit_cloud_exception_request(store, payload)
-        except ValueError as error:
-            message = str(error).strip() or "Invalid Guard exception request payload."
-            self._write_json({"error": "invalid_payload", "message": message}, status=400)
-            return
-        except CloudExceptionRequestError as error:
-            message = str(error).strip() or "Unable to create Guard Cloud exception request."
-            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=error.status)
-            return
-        except Exception as error:
-            message = str(error).strip() or "Unable to create Guard Cloud exception request."
-            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=502)
-            return
-        self._write_json(result)
-
-    def _handle_read_state_update(self, payload: dict[str, object]) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
-        action = str(payload.get("action") or "mark_read")
-        if action == "mark_all_read":
-            request_ids = payload.get("request_ids")
-            if not isinstance(request_ids, list):
-                self._write_json({"error": "invalid_request_ids"}, status=400)
-                return
-            store.mark_requests_read([str(rid) for rid in request_ids if isinstance(rid, str)])
-            self._write_json({"ok": True, "ids": store.get_read_state()})
-            return
-        if action == "mark_unread":
-            request_id = payload.get("request_id")
-            if not isinstance(request_id, str):
-                self._write_json({"error": "invalid_request_id"}, status=400)
-                return
-            store.mark_request_unread(request_id)
-            self._write_json({"ok": True, "ids": store.get_read_state()})
-            return
-        request_id = payload.get("request_id")
-        if isinstance(request_id, str):
-            store.mark_requests_read([request_id])
-            self._write_json({"ok": True, "ids": store.get_read_state()})
-            return
-        self._write_json({"error": "invalid_action"}, status=400)
-
-    def _read_delete_body(self) -> dict[str, object] | None:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            return None
-        if length <= 0 or length > self._MAX_BODY_BYTES:
-            return None
-        raw = self.rfile.read(length)
-        try:
-            parsed = json.loads(raw.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return None
-        return parsed if isinstance(parsed, dict) else None
-
-    def _record_incomplete_protection_repair(self, check_reasons: Mapping[str, str]) -> None:
-        record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
-
-    def _handle_protection_repair(self, payload: dict[str, object]) -> None:
-        check_id = self._optional_string(payload.get("check_id"))
-        store = self.server.store  # type: ignore[attr-defined]
-        if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
-            repaired_check_ids: list[str] = []
-            pending_check_ids: list[str] = []
-            failed_check_ids: list[str] = []
-            check_reasons: dict[str, str] = {}
-            if check_id == "all":
-                daemon_server = self._daemon_server()
-                registration_reason = repair_daemon_registration(
-                    store,
-                    session_id=daemon_server.runtime_session_id,
-                    registration=GuardRuntimeRegistration(
-                        daemon_host=daemon_server.runtime_host,
-                        daemon_port=daemon_server.daemon_port(),
-                        started_at=daemon_server.runtime_started_at,
-                    ),
-                    last_heartbeat_at=_now(),
-                )
-                if registration_reason is None:
-                    repaired_check_ids.append("daemon")
-                else:
-                    failed_check_ids.append("daemon")
-                    check_reasons["daemon"] = registration_reason
-            try:
-                status = store.setup_policy_integrity(now=_now(), include_items=False)
-                if status.get("mode") != "protected":
-                    status = store.repair_policy_integrity(
-                        clear_invalid=False,
-                        now=_now(),
-                        include_items=False,
-                    )
-            except (OSError, RuntimeError, TypeError, ValueError):
-                check_reasons.update(integrity_repair_reasons(restored=False))
-                self._record_incomplete_protection_repair(check_reasons)
-                self._write_json(
-                    {
-                        "error": "protection_repair_failed",
-                        "message": "Guard could not restore integrity protection automatically.",
-                        "check_reasons": check_reasons,
-                    },
-                    status=409,
-                )
-                return
-            repaired = status.get("mode") == "protected"
-            degraded_reasons = status.get("degraded_reasons")
-            reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
-            if repaired:
-                repaired_check_ids.extend(["policy_engine", "rule_packs", "tamper_checks"])
-            else:
-                failed_check_ids.extend(["policy_engine", "rule_packs", "tamper_checks"])
-                check_reasons.update(integrity_repair_reasons(restored=False))
-            hook_failures: list[str] | tuple[str, ...] = []
-            if check_id == "all":
-                hook_repair_unknown = False
-                try:
-                    _, hook_failures = repair_failing_managed_harness_hooks(store)
-                except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                    hook_failures = []
-                    hook_repair_unknown = True
-                has_active_hooks = any(
-                    isinstance(install.get("harness"), str) and install.get("active") is True
-                    for install in store.list_managed_installs()
-                )
-                if hook_failures or hook_repair_unknown or not has_active_hooks:
-                    failed_check_ids.append("harness_hooks")
-                    check_reasons["harness_hooks"] = harness_hooks_repair_reason(
-                        has_active_hooks=has_active_hooks,
-                        hook_failures=hook_failures,
-                        hook_repair_unknown=hook_repair_unknown,
-                    )
-                else:
-                    repaired_check_ids.append("harness_hooks")
-                if repaired:
-                    (
-                        containment_repaired,
-                        containment_failed,
-                        containment_reasons,
-                    ) = containment_repair_outcome(lambda: self._containment_health_payload(force_refresh=True))
-                    repaired_check_ids.extend(containment_repaired)
-                    failed_check_ids.extend(containment_failed)
-                    for failed_check_id in containment_failed:
-                        check_reasons[failed_check_id] = containment_reasons[failed_check_id]
-                    try:
-                        config = load_guard_config(store.guard_home)
-                        probe_reason = _repair_command_activity_persistence_health(store)
-                        store.maintain_command_activity(
-                            now=datetime.now(timezone.utc),
-                            detail_retain_days=config.evidence_retain_days,
-                        )
-                        evidence_health = store.get_command_activity_persistence_health()
-                        if evidence_health.active_error_count > 0:
-                            failed_check_ids.append("decision_stream")
-                            check_reasons["decision_stream"] = "decision_stream_degraded"
-                        elif probe_reason is not None:
-                            pending_check_ids.append("decision_stream")
-                            check_reasons["decision_stream"] = probe_reason
-                        else:
-                            repaired_check_ids.append("decision_stream")
-                    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                        failed_check_ids.append("decision_stream")
-                        check_reasons["decision_stream"] = "decision_stream_health_unavailable"
-                if repaired and (failed_check_ids or pending_check_ids):
-                    self._record_incomplete_protection_repair(check_reasons)
-                    self._write_json(
-                        incomplete_protection_repair_payload(
-                            repaired_check_ids=repaired_check_ids,
-                            failed_check_ids=failed_check_ids,
-                            failed_harnesses=hook_failures,
-                            pending_check_ids=pending_check_ids,
-                            has_active_hooks=has_active_hooks,
-                            hook_failures=hook_failures,
-                            hook_repair_unknown=hook_repair_unknown,
-                            check_reasons=check_reasons,
-                        ),
-                        status=409,
-                    )
-                    return
-            if not repaired or failed_check_ids or pending_check_ids:
-                self._record_incomplete_protection_repair(check_reasons)
-            self._write_json(
-                {
-                    **({"error": "local_integrity_repair_incomplete"} if not repaired else {}),
-                    "repaired": repaired,
-                    "repair_scope": "local_integrity",
-                    "check_ids": repaired_check_ids,
-                    **({"failed_check_ids": failed_check_ids} if failed_check_ids else {}),
-                    "pending_check_ids": pending_check_ids,
-                    "check_reasons": check_reasons,
-                    "message": (
-                        "Integrity protection restored."
-                        if repaired
-                        else (
-                            "Guard could not establish a local integrity proof. "
-                            "Unverified local rules remain disabled. Local repair did not change Guard Cloud policy "
-                            "availability. Retry local repair from Protect; "
-                            f"Guard will keep the remaining {reason_count or 1} issue isolated."
-                        )
-                    ),
-                },
-                status=200 if repaired else 409,
-            )
-            return
-        if check_id == "decision_stream":
-            check_reasons: dict[str, str] = {}
-            try:
-                config = load_guard_config(store.guard_home)
-                probe_reason = _repair_command_activity_persistence_health(store)
-            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                check_reasons["decision_stream"] = "decision_stream_health_unavailable"
-                self._record_incomplete_protection_repair(check_reasons)
-                self._write_json(
-                    {
-                        "error": "protection_repair_failed",
-                        "message": "Guard could not verify the command evidence store.",
-                        "check_reasons": check_reasons,
-                    },
-                    status=409,
-                )
-                return
-            if probe_reason is not None:
-                check_reasons["decision_stream"] = probe_reason
-                self._record_incomplete_protection_repair(check_reasons)
-                self._write_json(
-                    {
-                        "repaired": False,
-                        "repair_scope": "local_integrity",
-                        "check_ids": [],
-                        "pending_check_ids": ["decision_stream"],
-                        "check_reasons": check_reasons,
-                        "message": (
-                            "Guard could not run the native policy engine to prove command evidence. "
-                            "Existing evidence was not changed."
-                        ),
-                    },
-                    status=409,
-                )
-                return
-            try:
-                store.maintain_command_activity(
-                    now=datetime.now(timezone.utc),
-                    detail_retain_days=config.evidence_retain_days,
-                )
-                health = store.get_command_activity_persistence_health()
-            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                check_reasons["decision_stream"] = "decision_stream_health_unavailable"
-                self._record_incomplete_protection_repair(check_reasons)
-                self._write_json(
-                    {
-                        "error": "protection_repair_failed",
-                        "message": "Guard could not verify the command evidence store.",
-                        "check_reasons": check_reasons,
-                    },
-                    status=409,
-                )
-                return
-            repaired = health.active_error_count == 0
-            if not repaired:
-                check_reasons["decision_stream"] = "decision_stream_degraded"
-                self._record_incomplete_protection_repair(check_reasons)
-            self._write_json(
-                {
-                    "repaired": repaired,
-                    "repair_scope": "local_integrity",
-                    "check_ids": ["decision_stream"] if repaired else [],
-                    **({"failed_check_ids": ["decision_stream"]} if not repaired else {}),
-                    "check_reasons": check_reasons,
-                    "message": (
-                        "Command evidence is healthy."
-                        if repaired
-                        else "Guard could not restore command evidence persistence."
-                    ),
-                },
-                status=200 if repaired else 409,
-            )
-            return
-        self._write_json({"error": "unsupported_protection_check"}, status=400)
-
-    def _handle_settings_update(self, payload: dict[str, object]) -> None:
-        self._apply_settings_payload(payload, missing_error="invalid_settings")
-
-    def _handle_protection_repair_approval_gate_setup(self, payload: dict[str, object]) -> None:
-        if not self._protection_repair_approval_gate_setup_payload_is_allowed(payload):
-            self._write_json({"error": "invalid_settings"}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        gate_config = approval_gate_public_config(guard_home)
-        if gate_config.configured or gate_config.enabled:
-            self._write_json({"error": "approval_gate_setup_unavailable"}, status=409)
-            return
-        self._apply_settings_payload(payload, missing_error="invalid_settings")
-
-    def _protection_repair_approval_gate_setup_payload_is_allowed(self, payload: object) -> bool:
-        if not isinstance(payload, dict) or set(payload) != {"settings"}:
-            return False
-        settings = payload.get("settings")
-        if not isinstance(settings, dict) or set(settings) != {"approval_gate"}:
-            return False
-        gate_payload = settings.get("approval_gate")
-        return (
-            isinstance(gate_payload, dict)
-            and set(gate_payload) == {"enabled", "new_password", "confirm_password"}
-            and gate_payload.get("enabled") is True
-        )
-
-    def _apply_settings_payload(self, payload: dict[str, object], *, missing_error: str) -> None:
-        settings = payload.get("settings")
-        if not isinstance(settings, dict):
-            self._write_json({"error": missing_error}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
-        gate_payload = settings.get("approval_gate")
-        gate_input = (
-            approval_gate_input_from_mapping({"approval_gate": gate_payload})
-            if isinstance(gate_payload, dict)
-            else None
-        )
-        if payload.get("approval_password") or payload.get("approval_totp_code"):
-            proof_input = approval_gate_input_from_mapping(payload)
-            if proof_input is not None:
-                gate_input = proof_input
-        presentation_only_keys = {
-            "presentation_mode",
-            "presentation_mode_explicit",
-            "presentation_schema_version",
-            "presentation_revision",
-        }
-        presentation_only = gate_payload is None and bool(settings) and set(settings).issubset(presentation_only_keys)
-        try:
-            approval_gate_grant = (
-                None
-                if presentation_only
-                else require_high_risk(
-                    guard_home,
-                    purpose="settings_write",
-                    approval_gate_input=gate_input,
-                )
-            )
-            if isinstance(gate_payload, dict):
-                validate_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
-            config = update_guard_settings(
-                guard_home,
-                config_settings,
-                approval_gate_grant=approval_gate_grant,
-                cloud_sync_entitled=bool(entitlement.get("allowed")),
-                skip_approval_gate=presentation_only,
-            )
-            if isinstance(gate_payload, dict):
-                update_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-                config = load_guard_config(guard_home)
-            if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
-                    self.server.store,
-                    level=config.receipt_redaction_level,
-                    changed_at=_now(),
-                )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
-            return
-        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
-
-    def _handle_update_channel(self, payload: dict[str, object]) -> None:
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            update_guard_update_channel(
-                guard_home,
-                payload.get("update_channel"),
-                approval_gate_grant=approval_gate_grant,
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": "invalid_update_channel", "message": str(error)}, status=400)
-            return
-        self._write_json(
-            build_guard_update_status_payload(guard_home=guard_home),
-            extra_headers={"Cache-Control": "no-store, max-age=0"},
-        )
-
-    def _handle_settings_import(self, payload: dict[str, object]) -> None:
-        self._apply_settings_payload(payload, missing_error="invalid_settings_import")
-
-    def _handle_settings_reset(self, payload: dict[str, object]) -> None:
-        confirm = payload.get("confirm")
-        if confirm != "reset-local-settings":
-            self._write_json({"error": "confirmation_required", "confirm": "reset-local-settings"}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            config = reset_guard_settings(guard_home, approval_gate_grant=approval_gate_grant)
-            if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
-                    self.server.store,
-                    level=config.receipt_redaction_level,
-                    changed_at=_now(),
-                )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
-
-    def _handle_approval_gate_cooldown_revoke(self, payload: dict[str, object]) -> None:
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        try:
-            require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        gate = revoke_approval_gate_cooldown(guard_home).to_dict()
-        config = load_guard_config(guard_home)
-        settings = editable_guard_settings(config)
-        settings["approval_gate"] = gate
-        self._write_json(_settings_response_payload(guard_home, settings))
-
-    def _handle_approval_gate_totp_enroll(self, payload: dict[str, object]) -> None:
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        device_label = self._optional_string(payload.get("device_label")) or "local-device"
-        try:
-            enrollment = begin_totp_enrollment(
-                guard_home,
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-                device_label=device_label,
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        config = load_guard_config(guard_home)
-        settings = editable_guard_settings(config)
-        settings["approval_gate"] = approval_gate_public_config(guard_home).to_dict()
-        response = _settings_response_payload(guard_home, settings)
-        response["enrollment"] = enrollment
-        self._write_json(response)
-
-    def _handle_approval_gate_totp_verify(self, payload: dict[str, object]) -> None:
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        try:
-            gate = confirm_totp_enrollment(
-                guard_home,
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        config = load_guard_config(guard_home)
-        settings = editable_guard_settings(config)
-        settings["approval_gate"] = gate.to_dict()
-        self._write_json(_settings_response_payload(guard_home, settings))
-
-    def _handle_approval_gate_totp_disable(self, payload: dict[str, object]) -> None:
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        try:
-            gate = disable_totp(
-                guard_home,
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        config = load_guard_config(guard_home)
-        settings = editable_guard_settings(config)
-        settings["approval_gate"] = gate.to_dict()
-        self._write_json(_settings_response_payload(guard_home, settings))
-
-    def _handle_mcp_policy_request_get(self, request_id: str) -> None:
-        """Return sanitized MCP policy request details for the dashboard.
-
-        GET /v1/mcp-policy/requests/<id>
-
-        Returns the request status, digests, mode, timestamps, and a
-        sanitized semantic diff summary.  Never returns the canonical
-        policy YAML or the full plan JSON — the dashboard renders the
-        diff summary only.
-        """
-        import json as _json
-
-        from codex_plugin_scanner.guard.mcp.policy_store import MCPolicyRequestRepository
-
-        store = self.server.store  # type: ignore[attr-defined]
-        repo = MCPolicyRequestRepository(store)
-        request = repo.get_request(request_id)
-        if request is None:
-            self._write_json({"error": "not_found"}, status=404)
-            return
-
-        result: dict[str, object] = {}
-        if request.result_json:
-            try:
-                parsed_result: object = _json.loads(request.result_json)
-                if _is_string_object_dict(parsed_result):
-                    result = parsed_result
-            except _json.JSONDecodeError:
-                pass
-
-        plan_summary: dict[str, object] = {}
-        if request.plan_json:
-            try:
-                parsed_plan: object = _json.loads(request.plan_json)
-                if _is_string_object_dict(parsed_plan):
-                    plan_summary = parsed_plan
-            except _json.JSONDecodeError:
-                pass
-
-        inserted_value = result.get("inserted", 0)
-        replaced_value = result.get("replaced", 0)
-        inserted = inserted_value if isinstance(inserted_value, (bool, int)) else 0
-        replaced = replaced_value if isinstance(replaced_value, (bool, int)) else 0
-        additions_value = plan_summary.get("additions", [])
-        replacements_value = plan_summary.get("replacements", [])
-        removals_value = plan_summary.get("removals", [])
-        additions = additions_value if isinstance(additions_value, list) else []
-        replacements = replacements_value if isinstance(replacements_value, list) else []
-        removals = removals_value if isinstance(removals_value, list) else []
-
-        self._write_json(
-            {
-                "requestId": request.request_id,
-                "status": request.status,
-                "documentId": request.policy_document_id,
-                "candidateDigest": request.policy_document_digest,
-                "expectedCurrentDigest": request.expected_current_digest,
-                "expectedPolicyGeneration": request.expected_policy_generation,
-                "mode": request.mode,
-                "createdAt": request.created_at,
-                "expiresAt": request.expires_at,
-                "resolvedAt": request.resolved_at,
-                "failureCode": request.failure_code,
-                "isTerminal": request.is_terminal,
-                "isExpired": request.is_expired,
-                "result": {
-                    "inserted": _safe_int(inserted),
-                    "replaced": _safe_int(replaced),
-                },
-                "writePlan": {
-                    "additions": list(additions),
-                    "replacements": list(replacements),
-                    "removals": list(removals),
-                },
-                "semanticDiff": {
-                    "additionCount": len(additions),
-                    "replacementCount": len(replacements),
-                    "removalCount": len(removals),
-                },
-                "activeEnforcementWarning": request.status == "pending" and not request.is_expired,
-            }
-        )
-
-    def _handle_mcp_policy_decision(self, request_id: str, payload: dict[str, object]) -> None:
-        from .mcp_policy_decisions import handle_mcp_policy_decision
-
-        handle_mcp_policy_decision(self, request_id, payload)
-
-    def _handle_initialize(self, payload: dict[str, object]) -> None:
-        client_name = self._optional_string(payload.get("client_name")) or "guard-client"
-        surface = self._optional_string(payload.get("surface")) or "cli"
-        capabilities = payload.get("capabilities")
-        capability_items = (
-            tuple(str(item) for item in capabilities if isinstance(item, str)) if isinstance(capabilities, list) else ()
-        )
-        supported_versions = payload.get("supported_protocol_versions")
-        try:
-            response = self.server.runtime.initialize_client(  # type: ignore[attr-defined]
-                client_name=client_name,
-                client_title=self._optional_string(payload.get("client_title")),
-                version=self._optional_string(payload.get("version")),
-                surface=surface,
-                capabilities=capability_items,
-                supported_protocol_versions=tuple(str(item) for item in supported_versions if isinstance(item, str))
-                if isinstance(supported_versions, list)
-                else (),
-                include_sessions=self._header_token_is_valid(payload=payload),
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        refreshed_session_token = self._refresh_dashboard_session_token(surface=surface)
-        if refreshed_session_token is not None:
-            response["dashboard_session_token"] = refreshed_session_token
-        self._write_json(response)
-
-    def _handle_client_attach(self, payload: dict[str, object]) -> None:
-        client_id = self._optional_string(payload.get("client_id"))
-        surface = self._optional_string(payload.get("surface"))
-        if client_id is None or surface is None:
-            self._write_json({"attached": False, "error": "missing_required_fields"}, status=400)
-            return
-        try:
-            attachment = self.server.runtime.attach_client(  # type: ignore[attr-defined]
-                client_id=client_id,
-                surface=surface,
-                session_id=self._optional_string(payload.get("session_id")),
-                metadata={"title": self._optional_string(payload.get("client_title")) or surface},
-                lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
-            )
-        except ValueError as error:
-            self._write_json({"attached": False, "error": str(error)}, status=400)
-            return
-        self._write_json({"attached": True, "item": attachment})
-
-    def _handle_client_heartbeat(self, payload: dict[str, object]) -> None:
-        client_id = self._optional_string(payload.get("client_id"))
-        lease_id = self._optional_string(payload.get("lease_id"))
-        if client_id is None or lease_id is None:
-            self._write_json({"renewed": False, "error": "missing_required_fields"}, status=400)
-            return
-        try:
-            attachment = self.server.runtime.renew_client(  # type: ignore[attr-defined]
-                client_id=client_id,
-                lease_id=lease_id,
-                lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
-            )
-        except ValueError as error:
-            self._write_json({"renewed": False, "error": str(error)}, status=404)
-            return
-        self._write_json({"renewed": True, "item": attachment})
-
-    def _handle_session_start(self, payload: dict[str, object]) -> None:
-        harness = self._optional_string(payload.get("harness"))
-        surface = self._optional_string(payload.get("surface"))
-        client_name = self._optional_string(payload.get("client_name"))
-        if harness is None or surface is None or client_name is None:
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        capabilities = payload.get("capabilities")
-        session = self.server.runtime.start_session(  # type: ignore[attr-defined]
-            harness=harness,
-            surface=surface,
-            workspace=self._optional_string(payload.get("workspace")),
-            client_name=client_name,
-            client_title=self._optional_string(payload.get("client_title")),
-            client_version=self._optional_string(payload.get("client_version")),
-            capabilities=tuple(str(item) for item in capabilities if isinstance(item, str))
-            if isinstance(capabilities, list)
-            else (),
-        )
-        self._write_json(session)
-
-    def _handle_operation_start(self, payload: dict[str, object]) -> None:
-        session_id = self._optional_string(payload.get("session_id"))
-        operation_type = self._optional_string(payload.get("operation_type"))
-        harness = self._optional_string(payload.get("harness"))
-        if session_id is None or operation_type is None or harness is None:
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        metadata = payload.get("metadata")
-        try:
-            operation = self.server.runtime.start_operation(  # type: ignore[attr-defined]
-                session_id=session_id,
-                operation_type=operation_type,
-                harness=harness,
-                metadata=metadata if isinstance(metadata, dict) else {},
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        self._write_json(operation)
-
-    def _handle_operation_block(self, payload: dict[str, object]) -> None:
-        session_id = self._optional_string(payload.get("session_id"))
-        operation_type = self._optional_string(payload.get("operation_type"))
-        harness = self._optional_string(payload.get("harness"))
-        approval_center_url = self._optional_string(payload.get("approval_center_url"))
-        approval_surface_policy = self._optional_string(payload.get("approval_surface_policy"))
-        detection = payload.get("detection")
-        evaluation = payload.get("evaluation")
-        if (
-            session_id is None
-            or operation_type is None
-            or harness is None
-            or approval_center_url is None
-            or approval_surface_policy is None
-            or not _is_string_object_dict(detection)
-            or not _is_string_object_dict(evaluation)
-        ):
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        metadata = payload.get("metadata")
-        try:
-            redaction_level = self._optional_string(payload.get("redaction_level")) or "full"
-            response = self.server.runtime.queue_blocked_operation(  # type: ignore[attr-defined]
-                session_id=session_id,
-                operation_type=operation_type,
-                harness=harness,
-                metadata=metadata if _is_string_object_dict(metadata) else {},
-                detection=detection,
-                evaluation=evaluation,
-                approval_center_url=approval_center_url,
-                browser_url=_approval_center_browser_url(approval_center_url, self.server.auth_token),  # type: ignore[attr-defined]
-                approval_surface_policy=approval_surface_policy,
-                open_key=self._optional_string(payload.get("open_key")),
-                opener=open_browser_url,
-                redaction_level=redaction_level,
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        surface = response.get("surface")
-        operation = response.get("operation")
-        requests = response.get("approval_requests")
-        if (
-            isinstance(surface, dict)
-            and surface.get("reason") == "attention-deferred"
-            and isinstance(operation, dict)
-            and isinstance(operation.get("operation_id"), str)
-            and isinstance(requests, list)
-        ):
-            typed_requests = [request for request in requests if _is_string_object_dict(request)]
-            first_url: str | None = None
-            for request in typed_requests:
-                candidate_url = request.get("approval_url")
-                if isinstance(candidate_url, str):
-                    first_url = candidate_url
-                    break
-            browser_url = build_approval_browser_url(first_url, auth_token=self.server.auth_token)  # type: ignore[attr-defined]
-            if browser_url is not None:
-                self.server.approval_attention.schedule(  # type: ignore[attr-defined]
-                    operation_id=str(operation["operation_id"]),
-                    requests=typed_requests,
-                    browser_url=browser_url,
-                )
-        self._write_json(response)
-
-    def _handle_operation_item(self, operation_id: str, payload: dict[str, object]) -> None:
-        item_type = self._optional_string(payload.get("item_type"))
-        item_payload = payload.get("payload")
-        if item_type is None or not isinstance(item_payload, dict):
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        try:
-            item = self.server.runtime.add_item(  # type: ignore[attr-defined]
-                operation_id=operation_id,
-                item_type=item_type,
-                payload=item_payload,
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        self._write_json({"item": item})
-
-    def _handle_operation_status(self, operation_id: str, payload: dict[str, object]) -> None:
-        status = self._optional_string(payload.get("status"))
-        if status is None:
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        request_ids = payload.get("approval_request_ids")
-        try:
-            operation = self.server.runtime.update_operation_status(  # type: ignore[attr-defined]
-                operation_id=operation_id,
-                status=status,
-                approval_request_ids=[str(item) for item in request_ids if isinstance(item, str)]
-                if isinstance(request_ids, list)
-                else [],
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        self._write_json({"operation": operation})
-
-    def _handle_session_resume(self, session_id: str) -> None:
-        try:
-            payload = self.server.runtime.resume_session(session_id)  # type: ignore[attr-defined]
-        except ValueError:
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        self._write_json(payload)
-
-    def _handle_request_resume_read(self, request_id: str) -> None:
-        if self.server.store.get_approval_request(request_id) is None:  # type: ignore[attr-defined]
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        payload = get_request_resume_status(self.server.store, request_id=request_id, now=_now())  # type: ignore[attr-defined]
-        if payload is None:
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        self._write_json(payload)
-
-    def _handle_request_resume_retry(self, request_id: str) -> None:
-        try:
-            payload = retry_request_resume(self.server.store, request_id=request_id, now=_now(), force=False)  # type: ignore[attr-defined]
-        except ValueError as error:
-            error_code = str(error)
-            if error_code == "not_found":
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            if error_code == "not_resolved":
-                self._write_json({"error": "not_resolved"}, status=409)
-                return
-            self._write_json({"error": "resume_not_supported"}, status=400)
-            return
-        self.server.store.add_event(  # type: ignore[attr-defined]
-            "codex/thread_resume",
-            {"request_id": request_id, "action": payload.get("resolution_action"), **payload},
-            _now(),
-        )
-        self._write_json(payload)
-
-    def _handle_dashboard_update(self, payload: dict[str, object]) -> None:
-        force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        status_payload = build_guard_update_status_payload(guard_home=guard_home)
-        if status_payload.get("python_update_required") is True:
-            self._write_json(
-                {
-                    "error": "update_not_supported",
-                    "message": status_payload.get("blocked_reason") or "Update requires a different Python runtime.",
-                },
-                status=400,
-            )
-            return
-        recovery_reinstall_available = bool(status_payload.get("recovery_reinstall_available"))
-        if force_pypi_reinstall and not recovery_reinstall_available:
-            self._write_json(
-                {
-                    "error": "update_not_supported",
-                    "message": status_payload.get("blocked_reason") or "Reinstall is not available for this install.",
-                },
-                status=400,
-            )
-            return
-        if status_payload.get("auto_updatable") is not True and not force_pypi_reinstall:
-            self._write_json(
-                {
-                    "error": "update_not_supported",
-                    "message": status_payload.get("blocked_reason") or "Automatic update is not available.",
-                },
-                status=400,
-            )
-            return
-        if status_payload.get("update_available") is not True and not force_pypi_reinstall:
-            self._write_json(
-                {
-                    "error": "update_not_available",
-                    "message": "Guard is already on the latest version.",
-                },
-                status=400,
-            )
-            return
-        self._write_json(
-            schedule_guard_dashboard_update(
-                guard_home,
-                daemon_pid=os.getpid(),
-                daemon_port=self._daemon_server().daemon_port(),
-                force_pypi_reinstall=force_pypi_reinstall,
-                include_alpha=status_payload.get("release_channel") == "alpha",
-                status_payload=status_payload,
-            )
-        )
 
     def _handle_codex_live_decision(self, request_id: str, payload: Mapping[str, object]) -> None:
         request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
@@ -6162,59 +1657,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             request,
             payload,
             home_dir=home_dir,
+            guard_home=daemon_server.store.guard_home,
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_approval_request_id=claimed_approval_request_id,
             reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
-                daemon_server.hook_process_runner.review(
-                    payload=hook_payload,
-                    harness="codex",
+                daemon_server.hook_worker.review_http_payload(
+                    payload=dict(hook_payload),
+                    params={},
+                    default_harness="codex",
                     home_dir=home_dir,
                     guard_home=daemon_server.store.guard_home,
                     workspace=workspace,
-                    hook_env={},
                     deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
                     claim_saved_approval=False,
                     claimed_saved_allow_hash=claimed_hash,
                     claimed_approval_request_id=claimed_request_id,
-                ).payload
+                )
             ),
-        )
-
-    def _handle_cloud_review_settings(self, payload: dict[str, object]) -> None:
-        from .cloud_review_settings_route import handle_cloud_review_settings
-
-        lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
-        handle_cloud_review_settings(
-            self.server.store,
-            payload,
-            refresh_workers=lifecycle.refresh_command_queue_worker if lifecycle is not None else None,
-            write_json=self._write_json,
-            write_approval_gate_error=self._write_approval_gate_error,
-        )
-
-    def _handle_command_queue_worker_refresh(self) -> None:
-        lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
-        if lifecycle is None:
-            self._write_json({"error": "command_queue_lifecycle_unavailable"}, status=503)
-            return
-        self._write_json(
-            lifecycle.refresh_command_queue_worker(),
-            extra_headers={"Cache-Control": "no-store"},
         )
 
     def _write_legacy_pairing_disabled(self) -> None:
         self._write_json(
             {
                 "error": "legacy_pairing_disabled",
-                "message": "Use hol-guard connect for browser OAuth.",
-            },
-            status=410,
-        )
-
-    def _write_legacy_cloud_handoff_disabled(self) -> None:
-        self._write_json(
-            {
-                "error": "legacy_cloud_handoff_disabled",
                 "message": "Use hol-guard connect for browser OAuth.",
             },
             status=410,
@@ -6267,18 +1732,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if not _native_mode_requires_rust():
-            self._write_json(
-                {
-                    "ready": True,
-                    "native_required": False,
-                    "workspace_acknowledged": False,
-                    "worker_ready": True,
-                },
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-
         daemon_server = self._daemon_server()
         readiness_deadline = time.monotonic() + _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS
         try:
@@ -6297,18 +1750,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
 
-        remaining_seconds = max(0.0, readiness_deadline - time.monotonic())
-        worker_ready = daemon_server.hook_process_runner.wait_for_capacity(
-            minimum_workers=1,
-            timeout_seconds=remaining_seconds,
-        )
-        if not worker_ready:
-            self._write_json(
-                {"ready": False, "reason_code": "native_worker_not_ready"},
-                status=503,
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
         self._write_json(
             {
                 "ready": True,
@@ -6321,37 +1762,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
+        from .hook_direct_counters import note_hook_received
+        from .hook_direct_pi_transport import pi_direct_answer
         from .hook_request_parsing import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
             runtime_hook_event_name,
         )
 
-        grok_prompt = default_harness == "grok" and runtime_hook_event_name(payload) == "UserPromptSubmit"
-        admission_seconds = 10.0 if grok_prompt else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
-        transport_deadline = self._daemon_server().request_deadline(
-            self.request,
-            admission_seconds,
-        )
+        prompt_event = runtime_hook_event_name(payload) == "UserPromptSubmit"
+        admission_seconds = PROMPT_ADMISSION_SECONDS if prompt_event else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
+        transport_deadline = self._daemon_server().request_deadline(self.request, admission_seconds)
         params = parse_qs(query)
-        hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
-        remaining_hint = _runtime_hook_remaining_hint(payload)
-        if grok_prompt and hint_missing:
-            remaining_hint = admission_seconds
-        hinted_deadline = (
-            RuntimeHookDeadline.from_remaining_hint(
-                remaining_hint,
-                monotonic=lambda: transport_deadline - admission_seconds,
-                maximum_budget_seconds=10.0,
-            )
-            if grok_prompt
-            else RuntimeHookDeadline.from_remaining_hint(remaining_hint)
+        # Diagnostics only: a count by the harness the worker reviews (the
+        # `runtime-harness` override first), before anything is judged.
+        note_hook_received(
+            getattr(self._daemon_server(), "hook_worker", None),
+            self._optional_string(params.get("runtime-harness", [None])[-1]) or default_harness,
         )
-        hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
-        hook_env = _runtime_hook_env_overlay_from_payload(payload)
+        hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
+        hook_deadline = RuntimeHookDeadline.for_admission(
+            _runtime_hook_remaining_hint(payload),
+            hint_missing=hint_missing,
+            prompt_event=prompt_event,
+            admission_seconds=admission_seconds,
+            transport_deadline=transport_deadline,
+        )
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
-        native_required = _native_mode_requires_rust()
+        paths_validated = False
         try:
             home_dir = self._validated_hook_directory_string(
                 "home",
@@ -6370,22 +1809,32 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace_candidate,
                 roots=self._hook_safe_roots(),
             )
+            paths_validated = True
         except _HookPathValidationError as error:
-            if native_required:
-                # The Rust edge still receives the complete raw payload. Use
-                # daemon-owned metadata when an optional caller context is
-                # missing or invalid; never turn metadata rejection into a
-                # Python semantic/source-ref fallback in auto/force.
-                self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
-                home_dir = str(daemon_server.home_dir)
-                guard_home = str(daemon_server.store.guard_home)
-                workspace = None
-            else:
-                self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
-                self._write_json({"error": error.code}, status=400)
+            # The Rust edge still receives the complete raw payload. Use
+            # daemon-owned metadata when an optional caller context is
+            # missing or invalid; never turn metadata rejection into a
+            # Python semantic/source-ref fallback.
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            home_dir = str(daemon_server.home_dir)
+            guard_home = str(daemon_server.store.guard_home)
+            workspace = None
+
+        if paths_validated:
+            # Oh My Pi has no bridge to ask the resident first, so ask it here.
+            direct_response = pi_direct_answer(
+                getattr(daemon_server, "hook_worker", None),
+                default_harness=default_harness,
+                params=params,
+                payload=payload,
+                home_dir=home_dir,
+                deadline=hook_deadline.expires_at,
+            )
+            if direct_response is not None:
+                self._write_json(direct_response)
                 return
 
-        if native_required and not prepare_native_hook_policy(
+        if not prepare_native_hook_policy(
             self, daemon_server, payload, params, default_harness, workspace, hook_deadline.expires_at
         ):
             return
@@ -6413,7 +1862,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     default_harness=default_harness,
                     reason="HOL Guard could not authenticate the local hook payload.",
                     reason_code="invalid_hook_payload_reference",
-                    native_authoritative=native_required,
                 )
             )
             return
@@ -6430,7 +1878,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     params,
                     default_harness=default_harness,
                     reason_code=reservation_reason,
-                    native_authoritative=native_required,
                 )
             )
             return
@@ -6464,7 +1911,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         params,
                         default_harness=default_harness,
                         reason_code=admission.reason_code,
-                        native_authoritative=native_required,
                     )
                 )
                 return
@@ -6478,12 +1924,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._execute_runtime_hook(
                     payload,
                     params,
-                    hook_env=hook_env,
                     default_harness=default_harness,
                     home_dir=home_dir,
                     guard_home=guard_home,
                     workspace=workspace,
-                    payload_hydrated=True,
                     deadline=hook_deadline.expires_at,
                 )
         finally:
@@ -6542,7 +1986,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         default_harness: str,
         reason_code: RuntimeHookAdmissionReason | None = None,
-        native_authoritative: bool = False,
     ) -> dict[str, object]:
         resolved_reason_code = reason_code or "daemon_hook_queue_capacity"
         if resolved_reason_code == "daemon_hook_deadline_exhausted":
@@ -6555,7 +1998,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             default_harness=default_harness,
             reason=reason,
             reason_code=resolved_reason_code,
-            native_authoritative=native_authoritative,
         )
 
     def _runtime_hook_fail_safe_response(
@@ -6566,7 +2008,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         default_harness: str,
         reason: str,
         reason_code: str,
-        native_authoritative: bool = False,
     ) -> dict[str, object]:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
@@ -6574,29 +2015,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         daemon_server = getattr(self, "server", None)
         workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
         guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
-        try:
-            loaded = (
-                None
-                if guard_home is None
-                else load_guard_config(guard_home, workspace=workspace_path, require_canonical_workspace=True)
-            )
-            observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
-        except (OSError, RuntimeError, TypeError, ValueError):
-            observe_mode = False
-        if observe_mode and not native_authoritative:
-            if harness in {"pi", "omp"}:
-                return {"decision": "allow", "reason_code": reason_code, "observed_review_failure": True}
-            if event == "PermissionRequest":
-                return {
-                    "reason_code": reason_code,
-                    "hookSpecificOutput": {"hookEventName": event, "decision": {"behavior": "allow"}},
-                }
-            if event == "PreToolUse":
-                return {
-                    "reason_code": reason_code,
-                    "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow"},
-                }
-            return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
         from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
         from .hook_availability_policy import availability_harness_response
 
@@ -6610,11 +2028,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace=workspace_path,
             home_dir=home_path,
             guard_home=guard_home,
-            recording_only=(
-                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None))
-                if native_authoritative
-                else observe_mode
-            ),
+            recording_only=recording_only_from_acked_snapshot(getattr(daemon_server, "store", None), harness),
         )
 
     def _validated_fail_safe_hook_paths(
@@ -6651,15 +2065,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload: dict[str, object],
         params: Mapping[str, list[str]],
         *,
-        hook_env: dict[str, str],
         default_harness: str,
         home_dir: str | None,
         guard_home: str | None,
         workspace: str | None,
-        payload_hydrated: bool = False,
         deadline: float | None = None,
     ) -> None:
-        if self._hook_fast_path_enabled() or _native_mode_requires_rust():
+        from contextlib import nullcontext
+
+        from ..sqlite_tuning import sqlite_operation_deadline
+
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
             result = self._handle_runtime_hook_fast(
                 payload,
                 params,
@@ -6677,38 +2093,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         default_harness=default_harness,
                         reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
                         reason_code="daemon_hook_deadline_exhausted",
-                        native_authoritative=_native_mode_requires_rust(),
                     )
                 self._write_json(result)
                 return
-            if _native_mode_requires_rust():
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete the native hook decision safely.",
-                        reason_code="native_hook_worker_unavailable",
-                        native_authoritative=True,
-                    )
+            self._write_json(
+                self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete the native hook decision safely.",
+                    reason_code="native_hook_worker_unavailable",
                 )
-                return
-
-        self._handle_runtime_hook_compatibility_cli(
-            payload,
-            params,
-            hook_env=hook_env,
-            default_harness=default_harness,
-            home_dir=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-            deadline=deadline,
-        )
-
-    def _hook_fast_path_enabled(self) -> bool:
-        from ..config import hook_fast_path_enabled
-
-        return hook_fast_path_enabled()
+            )
 
     def _handle_runtime_hook_fast(
         self,
@@ -6721,312 +2117,44 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         workspace: str | None,
         deadline: float | None,
     ) -> dict[str, object] | None:
-        """Try the resident hook worker; only explicit rollback may fall back."""
+        """Review through the resident hook worker; failures deny and never reach Python semantics."""
+        from contextlib import nullcontext
+
+        from ..sqlite_tuning import sqlite_operation_deadline
+
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
         effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
 
-        try:
-            worker = daemon_server.hook_worker
-            return worker.review_http_payload(
-                payload=payload,
-                params=params,
-                default_harness=default_harness,
-                home_dir=effective_home_dir,
-                guard_home=effective_guard_home,
-                workspace=Path(workspace) if workspace else None,
-                deadline=deadline,
-            )
-        except Exception as error:
-            # Fail safe: deny/block. Do not fall back to compatibility CLI for
-            # requests that omitted full output and supplied only guard_source_ref.
-            self._daemon_server().hook_worker.metrics.record_failure(
-                stage="server",
-                exception_type=type(error).__name__,
-            )
-            return self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason="HOL Guard could not complete local hook review safely.",
-                reason_code="daemon_worker_exception",
-                native_authoritative=_native_mode_requires_rust(),
-            )
-
-    def _handle_runtime_hook_compatibility_cli(
-        self,
-        payload: dict[str, object],
-        params: Mapping[str, list[str]],
-        *,
-        hook_env: dict[str, str],
-        default_harness: str,
-        home_dir: str | None,
-        guard_home: str | None,
-        workspace: str | None,
-        deadline: float | None,
-    ) -> None:
-        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
-        harness = runtime_harness or default_harness
-        daemon_server = self._daemon_server()
-        workspace_path = Path(workspace) if workspace is not None else None
-        hook_event_name = payload.get("hook_event_name")
-        process_timeout_seconds = (
-            _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS
-            if isinstance(hook_event_name, str) and hook_event_name.strip().lower() == "posttooluse"
-            else _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS
-        )
-        process_deadline = min(
-            deadline if deadline is not None else float("inf"),
-            time.monotonic() + process_timeout_seconds,
-        )
-        admission = daemon_server.runtime_hook_process_scheduler.acquire(
-            harness=harness,
-            client_key=self._runtime_hook_client_key(payload, workspace),
-            lane=self._runtime_hook_lane(payload),
-            payload_bytes=0,
-            deadline=process_deadline,
-        )
-        if admission.permit is None:
-            self._write_json(
-                self._runtime_hook_fail_safe_response(
+        # Keep failure rendering on the same storage clock as direct review.
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+            try:
+                worker = daemon_server.hook_worker
+                return worker.review_http_payload(
+                    payload=payload,
+                    params=params,
+                    default_harness=default_harness,
+                    home_dir=effective_home_dir,
+                    guard_home=effective_guard_home,
+                    workspace=Path(workspace) if workspace else None,
+                    deadline=deadline,
+                )
+            except Exception as error:
+                # Fail safe: deny/block; there is no Python semantic fallback.
+                self._daemon_server().hook_worker.metrics.record_failure(
+                    stage="server",
+                    exception_type=type(error).__name__,
+                )
+                return self._runtime_hook_fail_safe_response(
                     payload,
                     params,
                     default_harness=default_harness,
-                    reason=(
-                        "HOL Guard blocked this action because isolated local review could not complete safely. "
-                        "The agent may continue with a different, lower-risk action. "
-                        "Retry this exact action after local review recovers."
-                    ),
-                    reason_code=admission.reason_code or "daemon_hook_process_not_ready",
+                    reason="HOL Guard could not complete local hook review safely.",
+                    reason_code="daemon_worker_exception",
                 )
-            )
-            return
-        with admission.permit:
-            review = daemon_server.hook_process_runner.review(
-                payload=payload,
-                harness=harness,
-                home_dir=Path(home_dir) if home_dir is not None else Path.home(),
-                guard_home=(Path(guard_home) if guard_home is not None else daemon_server.store.guard_home),
-                workspace=workspace_path,
-                hook_env=hook_env,
-                deadline=process_deadline,
-            )
-        scheduler_stats = daemon_server.runtime_hook_process_scheduler.stats()
-        daemon_server.hook_process_runner.observe_load(
-            queue_p95_ms=scheduler_stats["queue_wait_p95_ms"],
-            queued=scheduler_stats["queued"],
-        )
-        if review.payload is not None and time.monotonic() < process_deadline:
-            receipt_accepted = False
-            if review.receipt is not None:
-                with suppress(Exception):
-                    receipt_accepted = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(
-                        review.receipt
-                    )
-            with suppress(Exception):
-                activity_action = review.payload.get("policy_action")
-                event = payload.get("hook_event_name", payload.get("hookEventName"))
-                if (
-                    isinstance(event, str)
-                    and event.replace("_", "").lower() == "pretooluse"
-                    and _native_mode_requires_rust()
-                    and isinstance(activity_action, str)
-                ):
-                    _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
-                        harness=harness,
-                        event="PreToolUse",
-                        payload=payload,
-                        succeeded=True,
-                        policy_action=activity_action,
-                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id"))
-                        if receipt_accepted
-                        else None,
-                        prompted=review.payload.get("prompted") is True,
-                        approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
-                        or "not-applicable",
-                    )
-            from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
-
-            observation = transition_hook_observation(payload, review.receipt)
-            response = dict(review.payload)
-            if observation is not None:
-                response[OBSERVATION_FIELD] = observation
-            self._write_json(response)
-            return
-        reason_code = (
-            "daemon_hook_process_deadline_exhausted"
-            if review.payload is not None
-            else review.reason_code or "daemon_hook_process_failed"
-        )
-        self._write_json(
-            self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason=(
-                    "HOL Guard blocked this action because isolated local review could not complete safely. "
-                    "The agent may continue with a different, lower-risk action. "
-                    "Retry this exact action after local review recovers."
-                ),
-                reason_code=reason_code,
-            )
-        )
 
     def _query_has_guard_token(self, query: str) -> bool:
         return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
-
-    def _handle_dashboard_reconnect_prepare(self) -> None:
-        daemon_server = self._daemon_server()
-        try:
-            with daemon_server.dashboard_reconnect_lock:
-                authorization = prepare_dashboard_reconnect_authorization(daemon_server.store.guard_home)
-        except (OSError, RuntimeError):
-            self._write_json(
-                {
-                    "error": "dashboard_reconnect_unavailable",
-                    "reason_code": "dashboard_reconnect_identity_unavailable",
-                },
-                status=503,
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-        self._write_json(authorization, extra_headers={"Cache-Control": "no-store"})
-
-    def _handle_dashboard_reconnect_challenge(self, payload: dict[str, object]) -> None:
-        if payload.get("protocol_version") != DASHBOARD_RECONNECT_PROTOCOL_VERSION:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_protocol_mismatch")
-            return
-        candidate_origin = self._strict_loopback_origin(payload.get("candidate_origin"))
-        daemon_origin = self._dashboard_reconnect_daemon_origin()
-        if candidate_origin is None or daemon_origin is None or candidate_origin != daemon_origin:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_origin_mismatch")
-            return
-        state = self._current_authenticated_daemon_state()
-        state_id = self._optional_string(state.get("state_id")) if state is not None else None
-        if state_id is None:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_state_unavailable")
-            return
-        daemon_server = self._daemon_server()
-        with daemon_server.dashboard_reconnect_lock:
-            challenge, reason_code = issue_dashboard_reconnect_challenge(
-                daemon_server.store.guard_home,
-                reconnect_id=payload.get("reconnect_id"),
-                client_nonce=payload.get("client_nonce"),
-                candidate_origin=candidate_origin,
-                state_id=state_id,
-            )
-        if challenge is None:
-            self._write_dashboard_reconnect_candidate_failure(reason_code)
-            return
-        self._write_json(challenge, extra_headers={"Cache-Control": "no-store"})
-
-    def _handle_dashboard_reconnect_verify(self, payload: dict[str, object]) -> None:
-        if payload.get("protocol_version") != DASHBOARD_RECONNECT_PROTOCOL_VERSION:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_protocol_mismatch")
-            return
-        raw_challenge = payload.get("challenge")
-        if not isinstance(raw_challenge, dict) or not _is_string_object_dict(raw_challenge):
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
-            return
-        candidate_origin = self._strict_loopback_origin(raw_challenge.get("candidate_origin"))
-        daemon_origin = self._dashboard_reconnect_daemon_origin()
-        state = self._current_authenticated_daemon_state()
-        state_id = self._optional_string(state.get("state_id")) if state is not None else None
-        if candidate_origin is None or daemon_origin is None or candidate_origin != daemon_origin or state_id is None:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_context_mismatch")
-            return
-        daemon_server = self._daemon_server()
-        challenge_identity = dashboard_reconnect_challenge_identity(raw_challenge)
-        if challenge_identity is None:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
-            return
-        now_ms = int(time.time() * 1000)
-        with daemon_server.dashboard_reconnect_lock:
-            expired_challenges = [
-                identity
-                for identity, expires_at_ms in daemon_server.dashboard_reconnect_consumed_challenges.items()
-                if expires_at_ms < now_ms
-            ]
-            for identity in expired_challenges:
-                daemon_server.dashboard_reconnect_consumed_challenges.pop(identity, None)
-            if challenge_identity in daemon_server.dashboard_reconnect_consumed_challenges:
-                self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_replayed")
-                return
-            verified, reason_code = consume_dashboard_reconnect_challenge(
-                daemon_server.store.guard_home,
-                challenge=raw_challenge,
-                proof=payload.get("proof"),
-                expected_candidate_origin=daemon_origin,
-                expected_state_id=state_id,
-            )
-            if verified:
-                expires_at_ms = raw_challenge.get("expires_at_ms")
-                daemon_server.dashboard_reconnect_consumed_challenges[challenge_identity] = (
-                    expires_at_ms if isinstance(expires_at_ms, int) else now_ms
-                )
-                while len(daemon_server.dashboard_reconnect_consumed_challenges) > 256:
-                    oldest = next(iter(daemon_server.dashboard_reconnect_consumed_challenges))
-                    daemon_server.dashboard_reconnect_consumed_challenges.pop(oldest, None)
-        if not verified:
-            self._write_dashboard_reconnect_candidate_failure(reason_code)
-            return
-        self._write_json(
-            {"verified": True, "reason_code": reason_code},
-            extra_headers={"Cache-Control": "no-store"},
-        )
-
-    def _write_dashboard_reconnect_candidate_failure(self, reason_code: str) -> None:
-        self._write_json(
-            {"error": "daemon_candidate_unavailable", "reason_code": reason_code},
-            status=404,
-            extra_headers={"Cache-Control": "no-store"},
-        )
-
-    def _current_authenticated_daemon_state(self) -> dict[str, object] | None:
-        daemon_server = self._daemon_server()
-        state = load_authenticated_daemon_state(daemon_server.store.guard_home)
-        if state is None:
-            return None
-        expected_guard_home = str(daemon_server.store.guard_home.resolve())
-        if (
-            state.get("guard_home") != expected_guard_home
-            or state.get("host") != daemon_server.daemon_host()
-            or state.get("port") != daemon_server.daemon_port()
-            or state.get("pid") != os.getpid()
-            or state.get("state_id") != daemon_server.runtime_session_id
-        ):
-            return None
-        return state
-
-    def _dashboard_reconnect_daemon_origin(self) -> str | None:
-        daemon_server = self._daemon_server()
-        host = daemon_server.daemon_host()
-        if host == "127.0.0.1":
-            return f"http://127.0.0.1:{daemon_server.daemon_port()}"
-        if host == "::1":
-            return f"http://[::1]:{daemon_server.daemon_port()}"
-        return None
-
-    @classmethod
-    def _strict_loopback_origin(cls, value: object) -> str | None:
-        if not isinstance(value, str):
-            return None
-        normalized = cls._normalize_origin(value)
-        if normalized is None:
-            return None
-        parsed = urlparse(normalized)
-        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1"}:
-            return None
-        try:
-            port = parsed.port
-        except ValueError:
-            return None
-        if port is None or not 1 <= port <= 65535:
-            return None
-        canonical_host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
-        canonical = f"http://{canonical_host}:{port}"
-        raw_origin = value.strip()
-        return canonical if normalized == canonical and raw_origin in {canonical, f"{canonical}/"} else None
 
     def _handle_daemon_identity_challenge(self, payload: dict[str, object]) -> None:
         nonce = self._optional_string(payload.get("nonce"))
@@ -7184,23 +2312,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "persisted": False,
             }
             daemon_server.auth_audit_windows[key] = window
-        try:
-            with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                daemon_server.store.add_event("daemon.auth.unauthorized", payload, _now())
-        except Exception:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["suppressed_count"] += 1
-            daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-        else:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["persisted"] = True
-                    window["suppressed_count"] -= reported_suppressed_count
+        outcome = daemon_server.audit_persistence.persist("daemon.auth.unauthorized", payload, _now())
+        with daemon_server.auth_audit_lock:
+            if daemon_server.auth_audit_windows.get(key) is not window:
+                return
+            window["pending"] = False
+            if outcome == AUDIT_NOT_PERSISTED:
+                window["suppressed_count"] += 1
+                return
+            # A queued row carries the suppressed count, but its retry can still
+            # fail, so only a confirmed write lets the window coalesce later events.
+            window["suppressed_count"] -= reported_suppressed_count
+            window["persisted"] = outcome == AUDIT_WRITTEN
 
     def _record_query_token_rejection(self) -> None:
         self._record_bounded_denial_event(
@@ -7222,32 +2345,76 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _record_bounded_denial_event(self, event_name: str, payload: dict[str, object]) -> None:
         daemon_server = self._daemon_server()
         with daemon_server.denial_audit_lock:
-            for attempt in range(2):
-                try:
-                    with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                        daemon_server.store.add_event(event_name, payload, _now())
-                except TimeoutError:
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_timeout")
-                    return
-                except sqlite3.OperationalError as error:
-                    if attempt == 0 and any(
-                        marker in str(error).lower() for marker in ("database is locked", "database table is locked")
-                    ):
-                        continue
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-                except sqlite3.DatabaseError:
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-                else:
-                    return
+            _ = daemon_server.audit_persistence.persist(event_name, payload, _now())
+
+    def _route_home(self) -> Path | None:
+        return getattr(getattr(self.server, "store", None), "guard_home", None)
+
+    def _path_supports_dashboard_session(self, path: str) -> bool:
+        try:
+            return native_route_facts(self.command, path, guard_home=self._route_home()).session_path
+        except NativeDaemonRouteError:
+            return False
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
         path = urlparse(self.path).path
-        path_parts = [part for part in path.split("/") if part]
         return self._tokens_match(token) or (
-            self._path_supports_dashboard_session(path, path_parts)
-            and self._dashboard_session_token_is_valid(payload=payload)
+            self._path_supports_dashboard_session(path) and self._dashboard_session_token_is_valid(payload=payload)
         )
+
+    def _origin_is_allowed_for_request(self, path: str) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        normalized_origin = self._normalize_origin(origin)
+        if normalized_origin is None:
+            return False
+        try:
+            return native_origin_decision(normalized_origin, path, guard_home=self._route_home()).allowed
+        except NativeDaemonRouteError:
+            return False
+
+    def _is_hosted_dashboard_origin(self) -> bool:
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if origin is None:
+            return False
+        try:
+            return native_origin_decision(origin, "/", guard_home=self._route_home()).hosted_origin
+        except NativeDaemonRouteError:
+            return True
+
+    def _strict_loopback_origin(self, value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            return native_strict_loopback_origin(
+                value.strip(), self._normalize_origin(value), guard_home=self._route_home()
+            )
+        except NativeDaemonRouteError:
+            return None
+
+    def _dashboard_session_claims_authorize_request(
+        self,
+        claims: dict[str, object],
+        *,
+        payload: dict[str, object] | None,
+    ) -> bool:
+        try:
+            verdict = native_session_authorize(
+                method=self.command,
+                path=urlparse(self.path).path,
+                claims=claims,
+                payload=payload,
+                header_nonce=self.headers.get("X-Guard-Dashboard-Nonce"),
+                request_origin=self._normalize_origin(self.headers.get("Origin")),
+                guard_home=self._route_home(),
+            )
+        except NativeDaemonRouteError:
+            return False
+        if verdict.consume_nonce is not None and not self._consume_dashboard_session_nonce(verdict.consume_nonce):
+            return False
+        return verdict.allowed
 
     def _dashboard_session_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
@@ -7373,254 +2540,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return claims
         return None
 
-    def _dashboard_session_claims_authorize_request(
-        self,
-        claims: dict[str, object],
-        *,
-        payload: dict[str, object] | None,
-    ) -> bool:
-        surface = self._optional_string(claims.get("surface"))
-        path = urlparse(self.path).path
-        path_parts = [part for part in path.split("/") if part]
-        if surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
-            return self._protection_repair_session_request_is_allowed(path, payload=payload)
-        if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
-            return self._path_supports_dashboard_session(path, path_parts)
-        action_path = self._optional_string(claims.get("action_path"))
-        if action_path is None:
-            return False
-        if self.command == "GET" and self._dashboard_session_scoped_read_path_is_allowed(claims, path):
-            return self._dashboard_session_scoped_nonce_matches_request(claims=claims, payload=payload)
-        if (
-            len(path_parts) == 3
-            and path_parts[:2] == ["v1", "apps"]
-            and path_parts[2] in _cloud_app_dashboard_session_actions(action_path)
-        ):
-            if payload is None:
-                return False
-            harness = self._optional_string(claims.get("harness"))
-            location_id = self._optional_string(claims.get("location_id"))
-            workspace_id = self._optional_string(claims.get("workspace_id")) or ""
-            payload_harness = self._optional_string(payload.get("harness"))
-            payload_location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
-                payload.get("locationId")
-            )
-            payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
-            return (
-                harness is not None
-                and payload_harness == harness
-                and (not location_id or payload_location_id == location_id)
-                and (not workspace_id or payload_workspace_id == workspace_id)
-            )
-        supply_chain_action = self._supply_chain_claim_action_for_request(path, path_parts)
-        if supply_chain_action is not None:
-            return self._supply_chain_dashboard_claims_authorize(
-                claims,
-                payload=payload,
-                supply_chain_action=supply_chain_action,
-            )
-        return False
-
-    def _dashboard_session_scoped_read_path_is_allowed(self, claims: dict[str, object], path: str) -> bool:
-        allowed_read_paths = claims.get("allowed_read_paths")
-        if not isinstance(allowed_read_paths, list):
-            return False
-        return path in {item for item in allowed_read_paths if isinstance(item, str)}
-
-    def _dashboard_session_scoped_nonce_matches_request(
-        self,
-        *,
-        claims: dict[str, object],
-        payload: dict[str, object] | None,
-    ) -> bool:
-        claim_nonce = self._optional_string(claims.get("nonce"))
-        if claim_nonce is None:
-            return True
-        request_nonce = self._optional_string(self.headers.get("X-Guard-Dashboard-Nonce"))
-        if request_nonce is None and payload is not None:
-            request_nonce = self._optional_string(payload.get("dashboard_session_nonce"))
-        return request_nonce == claim_nonce
-
-    def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
-        if path in {
-            "/v1/cloud-review",
-            "/v1/capabilities",
-            "/v1/sessions",
-            "/v1/runtime",
-            "/v1/harnesses",
-            "/v1/inventory",
-            "/v1/settings",
-            "/v1/settings/export",
-            "/v1/events",
-            "/v1/events/stream",
-            "/v1/command-activity",
-            "/v1/command-activity/analytics",
-            "/v1/command-activity/diagnostics",
-            "/v1/command-activity/events",
-            "/v1/command-activity/feedback",
-            "/v1/command-extensions",
-            "/v1/requests",
-            "/v1/receipts",
-            "/v1/receipts/analytics",
-            "/v1/insights/share",
-            "/v1/cloud/connect",
-            "/v1/receipts/latest",
-            "/v1/policy",
-            "/v1/policy/cloud-exceptions",
-            "/v1/evidence",
-            "/v1/evidence/export",
-            "/v1/clients/attach",
-            "/v1/clients/heartbeat",
-            "/v1/sessions/start",
-            "/v1/operations/start",
-            "/v1/operations/block",
-            "/v1/policy/sync",
-            "/v1/requests/clear",
-            *_REMOTE_REVIEW_POST_ROUTES,
-            "/v1/settings/import",
-            "/v1/settings/reset",
-            "/v1/read-state",
-            "/v1/policy/clear",
-            "/v1/approval-gate/cooldown/revoke",
-            "/v1/approval-gate/totp/enroll",
-            "/v1/approval-gate/totp/verify",
-            "/v1/approval-gate/totp/disable",
-            "/v1/daemon/repair",
-            "/v1/protection/repair",
-            "/v1/notifications/setup",
-            "/v1/update/status",
-            "/v1/update/channel",
-            "/v1/update/reconnect/prepare",
-        }:
-            return True
-        # Hosted dashboard access is blocked for these routes, but local
-        # loopback/dashboard sessions still use them until the route deletion
-        # slice lands.
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
-            return True
-        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
-            return True
-        if self.command == "GET":
-            if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
-                return True
-            if len(path_parts) == 3 and path_parts[:2] in (
-                ["v1", "requests"],
-                ["v1", "receipts"],
-                ["v1", "operations"],
-            ):
-                return True
-            if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
-                return True
-        if self.command == "POST":
-            if (
-                len(path_parts) == 5
-                and path_parts[:3] == ["v1", "mcp-policy", "requests"]
-                and path_parts[4] == "decision"
-            ):
-                return True
-            if path in {"/v1/update", "/v1/update/channel", "/v1/update/reconnect/prepare"}:
-                return True
-            if (
-                len(path_parts) == 4
-                and path_parts[:2] == ["v1", "requests"]
-                and path_parts[3]
-                in {
-                    "approve",
-                    "block",
-                    "resume",
-                }
-            ):
-                return True
-            if (
-                len(path_parts) == 4
-                and path_parts[:2] == ["v1", "operations"]
-                and path_parts[3]
-                in {
-                    "items",
-                    "status",
-                }
-            ):
-                return True
-        return False
-
-    def _protection_repair_session_request_is_allowed(
-        self,
-        path: str,
-        *,
-        payload: dict[str, object] | None,
-    ) -> bool:
-        if self.command == "GET" and path in {
-            "/v1/runtime",
-            "/v1/settings",
-            "/v1/extension-controls/effective",
-            "/v1/update/status",
-        }:
-            return True
-        if self.command != "POST":
-            return False
-        return path in {
-            "/v1/initialize",
-            "/v1/extension-controls/recover-authority",
-        }
-
-    def _path_supports_dashboard_session(self, path: str, path_parts: list[str]) -> bool:
-        return self._is_hosted_dashboard_api_path(path, path_parts) or self._local_surface_session_request_is_allowed(
-            path,
-            path_parts,
-        )
-
-    def _claim_string(self, claims: dict[str, object], *keys: str) -> str | None:
-        for key in keys:
-            value = self._optional_string(claims.get(key))
-            if value is not None:
-                return value
-        return None
-
-    def _enforce_package_firewall_rate_limit(
-        self,
-        operation: str,
-        payload: dict[str, object],
-    ) -> bool:
-        workspace_id = (
-            self._optional_string(payload.get("workspace_id"))
-            or self._optional_string(payload.get("workspaceId"))
-            or self.server.store.get_cloud_workspace_id()  # type: ignore[attr-defined]
-            or "local"
-        )
-        rate_key = f"{workspace_id}:{operation}"
-        allowed, retry_after = self.server.package_firewall_action_rate_limiter.allow(rate_key)  # type: ignore[attr-defined]
-        if allowed:
-            return True
-        self._write_json(
-            {
-                "error": "rate_limited",
-                "message": "Package firewall actions are temporarily rate limited.",
-                "operation": operation,
-                "retry_after_seconds": retry_after,
-            },
-            status=429,
-        )
-        return False
-
-    def _run_package_firewall_mutation(self, operation: str, action: Callable[[], None]) -> None:
-        lock = self.server.package_firewall_mutation_lock  # type: ignore[attr-defined]
-        if not lock.acquire(blocking=False):
-            self._write_json(
-                {
-                    "error": "operation_in_progress",
-                    "message": (
-                        "Guard is still finishing a package protection change. Check its status before retrying."
-                    ),
-                    "operation": operation,
-                },
-                status=409,
-            )
-            return
-        try:
-            action()
-        finally:
-            lock.release()
-
     def _consume_dashboard_session_nonce(self, nonce: str) -> bool:
         now = time.monotonic()
         ttl_seconds = 600.0
@@ -7636,78 +2555,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.server.package_firewall_session_nonces[nonce] = now
             return True
 
-    def _supply_chain_dashboard_claims_authorize(
-        self,
-        claims: dict[str, object],
-        *,
-        payload: dict[str, object] | None,
-        supply_chain_action: str,
-    ) -> bool:
-        action_path = self._optional_string(claims.get("action_path"))
-        allowed_claim = claims.get("allowed_action_paths")
-        allowed_actions = (
-            {item for item in allowed_claim if isinstance(item, str)} if isinstance(allowed_claim, list) else set()
-        )
-        if supply_chain_action != action_path and supply_chain_action not in allowed_actions:
-            return False
-        claim_nonce = self._claim_string(claims, "nonce")
-        if claim_nonce is not None and not self._consume_dashboard_session_nonce(claim_nonce):
-            return False
-        if payload is None:
-            return supply_chain_action in {"package_shims_status", "supply_chain_bundle"}
-        workspace_id = self._claim_string(claims, "workspace_id", "workspaceId") or ""
-        payload_workspace_id = (
-            self._optional_string(payload.get("workspace_id"))
-            or self._optional_string(payload.get("workspaceId"))
-            or ""
-        )
-        if workspace_id and payload_workspace_id != workspace_id:
-            return False
-        location_id = self._claim_string(claims, "location_id", "locationId")
-        payload_location_id = (
-            self._optional_string(payload.get("location_id")) or self._optional_string(payload.get("locationId")) or ""
-        )
-        if location_id and payload_location_id != location_id:
-            return False
-        daemon_origin = self._claim_string(claims, "daemon_origin", "daemonOrigin")
-        if daemon_origin is not None:
-            request_origin = self._normalize_origin(self.headers.get("Origin"))
-            payload_origin = (
-                self._optional_string(payload.get("daemon_origin"))
-                or self._optional_string(payload.get("daemonOrigin"))
-                or request_origin
-            )
-            if payload_origin != daemon_origin:
-                return False
-        managers_claim = claims.get("managers")
-        if not isinstance(managers_claim, list):
-            return True
-        allowed_managers = {item for item in managers_claim if isinstance(item, str)}
-        managers_value = payload.get("managers")
-        if managers_value is None:
-            return True
-        if not isinstance(managers_value, list) or not all(isinstance(manager, str) for manager in managers_value):
-            return False
-        return set(managers_value).issubset(allowed_managers)
-
-    @staticmethod
-    def _supply_chain_claim_action_for_request(path: str, path_parts: list[str]) -> str | None:
-        if path == "/v1/supply-chain/package-shims":
-            return "package_shims_status"
-        if path == "/v1/supply-chain/entitlement":
-            return "supply_chain_entitlement"
-        if path == "/v1/supply-chain/bundle":
-            return "supply_chain_bundle"
-        if path == "/v1/supply-chain/repair":
-            return "package_shims_repair_all"
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "supply-chain", "package-shims"]:
-            action = "remove" if path_parts[3] == "uninstall" else path_parts[3]
-            if action in {"activate", "install", "repair", "test", "remove", "open-shell"}:
-                return f"package_shims_{action}"
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
-            return f"package_shims_{path_parts[2]}"
-        return None
-
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
             return False
@@ -7719,7 +2566,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return secrets.compare_digest(provided, expected)
 
     def _touch_runtime_heartbeat(self, path: str) -> None:
-        if path != "/healthz" and not path.startswith("/v1/"):
+        if path != "/healthz" and not path.startswith(("/v1/", "/v2/")):
             return
         self.server.last_activity_monotonic = time.monotonic()  # type: ignore[attr-defined]
         self._daemon_server().runtime_heartbeat.touch(_now())
@@ -7739,160 +2586,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
             self.server.active_stream_clients = max(0, self.server.active_stream_clients - 1)  # type: ignore[attr-defined]
 
-    @staticmethod
-    def _optional_int(value: object) -> int | None:
-        if isinstance(value, int):
-            return value
-        if isinstance(value, str) and value.strip():
-            try:
-                return int(value.strip())
-            except ValueError:
-                return None
-        return None
-
-    def _stream_events(self, cursor: int) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.end_headers()
-        next_cursor = cursor
-        self._increment_active_stream_clients()
-        try:
-            while True:
-                self._touch_runtime_heartbeat("/v1/events/stream")
-                items = self.server.store.list_events_after(next_cursor, limit=100)  # type: ignore[attr-defined]
-                for item in items:
-                    event_id = item.get("event_id")
-                    if not isinstance(event_id, int):
-                        continue
-                    next_cursor = event_id
-                    body = json.dumps(item)
-                    try:
-                        self.wfile.write(f"data: {body}\n\n".encode())
-                        self.wfile.flush()
-                    except BrokenPipeError:
-                        return
-                time.sleep(0.5)
-        finally:
-            self._decrement_active_stream_clients()
-
-    def _origin_is_allowed_for_request(self, path: str, path_parts: list[str]) -> bool:
-        origin = self.headers.get("Origin")
-        if origin is None:
-            return True
-        normalized_origin = self._normalize_origin(origin)
-        if normalized_origin is None:
-            return False
-        parsed = urlparse(normalized_origin)
-        local_origin = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-        if local_origin:
-            return True
-        return normalized_origin in _HOSTED_GUARD_DASHBOARD_ORIGINS and self._is_hosted_dashboard_api_path(
-            path, path_parts
-        )
-
-    @staticmethod
-    def _is_hosted_dashboard_api_path(path: str, path_parts: list[str]) -> bool:
-        if path in {
-            "/v1/capabilities",
-            "/v1/connect/complete",
-            "/v1/inventory",
-            "/v1/connect/state",
-            "/v1/daemon/repair",
-            "/v1/evidence",
-            "/v1/evidence/export",
-            "/v1/command-activity",
-            "/v1/command-activity/analytics",
-            "/v1/command-activity/diagnostics",
-            "/v1/command-activity/events",
-            "/v1/command-activity/feedback",
-            "/v1/command-extensions",
-            "/v1/extension-controls/catalog",
-            "/v1/extension-controls/effective",
-            "/v1/extension-controls/history",
-            "/v1/extension-controls/preview",
-            "/v1/extension-controls/test",
-            "/v1/extension-controls/apply",
-            "/v1/extension-controls/refresh",
-            "/v1/extension-controls/recover-authority",
-            "/v1/extension-controls/acknowledge-degraded",
-            "/v1/local-clis",
-            *_LOCAL_CLI_PATHS,
-            "/v1/harnesses",
-            "/v1/notifications/setup",
-            "/v1/policy",
-            "/v1/policy/cloud-exceptions",
-            "/v1/policy/cloud-exception-requests",
-            "/v1/policy/clear",
-            "/v1/receipts",
-            "/v1/receipts/analytics",
-            "/v1/insights/share",
-            "/v1/cloud/connect",
-            "/v1/supply-chain/package-shims/connect",
-            "/v1/supply-chain/package-shims/activate",
-            "/v1/receipts/latest",
-            "/v1/runtime",
-            "/v1/settings",
-            "/v1/protection/repair/approval-gate/setup",
-            "/v1/settings/export",
-            "/v1/settings/import",
-            "/v1/settings/reset",
-            "/v1/read-state",
-            "/v1/update",
-            "/v1/update/channel",
-            "/v1/update/reconnect/challenge",
-            "/v1/update/reconnect/prepare",
-            "/v1/update/reconnect/verify",
-            "/v1/update/status",
-        }:
-            return True
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "receipts"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            return True
-        if (
-            len(path_parts) == 5
-            and path_parts[:2] == ["v1", "apps"]
-            and path_parts[3] == "cloud"
-            and path_parts[4] == "start"
-        ):
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "harnesses"]
-            and path_parts[3]
-            in {
-                "install",
-                "verify",
-                "repair",
-                "uninstall",
-            }
-        ):
-            return True
-        return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
-
-    def _is_hosted_dashboard_origin(self) -> bool:
-        origin = self._normalize_origin(self.headers.get("Origin"))
-        return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
-
     def _public_healthz_payload(self) -> dict[str, object]:
         return {
             "ok": True,
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
         }
-
-    def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
-        from ..runtime.containment_health import probe_containment_health
-
-        def probe() -> dict[str, object]:
-            return probe_containment_health(
-                daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
-            ).to_dict()
-
-        return cached_containment_health(self._daemon_server(), force_refresh=force_refresh, probe=probe)
 
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
@@ -7901,7 +2599,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         pending_approvals = store.count_approval_requests()
         activity_health = store.get_command_activity_persistence_health()
         scheduler_stats = daemon_server.runtime_hook_scheduler.stats()
-        process_scheduler_stats = daemon_server.runtime_hook_process_scheduler.stats()
         evidence_writer_stats = daemon_server.runtime_hook_evidence_writer.stats()
         sqlite_profile = store.sqlite_profile()
         sqlite_migration_gate = store.sqlite_migration_gate_report()
@@ -7940,10 +2637,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if evidence_writer_stats["failures"] and evidence_writer_stats["queued"]:
             load_state = "store-contended"
             load_detail = "Evidence persistence is retrying outside the security decision path."
-        elif scheduler_stats["expired"] or process_scheduler_stats["expired"] or daemon_server.rejected_hook_requests:
+        elif scheduler_stats["expired"] or daemon_server.rejected_hook_requests:
             load_state = "saturated"
             load_detail = "Secure review capacity was exhausted; recovery is automatic as load falls."
-        elif scheduler_stats["queued"] or process_scheduler_stats["queued"]:
+        elif scheduler_stats["queued"]:
             load_state = "backlogged"
             load_detail = "Queued reviews are draining automatically."
         else:
@@ -7959,12 +2656,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "sqlite_migration_gate": sqlite_migration_gate,
             "quarantined_store": quarantined_store_summary(store.guard_home),
             "onefile_extraction": daemon_server.onefile_extraction_status,
+            "repair_self_check": daemon_server.repair_self_check_status,
             "uptime_seconds": uptime,
             "pid": os.getpid(),
             "tables": store.list_table_names(),
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
             "runtime_fingerprint": current_guard_daemon_runtime_fingerprint(),
+            # Adoption needs the install root to reject a previous generation
+            # still running from the same, now upgraded, install.
+            "source_root": current_guard_daemon_source_root(),
             "guard_home": str(store.guard_home.resolve()),
             "command_activity_evidence": {
                 "state": "degraded" if activity_health.persistence_error_count else "healthy",
@@ -7984,58 +2685,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "state": load_state,
                 "detail": load_detail,
             },
-            "hook_process_capacity": process_scheduler_stats,
-            "hook_workers": daemon_server.hook_process_runner.stats(),
             "request_capacity": request_capacity,
-        }
-
-    def _operator_health_payload(self) -> dict[str, object]:
-        daemon_server = self._daemon_server()
-        scheduler = daemon_server.runtime_hook_scheduler.stats()
-        workers = daemon_server.hook_process_runner.stats()
-        evidence_writer = daemon_server.runtime_hook_evidence_writer.stats()
-        activity_health = daemon_server.store.get_command_activity_persistence_health()
-        worker_fault = workers["configured"] > 0 and workers["workers"] == 0
-        evidence_fault = not evidence_writer["running"]
-        store_busy = (
-            activity_health.persistence_error_count > 0
-            and activity_health.last_error_code is not None
-            and activity_health.last_error_code.startswith("sqlite.")
-        )
-        saturated = scheduler["queued_limit"] > 0 and scheduler["queued"] >= scheduler["queued_limit"]
-
-        if worker_fault or evidence_fault:
-            state = "saturated"
-            cause = "A local processing component stopped and needs repair."
-        elif store_busy:
-            state = "store-contended"
-            cause = "The local evidence store is busy; queued writes are retrying automatically."
-        elif saturated:
-            state = "saturated"
-            cause = "Local review capacity is full; new work waits or receives a typed retry."
-        elif scheduler["queued"] > 0:
-            state = "backlogged"
-            cause = "A short local backlog is waiting behind active reviews."
-        else:
-            state = "healthy"
-            cause = "Local reviews are processing within available capacity."
-
-        repairable = worker_fault or evidence_fault
-        return {
-            "state": state,
-            "cause": cause,
-            "automatic_recovery": (
-                "Repair restores the stopped local component."
-                if repairable
-                else "Guard drains queued work and adjusts ready workers automatically."
-            ),
-            "repairable": repairable,
-            "queue_depth": scheduler["queued"],
-            "queue_limit": scheduler["queued_limit"],
-            "oldest_wait_ms": scheduler["oldest_queued_ms"],
-            "workers_busy": workers["busy"],
-            "workers_ready": workers["ready"],
-            "workers_configured": workers["configured"],
         }
 
     @staticmethod
@@ -8087,147 +2737,33 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         allow_headers: str = "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
     ) -> dict[str, str] | None:
         parsed = urlparse(self.path)
-        path_parts = [part for part in parsed.path.split("/") if part]
         origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is None or not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if origin is None or not self._origin_is_allowed_for_request(parsed.path):
             return None
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
-    def _handle_policy_upsert(self, payload: dict[str, object]) -> None:
-        harness = payload.get("harness")
-        scope = payload.get("scope")
-        action = payload.get("action")
-        if (
-            not isinstance(harness, str)
-            or not harness.strip()
-            or not isinstance(scope, str)
-            or not scope.strip()
-            or not isinstance(action, str)
-            or not action.strip()
-        ):
-            self._write_json({"saved": False, "error": "missing_required_fields"}, status=400)
-            return
-        normalized_harness = harness.strip()
-        normalized_scope = scope.strip()
-        normalized_action = action.strip()
-        if not _is_decision_scope(normalized_scope) or not _is_guard_action(normalized_action):
-            self._write_json({"saved": False, "error": "unsupported_policy_value"}, status=400)
-            return
-        if normalized_scope == "global" and normalized_action == "allow":
-            self._write_json({"saved": False, "error": "broad_allow_requires_narrow_scope"}, status=400)
-            return
-        record = {
-            "harness": normalized_harness,
-            "scope": normalized_scope,
-            "action": normalized_action,
-            "artifact_id": self._optional_string(payload.get("artifact_id")),
-            "workspace": self._optional_string(payload.get("workspace")),
-            "publisher": self._optional_string(payload.get("publisher")),
-            "reason": self._optional_string(payload.get("reason")),
-        }
-        if not self._scope_target_is_valid(
-            normalized_scope,
-            artifact_id=record["artifact_id"],
-            workspace=record["workspace"],
-            publisher=record["publisher"],
-        ):
-            self._write_json({"saved": False, "error": "missing_scope_target"}, status=400)
-            return
-        store = self.server.store  # type: ignore[attr-defined]
-        decision = PolicyDecision(
-            harness=normalized_harness,
-            scope=normalized_scope,
-            action=normalized_action,
-            artifact_id=record["artifact_id"],
-            workspace=record["workspace"],
-            publisher=record["publisher"],
-            reason=record["reason"],
-        )
-        try:
-            approval_gate_grant = require_high_risk(
-                store.guard_home,
-                purpose="policy_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            store.upsert_policy(
-                decision,
-                _now(),
-                approval_gate_grant=approval_gate_grant,
-            )
-        except ApprovalGateError as error:
-            payload = error.to_payload()
-            payload["saved"] = False
-            self._write_json(payload, status=error.status)
-            return
-        except ValueError as error:
-            self._write_json({"saved": False, "error": str(error)}, status=400)
-            return
-        self._write_json({"saved": True, "decision": record})
+    def _native_handler_decision(self, ask: Callable[[], HandlerDecision]) -> HandlerDecision | None:
+        """Ask the resident to validate a request.
 
-    def _handle_policy_resolve(self, payload: dict[str, object]) -> None:
-        from .policy_authority_api import PolicyAuthorityApiError, resolve_policy_decision
+        A rejection is written as the resident shaped it; so is the fail-closed
+        reply when the resident cannot answer. Both return ``None``.
+        """
 
         try:
-            result = resolve_policy_decision(self.server.store, payload, now=_now())  # type: ignore[attr-defined]
-        except PolicyAuthorityApiError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        self._write_json(result, extra_headers={"Cache-Control": "no-store"})
-
-    def _handle_policy_claim(self, payload: dict[str, object]) -> None:
-        from .policy_authority_api import PolicyAuthorityApiError, claim_policy_decision
-
-        try:
-            result = claim_policy_decision(self.server.store, payload, now=_now())  # type: ignore[attr-defined]
-        except PolicyAuthorityApiError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        self._write_json(result, status=200 if result["claimed"] else 409)
+            decision = ask()
+        except NativeDaemonHandlerError:
+            self._write_json({"error": "native_handler_policy_unavailable"}, status=503)
+            return None
+        if decision.rejected:
+            self._write_json(decision.body, status=decision.status)
+            return None
+        return decision
 
     @staticmethod
     def _optional_string(value: object) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
         return None
-
-    def _coalesce_string(self, mapping: dict[str, object], *keys: str) -> str | None:
-        for key in keys:
-            value = self._optional_string(mapping.get(key))
-            if value is not None:
-                return value
-        return None
-
-    @staticmethod
-    def _query_string(query_string: str, key: str) -> str | None:
-        value = parse_qs(query_string).get(key, [None])[-1]
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return None
-
-    @staticmethod
-    def _query_bool(query_string: str, key: str, *, default: bool) -> bool:
-        value = parse_qs(query_string).get(key, [None])[-1]
-        if not isinstance(value, str):
-            return default
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-        return default
-
-    @staticmethod
-    def _query_limit(query_string: str, *, default: int, maximum: int) -> int | None:
-        raw_value = parse_qs(query_string).get("limit", [None])[-1]
-        if raw_value is None:
-            return default
-        try:
-            value = int(raw_value)
-        except (TypeError, ValueError):
-            return None
-        if value < 1:
-            return None
-        return min(value, maximum)
 
     def _validated_hook_directory_string(
         self,
@@ -8259,7 +2795,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_root = trusted_temporary_root_for_path(Path(candidate))
         except OSError:
             temporary_root = None
-        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
             return None
         return candidate
 
@@ -8282,7 +2818,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_root = trusted_temporary_root_for_path(Path(candidate))
         except OSError:
             temporary_root = None
-        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
             return True, None
         return True, candidate
 
@@ -8302,14 +2838,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except DirectoryPathTrustError as error:
             raise _HookPathValidationError(parameter, error.reason) from error
 
-    @staticmethod
-    def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
-        return _GuardDaemonHandler._validated_owned_temporary_hook_workspace(candidate) is not None
-
-    @staticmethod
-    def _validated_owned_temporary_hook_workspace(candidate: str) -> Path | None:
-        return validated_owned_temporary_workspace(candidate)
-
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
             return None
@@ -8317,138 +2845,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not os.path.isabs(expanded):
             raise _HookPathValidationError("guard-home", "relative_path")
         try:
-            candidate = os.path.realpath(expanded)
+            candidate = cached_realpath(expanded)
         except OSError:
             raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
-        expected = os.path.realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
+        expected = cached_realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
         if candidate != expected:
             raise _HookPathValidationError("guard-home", "unexpected_guard_home")
         return expected
 
     def _hook_safe_roots(self) -> tuple[Path, ...]:
         return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
-
-    @staticmethod
-    def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
-        candidate_path = os.fspath(candidate)
-        root_path = os.fspath(root)
-        try:
-            return os.path.commonpath([candidate_path, root_path]) == root_path
-        except ValueError:
-            return False
-
-    @staticmethod
-    def _scope_target_is_valid(
-        scope: str,
-        *,
-        artifact_id: str | None,
-        workspace: str | None,
-        publisher: str | None,
-    ) -> bool:
-        if scope in {"global", "harness"}:
-            return True
-        if scope == "artifact":
-            return artifact_id is not None
-        if scope == "workspace":
-            return workspace is not None
-        if scope == "publisher":
-            return publisher is not None
-        return False
-
-    @staticmethod
-    def _resolve_request_action(
-        path_parts: list[str], payload: dict[str, object]
-    ) -> tuple[str | None, str | None, bool]:
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
-            return path_parts[2], "allow" if path_parts[3] == "approve" else "block", True
-        if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
-            action = payload.get("action")
-            if not isinstance(action, str) or not action.strip():
-                return path_parts[1], None, True
-            return path_parts[1], action.strip(), True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            action = payload.get("action")
-            if not isinstance(action, str) or not action.strip():
-                return path_parts[2], None, True
-            return path_parts[2], action.strip(), True
-        return None, None, False
-
-    @staticmethod
-    def _requires_header_token(path: str, path_parts: list[str]) -> bool:
-        if path in {
-            "/v1/cloud-review",
-            "/v1/clients/attach",
-            "/v1/clients/heartbeat",
-            "/v1/sessions/start",
-            "/v1/operations/start",
-            "/v1/connect/requests",
-            "/v1/connect/result",
-            "/v1/operations/block",
-            "/v1/policy/decisions",
-            "/v1/policy/resolve",
-            "/v1/policy/claim",
-            "/v1/policy/cloud-exceptions",
-            "/v1/policy/cloud-exception-requests",
-            "/v1/policy/clear",
-            "/v1/policy/sync",
-            "/v1/requests/clear",
-            *_REMOTE_REVIEW_POST_ROUTES,
-            "/v1/settings",
-            "/v1/settings/import",
-            "/v1/settings/reset",
-            "/v1/approval-gate/cooldown/revoke",
-            "/v1/approval-gate/totp/enroll",
-            "/v1/approval-gate/totp/verify",
-            "/v1/approval-gate/totp/disable",
-            "/v1/daemon/repair",
-            "/v1/protection/repair",
-            "/v1/protection/repair/approval-gate/setup",
-            "/v1/insights/share",
-            "/v1/cloud/connect",
-            "/v1/notifications/setup",
-            "/v1/update",
-            "/v1/update/channel",
-            "/v1/update/reconnect/prepare",
-            "/v1/command-activity/feedback",
-        }:
-            return True
-        if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
-            return True
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
-            return True
-        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "requests"]
-            and path_parts[3] in {"approve", "block", "resume", "live-decision"}
-        ):
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "harnesses"]
-            and path_parts[3]
-            in {
-                "install",
-                "verify",
-                "repair",
-                "uninstall",
-            }
-        ):
-            return True
-        if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3:] == ["cloud", "start"]:
-            return True
-        if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
-            return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            return True
-        return (
-            len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision"
-        )
 
     def _write_json(
         self,
@@ -8458,6 +2864,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         extra_headers: dict[str, str] | None = None,
     ) -> None:
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
+        self._write_json_bytes(body, status=status, extra_headers=extra_headers)
+
+    def _write_discovery_body(self, body: bytes) -> None:
+        """Write the native discovery projection verbatim, uncached.
+
+        The bytes are exactly what the native validator produced: this server
+        never interprets, filters, or reorders placements.
+        """
+
+        self._write_json_bytes(
+            escape_json_for_html(body),
+            status=200,
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
+    def _write_json_bytes(
+        self,
+        body: bytes,
+        *,
+        status: int,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        """Write already HTML-safe JSON bytes with the standard response headers."""
+
         headers = {**dict(extra_headers or {}), "X-Content-Type-Options": "nosniff"}
         cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS")
         if cors_headers is not None:
@@ -8491,6 +2921,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _validated_headers(extra_headers: dict[str, str] | None) -> dict[str, str]:
         allowed_headers = {
             "Access-Control-Allow-Origin",
+            "Access-Control-Expose-Headers",
+            "ETag",
             "Access-Control-Allow-Methods",
             "Access-Control-Allow-Headers",
             "Access-Control-Allow-Private-Network",
@@ -8509,71 +2941,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 continue
             validated[key] = value
         return validated
-
-    def _write_static_asset(self, relative_path: str) -> None:
-        target = (_STATIC_DIR / relative_path).resolve()
-        if not target.is_file() or _STATIC_DIR.resolve() not in target.parents:
-            self.send_response(404)
-            self.end_headers()
-            return
-        body = target.read_bytes()
-        content_type, _ = mimetypes.guess_type(str(target))
-        self.send_response(200)
-        self.send_header("Content-Type", content_type or "application/octet-stream")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store, max-age=0")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _write_dashboard_shell(self) -> None:
-        if _INDEX_PATH.is_file() and _ENTRY_PATH.is_file():
-            encoded = _INDEX_PATH.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(encoded)))
-            self.send_header("Cache-Control", "no-store, max-age=0")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            self.send_header("Content-Security-Policy", _DASHBOARD_CSP)
-            self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.end_headers()
-            self.wfile.write(encoded)
-            return
-        self._write_json({"error": "dashboard_bundle_missing"}, status=503)
-
-    @staticmethod
-    def _is_dashboard_route(path: str) -> bool:
-        if path in {
-            "/",
-            "/home",
-            "/dashboard",
-            "/inbox",
-            "/protect",
-            "/evidence",
-            "/extensions",
-            "/supply-chain",
-            "/audit",
-            "/policy",
-            "/feed-health",
-            "/settings",
-            "/about",
-            "/protection/repair",
-            "/requests",
-            "/approvals",
-        }:
-            return True
-        if path.startswith("/requests/"):
-            return True
-        if path.startswith("/apps/"):
-            return True
-        if path.startswith("/extensions/"):
-            return True
-        return path.startswith("/approvals/") and not path.endswith("/decision")
 
 
 class GuardDaemonServer:
@@ -8632,9 +2999,17 @@ class GuardDaemonServer:
         if not type(self)._retry_quarantined_service(store.guard_home):
             raise RuntimeError("A previous Guard daemon remains quarantined after unconfirmed containment.")
         self._diagnostics = DaemonDiagnostics(store.guard_home)
+        flush_pending_phases(self._diagnostics.record_phase)
         try:
-            self._isolation_provider_registry = load_managed_provider_registry()
-            _validate_dashboard_bundle()
+            with timed_phase("init_provider_registry"):
+                self._isolation_provider_registry = load_managed_provider_registry()
+            with timed_phase("init_dashboard_bundle"):
+                _validate_dashboard_bundle()
+            # Pin this process's identity before serving. Computing it lazily
+            # after an in-place upgrade would advertise the replacement
+            # install's fingerprint for code that is still the old generation.
+            with timed_phase("init_runtime_fingerprint"):
+                current_guard_daemon_runtime_fingerprint()
         except BaseException:
             self._diagnostics.record_exception("daemon_initialization_failed")
             self._diagnostics.close(timeout_seconds=0.5)
@@ -8649,11 +3024,12 @@ class GuardDaemonServer:
         self._serve_thread_error: BaseException | None = None
         self._owner_lock: BinaryIO | None = None
         try:
+            http_server_started = time.monotonic()
             self._server = _GuardDaemonHttpServer(
                 (host, port),
                 _GuardDaemonHandler,
                 store=store,
-                auth_token=load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex,
+                auth_token=ensure_guard_daemon_auth_token(store.guard_home),
                 runtime_host=host,
                 runtime_session_id=uuid.uuid4().hex,
                 runtime_started_at=_now(),
@@ -8667,6 +3043,7 @@ class GuardDaemonServer:
                 diagnostics=self._diagnostics,
             )
             self._server.command_queue_lifecycle = self
+            record_phase_since("init_http_server", http_server_started)
         except BaseException:
             self._diagnostics.record_exception("daemon_initialization_failed")
             self._diagnostics.close(timeout_seconds=0.5)
@@ -8693,6 +3070,7 @@ class GuardDaemonServer:
         self._thread: threading.Thread | None = None
         self._serve_loop_started = threading.Event()
         self._watchdog_thread: threading.Thread | None = None
+        self._native_resident_watchdog_thread: threading.Thread | None = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -8710,7 +3088,8 @@ class GuardDaemonServer:
             serve_thread_started = True
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
-            enable_full_capacity_for_generation(self, generation)
+            if not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
         except BaseException as error:
             contain_failed_service_start(
                 self,
@@ -8730,7 +3109,8 @@ class GuardDaemonServer:
         generation = self._active_start_generation
         serve_thread = self._thread
         try:
-            enable_full_capacity_for_generation(self, generation)
+            if not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
             if serve_thread is None:
                 self._serve_forever()
                 return
@@ -8810,14 +3190,14 @@ class GuardDaemonServer:
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._aibom_refresh_thread = None
         self._require_command_activity_maintenance_stopped()
-        self._server.hook_process_runner.start(defer_backfill=publish_before_workers)
         if publish_before_workers:
             # Desktop `desktop bootstrap --json` waits for the daemon state
             # file, not for hook workers or artifact reconciliation. Accept
             # HTTP and publish that file before the 60s+ cold-home work.
-            start_serve_thread(self, already_locked=True)
-            if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
-                raise RuntimeError("Guard daemon serve thread did not become ready")
+            with timed_phase("serve_thread_start", self._diagnostics.record_phase):
+                start_serve_thread(self, already_locked=True)
+                if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
+                    raise RuntimeError("Guard daemon serve thread did not become ready")
             # Re-check under _finish_service_lock: shutdown may have been
             # requested while the serve loop was coming up. Publishing or
             # registering after shutdown would resurrect a stopped daemon.
@@ -8838,14 +3218,17 @@ class GuardDaemonServer:
     ) -> None:
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
-        self._server.hook_process_runner.require_initial_capacity()
-        self._reconcile_runtime_artifacts_best_effort()
+        phase = self._diagnostics.record_phase
+        with timed_phase("reconcile_runtime_artifacts", phase):
+            self._reconcile_runtime_artifacts_best_effort()
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
-        self._maintain_command_activity_best_effort()
+        with timed_phase("maintain_command_activity", phase):
+            self._maintain_command_activity_best_effort()
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
-        self._persist_aibom_inventory_context()
+        with timed_phase("persist_aibom_context", phase):
+            self._persist_aibom_inventory_context()
 
         def start_post_listen_workers() -> None:
             # The shutdown/generation re-check and the registration publish
@@ -8855,25 +3238,32 @@ class GuardDaemonServer:
             # runtime row.
             if self._shutdown_started.is_set() or not startup_generation_is_current(self, generation):
                 raise RuntimeError("Guard daemon stopped during startup")
-            self._publish_listen_state()
-            self._server.start_unclassified_watchdog()
-            self._server.runtime_heartbeat.start()
-            approval_attention = getattr(self._server, "approval_attention", None)
-            if approval_attention is not None:
-                approval_attention.start()
-            self._start_watchdog()
-            self._start_headless_cloud_sync()
-            self._start_supply_chain_bundle_refresh()
-            self._start_aibom_inventory_refresh()
-            self._start_extension_control_refresh()
-            self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
-            self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
-                self._server.store,
-                self._cloud_review_sync_worker,
-                on_authority_changed=self._start_command_queue_after_authority,
-            )
-            self._start_command_activity_maintenance()
-            self._start_onefile_extraction_reclaim()
+            with timed_phase("publish_listen_state", phase):
+                self._publish_listen_state()
+            with timed_phase("start_watchdog_and_heartbeat", phase):
+                self._server.start_unclassified_watchdog()
+                self._server.runtime_heartbeat.start()
+                approval_attention = getattr(self._server, "approval_attention", None)
+                if approval_attention is not None:
+                    approval_attention.start()
+                self._start_watchdog()
+            with timed_phase("start_sync_and_refresh_threads", phase):
+                self._start_headless_cloud_sync()
+                self._start_supply_chain_bundle_refresh()
+                self._start_aibom_inventory_refresh()
+                self._start_extension_control_refresh()
+            with timed_phase("start_queue_and_cloud_workers", phase):
+                self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+                self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
+                    self._server.store,
+                    self._cloud_review_sync_worker,
+                    on_authority_changed=self._start_command_queue_after_authority,
+                )
+            with timed_phase("start_maintenance_threads", phase):
+                self._start_command_activity_maintenance()
+                self._start_onefile_extraction_reclaim()
+                self._start_repair_self_check()
+                self._start_native_resident_watchdog()
             self._record_lifecycle("ready")
             self._owned_service_ready = True
             self._diagnostics.record("daemon_ready")
@@ -8897,12 +3287,13 @@ class GuardDaemonServer:
             try:
                 from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
 
-                desktop_bootstrap_document_for_running_daemon(
-                    store=server.store,
-                    home_dir=server.home_dir,
-                    daemon_url=f"http://127.0.0.1:{server.daemon_port()}",
-                    auth_token=server.auth_token,
-                )
+                with timed_phase("warm_desktop_bootstrap_cache", self._diagnostics.record_phase):
+                    desktop_bootstrap_document_for_running_daemon(
+                        store=server.store,
+                        home_dir=server.home_dir,
+                        daemon_url=f"http://127.0.0.1:{server.daemon_port()}",
+                        auth_token=server.auth_token,
+                    )
             except Exception:
                 self._diagnostics.record_exception("desktop_bootstrap_warmup_failed")
                 return
@@ -9035,13 +3426,6 @@ class GuardDaemonServer:
             raise RuntimeError("command activity maintenance is still stopping")
         self._command_activity_maintenance_thread = None
 
-    def _join_command_activity_maintenance(self) -> None:
-        if self._command_activity_maintenance_thread is None:
-            return
-        self._command_activity_maintenance_thread.join(timeout=5)
-        if not self._command_activity_maintenance_thread.is_alive():
-            self._command_activity_maintenance_thread = None
-
     def _command_activity_maintenance_loop(self) -> None:
         if self._shutdown_started.is_set():
             return
@@ -9062,6 +3446,24 @@ class GuardDaemonServer:
         )
         self._onefile_extraction_reclaim_thread.start()
 
+    def _start_repair_self_check(self) -> None:
+        def publish(status: dict[str, object]) -> None:
+            self._server.repair_self_check_status = status
+
+        repair_self_check.start_self_check(
+            self._server.store,
+            publish=publish,
+            stop=self._shutdown_started,
+            on_error=self._diagnostics.record_exception,
+        )
+
+    def _start_native_resident_watchdog(self) -> None:
+        self._native_resident_watchdog_thread = start_native_resident_watchdog(
+            self._server.store.guard_home,
+            stop=self._shutdown_started,
+            on_error=self._diagnostics.record_exception,
+        )
+
     def _onefile_extraction_reclaim_loop(self) -> None:
         while not self._shutdown_started.is_set():
             self._reclaim_onefile_extraction_dirs_once()
@@ -9071,12 +3473,14 @@ class GuardDaemonServer:
     def _reclaim_onefile_extraction_dirs_once(self) -> None:
         try:
             from ..onefile_extraction import reclaim_orphaned_extraction_dirs
+            from ..onefile_open_paths import scan_open_extraction_dirs
 
             result = reclaim_orphaned_extraction_dirs(
                 temp_root=Path(tempfile.gettempdir()),
                 current_meipass=getattr(sys, "_MEIPASS", None),
                 now=datetime.now(timezone.utc),
                 should_stop=self._shutdown_started.is_set,
+                open_path_scanner=scan_open_extraction_dirs,
             )
         except Exception:
             self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
@@ -9092,6 +3496,9 @@ class GuardDaemonServer:
             "killed_launches_last_run": result.killed_launches,
             "unmarked_legacy_count": result.unmarked_count,
             "unmarked_legacy_bytes_estimate": result.unmarked_bytes_estimate,
+            "unmarked_reclaimed_count": result.unmarked_reclaimed_count,
+            "unmarked_reclaimed_bytes": result.unmarked_reclaimed_bytes,
+            "unmarked_scan": result.unmarked_scan,
             "error_count": len(result.errors),
         }
         self._diagnostics.record(
@@ -9227,16 +3634,6 @@ class GuardDaemonServer:
                     contained = hook_worker.close() is not False and contained
             except Exception:
                 contained = False
-        hook_process_runner = getattr(self._server, "hook_process_runner", None)
-        if hook_process_runner is not None:
-            try:
-                close_contained = getattr(hook_process_runner, "close_contained", None)
-                if callable(close_contained):
-                    contained = close_contained() is not False and contained
-                else:
-                    contained = hook_process_runner.close() is not False and contained
-            except Exception:
-                contained = False
         contained = self._join_service_background_threads() and contained
         with suppress(Exception):
             clear_guard_daemon_state_if_current(
@@ -9275,7 +3672,8 @@ class GuardDaemonServer:
         return thread if thread.is_alive() else None
 
     def _join_service_background_threads(self) -> bool:
-        deadline = time.monotonic() + _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS
+        started = time.monotonic()
+        deadline = started + _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS
         self._watchdog_thread = self._join_service_thread(
             getattr(self, "_watchdog_thread", None),
             deadline=deadline,
@@ -9304,6 +3702,10 @@ class GuardDaemonServer:
             getattr(self, "_onefile_extraction_reclaim_thread", None),
             deadline=deadline,
         )
+        self._native_resident_watchdog_thread = self._join_service_thread(
+            getattr(self, "_native_resident_watchdog_thread", None),
+            deadline=started + _NATIVE_RESIDENT_WATCHDOG_STOP_JOIN_TIMEOUT_SECONDS,
+        )
         return all(
             thread is None
             for thread in (
@@ -9314,6 +3716,7 @@ class GuardDaemonServer:
                 self._headless_cloud_sync_thread,
                 self._command_activity_maintenance_thread,
                 self._onefile_extraction_reclaim_thread,
+                self._native_resident_watchdog_thread,
             )
         )
 
@@ -9362,6 +3765,8 @@ class GuardDaemonServer:
         while not self._shutdown_started.is_set():
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
+            from ..native_approval_scope import ApprovalScopeUnavailableError
+
             try:
                 pending_review_requests = self._server.store.list_approval_requests(
                     status="pending",
@@ -9369,12 +3774,18 @@ class GuardDaemonServer:
                 )
                 cloud_profile = self._server.store.get_cloud_sync_profile()
                 workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
-                outbox_status = self._server.store.review_event_outbox_status(
-                    now=_now(),
-                    workspace_id=workspace_id,
-                )
-                outbox_depth = outbox_status["depth"]
-            except sqlite3.OperationalError:
+                try:
+                    outbox_status = self._server.store.review_event_outbox_status(
+                        now=_now(),
+                        workspace_id=workspace_id,
+                    )
+                    outbox_depth = outbox_status["depth"]
+                except NativeGuardStoreUnavailable:
+                    # The native resident cannot answer, so no delivery can run and
+                    # the depth is unknown rather than transient-locked. Queued events
+                    # stay durable in guard.db; do not let this pin the daemon alive.
+                    outbox_depth = None
+            except (sqlite3.OperationalError, ApprovalScopeUnavailableError):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
             if (
@@ -9384,7 +3795,15 @@ class GuardDaemonServer:
             ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
-            if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
+            with self._server.request_capacity_lock:
+                # A request that outlives the idle window is activity, not idleness.
+                idle = (
+                    self._server.active_requests == 0
+                    and time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds
+                )
+                if idle:
+                    self._server.idle_shutdown_claimed = True
+            if idle:
                 self._shutdown_started.set()
                 self._server.shutdown()
                 return
@@ -9588,60 +4007,6 @@ class GuardDaemonServer:
                 return
 
 
-def _approval_center_browser_url(approval_center_url: str, auth_token: str) -> str:
-    parsed = urlparse(approval_center_url)
-    fragment_pairs = [
-        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
-    ]
-    fragment_pairs.append(
-        (
-            "guard-token",
-            build_local_dashboard_session_token(auth_token=auth_token, surface="approval-center"),
-        )
-    )
-    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
-
-
-def _build_local_url(host: str, port: int, path: str) -> str:
-    host_part = f"[{host}]" if ":" in host else host
-    return f"http://{host_part}:{port}{path}"
-
-
-_HARNESS_RETRY_COPY: dict[str, str] = {
-    "codex": "Return to Codex and retry",
-    "claude-code": "Return to Claude and retry",
-    "opencode": "Return to OpenCode and retry",
-    "copilot": "Return to Copilot and retry",
-    "pi": "Return to Pi and retry",
-    "omp": "Return to Oh My Pi and retry",
-}
-_DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
-
-
-def _build_resolution_copy(action: str, harness: str) -> dict[str, str]:
-    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Decision saved."
-    return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
-
-
-def _settings_response_payload(guard_home: Path, settings: dict[str, object]) -> dict[str, object]:
-    from ..protection_capabilities import protection_capability_payloads
-
-    return {
-        "guard_home": str(guard_home),
-        "config_path": str(guard_home / "config.toml"),
-        "settings": settings,
-        "protection_capabilities": protection_capability_payloads(),
-    }
-
-
-def _settings_export_payload(config: GuardConfig) -> dict[str, object]:
-    return {
-        "schema_version": 1,
-        "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
-        "settings": editable_guard_settings(config),
-    }
-
-
 def _dashboard_session_signature(payload: str, auth_token: str) -> str:
     digest = hmac.new(auth_token.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).digest()
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
@@ -9662,28 +4027,14 @@ def _parse_iso_timestamp(value: str) -> float:
     return datetime.fromisoformat(normalized).timestamp()
 
 
-def _normalized_iso_timestamp_string(value: object) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def _validate_dashboard_bundle() -> None:
     if not _INDEX_PATH.is_file() or not _ENTRY_PATH.is_file():
         raise RuntimeError(
             "Guard dashboard bundle is missing. Run `pnpm install && pnpm run build` in the dashboard directory."
         )
+    # Serve the dashboard that matches this process's code, even after an
+    # in-place upgrade replaces the files on disk.
+    pin_dashboard_bundle(_STATIC_DIR)
 
 
 def _guard_daemon_idle_timeout_seconds(
@@ -9711,15 +4062,6 @@ def _guard_daemon_idle_timeout_seconds(
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
     resolved_parts = guard_home.resolve().parts
     return any(part.startswith("pytest-") or "pytest-of-" in part for part in resolved_parts)
-
-
-def _int_query_value(query: str, key: str) -> int:
-    values = parse_qs(query).get(key, ["0"])
-    raw_value = values[-1]
-    try:
-        return int(str(raw_value))
-    except ValueError:
-        return 0
 
 
 forget_in_child(GuardDaemonServer._quarantined_services)

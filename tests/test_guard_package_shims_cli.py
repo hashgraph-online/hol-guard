@@ -12,8 +12,9 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
-from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims
+from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.shim_execution_helpers import build_shim_content_hash
 
 
 def _seed_paid_oauth_entitlement(home_dir: Path) -> None:
@@ -159,7 +160,7 @@ def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired
         "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
     }
     assert payload["actions"]["install"] == "reconnect_required"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "reconnect_required"
     assert payload["actions"]["remove"] == "disabled"
 
 
@@ -451,7 +452,7 @@ def test_package_shims_status_reports_paid_oauth_entitlement(
         "upgrade_cta": None,
     }
     assert payload["actions"]["install"] == "available"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "available"
     assert payload["actions"]["remove"] == "disabled"
 
 

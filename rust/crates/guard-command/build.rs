@@ -2,8 +2,10 @@
 #[path = "../../build_support/command_identity.rs"]
 mod command_identity;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{
     env, fs,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -87,10 +89,37 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
         .collect()
 }
 
-fn write_json(path: &Path, value: &Value) {
+fn write_json(path: &Path, value: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(value).expect("generated JSON");
     bytes.push(b'\n');
-    fs::write(path, bytes).expect("write generated build output");
+    fs::write(path, &bytes).expect("write generated build output");
+    bytes
+}
+
+fn write_embedded_json(out: &Path, name: &str, env_prefix: &str, value: &Value) {
+    let bytes = write_json(&out.join(name), value);
+    println!(
+        "cargo:rustc-env={env_prefix}_SHA256={}",
+        hex::encode(Sha256::digest(&bytes))
+    );
+    println!("cargo:rustc-env={env_prefix}_LEN={}", bytes.len());
+    let mut encoder = zstd::stream::read::Encoder::new(bytes.as_slice(), 19).expect("zstd encoder");
+    encoder
+        .include_checksum(false)
+        .expect("zstd checksum option");
+    encoder
+        .include_contentsize(false)
+        .expect("zstd contentsize option");
+    encoder.include_dictid(false).expect("zstd dictid option");
+    let mut compressed = Vec::new();
+    std::io::copy(&mut encoder, &mut compressed).expect("compress packaged JSON");
+    let mut decoded = Vec::new();
+    ruzstd::decoding::StreamingDecoder::new(compressed.as_slice())
+        .expect("decode packaged JSON")
+        .read_to_end(&mut decoded)
+        .expect("decode packaged JSON");
+    assert_eq!(decoded, bytes, "packaged JSON round-trip mismatch");
+    fs::write(out.join(format!("{name}.zst")), compressed).expect("write compressed build output");
 }
 
 fn trust_map(root: &Path) -> Value {
@@ -152,7 +181,7 @@ fn main() {
         request.len() as u64 <= MAX_ENVELOPE_BYTES,
         "canonical source envelope exceeds budget"
     );
-    let compiled = guard_command_build::native_command_program::source::compile_build_request(
+    let mut compiled = guard_command_build::native_command_program::source::compile_build_request(
         request.as_bytes(),
     )
     .unwrap_or_else(|error| panic!("canonical source compilation failed: {error}"));
@@ -163,20 +192,32 @@ fn main() {
     );
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
     write_json(&out.join("trust-class-map.v1.json"), &trust);
-    write_json(
-        &out.join("native-command-program.v1.json"),
+    write_embedded_json(
+        &out,
+        "native-command-program.v1.json",
+        "GUARD_PACKAGED_PROGRAM",
         &compiled.program,
     );
-    write_json(
-        &out.join("command-catalog.v1.json"),
+    write_embedded_json(
+        &out,
+        "command-catalog.v1.json",
+        "GUARD_PACKAGED_CATALOG",
         &json!({
             "schema":"guard.command-catalog.v1", "catalog":compiled.catalog,
             "catalog_digest":compiled.program["catalog_digest"], "program_digest":compiled.program["program_digest"],
             "source_digest":compiled.source_digest, "implementation_digest":compiled.implementation_digest,
         }),
     );
-    write_json(
-        &out.join("native-command-build.v1.json"),
+    // The export front end reuses the admitted program rather than embedding a
+    // second complete copy inside the build envelope.
+    compiled.program = Value::Null;
+    // The catalog projection already ships inside command-catalog.v1.json; the
+    // export front end reinserts it when serving the build envelope.
+    compiled.catalog = Value::Null;
+    write_embedded_json(
+        &out,
+        "native-command-build.v1.json",
+        "GUARD_PACKAGED_BUILD",
         &serde_json::to_value(compiled).expect("compiled output"),
     );
 }

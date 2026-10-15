@@ -37,6 +37,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Autho
 
 from .test_guard_extension_control_authority import MemorySecretStore, _commit, _store
 from .test_native_command_control_binding import _snapshot
+from .test_native_command_control_binding_publisher import (
+    _pinned_integrity_material_and_resident_key as _pinned_integrity_material_and_resident_key,
+)
 from .test_native_command_control_binding_publisher import _publish_ready, _publisher
 
 KEY = derive_native_policy_verifier_key(b"k" * 32)
