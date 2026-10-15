@@ -31,6 +31,7 @@ _SAFETY_GUIDANCE_BODY = (
 _SAFETY_GUIDANCE = f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_SAFETY_GUIDANCE_BODY}"
 _LEGACY_SAFETY_GUIDANCE_DIGESTS = frozenset(
     {
+        # Guidance before the self-approval section: unprefixed, then v2-prefixed.
         "8dfc18925c07e425e6ac5e5c4b5aba27d15e9bba4472409cf57411085f6389ed",
         "5276fa1bb1460b07d4ce2c42f732931b06744d11ad28fd9422dc2ff24be1eeda",
     }

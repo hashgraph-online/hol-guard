@@ -2,6 +2,8 @@ use crate::CanonicalCommandV1;
 
 #[path = "bun_eval_screen.rs"]
 mod bun_eval_screen;
+#[path = "package_script_route.rs"]
+pub(super) mod package_script;
 
 /// Bun evaluation shares the Node evaluation profile under its own reason, so
 /// a receipt can admit Bun's package-protection permission without admitting

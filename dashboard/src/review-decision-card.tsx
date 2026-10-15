@@ -37,7 +37,12 @@ import {
   taskCapabilityExplanation,
   willPersistExactAction,
 } from "./approval-scopes";
-import { approvalProofRecentlySatisfied, buildApprovalProofCredentials } from "./approval-proof-inline";
+import {
+  ApprovalGateRecommendationNotice,
+  approvalGateNeedsSetup,
+  approvalProofRecentlySatisfied,
+  buildApprovalProofCredentials,
+} from "./approval-proof-inline";
 import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { guardAwareHref } from "./guard-api";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
@@ -665,7 +670,9 @@ export function ReviewDecisionCard(props: {
             )}
           </ActionButton>
         </div>}
-
+        {resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && (
+          <ApprovalGateRecommendationNotice />
+        )}
       </div>
 
       {evidenceItems.length > 0 && (

@@ -13,6 +13,14 @@ Use these command-shaping rules to reduce avoidable Guard reviews while preservi
 - If Guard pauses an action, do not automatically retry equivalent spellings. Wait for approval or choose
   a safer operation.
 
+## Leave approvals to the user
+
+- Never approve, deny, or resolve your own Guard approval requests.
+- Never open, fetch, or follow a Guard approval link. Never call the approval API, daemon endpoints, or
+  `hol-guard` approval commands to decide a request.
+- When Guard blocks an action, show its approval link to the user verbatim. Wait for the user to decide
+  in the browser, then retry.
+
 ## Prefer bounded operations
 
 - Use read-only Git inspection before writes. Do not rewrite history, discard changes, or delete branches

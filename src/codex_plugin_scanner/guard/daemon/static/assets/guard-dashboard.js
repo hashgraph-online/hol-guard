@@ -20364,6 +20364,23 @@ function approvalProofRecentlySatisfied(gate) {
 function approvalProofRequiresPassword(gate) {
   return gate?.totp_enabled !== true;
 }
+function approvalGateNeedsSetup(gate) {
+  return gate !== null && gate !== void 0 && gate.enabled !== true;
+}
+function ApprovalGateRecommendationNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "note",
+      className: "mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 flex-1 text-sm text-slate-600", children: "Set an approval password or MFA so only you can approve blocked actions." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval" })
+      ]
+    }
+  );
+}
 function ApprovalGateSetupNotice() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
@@ -32046,7 +32063,8 @@ function ReviewDecisionCard(props) {
             ] })
           }
         )
-      ] })
+      ] }),
+      resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateRecommendationNotice, {})
     ] }),
     evidenceItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(

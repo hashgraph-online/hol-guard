@@ -1,8 +1,13 @@
 //! Vetted toolchain roots a workspace sandbox may execute, derived from the
-//! host PATH. A root is accepted only when it is a trusted system prefix or a
-//! known version-manager directory, and is not writable by anyone else.
+//! host PATH. A root is accepted only when it is a trusted system prefix, a
+//! known version-manager directory or one of the caller's sealed tool
+//! directories, and is not writable by anyone else.
 use super::*;
 use std::os::unix::fs::MetadataExt;
+
+#[path = "user_tools.rs"]
+mod user_tools;
+pub(super) use user_tools::host_corepack_home;
 
 /// Where `xcode-select -s` records the developer directory: the current
 /// location first, then the one older macOS releases used.
@@ -53,11 +58,16 @@ fn owned_and_sealed(path: &Path) -> bool {
         && (metadata.mode() & 0o020 == 0 || TRUSTED_WRITER_GROUPS.contains(&metadata.gid()))
 }
 
-fn forbidden(path: &Path, home: Option<&Path>) -> bool {
-    let homes: Vec<PathBuf> = host_home_directory()
+/// This account's HOME and the caller's, canonical.
+fn homes(home: Option<&Path>) -> Vec<PathBuf> {
+    host_home_directory()
         .into_iter()
         .chain(home.map(|h| h.canonicalize().unwrap_or_else(|_| h.to_path_buf())))
-        .collect();
+        .collect()
+}
+
+fn forbidden(path: &Path, home: Option<&Path>) -> bool {
+    let homes = homes(home);
     homes.is_empty() || homes.iter().any(|h| sensitive_for_exec(path, h))
 }
 
@@ -85,10 +95,13 @@ fn sensitive_for_exec(path: &Path, home: &Path) -> bool {
     })
 }
 
-fn accept_entry(entry: &Path, home: Option<&Path>) -> Option<Vec<PathBuf>> {
+fn accept_entry(entry: &Path, home: Option<&Path>, workspace: &Path) -> Option<Vec<PathBuf>> {
     let canonical = entry.canonicalize().ok()?;
+    // Any other directory must be one of the caller's sealed tool directories.
+    let user_tool =
+        || user_tools::tool_root(&canonical, &homes(home), workspace).map(|root| vec![root]);
     if forbidden(&canonical, home) || !owned_and_sealed(&canonical) {
-        return None;
+        return user_tool();
     }
     if let Some(prefix) = TRUSTED_EXECUTABLE_ROOTS
         .iter()
@@ -135,7 +148,7 @@ fn accept_entry(entry: &Path, home: Option<&Path>) -> Option<Vec<PathBuf>> {
             }
         }
     }
-    None
+    user_tool()
 }
 
 /// The Xcode or CommandLineTools root `/usr/bin` shims forward into. Inside
@@ -170,8 +183,8 @@ fn developer_root(resolved: &Path) -> Option<PathBuf> {
 }
 
 /// Executable roots and the sandbox PATH for `search_path`, plus the developer
-/// directory. Entries that fail any check are dropped, so their tools are
-/// simply unavailable.
+/// directory and Corepack's cache. Entries that fail any check are dropped,
+/// so their tools are simply unavailable.
 pub(super) fn workspace_exec_roots(
     search_path: &str,
     home: Option<&Path>,
@@ -184,7 +197,7 @@ pub(super) fn workspace_exec_roots(
         if !path.is_absolute() || path_is_within(path, workspace) {
             continue;
         }
-        let Some(accepted) = accept_entry(path, home) else {
+        let Some(accepted) = accept_entry(path, home, workspace) else {
             continue;
         };
         if let Ok(canonical) = path.canonicalize() {
@@ -205,6 +218,13 @@ pub(super) fn workspace_exec_roots(
         }
     }
     roots.extend(developer_dir());
+    // Corepack's shims (`pnpm`, `yarn`) read the package manager they run
+    // from its cache; the launch environment points `COREPACK_HOME` there.
+    if let Some(cache) = host_corepack_home() {
+        if !roots.contains(&cache) {
+            roots.push(cache);
+        }
+    }
     (roots, entries.join(":"))
 }
 

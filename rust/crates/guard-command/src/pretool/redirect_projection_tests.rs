@@ -215,7 +215,7 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
     std::fs::create_dir_all(&project).unwrap();
     std::fs::write(
         project.join("package.json"),
-        r#"{"scripts":{"test":"vitest"}}"#,
+        r#"{"scripts":{"test":"vitest run"}}"#,
     )
     .unwrap();
     let home = root.to_string_lossy().into_owned();

@@ -782,18 +782,14 @@ fn evaluate_envelope(
             .unwrap_or_else(|| "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into());
     }
     let contained_test_reason = command_model.and_then(|model| {
-        super::restricted_tests::readonly_test_reason(model).or_else(|| {
-            super::contained_wrapper::contained_core(
-                model,
-                super::PathContext {
-                    home_dir,
-                    cwd,
-                    ..context
-                },
-            )
-            .and_then(|core| super::restricted_tests::readonly_test_reason(&core))
-            .filter(|reason| *reason != "native_git_readonly_containment_required")
-        })
+        super::restricted_tests::package_script::contained_test_reason(
+            model,
+            super::PathContext {
+                home_dir,
+                cwd,
+                ..context
+            },
+        )
     });
     // macOS runs every credential-filtering profile. Windows runs only the
     // Python profile, in an AppContainer, for Claude Code, whose Git Bash shell

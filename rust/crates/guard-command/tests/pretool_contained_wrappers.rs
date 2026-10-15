@@ -13,7 +13,20 @@ fn fixture() -> std::path::PathBuf {
         .join(format!("fixture-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(root.join("project/web")).unwrap();
     std::fs::create_dir_all(root.join("outside")).unwrap();
+    package(&root.join("project"));
     std::fs::canonicalize(root).unwrap()
+}
+
+/// The script bodies the narrow node sinks run, and their local entrypoints.
+fn package(directory: &std::path::Path) {
+    let scripts =
+        r#"{"scripts":{"build":"vite build","test":"node --test","typecheck":"tsc --noEmit"}}"#;
+    std::fs::write(directory.join("package.json"), scripts).unwrap();
+    for entry in ["typescript/bin/tsc", "vite/bin/vite.js"] {
+        let entry = directory.join("node_modules").join(entry);
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        std::fs::write(entry, "").unwrap();
+    }
 }
 
 fn classify(
@@ -186,6 +199,7 @@ fn verified_cd_into_a_sibling_repository_reaches_containment() {
     std::fs::create_dir_all(sibling.join("dashboard")).unwrap();
     // A linked worktree marks its root with a `.git` file.
     std::fs::write(sibling.join(".git"), "gitdir: /nonexistent\n").unwrap();
+    package(&sibling);
     let sibling = sibling.to_str().unwrap();
     let outside = root.join("outside");
     let outside = outside.to_str().unwrap();

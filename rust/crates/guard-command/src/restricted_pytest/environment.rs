@@ -136,6 +136,24 @@ pub(super) fn filter(
     ] {
         result.insert(key.to_owned(), value);
     }
+    // A workspace run (no allowed executables) reaches `pnpm` and `yarn`
+    // through Corepack, which reads the package manager it runs from a cache
+    // below the real HOME. The plan grants that cache read-only; Corepack must
+    // neither fetch (there is no network) nor pin a version in the workspace.
+    if allowed.is_empty() {
+        if let Some(cache) = super::toolchains::host_corepack_home() {
+            let cache = cache.to_string_lossy().into_owned();
+            for (key, value) in [
+                ("COREPACK_HOME", cache.as_str()),
+                ("COREPACK_ENABLE_AUTO_PIN", "0"),
+                ("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0"),
+                ("COREPACK_ENABLE_NETWORK", "0"),
+                ("COREPACK_DEFAULT_TO_LATEST", "0"),
+            ] {
+                result.insert(key.to_owned(), value.to_owned());
+            }
+        }
+    }
     // A linked user site is read through the private HOME; otherwise it stays off.
     if !user_site {
         result.insert("PYTHONNOUSERSITE".to_owned(), "1".to_owned());

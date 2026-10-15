@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
+from ..approval_gate_nudge import approval_gate_posture
 from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from . import protect_output as _protect_output
 from ._commands_shared import *
@@ -514,6 +515,7 @@ def _run_guard_status_command(
     store = _require_guard_store(store)
     config = _require_guard_config(config)
     payload = importlib.import_module(".product", __package__).build_guard_status_payload(context, store, config)
+    payload["approval_gate"] = approval_gate_posture(context.guard_home)
     _emit("status", payload, getattr(args, "json", False))
     return 0
 

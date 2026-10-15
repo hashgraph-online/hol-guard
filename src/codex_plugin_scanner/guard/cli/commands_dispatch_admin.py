@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 
 from ..adapters.diagnostic_probes import without_command_probes
+from ..approval_gate_nudge import approval_gate_posture
 from ..daemon.bounded_http import daemon_admission_snapshot
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
@@ -392,6 +393,7 @@ def _run_guard_doctor_command(
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
     payload.update(harness_posture_summary(config))
+    payload["approval_gate"] = approval_gate_posture(guard_home)
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

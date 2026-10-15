@@ -89,6 +89,14 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
 #[test]
 fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
     let ws = workspace("node-narrow", true);
+    // The narrow profiles run only these script bodies, from local entrypoints.
+    let scripts = r#"{"scripts":{"lint":"eslint src","build":"vite build"}}"#;
+    std::fs::write(ws.join("package.json"), scripts).unwrap();
+    for entry in ["eslint/bin/eslint.js", "vite/bin/vite.js"] {
+        let entry = ws.join("node_modules").join(entry);
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        std::fs::write(entry, "").unwrap();
+    }
     for (command, narrower) in [
         (
             "npm run lint",
