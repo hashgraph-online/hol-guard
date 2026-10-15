@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
     HOOK_SCRIPT_NAME,
-    _hook_script_mode_is_executable,
     _strip_managed_hook_entries,
     cursor_hook_response_from_guard,
     cursor_hook_should_block,
@@ -45,15 +44,6 @@ def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifac
         config_path=str(workspace_dir / ".cursor" / "mcp.json"),
         command=command,
     )
-
-
-def test_cursor_hook_executable_mode_is_platform_portable(monkeypatch) -> None:
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "nt")
-    assert _hook_script_mode_is_executable(0o600) is True
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "posix")
-    assert _hook_script_mode_is_executable(0o600) is False
-    assert _hook_script_mode_is_executable(0o700) is True
 
 
 def _record_cursor_pending_for_test(
@@ -1745,82 +1735,6 @@ def test_forged_after_shell_without_attestation_is_rejected(tmp_path: Path) -> N
         ),
     )
     assert len(store.list_policy_decisions("cursor")) == 0
-
-
-def test_cursor_session_allow_without_generation_id_uses_binding_file(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import read_cursor_shell_binding_file
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-no-generation-id"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=None,
-    )
-    approval_binding = read_cursor_shell_binding_file(
-        home_dir,
-        conversation_id=conversation_id,
-        command=command,
-    )
-    assert approval_binding is not None
-    assert approval_binding.startswith("hol-guard:")
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 8,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=approval_binding,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-
-
-def test_cursor_after_shell_proof_message_uses_null_separator() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_after_shell_proof_message
-
-    message = cursor_after_shell_proof_message(
-        conversation_id="conv-test",
-        command="echo hello",
-        approval_binding="hol-guard:test-binding",
-    )
-    assert message == (b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution")
 
 
 def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:

@@ -2,14 +2,15 @@
 //!
 //! Grok runs `guard-runtime bounded-hook-bridge <python> -I <script>
 //! <config>`, where `<script>` is `managed/bounded-hooks/grok.py` rendered
-//! by `_render_bounded_hook_script`. The native bridge answers only for the
-//! client it was ported from: the script, with its three rendered
-//! constants put back to their template placeholders, must hash to
-//! [`GROK_SCRIPT_SHA256`]. Any other client, including one installed by an
-//! older Guard, runs as Python with the original argv and stdin. The
+//! by `_render_bounded_hook_script`. The bridge reads the three constants
+//! the renderer writes, from the current client or one an older Guard
+//! installed, and answers the hook itself; the client's own code never
+//! runs. A script whose constants it cannot read fails the hook closed. The
 //! `<config>` argument is read here too, as `_configure_grok_invocation`
 //! reads it.
 //!
+//! [`GROK_SCRIPT_SHA256`] is the digest of the template the bridge was
+//! ported from, with its placeholders in place.
 //! `tests/test_grok_native_bridge.py` renders the current template and
 //! checks it against this digest, so a template change fails CI until the
 //! native port is reviewed and the digest updated.
@@ -17,13 +18,12 @@
 use std::io::Read;
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
-
 use crate::bounded_hook_bridge_grok_render::{json_object, py_float};
 use crate::bounded_hook_bridge_render::member;
 use crate::pyjson::{self, PyVal};
 
 /// SHA-256 of the current template with its placeholders in place.
+#[allow(dead_code)] // Read by `tests/test_grok_native_bridge.py`.
 pub(crate) const GROK_SCRIPT_SHA256: &str =
     "df6150723b44637eb1397dc696133b11c0622a9816716a49db0f17edddece82b";
 
@@ -101,16 +101,9 @@ pub(crate) fn normalize(text: &str) -> Option<(String, ScriptConstants)> {
     Some((lines.join("\n"), constants))
 }
 
-/// The client's constants when `text` is the ported Grok client.
-pub(crate) fn ported_constants(text: &str) -> Option<ScriptConstants> {
-    let (template, constants) = normalize(text)?;
-    let digest = hex::encode(Sha256::digest(template.as_bytes()));
-    (digest == GROK_SCRIPT_SHA256).then_some(constants)
-}
-
-/// Read the client Python would run and return its constants when it is
-/// the ported Grok client.
-pub(crate) fn read_ported_script(path: &Path) -> Option<ScriptConstants> {
+/// Read the client the installer wrote and return the constants it was
+/// rendered with.
+pub(crate) fn read_client_constants(path: &Path) -> Option<ScriptConstants> {
     let metadata = std::fs::metadata(path).ok()?;
     if !metadata.is_file() || metadata.len() > MAX_SCRIPT_BYTES {
         return None;
@@ -124,7 +117,7 @@ pub(crate) fn read_ported_script(path: &Path) -> Option<ScriptConstants> {
     if bytes.len() as u64 > MAX_SCRIPT_BYTES {
         return None;
     }
-    ported_constants(std::str::from_utf8(&bytes).ok()?)
+    normalize(std::str::from_utf8(&bytes).ok()?).map(|(_, constants)| constants)
 }
 
 /// What `_configure_grok_invocation` records from the hook command.

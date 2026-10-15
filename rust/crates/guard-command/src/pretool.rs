@@ -18,12 +18,17 @@ pub struct PathContext<'a> {
     /// The shell expands `~` to `home_dir`: its HOME names the same
     /// directory. Literal contexts leave this false.
     pub shell_home_matches: bool,
+    /// No inherited `RIPGREP_CONFIG_PATH` can prepend options such as
+    /// `--pre`, `--hidden` or extra search paths to an `rg` command that
+    /// omits `--no-config`. Literal contexts leave this false.
+    pub ripgrep_config_absent: bool,
 }
 
 mod contained_wrapper;
 pub(crate) mod curl_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
+mod doctl_reads;
 pub(crate) mod kubectl_reads;
 pub(crate) mod port_probes;
 mod workspace_contained;
@@ -53,6 +58,7 @@ pub(crate) mod git_object_reads;
 mod git_read_floor;
 mod git_reads;
 mod git_ref_listings;
+mod git_rev_list;
 mod git_search_text;
 mod repo_create_reason;
 use git_reads::safe_git_arguments;
@@ -80,6 +86,7 @@ mod trusted_location;
 pub(crate) use git_routes::{git_dir_route_within_scope, git_route_within_workspace};
 mod apply_patch_writes;
 mod lockfile_install;
+mod omp_hashline_writes;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
@@ -130,6 +137,7 @@ pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
 pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
 
 /// Whether this evaluation already proved `segment` as a safe `origin`
@@ -693,7 +701,7 @@ fn evaluate_single_command(
         "review",
         "native_command_review_required",
         reason.as_deref().unwrap_or(
-            "HOL Guard requires review because this command could not be confirmed read-only. Approve it in the HOL Guard inbox (choose Always for a repeated read-only command), or split it into simpler commands.",
+            "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review.",
         ),
     ))
 }

@@ -37,6 +37,10 @@ mod codex_output_identity;
 mod codex_output_inspection;
 mod codex_output_inspection_flow;
 mod codex_output_pathspecs;
+mod codex_output_post_tool;
+mod codex_output_post_tool_copy;
+mod codex_output_post_tool_skips;
+mod codex_output_post_tool_sources;
 mod codex_output_py;
 mod codex_output_search;
 mod codex_output_shlex;
@@ -679,6 +683,7 @@ pub mod contained_argv;
 pub mod contained_execution;
 #[cfg(unix)]
 pub mod contained_runner;
+pub mod credential_patterns;
 pub mod data_flow_rules;
 pub mod decisions;
 pub mod detectors;

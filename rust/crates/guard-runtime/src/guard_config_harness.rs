@@ -40,7 +40,7 @@ const POSTURE_LOCK_KEYS: [&str; 4] = [
 ];
 
 /// `canonical_harness_id`: a registry id or install alias, else `None`.
-fn canonical_harness_id(value: &str) -> Option<&'static str> {
+pub(crate) fn canonical_harness_id(value: &str) -> Option<&'static str> {
     let key = value.trim().to_lowercase().replace('_', "-");
     HARNESS_ALIASES
         .iter()

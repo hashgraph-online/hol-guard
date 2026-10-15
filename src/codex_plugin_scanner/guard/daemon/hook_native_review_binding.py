@@ -64,7 +64,52 @@ def native_review_matching_allow(
     workspace: Path | None,
     identity: str | None,
 ) -> bool:
-    consume = getattr(store, "consume_native_review_approval", None)
+    return _native_review_matching_decision(
+        store,
+        method="consume_native_review_approval",
+        harness=harness,
+        artifact_id=artifact_id,
+        tool_name=tool_name,
+        launch_target=launch_target,
+        workspace=workspace,
+        identity=identity,
+    )
+
+
+def native_review_matching_block(
+    store: object,
+    *,
+    harness: str,
+    artifact_id: str,
+    tool_name: str,
+    launch_target: str,
+    workspace: Path | None,
+    identity: str | None,
+) -> bool:
+    return _native_review_matching_decision(
+        store,
+        method="matching_native_review_block",
+        harness=harness,
+        artifact_id=artifact_id,
+        tool_name=tool_name,
+        launch_target=launch_target,
+        workspace=workspace,
+        identity=identity,
+    )
+
+
+def _native_review_matching_decision(
+    store: object,
+    *,
+    method: str,
+    harness: str,
+    artifact_id: str,
+    tool_name: str,
+    launch_target: str,
+    workspace: Path | None,
+    identity: str | None,
+) -> bool:
+    consume = getattr(store, method, None)
     if not callable(consume) or identity is None or not launch_target:
         return False
     try:

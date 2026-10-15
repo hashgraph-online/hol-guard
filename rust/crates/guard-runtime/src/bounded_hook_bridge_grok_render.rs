@@ -169,8 +169,8 @@ pub(crate) fn dump_object(payload: &[(String, PyVal)]) -> String {
     out
 }
 
-/// `_failure_payload(event_name, _FAILURE_REASON)` for Grok.
-fn failure_payload(event_name: &str) -> Vec<(String, PyVal)> {
+/// `_failure_payload(event_name, reason)` for Grok.
+fn failure_payload(event_name: &str, reason: &str) -> Vec<(String, PyVal)> {
     let compacted = compact(event_name);
     if OBSERVE_EVENTS.contains(&compacted.as_str()) {
         return Vec::new();
@@ -193,14 +193,19 @@ fn failure_payload(event_name: &str) -> Vec<(String, PyVal)> {
     };
     vec![
         ("decision".to_owned(), text(decision)),
-        ("reason".to_owned(), text(FAILURE_REASON)),
+        ("reason".to_owned(), text(reason)),
     ]
 }
 
 /// What `_fail(input_text)` writes to stdout; Grok's failure always exits 0.
 /// The caller has already ruled out a PreToolUse label conflict.
 pub(crate) fn failure_stdout(input_text: &str) -> String {
-    let mut stdout = dump_object(&failure_payload(&event_name_of_text(input_text)));
+    failure_stdout_for(input_text, FAILURE_REASON)
+}
+
+/// What `_fail(input_text, reason=reason)` writes to stdout.
+pub(crate) fn failure_stdout_for(input_text: &str, reason: &str) -> String {
+    let mut stdout = dump_object(&failure_payload(&event_name_of_text(input_text), reason));
     stdout.push('\n');
     stdout
 }

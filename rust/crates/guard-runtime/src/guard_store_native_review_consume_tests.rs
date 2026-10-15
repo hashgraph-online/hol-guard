@@ -14,6 +14,10 @@ use crate::guard_store_op::evaluate_guard_store_request;
 const VECTORS: &str = include_str!("../testdata/guard_store/native_review_consume_vectors.json");
 
 fn consume(home: &std::path::Path, args: &Value) -> Value {
+    call(home, args, "consume_native_review_approval")
+}
+
+fn call(home: &std::path::Path, args: &Value, method: &str) -> Value {
     let mut wire: Map<String, Value> = args.as_object().unwrap().clone();
     wire.entry("workspace").or_insert(Value::Null);
     let request = GuardStoreRequestV1 {
@@ -21,12 +25,48 @@ fn consume(home: &std::path::Path, args: &Value) -> Value {
         request_id: "vector".to_owned(),
         store_path: home.join("guard.db").to_string_lossy().into_owned(),
         guard_home: home.to_string_lossy().into_owned(),
-        method: "consume_native_review_approval".to_owned(),
+        method: method.to_owned(),
         source: "guard".to_owned(),
         busy_timeout_ms: 5000,
         args: wire,
     };
     serde_json::from_slice(&evaluate_guard_store_request(&request).unwrap()).unwrap()
+}
+
+#[test]
+fn blocks_use_the_same_identity_window_scope_and_latest_decision_rules() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    for scenario in vectors["scenarios"].as_array().unwrap() {
+        let name = scenario["name"].as_str().unwrap();
+        let home = temp_home(&format!("block-{name}"));
+        let db = home.join("guard.db");
+        seed(&db, &vectors);
+        let mut rows = scenario["rows"].clone();
+        for row in rows.as_array_mut().unwrap() {
+            row["resolution_action"] = match row["resolution_action"].as_str() {
+                Some("allow") => Value::from("block"),
+                Some("block") => Value::from("allow"),
+                _ => row["resolution_action"].clone(),
+            };
+        }
+        insert_rows(&Connection::open(&db).unwrap(), "approval_requests", &rows);
+        let first = &scenario["calls"][0];
+        let expected = scenario["native_may_deny"] != true && first["result"] == true;
+        for _ in 0..2 {
+            let reply = call(&home, &first["args"], "matching_native_review_block");
+            assert_eq!(reply["status"], "ok", "{name}: {reply}");
+            assert_eq!(reply["payload"], expected, "{name}");
+        }
+        assert_eq!(
+            dump(
+                &Connection::open(&db).unwrap(),
+                "guard_continuation_effects",
+                "effect_key"
+            ),
+            serde_json::json!([])
+        );
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }
 
 fn seed(path: &std::path::Path, vectors: &Value) {

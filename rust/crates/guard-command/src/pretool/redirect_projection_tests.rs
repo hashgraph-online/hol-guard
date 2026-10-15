@@ -20,6 +20,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         rustup_override_absent: false,
         npm_config_inert: false,
         shell_home_matches: false,
+        ripgrep_config_absent: false,
     }
 }
 
@@ -131,6 +132,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         rustup_override_absent: false,
         npm_config_inert: false,
         shell_home_matches: false,
+        ripgrep_config_absent: false,
     };
     for command in [
         "echo hi > link/hosts".to_owned(),

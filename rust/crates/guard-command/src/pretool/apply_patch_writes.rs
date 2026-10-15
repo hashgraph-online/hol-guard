@@ -143,7 +143,7 @@ pub(super) fn routine_apply_patch(patch: &str, home_dir: Option<&str>, cwd: Opti
     })
 }
 
-fn protected_target(target: &str, workspace: &Path, cwd: Option<&str>) -> bool {
+pub(super) fn protected_target(target: &str, workspace: &Path, cwd: Option<&str>) -> bool {
     let supplied = Path::new(target);
     let joined = if supplied.is_absolute() {
         supplied.to_path_buf()
@@ -165,7 +165,7 @@ fn protected_target(target: &str, workspace: &Path, cwd: Option<&str>) -> bool {
     protected_name(scope) || protected_name(spelled)
 }
 
-fn protected_name(path: &Path) -> bool {
+pub(super) fn protected_name(path: &Path) -> bool {
     let instruction_file = match path.file_name() {
         Some(name) => name.to_str().is_none_or(|name| {
             AGENT_INSTRUCTION_FILE_NAMES.contains(&name.to_ascii_lowercase().as_str())

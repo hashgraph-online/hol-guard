@@ -12,8 +12,9 @@ use guard_command::{review_codex_tool_output, Ctx, GitCheck, GitProbe, GitRun, I
 use guard_contracts::{
     CodexToolOutputActionV1, CodexToolOutputFactsV1, CodexToolOutputRequestV1,
     CodexToolOutputResultV1, CompoundGitSegmentV1, GitExecutionSafetyCheckV1,
-    GitExecutionSafetyRequestV1, CODEX_TOOL_OUTPUT_MAX_BYTES, CODEX_TOOL_OUTPUT_REQUEST_SCHEMA,
-    CODEX_TOOL_OUTPUT_RESULT_SCHEMA, GIT_EXECUTION_SAFETY_REQUEST_SCHEMA,
+    GitExecutionSafetyRequestV1, CODEX_POST_TOOL_OUTPUT_MAX_BYTES, CODEX_TOOL_OUTPUT_MAX_BYTES,
+    CODEX_TOOL_OUTPUT_REQUEST_SCHEMA, CODEX_TOOL_OUTPUT_RESULT_SCHEMA,
+    GIT_EXECUTION_SAFETY_REQUEST_SCHEMA,
 };
 use guard_policy_snapshot::digest_bytes;
 
@@ -177,9 +178,12 @@ impl InspectionHost for ResidentInspectionHost<'_> {
 
 fn request_digest(request: &CodexToolOutputRequestV1) -> Result<String, &'static str> {
     let material = serde_json::to_value(request).map_err(|_| INVALID)?;
+    let limit = match request.action {
+        CodexToolOutputActionV1::PostToolOutput(_) => CODEX_POST_TOOL_OUTPUT_MAX_BYTES,
+        _ => CODEX_TOOL_OUTPUT_MAX_BYTES,
+    };
     let mut bytes = Vec::new();
-    write_canonical_json_with_limit(&material, &mut bytes, CODEX_TOOL_OUTPUT_MAX_BYTES)
-        .map_err(|_| INVALID)?;
+    write_canonical_json_with_limit(&material, &mut bytes, limit).map_err(|_| INVALID)?;
     Ok(format!("sha256:{}", digest_bytes(&bytes)))
 }
 
@@ -225,6 +229,8 @@ fn action_is_bounded(action: &CodexToolOutputActionV1) -> bool {
         Action::ReadsEnvironmentPipeline(text) | Action::FocusedPytest(text) => {
             text_is_bounded(&text.command)
         }
+        // The canonical digest already bounds the whole body.
+        Action::PostToolOutput(_) => true,
     }
 }
 

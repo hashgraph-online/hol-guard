@@ -36,7 +36,15 @@ from .cleanup import cleanup_case_resources
 from .contained_core import request_proofs
 from .evidence import assess_case, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
-from .fixtures import create_fixture, create_run_root, digest_file, filesystem_checks, scenario_fixture_name
+from .fixtures import (
+    create_fixture,
+    create_run_root,
+    digest_file,
+    filesystem_checks,
+    remove_scratch_checkout,
+    scenario_fixture_name,
+    scratch_checkout,
+)
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
     public_native_extension_evidence,
@@ -107,7 +115,13 @@ def run_case(
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             replacements[collector.url] = "{{collector_url}}"
             rendered = scenario.render(
-                {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
+                {
+                    "home": str(fixture.home),
+                    "workspace": str(fixture.workspace),
+                    "root": str(fixture.root),
+                    "scratch": str(scratch_checkout(fixture.root)),
+                    "collector_url": collector.url,
+                }
             )
             prompt = _scenario_prompt(rendered)
             authorization = fixture_authorization(fixture, collector.url, rendered) + (
@@ -306,6 +320,7 @@ def run_case(
         (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
     finally:
         case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+        remove_scratch_checkout(fixture.root)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
     if first_contact:

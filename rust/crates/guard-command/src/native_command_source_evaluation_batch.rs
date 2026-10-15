@@ -118,6 +118,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
             request.execution_environment.as_ref(),
         );

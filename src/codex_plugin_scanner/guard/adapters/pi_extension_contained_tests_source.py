@@ -49,13 +49,32 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
     return changed ? { messages } : undefined;
   });
 
-  pi.on("session_shutdown", () => containedTestPresentations.clear());
+  // A backgrounded call returns before its job reads the request, so the
+  // sink owns that file and removes it once read. Shutdown releases any that
+  // a job never reached.
+  const backgroundContainedTestRequests = new Set<string>();
+  function releaseBackgroundContainedTestRequests(): void {
+    for (const directory of backgroundContainedTestRequests) {
+      try { rmSync(directory, { recursive: true, force: true }); } catch {}
+    }
+    backgroundContainedTestRequests.clear();
+  }
 
-  function cleanupContainedTestRequest(toolCallId: unknown): void {
+  pi.on("session_shutdown", () => {
+    containedTestPresentations.clear();
+    releaseBackgroundContainedTestRequests();
+  });
+
+  function cleanupContainedTestRequest(toolCallId: unknown, details?: unknown): void {
     const key = toolCallIdKey(toolCallId);
     const directory = key ? containedTestRequests.get(key) : undefined;
     if (!key || !directory) return;
     containedTestRequests.delete(key);
+    const job = details && typeof details === "object" ? Reflect.get(details, "async") : undefined;
+    if (job && typeof job === "object" && Reflect.get(job, "state") === "running") {
+      backgroundContainedTestRequests.add(directory);
+      return;
+    }
     try { rmSync(directory, { recursive: true, force: true }); } catch {}
   }
 
@@ -155,10 +174,9 @@ _PI_INPUT_RETURN = "      Object.assign(event.input, input);\n      return undef
 _SINK_ARGS = '"execute-contained-test", "--guard-home"'
 _PI_SINK_ARGS = '"execute-contained-test", "--harness", "pi", "--guard-home"'
 # Pi has no `session_stop`; release unconsumed request files on shutdown instead.
-_SHUTDOWN = '  pi.on("session_shutdown", () => containedTestPresentations.clear());\n'
+_SHUTDOWN = "    releaseBackgroundContainedTestRequests();\n  });\n"
 _PI_SHUTDOWN = (
-    '  pi.on("session_shutdown", () => {\n'
-    "    containedTestPresentations.clear();\n"
+    "    releaseBackgroundContainedTestRequests();\n"
     "    for (const key of containedTestRequests.keys()) cleanupContainedTestRequest(key);\n"
     "  });\n"
 )
@@ -187,7 +205,7 @@ def with_contained_test_routing(shared_source: str, *, harness: str = "omp") -> 
         branch,
         branch_source + branch,
         1,
-    ).replace(cleanup, cleanup + "    cleanupContainedTestRequest(event.toolCallId);\n", 1)
+    ).replace(cleanup, cleanup + "    cleanupContainedTestRequest(event.toolCallId, event.details);\n", 1)
 
 
 def _replace_once(source: str, old: str, new: str) -> str:

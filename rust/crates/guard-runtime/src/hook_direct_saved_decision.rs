@@ -18,12 +18,15 @@
 //!   identity (`hook_direct_saved_portable.rs`);
 //! - the block or accepted-allow response.
 //!
+//! Remote decisions need no more evidence than the daemon ships: the lookup
+//! never serves a cloud-sync or team-policy row and verifies no remote row's
+//! integrity, so the integrity key and state go only with a local decision.
 //! Any other shape defers, so the daemon takes the request: custom grant
-//! rows, remote decisions, portable decisions bound anywhere but the
-//! workspace's own identity, a portable identity the resident does not
-//! resolve exactly, a policy bundle, an integrity state other than the
-//! published protected one, a missing or unreadable decision, and every step
-//! the daemon could answer differently.
+//! rows, portable decisions bound anywhere but the workspace's own identity,
+//! a portable identity the resident does not resolve exactly, a policy
+//! bundle with a policy-bundle row to match, an integrity state other than
+//! the published protected one, a missing or unreadable decision, and every
+//! step the daemon could answer differently.
 
 use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
 use crate::local_store_read::{
@@ -183,9 +186,9 @@ fn saved_response(
     }
     let integrity_state =
         serde_json::to_value(integrity).map_err(|_| HookDirectDefer::SavedDecision)?;
-    if !store.local_only(&integrity_state)? {
+    let Some(has_local_policy) = store.readable(&integrity_state)? else {
         return Err(HookDirectDefer::SavedDecision);
-    }
+    };
     let identity = portable::identity(store, context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -203,9 +206,13 @@ fn saved_response(
         runtime_exact_match_context: None,
         consume_one_shot: false,
         local_once_only: false,
-        integrity_state: Some(integrity_state),
-        integrity_key_b64: Some(key_b64.to_string()),
-        integrity_key_id: Some(key.key_id.clone()),
+        integrity_state: Some(if has_local_policy {
+            integrity_state
+        } else {
+            json!({})
+        }),
+        integrity_key_b64: has_local_policy.then(|| key_b64.to_string()),
+        integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
         local_once_integrity_key_b64: Some(key_b64.to_string()),
         local_once_integrity_key_id: Some(key.key_id.clone()),
         policy_bundle_decision_identities: None,
@@ -368,25 +375,29 @@ impl StoreShape<'_> {
         }
     }
 
-    /// Whether the daemon's lookup reads only local decisions under the
-    /// published integrity state: no remote or bundle decisions, and the
-    /// published state still stored. Portable decisions are read through the
-    /// workspace's identity (`portable::identity`).
-    fn local_only(&self, integrity_state: &Value) -> Result<bool, HookDirectDefer> {
+    /// Whether the store holds a local decision, when the daemon's lookup
+    /// reads it under the published integrity state: no cached policy bundle
+    /// with a policy-bundle row to match, since the bundle's decision
+    /// identities come from a synced payload the resident does not validate,
+    /// and the published state still stored. `None` otherwise.
+    /// Portable decisions are read through the workspace's identity
+    /// (`portable::identity`).
+    fn readable(&self, integrity_state: &Value) -> Result<Option<bool>, HookDirectDefer> {
         if self.any(
-            &format!("select 1 from policy_decisions where source in {REMOTE_SOURCES_SQL} limit 1"),
+            "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
             &[],
-        )? || !self.any(
+        )? && self.any(
+            "select 1 from sync_state where state_key = 'policy_bundle' limit 1",
+            &[],
+        )? {
+            return Ok(None);
+        }
+        let has_local_policy = self.any(
             &format!(
                 "select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL} limit 1"
             ),
             &[],
-        )? || self.any(
-            "select 1 from sync_state where state_key = 'policy_bundle' limit 1",
-            &[],
-        )? {
-            return Ok(false);
-        }
+        )?;
         let stored: Option<String> = self
             .connection
             .query_row(
@@ -397,7 +408,7 @@ impl StoreShape<'_> {
             .optional()
             .map_err(|_| HookDirectDefer::SavedDecision)?;
         let stored = stored.and_then(|text| serde_json::from_str::<Value>(&text).ok());
-        Ok(stored.as_ref() == Some(integrity_state))
+        Ok((stored.as_ref() == Some(integrity_state)).then_some(has_local_policy))
     }
 
     fn any(&self, query: &str, values: &[&str]) -> Result<bool, HookDirectDefer> {

@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import argparse
 
-from ._commands_shared import *
+from ...argparse_utils import FriendlyArgumentParser
+from ..models import GUARD_ACTION_VALUES
+from .commands_parser_approvals import add_approval_parser
+from .commands_parser_constants import DEFAULT_ALIAS_NAME, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
 
 def _configure_run_parsers(

@@ -201,6 +201,7 @@ pub(super) fn inspection_arguments<'a>(
                 | "cat-file"
                 | "show-ref"
                 | "for-each-ref"
+                | "rev-list"
         )
     )
     .then_some(remaining)

@@ -38,6 +38,7 @@ pub(crate) fn benign_command_segments(
         rustup_override_absent: context.rustup_override_absent,
         npm_config_inert: context.npm_config_inert,
         shell_home_matches: context.shell_home_matches,
+        ripgrep_config_absent: context.ripgrep_config_absent,
         cwd: cwd.as_deref().or(context.cwd),
     };
     let segment_benign: Vec<bool> = model
@@ -215,7 +216,9 @@ pub(super) fn exact_safe_segment_with_context(
                         && !search_text.contains(&index)
                         && sensitive_path_argument(argument)
                 }))
-        || !segment.environment_names.is_empty()
+        || !(segment.environment_names.is_empty()
+            || (basename == "kubectl"
+                && super::kubectl_reads::trusted_kubeconfig_prefix(segment, context)))
         || (executable.contains(['/', '\\'])
             && !super::postgres_reads::trusted_pg_ctl_path(executable, context))
     {
@@ -247,6 +250,12 @@ pub(super) fn exact_safe_segment_with_context(
             super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
         }
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
+        "[" => segment
+            .arguments
+            .split_last()
+            .is_some_and(|(last, predicate)| {
+                last == "]" && safe_reads::safe_file_predicate_arguments(predicate, context)
+            }),
         "find" => {
             super::find_reads::safe_find_listing_arguments(&segment.arguments, context)
                 || super::fanout_reads::safe_find_exec(model, segment, context)
@@ -307,6 +316,7 @@ pub(super) fn exact_safe_segment_with_context(
         "kubectl" => super::kubectl_reads::safe_kubectl_segment(model, segment, context),
         "export" => super::kubectl_reads::safe_export_segment(model, segment, context),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
+        "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),
         "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),

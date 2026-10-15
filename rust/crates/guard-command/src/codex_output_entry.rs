@@ -15,6 +15,7 @@ use crate::codex_output_git_diff::git_diff_selection_identity;
 use crate::codex_output_inspection_flow::{
     is_read_only_source_inspection, scan_targets_secret_like_source_name,
 };
+use crate::codex_output_post_tool::review_post_tool_output;
 use crate::codex_output_py::{shlex_split, PyPath};
 use crate::codex_output_search::Scope;
 use crate::codex_output_source_paths::py_path;
@@ -39,7 +40,11 @@ impl ToolOutputOutcome {
     }
 }
 
-fn scope_of<'a>(ctx: &'a Ctx<'a>, cwd: Option<&'a PyPath>, home: Option<&'a PyPath>) -> Scope<'a> {
+pub(crate) fn scope_of<'a>(
+    ctx: &'a Ctx<'a>,
+    cwd: Option<&'a PyPath>,
+    home: Option<&'a PyPath>,
+) -> Scope<'a> {
     Scope { cwd, home, ctx }
 }
 
@@ -62,7 +67,7 @@ fn model(ctx: &Ctx, command: &str, cwd: Option<&PyPath>) -> ShellExecutionContex
 /// The per-segment review of a directory-change context: `Err(())` when the
 /// context or a segment cannot be proven, otherwise each non-directory segment
 /// with its validated working directory.
-fn contextual_segments(
+pub(crate) fn contextual_segments(
     context: &ShellExecutionContext,
 ) -> Result<Vec<(usize, String, PyPath)>, ()> {
     if !context.complete {
@@ -87,7 +92,7 @@ fn contextual_segments(
 /// `_codex_command_targets_secret_like_source_name` (tool-output variant, which
 /// applies the execution-context policy) and the plain scan (`exec_context`
 /// false).
-fn secret_like_source_name(
+pub(crate) fn secret_like_source_name(
     ctx: &Ctx,
     command: &str,
     cwd: Option<&PyPath>,
@@ -137,7 +142,11 @@ fn context_identity(identities: &[(usize, String)]) -> String {
 }
 
 /// `_codex_git_pathspec_identity_for_command`.
-fn git_pathspec_identity(ctx: &Ctx, command: &str, cwd: Option<&PyPath>) -> Option<String> {
+pub(crate) fn git_pathspec_identity(
+    ctx: &Ctx,
+    command: &str,
+    cwd: Option<&PyPath>,
+) -> Option<String> {
     let context = model(ctx, command, cwd);
     if !context.directory_change_present {
         return direct_git_pathspec_identity(command, scope_of(ctx, cwd, None));
@@ -218,6 +227,13 @@ pub fn review_codex_tool_output(ctx: &Ctx, action: &CodexToolOutputActionV1) -> 
                 scope_of(ctx, cwd.as_ref(), None),
             ))
         }
+        Action::PostToolOutput(request) => match review_post_tool_output(ctx, &request.body) {
+            Ok(value) => ToolOutputOutcome {
+                allowed: true,
+                value: Some(value),
+            },
+            Err(_) => ToolOutputOutcome::flag(false),
+        },
     }
 }
 

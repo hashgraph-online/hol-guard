@@ -6,9 +6,10 @@
 //! stdio and the child without a Python process or per-frame resident round
 //! trips. Every `tools/call` is decided in one round trip to the resident's
 //! `mcp_relay_decide` op, and anything it does not decide is blocked. A
-//! session whose calls the resident cannot decide never reaches that point:
-//! at startup the relay hands it to the Python proxy (`mcp_relay_lane`), so
-//! installers select the relay wherever the runtime advertises it.
+//! session the native lane cannot serve never reaches that point: at startup
+//! the relay hands it to the Python proxy (`mcp_relay_lane`), so installers
+//! select the relay wherever the runtime advertises it. A lane the daemon
+//! has only not prepared yet keeps the session native.
 //!
 //! Unix only: the child session relies on process groups.
 
@@ -41,7 +42,9 @@ mod unix {
     use crate::mcp_relay_args::parse;
     use crate::mcp_relay_core::{child_response_timeout, ChildLink, Relay, RelayExit};
     use crate::mcp_relay_host::LineHost;
-    use crate::mcp_relay_lane::{hand_off, note, startup, DaemonKick, Gate, STARTUP_BUDGET};
+    use crate::mcp_relay_lane::{
+        hand_off, hands_off, note, startup, DaemonKick, Gate, STARTUP_BUDGET,
+    };
     use crate::mcp_relay_launch::{inherited_environment, prepare, spawn};
     use crate::mcp_relay_resident::{ProcessFacts, ResidentRelayAuthority};
 
@@ -72,8 +75,8 @@ mod unix {
             Err(reason) => return fail(&reason, 1),
         };
         let mut authority = ResidentRelayAuthority::new(&args, &launch, &ProcessFacts::current());
-        // Before any stdin byte is read or the child exists: a session whose
-        // lane is not ready runs as the Python proxy, on untouched stdio.
+        // Before any stdin byte is read or the child exists: a session the
+        // lane cannot serve runs as the Python proxy, on untouched stdio.
         let workspace = authority.lane_workspace().unwrap_or_default().to_owned();
         let mut kick = DaemonKick::new(&args, python_argv, std::path::Path::new(&workspace));
         let gate = startup(
@@ -82,10 +85,12 @@ mod unix {
             STARTUP_BUDGET,
         );
         note(&gate);
-        if let Gate::HandOff(_) = gate {
-            return hand_off(python_argv);
-        }
-        let authority = authority.with_kick(Box::new(kick));
+        let warming = match gate {
+            Gate::NotReady(code) if hands_off(&code) => return hand_off(python_argv),
+            Gate::NotReady(_) => true,
+            Gate::Relay { .. } => false,
+        };
+        let authority = authority.with_kick(Box::new(kick)).warming(warming);
         let mut child = match spawn(&args, &launch) {
             Ok(child) => child,
             Err(reason) => return fail(&reason, 1),

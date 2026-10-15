@@ -119,13 +119,35 @@ def _sink_command_prefix(config: Mapping[str, object]) -> tuple[str, ...]:
         from ..stable_guard_cli import resolve_frozen_guard_cli
 
         return (resolve_frozen_guard_cli(),)
-    return isolated_guard_cli_command(str(config["python_executable"]), Path(str(config["package_root"])), ())
+    package_root = Path(str(config["package_root"]))
+    command = isolated_guard_cli_command(str(config["python_executable"]), package_root, ())
+    if sys.platform != "win32":
+        return command
+    # Git Bash hands a native program each doubled backslash as a single one,
+    # which breaks the escaped package root in the bootstrap. The same
+    # directory written with forward slashes needs no escaping.
+    root = str(package_root.resolve())
+    return (*command[:-1], command[-1].replace(repr(root), repr(root.replace("\\", "/")), 1))
+
+
+def _request_root() -> str | None:
+    """Where the sink looks for a snapshot; on Windows not TEMP, which the
+    harness shell may set differently from this hook."""
+    if sys.platform != "win32":
+        return None
+    from ..windows_paths import trusted_windows_local_temp
+
+    return str(trusted_windows_local_temp())
 
 
 def platform_contains(response: Mapping[str, object]) -> bool:
-    """macOS runs every contained profile; Linux runs the workspace sandbox."""
-    return sys.platform == "darwin" or (
-        sys.platform == "linux" and response.get("required_execution_profile") == "workspace-contained-v1"
+    """macOS runs every contained profile; Linux runs the workspace sandbox;
+    Windows runs installed Python in an AppContainer."""
+    profile = response.get("required_execution_profile")
+    return (
+        sys.platform == "darwin"
+        or (sys.platform == "linux" and profile == "workspace-contained-v1")
+        or (sys.platform == "win32" and profile == "python-eval-readonly-v1")
     )
 
 
@@ -141,6 +163,9 @@ def contained_zcode_response(
     if (
         not platform_contains(response)
         or config.get("harness") not in _SINK_HARNESSES
+        # The sink command is POSIX-quoted; on Windows only Claude Code runs
+        # it through Git Bash.
+        or (sys.platform == "win32" and config.get("harness") != "claude-code")
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
         or response.get("observe_mode") is True
@@ -192,7 +217,7 @@ def contained_zcode_response(
         if len(serialized) > 1_048_576:
             return None
         cleanup_stale_zcode_requests()
-        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-"))
+        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-", dir=_request_root()))
         # mkdtemp creates an owner-only directory; do not widen its permissions.
         request = directory / "request.json"
         descriptor = os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

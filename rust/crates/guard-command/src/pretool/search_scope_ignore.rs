@@ -170,6 +170,33 @@ fn path_below_base<'a>(path: &'a str, base: &str) -> Option<&'a str> {
         .filter(|rest| !rest.is_empty())
 }
 
+pub(super) fn holds_custom_ignore_file(directory: &Path) -> bool {
+    [".ignore", ".rgignore"]
+        .iter()
+        .any(|name| std::fs::symlink_metadata(directory.join(name)).is_ok())
+}
+
+pub(super) fn load_custom_rules(
+    directory: &Path,
+    tiers: &mut IgnoreTiers,
+) -> Result<(), ScopeUnproven> {
+    let base = slash_path(directory).ok_or(ScopeUnproven)?;
+    load_ignore_file(&directory.join(".ignore"), &base, &mut tiers.ignore)?;
+    load_ignore_file(&directory.join(".rgignore"), &base, &mut tiers.rgignore)
+}
+
+/// Whether the ignore rules skip the link at `path`. A host that follows the
+/// link sees its target's kind, so a link to a folder meets folder-only rules
+/// such as `node_modules/`; one that does not follow it never walks it.
+pub(super) fn link_ignored(
+    tiers: &IgnoreTiers,
+    path: &Path,
+    target: Option<&Path>,
+) -> Result<bool, ScopeUnproven> {
+    let rendered = slash_path(path).ok_or(ScopeUnproven)?;
+    is_ignored(tiers, &rendered, target.is_some_and(Path::is_dir))
+}
+
 /// Render an absolute path as `/`-joined normal components so rule bases and
 /// entries compare the same way on every platform.
 pub(super) fn slash_path(path: &Path) -> Option<String> {

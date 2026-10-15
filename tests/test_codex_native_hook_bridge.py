@@ -1,9 +1,7 @@
-"""The Python side of the native Codex hook bridge: install argv, trust hashes and handoff."""
+"""The Python side of the native Codex hook bridge: install argv and trust hashes."""
 
 from __future__ import annotations
 
-import io
-import json
 import os
 import subprocess
 import sys
@@ -12,14 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
-    NATIVE_ELAPSED_ENV,
-    NATIVE_HANDOFF_SCHEMA,
-    native_elapsed_seconds,
-    read_native_handoff,
-)
 from codex_plugin_scanner.guard.codex_hook_compatibility import (
     NATIVE_CODEX_HOOK_COMMAND,
     NATIVE_CODEX_HOOK_FEATURE,
@@ -194,67 +185,3 @@ def test_native_hook_command_is_a_live_guard_hook(tmp_path: Path) -> None:
     bridge_path.unlink()
     assert missing_guard_hook_program(command, windows=False) == str(bridge_path)
     assert not _is_live_guard_codex_hook_command(f"{runtime} {NATIVE_CODEX_HOOK_COMMAND}", windows=False)
-
-
-def test_native_elapsed_time_only_shortens_the_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(NATIVE_ELAPSED_ENV, "1500")
-    assert native_elapsed_seconds(10.0) == 1.5
-    # The bridge reads the value once; its children never inherit it.
-    assert native_elapsed_seconds(10.0) == 0.0
-    monkeypatch.setenv(NATIVE_ELAPSED_ENV, "90000")
-    assert native_elapsed_seconds(10.0) == 10.0
-    for raw in ("-5", "1.5", "", chr(0x0661)):
-        monkeypatch.setenv(NATIVE_ELAPSED_ENV, raw)
-        assert native_elapsed_seconds(10.0) == 0.0
-
-
-def _stdin(monkeypatch: pytest.MonkeyPatch, envelope: object) -> None:
-    raw = json.dumps(envelope).encode("utf-8")
-    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw)))
-
-
-def _envelope(**overrides: object) -> dict[str, object]:
-    envelope: dict[str, object] = {
-        "schema": NATIVE_HANDOFF_SCHEMA,
-        "hook_input": json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
-        "event_name": "PreToolUse",
-        "daemon_response": json.dumps({"decision": "allow"}),
-        "elapsed_ms": 250,
-    }
-    envelope.update(overrides)
-    return envelope
-
-
-def test_native_handoff_is_read_when_well_formed(monkeypatch: pytest.MonkeyPatch) -> None:
-    _stdin(monkeypatch, _envelope())
-
-    handoff = read_native_handoff(bridge.runtime_hook_event_name)
-
-    assert handoff is not None
-    assert handoff.event_name == "PreToolUse"
-    assert handoff.response == {"decision": "allow"}
-    assert handoff.elapsed_seconds == 0.25
-
-
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"schema": "hol-guard.codex-native-handoff.v0"},
-        {"event_name": "PostToolUse"},
-        {"elapsed_ms": -1},
-        {"elapsed_ms": True},
-        {"daemon_response": "[]"},
-        {"hook_input": "not json"},
-        {"extra": 1},
-    ],
-)
-def test_malformed_native_handoff_fails_closed(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, object]) -> None:
-    _stdin(monkeypatch, _envelope(**overrides))
-    assert read_native_handoff(bridge.runtime_hook_event_name) is None
-
-    _stdin(monkeypatch, _envelope(**overrides))
-    out = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", out)
-    assert bridge.native_handoff_main(state_path="/missing", query="", hook_timeouts={}) == 0
-    decision = json.loads(out.getvalue())["hookSpecificOutput"]
-    assert decision["permissionDecision"] == "deny"

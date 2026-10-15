@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_policy import (
         _runtime_data_flow_summary,
         _runtime_saved_allow_validation_reason,
-        _runtime_stored_policy_decision,
+        _runtime_saved_policy_decision,
     )
     from .commands_support_runtime_resolution import (
         _canonical_harness_name,
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     )
 
 
-from ..action_lattice import coerce_guard_action, guard_action_severity, most_restrictive_guard_action
+from ..action_lattice import coerce_guard_action, most_restrictive_guard_action
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..harness_posture import harness_is_recording_only
 from ..local_supply_chain import (
@@ -89,10 +89,9 @@ from .commands_support_runtime_artifact_policy import (
 from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
 from .commands_support_runtime_policy import (
     _remembered_rule_rejection_reason,
-    _runtime_artifact_exact_match_context,
     _runtime_hook_approval_context_token,
     _runtime_saved_allow_validation_reason,
-    _runtime_stored_policy_decision,
+    _runtime_saved_policy_decision,
 )
 
 
@@ -636,29 +635,6 @@ def evaluate_native_artifact_hook(
 
     # Resolve saved evidence only after all current policy, package, data-flow,
     # scanner, configuration, workspace, and sandbox inputs are frozen above.
-    runtime_exact_match_context = _runtime_artifact_exact_match_context(runtime_artifact)
-    policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-        policy_harness,
-        artifact_id,
-        artifact_hash=runtime_artifact_hash,
-        workspace=policy_workspace,
-        publisher=runtime_artifact.publisher,
-        runtime_exact_match_context=runtime_exact_match_context,
-        memory_command=runtime_artifact.command,
-        memory_artifact_type=runtime_artifact.artifact_type,
-        memory_artifact_name=runtime_artifact.name,
-        consume_one_shot=False,
-    )
-    stored_policy_decision = _runtime_stored_policy_decision(
-        store=store,
-        harness=policy_harness,
-        artifact=runtime_artifact,
-        artifact_id=artifact_id,
-        artifact_hash=runtime_artifact_hash,
-        workspace=policy_workspace,
-        decision_lookup=policy_lookup,
-        consume_one_shot=False,
-    )
     # Legacy exact hashes cannot authorize an allow, but they must still be
     # inspected even when a v1 decision exists: a new exact allow must never
     # hide an intentionally retained pre-v1 block during migration.
@@ -670,60 +646,29 @@ def evaluate_native_artifact_hook(
             artifact_type=runtime_artifact.artifact_type,
             execution_context=package_execution_context,
         )
-    legacy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-        policy_harness,
-        artifact_id,
-        artifact_hash=artifact_content_hash,
-        workspace=legacy_policy_workspace,
-        publisher=runtime_artifact.publisher,
-        runtime_exact_match_context=runtime_exact_match_context,
-        memory_command=runtime_artifact.command,
-        memory_artifact_type=runtime_artifact.artifact_type,
-        memory_artifact_name=runtime_artifact.name,
-        consume_one_shot=False,
-    )
-    legacy_decision = _runtime_stored_policy_decision(
-        store=store,
-        harness=policy_harness,
-        artifact=runtime_artifact,
-        artifact_id=artifact_id,
-        artifact_hash=artifact_content_hash,
-        workspace=legacy_policy_workspace,
-        decision_lookup=legacy_lookup,
-        consume_one_shot=False,
-    )
-    if legacy_lookup.get("ignored_local_integrity") is not None:
-        policy_lookup = {
-            **policy_lookup,
-            "ignored_local_integrity": legacy_lookup["ignored_local_integrity"],
-        }
-    if legacy_decision is not None and (
-        stored_policy_decision is None
-        or guard_action_severity(legacy_decision.get("action"), unknown_action="block")
-        > guard_action_severity(stored_policy_decision.get("action"), unknown_action="block")
-    ):
-        merged_integrity = policy_lookup.get("ignored_local_integrity")
-        policy_lookup = dict(legacy_lookup)
-        if merged_integrity is not None:
-            policy_lookup["ignored_local_integrity"] = merged_integrity
-        stored_policy_decision = legacy_decision
-    if stored_policy_decision is None and runtime_artifact.artifact_type != "package_request":
-        legacy_artifact = _legacy_claude_alias_runtime_artifact(
+    legacy_artifact = (
+        None
+        if runtime_artifact.artifact_type == "package_request"
+        else _legacy_claude_alias_runtime_artifact(
             artifact=runtime_artifact,
             requested_harness=args.harness,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
         )
-        if legacy_artifact is not None:
-            stored_policy_decision = _runtime_stored_policy_decision(
-                store=store,
-                harness=args.harness,
-                artifact=legacy_artifact,
-                artifact_id=legacy_artifact.artifact_id,
-                artifact_hash=artifact_hash(legacy_artifact),
-                workspace=str(runtime_workspace) if runtime_workspace else None,
-                consume_one_shot=False,
-            )
+    )
+    policy_lookup, stored_policy_decision = _runtime_saved_policy_decision(
+        store=store,
+        harness=policy_harness,
+        artifact=runtime_artifact,
+        artifact_hash=runtime_artifact_hash,
+        workspace=policy_workspace,
+        legacy_artifact_hash=artifact_content_hash,
+        legacy_workspace=legacy_policy_workspace,
+        alias_harness=args.harness,
+        alias_artifact=legacy_artifact,
+        alias_artifact_hash=artifact_hash(legacy_artifact) if legacy_artifact is not None else None,
+        alias_workspace=str(runtime_workspace) if runtime_workspace else None,
+    )
     stored_policy_action = (
         _optional_string(stored_policy_decision.get("action")) if stored_policy_decision is not None else None
     )

@@ -14,6 +14,7 @@ mod scan;
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use guard_contracts::{GuardExecutionEnvironmentV1, PreToolActionTypeV1, PreToolResultV1};
+use std::path::Path;
 use std::time::Instant;
 
 pub(crate) const REASON: &str = "native_exact_safe_lockfile_install";
@@ -74,6 +75,10 @@ pub(super) fn settle(
         ..context
     };
     if !scan::directory_ready(manager, context, xdg_config_home.as_deref(), deadline) {
+        if let Some(hint) = scan::present_lockfile_hint(manager, Path::new(&directory)) {
+            result.reason.push(' ');
+            result.reason.push_str(&hint);
+        }
         return;
     }
     result.minimum_action = "allow".into();

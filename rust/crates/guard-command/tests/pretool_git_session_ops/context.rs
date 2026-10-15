@@ -175,3 +175,45 @@ fn init_of_a_fresh_owned_temporary_directory_is_quiet() {
     );
     session.assert_not_allow(&format!("git init -q {target}/scratch"));
 }
+
+#[test]
+fn init_of_a_fresh_leaf_directly_in_a_temporary_root_is_quiet() {
+    const INIT: &str = "native_exact_safe_git_init_target";
+    let session = session("init-root");
+    let unique = format!(
+        "guard-init-root-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let mut roots = vec![std::fs::canonicalize("/tmp").unwrap()];
+    let private = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    if cfg!(target_os = "macos") && private.starts_with("/private/var/folders") {
+        roots.push(private);
+    }
+    for root in roots {
+        let leaf = root.join(&unique);
+        let _cleanup = FixtureCleanup(leaf.clone());
+        let target = leaf.display();
+        for command in [
+            format!("git init -q {target}"),
+            format!("git init {target} -b main"),
+        ] {
+            session.assert_allow(&command, INIT);
+        }
+        for command in [
+            format!("git init -q {}/.{unique}", root.display()),
+            format!("git init -q {target}/nested"),
+            format!("git init --bare {target}"),
+            format!("git init -q {target} && cd {target} && git add ."),
+        ] {
+            session.assert_not_allow(&command);
+        }
+        // A directory that already exists there, which in the shared root
+        // another user may have planted, keeps its review.
+        std::fs::create_dir(&leaf).unwrap();
+        session.assert_not_allow(&format!("git init -q {target}"));
+    }
+}

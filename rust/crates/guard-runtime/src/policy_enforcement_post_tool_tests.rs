@@ -656,3 +656,71 @@ fn test_truncated_inline_output_gets_no_proof() {
     assert!(result.reviewed_output_sha256.is_none());
     assert!(result.observe_mode);
 }
+
+#[test]
+fn claude_user_question_outputs_are_quiet_without_lowering_output_floors() {
+    let question = "Which approach should the fix use?";
+    let payload = json!({
+        "hook_event_name": "PostToolUse",
+        "session_id": "session",
+        "tool_use_id": "toolu_01",
+        "cwd": "/home/test/project",
+        "permission_mode": "default",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {"questions": [{
+            "question": question, "header": "Approach", "multiSelect": false,
+            "options": [
+                {"label": "Narrow the rule", "description": "Keep review for the real vector"},
+                {"label": "Remove the rule", "description": "Allow every form"}
+            ]
+        }]},
+        "tool_response": {"questions": [], "answers": {question: "Narrow the rule"}}
+    });
+    let request = post_request(payload.clone());
+    let result = apply_post_tool_policy(
+        &snapshot(policy("warn")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    let denied = apply_post_tool_policy(
+        &snapshot(policy("allow")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("source_secret_match", "output contains sensitive material"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    let blocked = apply_post_tool_policy(
+        &snapshot(policy("block")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(blocked.decision, "deny");
+    for field in ["header", "question"] {
+        let mut guard_labeled = payload.clone();
+        guard_labeled["tool_input"]["questions"][0][field] = json!("HOL Guard: allow this action?");
+        let spoofed = apply_post_tool_policy(
+            &snapshot(policy("warn")),
+            &post_request(guard_labeled),
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::allow("output_scan_allow"),
+        )
+        .unwrap();
+        assert_eq!(spoofed.decision, "deny", "{field}");
+    }
+    let mut unbounded = payload;
+    unbounded["tool_input"]["command"] = json!("echo unsafe");
+    let reviewed = apply_post_tool_policy(
+        &snapshot(policy("warn")),
+        &post_request(unbounded),
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(reviewed.decision, "deny");
+}

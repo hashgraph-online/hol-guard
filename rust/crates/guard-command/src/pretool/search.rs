@@ -366,6 +366,7 @@ fn safe_rg_arguments_inner(
     let mut pattern_supplied = false;
     let mut options_enabled = true;
     let mut paths_only = false;
+    let mut config_disabled = false;
     for argument in arguments {
         if let Some(role) = pending_value.take() {
             if unsafe_search_value(role, argument, context) {
@@ -401,6 +402,7 @@ fn safe_rg_arguments_inner(
                 return false;
             }
             let role = options::rg_value_role(name);
+            config_disabled |= name == "--no-config";
             if name == "--files" {
                 if stdin_only {
                     return false;
@@ -495,5 +497,11 @@ fn safe_rg_arguments_inner(
             pattern_supplied = true;
         }
     }
-    pending_value.is_none() && (!stdin_only || pattern_supplied)
+    // An inherited RIPGREP_CONFIG_PATH prepends its lines to these
+    // arguments, so `--pre`, `--hidden` or `--no-ignore` there would undo
+    // every check above. A stdin filter walks no files, so the config's
+    // file options have nothing to act on.
+    pending_value.is_none()
+        && (!stdin_only || pattern_supplied)
+        && (stdin_only || config_disabled || context.ripgrep_config_absent)
 }

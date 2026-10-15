@@ -33,6 +33,15 @@ pub(crate) fn evaluate(
     if request.consume_one_shot || request.local_once_only {
         return Err(ERR_INVALID.to_owned());
     }
+    if let Some(runtime) = &groups.runtime {
+        if !groups.groups.is_empty()
+            || groups.reuse.is_some()
+            || groups.portable_workspace.is_some()
+        {
+            return Err(ERR_INVALID.to_owned());
+        }
+        return crate::policy_runtime_saved::evaluate(request, runtime);
+    }
     let current_token = match &groups.reuse {
         Some(reuse) => Some(
             generic_hook_token(&reuse.approval_context_inputs)
@@ -129,7 +138,7 @@ where
 }
 
 /// The empty answer of a home that serves no authority.
-fn remembered_rules_disabled(lookup: &Value) -> bool {
+pub(crate) fn remembered_rules_disabled(lookup: &Value) -> bool {
     field(lookup, "decision").is_null()
         && field(lookup, "authority_revision") == &json!(-1)
         && field(lookup, "trust_status").get("remembered_rules")

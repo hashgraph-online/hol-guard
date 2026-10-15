@@ -92,8 +92,6 @@ pub struct ReadFile {
 }
 
 fn regular(file: &File, executable: bool) -> io::Result<()> {
-    #[cfg(not(unix))]
-    let _ = executable;
     let m = file.metadata()?;
     if !m.is_file() {
         return Err(changed());
@@ -106,6 +104,10 @@ fn regular(file: &File, executable: bool) -> io::Result<()> {
     {
         use std::os::windows::fs::MetadataExt;
         if m.file_attributes() & 0x400 != 0 {
+            return Err(changed());
+        }
+        // A second name can alias a withheld file, as on Unix.
+        if !executable && !guard_runtime_windows_process::is_single_link_handle(file)? {
             return Err(changed());
         }
     }

@@ -183,3 +183,83 @@ fn merge_base_object_names_feed_a_git_read() {
     assert_ne!(action(&home, &repository, command), "allow", "{command}");
     assert!(!root.join("helper-ran").exists());
 }
+
+fn result(
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+    command: &str,
+) -> guard_contracts::PreToolResultV1 {
+    let controls = github_controls("enabled");
+    evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+        Some(&controls),
+        None,
+        home.to_str(),
+        cwd.to_str(),
+    )
+}
+
+// An agent told only that "this Git read may execute a configured helper"
+// stopped using Git for the rest of the task. When the read itself was proven
+// helper-free and only an earlier step kept that proof from carrying over,
+// the reason names the step and says the read is fine as its own command.
+#[test]
+fn an_unproven_step_before_a_proven_git_read_is_named() {
+    let root = std::env::temp_dir().join(format!("guard read order {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+    let linked = root.join("linked");
+    git(
+        &repository,
+        &home,
+        &["worktree", "add", "--quiet", linked.to_str().unwrap()],
+    );
+    let linked = linked.canonicalize().unwrap();
+
+    let command = "corepack pnpm --version && git status --short";
+    let ordered = result(&home, &linked, command);
+    assert_eq!(ordered.reason_code, FLOOR, "{}", ordered.reason);
+    assert!(
+        ordered
+            .reason
+            .contains("Step 1 (corepack pnpm) runs before the Git read")
+            && ordered.reason.contains("run it as its own command"),
+        "{}",
+        ordered.reason
+    );
+    assert_ne!(reason(&home, &linked, "git status --short"), FLOOR);
+
+    // A read that would launch a pager keeps the generic reason: running it
+    // alone would not help.
+    let marker = root.join("pager-ran").to_string_lossy().replace('\\', "/");
+    git(
+        &repository,
+        &home,
+        &["config", "core.pager", &format!("touch '{marker}'")],
+    );
+    let helper = result(&home, &linked, "corepack pnpm --version && git log -1");
+    assert!(
+        !helper.reason.contains("own command"),
+        "{}: {}",
+        helper.reason_code,
+        helper.reason
+    );
+}

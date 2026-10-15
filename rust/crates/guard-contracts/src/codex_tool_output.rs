@@ -19,6 +19,9 @@ pub const CODEX_TOOL_OUTPUT_RESULT_SCHEMA: &str = "guard-codex-tool-output-resul
 pub const CODEX_TOOL_OUTPUT_FEATURE: &str = "codex-tool-output-v1";
 /// Largest request the op accepts.
 pub const CODEX_TOOL_OUTPUT_MAX_BYTES: usize = 256 * 1024;
+/// Canonical request bound for a post-tool output review, which carries the
+/// collected tool response.
+pub const CODEX_POST_TOOL_OUTPUT_MAX_BYTES: usize = 6 * 1024 * 1024;
 
 /// One command reviewed with a working directory and an optional home.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -64,6 +67,14 @@ pub struct CodexCommandTextV1 {
     pub command: String,
 }
 
+/// One post-tool hook payload projection: the commands, tool input and
+/// collected response text the credential-output review reads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CodexPostToolOutputV1 {
+    pub body: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CodexToolOutputActionV1 {
@@ -83,6 +94,8 @@ pub enum CodexToolOutputActionV1 {
     FocusedPytest(CodexCommandTextV1),
     /// A read-only git metadata command.
     GitMetadata(CodexCommandCwdV1),
+    /// The credential-looking post-tool output artifact (`value`).
+    PostToolOutput(CodexPostToolOutputV1),
 }
 
 /// Observed caller facts.

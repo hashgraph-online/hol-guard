@@ -65,6 +65,7 @@ mod bounded_hook_bridge_grok_render;
 mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_render;
+mod browser_open;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -131,6 +132,8 @@ mod codex_hook_identity;
 mod codex_hook_response;
 mod codex_hooks;
 mod codex_identity;
+#[cfg(all(test, unix))]
+mod codex_post_tool_output_vectors_tests;
 mod codex_proxy;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
@@ -168,6 +171,8 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+#[cfg(unix)]
+mod contained_workspace_sink;
 mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
@@ -249,6 +254,11 @@ mod guard_config_harness;
 mod guard_config_iso;
 mod guard_config_load;
 mod guard_config_managed;
+mod guard_config_update;
+mod guard_config_update_coerce;
+mod guard_config_update_harness;
+mod guard_config_update_settings;
+mod guard_config_update_value;
 mod guard_store_advisory_cache;
 #[cfg(test)]
 mod guard_store_advisory_cache_vectors_tests;
@@ -368,7 +378,8 @@ mod hook_approval_context;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
-mod hook_bridge_exit;
+mod hook_bridge_daemon_start;
+mod hook_bridge_fallback;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
@@ -524,6 +535,7 @@ mod policy_integrity_resolver;
 mod policy_integrity_rows_op;
 mod policy_lookup_groups;
 mod policy_lookup_reuse;
+mod policy_runtime_saved;
 mod policy_snapshot_build;
 mod policy_store;
 mod project_identity;
@@ -549,6 +561,7 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
 mod rich_command_model_op;
@@ -593,6 +606,8 @@ mod supply_chain_cloud_vectors_tests;
 mod supply_chain_egress;
 mod supply_chain_eval_seams;
 mod totp;
+#[cfg(windows)]
+mod windows_readonly;
 mod workspace_inventory_files;
 mod workspace_inventory_op;
 mod workspace_scan_targets;
@@ -708,6 +723,10 @@ fn main() {
     // wheel ships a single native binary. Dispatch before the panic hook so
     // compiler behavior (including its own exit paths) stays identical.
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(windows)]
+    if windows_readonly::is_command(&arguments) {
+        std::process::exit(windows_readonly::main(&arguments));
+    }
     if guard_command::source_cli::is_command(&arguments) {
         std::process::exit(guard_command::source_cli::main(arguments));
     }

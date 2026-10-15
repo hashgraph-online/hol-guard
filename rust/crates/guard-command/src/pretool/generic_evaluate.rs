@@ -371,8 +371,17 @@ pub(super) fn evaluate_signals(
             "HOL Guard did not run this read because the path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
         );
     }
-    let (reason_code, reason) = review_reason(action_type);
+    let (reason_code, mut reason) = review_reason(action_type);
+    if action_type == PreToolActionTypeV1::Unknown
+        && matches!(harness, "omp" | "pi")
+        && signals.tool_name.as_deref() == Some("eval")
+    {
+        // Same review; the reason names the form Guard can check instead.
+        reason = EVAL_REVIEW_REASON;
+    }
     generic_result(action, "review", reason_code, reason)
 }
+
+const EVAL_REVIEW_REASON: &str = "HOL Guard requires review because code run by eval can start processes, change files or reach the network, and Guard cannot check what it will do before it runs. Run shell commands with the bash tool instead, where Guard checks each command.";
 
 pub(super) const MISSING_PATH: &str = "native_missing_path";

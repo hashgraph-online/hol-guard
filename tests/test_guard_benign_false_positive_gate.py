@@ -58,6 +58,8 @@ _FIXED_TOOLS = {
     "todo": "todo",
     "todo_write": "todo_write",
     "ls": "ls",
+    # Claude Code's built-in question prompt reaches Guard only after the user answers.
+    "ask_user_question": "AskUserQuestion",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
@@ -87,6 +89,10 @@ class GateCase:
     tool_input: dict[str, object]
     cwd: str
     expect: str
+    event: str = "PreToolUse"
+    tool_response: object = None
+    # Variables the agent shell inherits, such as a user's RIPGREP_CONFIG_PATH.
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 def _expand() -> list[GateCase]:
@@ -103,6 +109,9 @@ def _expand() -> list[GateCase]:
                     tool_input=entry["tool_input"],
                     cwd=entry["cwd"],
                     expect=entry["expect"],
+                    event=entry.get("event", "PreToolUse"),
+                    tool_response=entry.get("tool_response"),
+                    environment=tuple(sorted(entry.get("environment", {}).items())),
                 )
             )
     return expanded
@@ -158,8 +167,10 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # the agent environment. A test-only GIT_CONFIG_GLOBAL, and later the
     # LD_LIBRARY_PATH that setup-python exports on CI runners, each hid every
     # Git read case behind a review that real agents never see.
+    # A developer's RIPGREP_CONFIG_PATH likewise keeps every rg case on
+    # review; a case that models one sets it through its environment.
     for name in list(os.environ):
-        if name.upper().startswith(("GIT_", "LD_", "DYLD_")):
+        if name.upper().startswith(("GIT_", "LD_", "DYLD_")) or name.upper() == "RIPGREP_CONFIG_PATH":
             patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
@@ -192,7 +203,7 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     before = worker.store.count_approval_requests(status=None)
     known = {str(row.get("request_id")) for row in worker.store.list_approval_requests(status=None, limit=500)}
     payload: dict[str, object] = {
-        "hook_event_name": "PreToolUse",
+        "hook_event_name": case.event,
         "tool_name": _tool_name(case),
         "tool_input": _tool_input(case, fixture),
         "session_id": "benign-fp-gate",
@@ -200,6 +211,8 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
         "cwd": str(fixture.cwd(case.cwd)),
         "guard_execution_environment": collect_hook_execution_environment(),
     }
+    if case.tool_response is not None:
+        payload["tool_response"] = case.tool_response
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.
@@ -214,6 +227,11 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
             workspace=fixture.cwd(case.cwd),
         ),
     )
+    # Claude's PostToolUse output carries no reason code, so a silent policy
+    # warning is visible only in the native receipt the review just wrote.
+    receipt = worker._last_native_decision_receipt
+    if "reason_code" not in result and isinstance(receipt, dict) and isinstance(receipt.get("reason_code"), str):
+        result = {**result, "reason_code": receipt["reason_code"]}
     _ROWS[case.case_id] = approval_rows(worker.store, known)
     routed = _harness_route(case, result, payload, fixture)
     return routed, worker.store.count_approval_requests(status=None) - before
@@ -331,7 +349,10 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
     case: GateCase, gate_environment: tuple[BenignFixture, HookWorker]
 ) -> None:
     fixture, worker = gate_environment
-    result, approvals = _review(case, fixture, worker)
+    with pytest.MonkeyPatch.context() as patch:
+        for name, value in case.environment:
+            patch.setenv(name, value)
+        result, approvals = _review(case, fixture, worker)
     description = _describe(case, result, approvals)
     if case.expect == "not_allow":
         assert case.case_id not in _PENDING_FIX, "negative controls cannot be pending_fix"
@@ -411,4 +432,14 @@ def test_every_confirmed_false_positive_class_has_a_gate_case() -> None:
         "rg-numbered",
         "uv-version",
         "pytest-quiet",
+    } <= ids
+    # Shapes the live Gauntlet missed: a gitignored node_modules link out of the
+    # worktree, piped local builds and doctl reads, and placeholder docs reads.
+    assert {
+        "omp-glob-recursive-sh",
+        "omp-glob-recursive-sh-pattern",
+        "gauntlet-linked-modules-relative-vite-build",
+        "doctl-apps-list-format-head",
+        "neg-doctl-auth-token-head",
+        "gauntlet-cat-credential-placeholder-docs",
     } <= ids

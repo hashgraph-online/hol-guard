@@ -5,21 +5,13 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-import os
 import re
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple, Protocol, TypedDict
+from typing import Protocol, TypedDict
 
 _BASE64URL_ARGUMENT = re.compile(r"[A-Za-z0-9_-]+")
-
-NATIVE_HANDOFF_FLAG = "--native-handoff"
-NATIVE_HANDOFF_SCHEMA = "hol-guard.codex-native-handoff.v1"
-NATIVE_ELAPSED_ENV = "HOL_GUARD_CODEX_NATIVE_ELAPSED_MS"
-# The hook input, its stamped copy and the daemon answer, each JSON-escaped.
-_MAX_NATIVE_HANDOFF_BYTES = 4 * 1024 * 1024
-_NATIVE_HANDOFF_KEYS = frozenset({"schema", "hook_input", "event_name", "daemon_response", "elapsed_ms"})
 
 
 def decode_bridge_config_argument(argument: str) -> str:
@@ -161,72 +153,10 @@ def _hook_timeout_mapping(value: object, *, timeout_grace_seconds: int) -> dict[
     return timeouts
 
 
-class NativeHandoff(NamedTuple):
-    """A daemon answer the native bridge received and left to Python."""
-
-    hook_input: str
-    event_name: str
-    response: dict[str, object]
-    elapsed_seconds: float
-
-
-def native_elapsed_seconds(limit: float) -> float:
-    """Time the native bridge already spent on this hook, within ``limit``.
-
-    The native bridge reports it when it runs this bridge in its place, so
-    the hook keeps one deadline. The value only ever shortens the deadline.
-    """
-
-    raw = os.environ.pop(NATIVE_ELAPSED_ENV, None)
-    if raw is None or not raw.isascii() or not raw.isdigit():
-        return 0.0
-    return min(int(raw) / 1000.0, max(0.0, limit))
-
-
-def read_native_handoff(event_name_of: Callable[[Mapping[str, object]], str]) -> NativeHandoff | None:
-    """Read the native bridge's handoff from stdin, or None when malformed."""
-
-    stream = getattr(sys.stdin, "buffer", None)
-    if stream is None:
-        return None
-    raw = stream.read(_MAX_NATIVE_HANDOFF_BYTES + 1)
-    if len(raw) > _MAX_NATIVE_HANDOFF_BYTES:
-        return None
-    try:
-        envelope = json.loads(raw.decode("utf-8"))
-        if not isinstance(envelope, dict) or set(envelope) != _NATIVE_HANDOFF_KEYS:
-            return None
-        hook_input = envelope["hook_input"]
-        event_name = envelope["event_name"]
-        elapsed_ms = envelope["elapsed_ms"]
-        if (
-            envelope["schema"] != NATIVE_HANDOFF_SCHEMA
-            or not isinstance(hook_input, str)
-            or not isinstance(event_name, str)
-            or not isinstance(envelope["daemon_response"], str)
-            or not isinstance(elapsed_ms, int)
-            or isinstance(elapsed_ms, bool)
-            or elapsed_ms < 0
-        ):
-            return None
-        payload = json.loads(hook_input)
-        response = json.loads(envelope["daemon_response"])
-    except (UnicodeDecodeError, ValueError, RecursionError):
-        return None
-    # The event decides how the answer is rendered; it must be the input's.
-    if not isinstance(payload, dict) or not isinstance(response, dict) or event_name_of(payload) != event_name:
-        return None
-    return NativeHandoff(hook_input, event_name, response, elapsed_ms / 1000.0)
-
-
 __all__ = [
-    "NATIVE_HANDOFF_FLAG",
     "BridgeConfig",
-    "NativeHandoff",
     "TrustedHookLaunch",
     "bounded_hook_input",
     "bridge_config_from_argv",
-    "native_elapsed_seconds",
-    "read_native_handoff",
     "trusted_hook_launch",
 ]

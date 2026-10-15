@@ -1,8 +1,9 @@
-"""A native MCP relay session whose direct lane is not ready runs as the Python proxy.
+"""A native MCP relay session whose daemon is down stays native.
 
-The relay must decide before it reads any stdin byte or starts the MCP server,
-and then exec the exact Python proxy argv with its environment unchanged, so
-the proxy sees the host's untouched stdio stream.
+The relay decides how the session runs before it reads any stdin byte or
+starts the MCP server. A lane that is only not ready yet keeps the session in
+the relay, which starts one detached daemon ensure; the Python proxy is never
+launched for it.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import pytest
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native MCP relay is Unix only")
 
-_STDIN = b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n\x00tail without newline \xff'
+_STDIN = b""
 _FAKE_PROXY = """#!{python}
 import json, os, sys
 record = {{"argv": sys.argv[1:], "env": dict(os.environ), "stdin": sys.stdin.buffer.read().hex()}}
@@ -47,7 +48,7 @@ def _wait_for(path: Path, seconds: float = 10.0) -> dict[str, object]:
     raise AssertionError(f"{path.name} was never written")
 
 
-def test_an_unready_lane_hands_the_untouched_session_to_the_python_proxy(tmp_path: Path) -> None:
+def test_a_down_daemon_keeps_the_session_native_and_starts_one_ensure(tmp_path: Path) -> None:
     runtime = _runtime()
     log, guard_home, workspace = tmp_path / "log", tmp_path / "guard-home", tmp_path / "workspace"
     for directory in (log, guard_home, workspace):
@@ -84,15 +85,11 @@ def test_an_unready_lane_hands_the_untouched_session_to_the_python_proxy(tmp_pat
         timeout=60,
         check=False,
     )
-    assert completed.returncode == 0, completed.stderr
-    proxy = _wait_for(log / "proxy.json")
-    assert proxy["argv"] == proxy_args
-    assert bytes.fromhex(str(proxy["stdin"])) == _STDIN
-    recorded = {key: value for key, value in dict(proxy["env"]).items() if not key.startswith("__")}
-    assert recorded == env
     stderr = completed.stderr.decode("utf-8", errors="replace")
-    assert "hol-guard mcp-relay: python proxy: mcp_relay_daemon_unreachable" in stderr
-    assert "no native decision" not in stderr
+    assert "hol-guard mcp-relay: lane not ready: mcp_relay_daemon_unreachable" in stderr
+    assert "python proxy" not in stderr
+    # The host closed at once, so the relay shut its MCP server down cleanly.
+    assert completed.returncode == 0, stderr
     # The daemon is down, so one detached ensure ran without the host's input.
     ensure = _wait_for(log / "ensure.json")
     assert ensure["argv"] == [
@@ -107,3 +104,4 @@ def test_an_unready_lane_hands_the_untouched_session_to_the_python_proxy(tmp_pat
         str(tmp_path),
     ]
     assert ensure["stdin"] == ""
+    assert not (log / "proxy.json").exists()

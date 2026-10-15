@@ -132,7 +132,14 @@ fn task_wait_and_todo_are_allowed_only_for_omp() {
 #[test]
 fn artifact_references_are_allowed_only_in_exact_form() {
     let f = fixture();
-    for path in ["artifact://1", "artifact://42", "artifact://7:1-20"] {
+    for path in [
+        "artifact://1",
+        "artifact://42",
+        "artifact://7:1-20",
+        "artifact://13:raw",
+        "artifact://13:1-20:raw",
+        "artifact://13:RAW:1-20",
+    ] {
         let result = omp(&f, "read", json!({"path": path}));
         assert!(allowed(&result), "{path}");
         assert_eq!(result.reason_code, "native_omp_artifact_read");
@@ -172,6 +179,11 @@ fn artifact_references_are_allowed_only_in_exact_form() {
         "artifact://1/../../x",
         "artifact://1:5",
         "artifact://1:a-b",
+        "artifact://1:raw:raw",
+        "artifact://1:1-2:3-4",
+        "artifact://1:raw:1-2:raw",
+        "artifact://1:conflicts",
+        "artifact://1:raw:",
         "artifact://1234567890",
         "artifact:///etc/passwd",
     ] {
@@ -270,9 +282,102 @@ fn listings_allow_verified_directories_only() {
 }
 
 #[test]
+fn listings_of_a_missing_path_say_so_like_a_read() {
+    let f = fixture();
+    // The agent guessed where a worktree beside the session folder would be.
+    // A read of that path is told it does not exist, so a listing is too.
+    for tool in ["glob", "find", "ls"] {
+        for path in [
+            "~/missing-worktree",
+            "../missing-worktree",
+            "~/clean/missing",
+        ] {
+            let result = omp(&f, tool, json!({"path": path}));
+            assert_eq!(result.minimum_action, "block", "{tool} {path}");
+            assert_eq!(result.reason_code, "native_missing_path", "{tool} {path}");
+            let read = omp(&f, "read", json!({"path": path}));
+            assert_eq!(read.reason_code, "native_missing_path", "{tool} {path}");
+        }
+        // Sensitive names, wildcards and existing folders keep their review.
+        for path in [
+            "~/.ssh/missing",
+            "~/missing/.env",
+            ".env",
+            "~/missing-*",
+            "~/secret-dir",
+        ] {
+            let result = omp(&f, tool, json!({"path": path}));
+            assert!(!allowed(&result), "{tool} {path}");
+            assert_ne!(result.reason_code, "native_missing_path", "{tool} {path}");
+        }
+    }
+}
+
+#[test]
+fn project_skill_folders_list_by_name() {
+    let f = fixture();
+    write(
+        f.project.join("app/.agents/skills/deploy/SKILL.md"),
+        "synthetic fixture\n",
+    );
+    write(
+        f.project.join(".claude/skills/review/SKILL.md"),
+        "synthetic fixture\n",
+    );
+    write(f.project.join(".claude/settings.local.json"), "{}\n");
+    let absolute = f.project.join(".agents");
+    for tool in ["glob", "find", "ls"] {
+        for path in [
+            ".agents",
+            ".agents/",
+            ".agents/skills",
+            ".agents/skills/example",
+            "app/.agents",
+            ".claude/skills",
+            "~/project/.agents",
+            absolute.to_str().unwrap(),
+        ] {
+            let result = omp(
+                &f,
+                tool,
+                json!({"path": path, "hidden": true, "gitignore": false}),
+            );
+            assert!(allowed(&result), "{tool} {path}: {}", result.reason_code);
+        }
+        for path in [
+            ".agents/skills/.hidden",
+            ".git",
+            ".git/skills",
+            ".claude",
+            "~/.codex",
+            "~/.agents/../project/.agents",
+        ] {
+            let result = omp(&f, tool, json!({"path": path, "hidden": true}));
+            assert!(!allowed(&result), "{tool} {path}");
+        }
+    }
+    // A glob inside the folder keeps the full tree proof.
+    assert!(!allowed(&omp(
+        &f,
+        "glob",
+        json!({"path": ".agents/**/*.py"})
+    )));
+    // A project `.agents` folder holding more than skills may hold agent state.
+    std::fs::create_dir_all(f.project.join(".agents/sessions")).unwrap();
+    for tool in ["glob", "find", "ls"] {
+        assert!(
+            !allowed(&omp(&f, tool, json!({"path": ".agents"}))),
+            "{tool}"
+        );
+    }
+    assert!(allowed(&omp(&f, "ls", json!({"path": ".agents/skills"}))));
+}
+
+#[test]
 fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
     let f = fixture();
-    for path in ["src/**/*.ts", "src/*.rs", "~/clean/*"] {
+    // `*.py` walks the workspace for names, as `find` does.
+    for path in ["src/**/*.ts", "src/*.rs", "~/clean/*", "*.py"] {
         let result = omp(
             &f,
             "glob",
@@ -293,7 +398,6 @@ fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
         "src/[.][.]/clean/*",
         "~/.ss*/*",
         "~/*/*",
-        "*.py",
     ] {
         assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
     }
@@ -307,8 +411,49 @@ fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
     std::os::unix::fs::symlink(f.home.join("clean"), &link).unwrap();
     assert!(!allowed(&omp(&f, "glob", json!({"path": "linked/*"}))));
     assert!(!allowed(&omp(&f, "glob", json!({"path": "linke?/*"}))));
+    // A directory link out of the prefix is refused even with no sensitive
+    // file anywhere in the tree.
+    write(f.project.join("lib/a.ts"), "synthetic marker\n");
+    assert!(allowed(&omp(&f, "glob", json!({"path": "lib/**/*.ts"}))));
+    std::os::unix::fs::symlink(f.home.join("clean"), f.project.join("lib/keys")).unwrap();
+    assert!(!allowed(&omp(&f, "glob", json!({"path": "lib/**/*.ts"}))));
+    // Names only: a `.env` below the prefix is listed, never read, as with
+    // `find`. A link below it that leaves the prefix stays on review.
     write(f.project.join("src/.env"), "synthetic marker\n");
+    assert!(allowed(&omp(&f, "glob", json!({"path": "src/**/*.ts"}))));
+    std::os::unix::fs::symlink(f.home.join("clean"), f.project.join("src/out")).unwrap();
     assert!(!allowed(&omp(&f, "glob", json!({"path": "src/**/*.ts"}))));
+    // A literal last name can only return names that end in it, so the walk
+    // may pass hidden or linked children.
+    write(f.project.join("src/AGENTS.md"), "synthetic instructions\n");
+    for path in [
+        "src/**/AGENTS.md",
+        "src/**/{AGENTS,CLAUDE}.md",
+        "src/AGENTS.md;src/**/AGENTS.md",
+        "**/AGENTS.md",
+    ] {
+        let result = omp(
+            &f,
+            "glob",
+            json!({"path": path, "hidden": true, "gitignore": false, "limit": 30}),
+        );
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+    }
+    for path in [
+        "src/**/.env",
+        "src/**/.ENV",
+        "src/**/id_rsa",
+        "src/**/credentials.json",
+        "src/**/*.env",
+        "src/**/AGENTS.md\\",
+        "src/**/",
+        "src/**/..",
+        "src/**/../../.ssh/AGENTS.md",
+        "~/**/AGENTS.md",
+        "../**/AGENTS.md",
+    ] {
+        assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
+    }
 }
 
 #[test]
@@ -355,6 +500,42 @@ fn grep_allows_only_directories_without_reachable_secrets() {
         "grep",
         json!({"pattern": "x", "path": "~/clean"})
     )));
+}
+
+#[test]
+fn grep_reviews_name_the_sensitive_file_or_ask_for_separate_folders() {
+    let f = fixture();
+    write(
+        f.project.join("deploy/base/secret.yaml"),
+        "synthetic fixture\n",
+    );
+    write(
+        f.project.join("deploy/base/service.yaml"),
+        "synthetic fixture\n",
+    );
+    write(f.home.join("suites/tls/server.key"), "synthetic fixture\n");
+    for (path, note) in [
+        ("deploy", "would reach `deploy/base/secret.yaml`"),
+        ("deploy/base/", "would reach `deploy/base/secret.yaml`"),
+        ("src;~/suites", "would reach `~/suites/tls/server.key`"),
+        (
+            "{src,deploy}",
+            "list the folders you need as `;`-separated paths",
+        ),
+        (
+            "deploy/**/*.yaml",
+            "list the folders you need as `;`-separated paths",
+        ),
+    ] {
+        let result = omp(&f, "grep", json!({"pattern": "x", "path": path}));
+        assert!(!allowed(&result), "{path}");
+        assert_eq!(result.reason_code, "native_file_read_review", "{path}");
+        assert!(result.reason.contains(note), "{path}: {}", result.reason);
+    }
+    // A sensitive file named directly keeps its own reason with no note.
+    let result = omp(&f, "grep", json!({"pattern": "x", "path": ".env"}));
+    assert!(!allowed(&result));
+    assert!(!result.reason.contains("would reach"), "{}", result.reason);
 }
 
 #[test]
@@ -457,6 +638,134 @@ fn semicolon_path_lists_prove_every_entry() {
 }
 
 #[test]
+fn grep_lists_naming_a_missing_file_say_so_instead_of_asking() {
+    let f = fixture();
+    // The agent spelled a worktree beside the session folder as if it were
+    // inside it. Nothing is searched, so Guard says why rather than queueing
+    // an approval the agent is told not to retry.
+    for path in [
+        "calc.py; missing.py",
+        "app-fix/src/report.ts;app-fix/src/projector.ts",
+        "src/main.rs; app-fix/src/report.ts",
+        "missing.py; ~/missing-directory",
+    ] {
+        let result = omp(
+            &f,
+            "grep",
+            json!({"pattern": "x", "path": path, "gitignore": true}),
+        );
+        assert_eq!(result.minimum_action, "block", "{path}");
+        assert_eq!(result.reason_code, "native_missing_path", "{path}");
+    }
+    // Every other entry keeps its proof, and a missing entry with a
+    // sensitive name keeps its review.
+    for path in [
+        "missing.py; ~/.ssh/id_rsa",
+        "missing.py; ~/secret-dir/.env",
+        "missing.py; src/*.rs",
+        "missing.py; ~/.ssh",
+        "missing.py; missing/.env",
+    ] {
+        let result = omp(&f, "grep", json!({"pattern": "x", "path": path}));
+        assert!(!allowed(&result), "{path}");
+        assert_ne!(result.reason_code, "native_missing_path", "{path}");
+    }
+}
+
+#[test]
+fn grep_lists_naming_a_missing_absolute_file_say_so() {
+    let f = fixture();
+    // After a relative spelling failed, the agent named every file in the
+    // worktree beside the session folder by its absolute path, one of them
+    // wrong. Guard would search that folder, so it says the name is missing.
+    let clean = f.home.join("clean");
+    // A test folder whose fixtures hold a key file is not searchable as a
+    // whole, but a missing test file beside it is still only missing.
+    write(
+        f.project.join("tests/report.test.ts"),
+        "synthetic fixture\n",
+    );
+    write(
+        f.project.join("tests/fixtures/tls/loopback-server.key"),
+        "synthetic fixture\n",
+    );
+    let tests = f.project.join("tests");
+    for path in [
+        format!(
+            "{0}/report.test.ts;{0}/cohort-query.test.ts",
+            tests.display()
+        ),
+        format!("{0}/a.txt;{0}/report-cli.ts", clean.display()),
+        "~/clean/a.txt; ~/clean/missing/report.ts".to_owned(),
+        // A folder Guard would not search as a whole still answers a direct
+        // read of a missing name the same way, so the list does too.
+        "~/clean/a.txt; ~/creds-dir/report.ts".to_owned(),
+        "~/clean/a.txt; ~/report.ts".to_owned(),
+    ] {
+        let result = omp(
+            &f,
+            "grep",
+            json!({"pattern": "x", "path": path, "case": false}),
+        );
+        assert_eq!(result.minimum_action, "block", "{path}");
+        assert_eq!(result.reason_code, "native_missing_path", "{path}");
+    }
+    // A folder Guard would not search keeps the review, as does a spelling
+    // that climbs out of a searchable one.
+    for path in [
+        "~/clean/a.txt; ~/secret-dir/report.ts".to_owned(),
+        "~/clean/a.txt; ~/creds-dir/credentials.yaml".to_owned(),
+        "~/clean/a.txt; ~/clean/../secret-dir/report.ts".to_owned(),
+        format!("{}/a.txt; /nonexistent-root/report.ts", clean.display()),
+    ] {
+        let result = omp(&f, "grep", json!({"pattern": "x", "path": path}));
+        assert!(!allowed(&result), "{path}");
+        assert_ne!(result.reason_code, "native_missing_path", "{path}");
+    }
+    // The existing entries are still searched, so the folder keeps its review.
+    let result = omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": format!("{0}/report.test.ts;{0}", tests.display())}),
+    );
+    assert!(!allowed(&result));
+    assert_ne!(result.reason_code, "native_missing_path");
+}
+
+#[test]
+fn grep_naming_one_missing_file_says_so() {
+    let f = fixture();
+    // The agent guessed a lockfile name the repository does not use. Nothing
+    // is searched, so Guard says the path is missing, as it does for a read.
+    let clean = f.home.join("clean");
+    for path in [
+        "~/clean/pnpm-lock.yaml".to_owned(),
+        format!("{}/pnpm-lock.yaml", clean.display()),
+    ] {
+        let result = omp(
+            &f,
+            "grep",
+            json!({"pattern": "x", "path": path, "case": false, "gitignore": false}),
+        );
+        assert_eq!(result.minimum_action, "block", "{path}");
+        assert_eq!(result.reason_code, "native_missing_path", "{path}");
+    }
+    // A sensitive name, a folder Guard would not search and a spelling that
+    // climbs out of a searchable one keep the review.
+    for path in [
+        "missing/.env",
+        "~/secret-dir/report.ts",
+        "~/creds-dir/credentials.yaml",
+        "~/clean/../secret-dir/report.ts",
+        "/nonexistent-root/report.ts",
+    ] {
+        let result = omp(&f, "grep", json!({"pattern": "x", "path": path}));
+        assert!(!allowed(&result), "{path}");
+        assert_ne!(result.reason_code, "native_missing_path", "{path}");
+    }
+}
+
+#[test]
 fn brace_globs_prove_every_alternative() {
     let f = fixture();
     write(f.project.join("app/lib/index.ts"), "synthetic fixture\n");
@@ -478,7 +787,6 @@ fn brace_globs_prove_every_alternative() {
         "~/{clean,secret-dir}",
         "~/{clean,.ss*}",
         "~/clean/{.,x}./.ssh",
-        "{lib,app}",
         "app/{lib,{tests}}",
         "app/{lib,tests",
         "app/lib,tests}",
@@ -487,6 +795,129 @@ fn brace_globs_prove_every_alternative() {
     ] {
         assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
     }
+}
+
+#[test]
+fn grep_line_ranges_carry_the_file_read_proof() {
+    let f = fixture();
+    // `grep` takes the `file:N-M` selectors `read` takes and searches only
+    // those lines of that one file.
+    let absolute = format!("{}:970-1160", f.project.join("calc.py").display());
+    for path in [
+        absolute.as_str(),
+        "calc.py:1-5",
+        "src/main.rs:1-3,8+2",
+        "~/clean/a.txt:2",
+    ] {
+        let result = omp(
+            &f,
+            "grep",
+            json!({"pattern": "x", "path": path, "case": false}),
+        );
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+    }
+    // Absolute forms skip the relative-path read proof, so these reach the
+    // selector proof itself.
+    let project = |rest: &str| format!("{}/{rest}", f.project.display());
+    for path in [
+        "~/secret-dir/.env:1-5".to_owned(),
+        "~/.ssh/id_rsa:1-2".to_owned(),
+        "~/.codex/auth.json:1".to_owned(),
+        "calc.py:1-2;~/secret-dir".to_owned(),
+        project("calc.py:0-3"),
+        project("calc.py:1-5:raw"),
+        project("src:1-5"),
+        project("missing.py:1-5"),
+        project("../project/calc.py:1-2"),
+    ] {
+        let result = omp(&f, "grep", json!({"pattern": "x", "path": path}));
+        assert!(!allowed(&result), "{path}: {}", result.reason_code);
+    }
+}
+
+#[test]
+fn unanchored_brace_globs_prove_each_alternative_at_every_depth() {
+    let f = fixture();
+    let glob_in = |cwd: &std::path::Path, path: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "glob", "tool_input": {"path": path}}),
+            None,
+            None,
+            f.home.to_str(),
+            cwd.to_str(),
+        )
+    };
+    let clean = f.home.join("clean-app");
+    write(clean.join("deploy.sh"), "synthetic fixture\n");
+    write(clean.join("app/lib/index.ts"), "synthetic fixture\n");
+    // The host searches `**/<alternative>` from the cwd: the same walk as an
+    // unbraced `**/*.sh`, so both are proven the same way.
+    for path in [
+        "**/*.sh",
+        "**/*{registry,deploy,cleanup}*",
+        "*{deploy,index}*",
+        "{lib,app}",
+    ] {
+        let result = glob_in(&clean, path);
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_directory_listing");
+    }
+    for path in [
+        "{lib,../clean}",
+        "{lib,/etc}",
+        "{lib,~/.ssh}",
+        "*{index,..}*/x",
+    ] {
+        assert!(!allowed(&glob_in(&clean, path)), "{path}");
+    }
+}
+
+#[test]
+fn glob_entries_that_name_nothing_carry_their_folder_listing_proof() {
+    let f = fixture();
+    // Agents glob a few instruction files to learn which exist. The host
+    // skips missing entries in a list and fails a lone one, so neither lists
+    // more than the nearest existing folder would.
+    let absolute = format!(
+        "{};{}",
+        f.project.join("calc.py").display(),
+        f.project.join("src/AGENTS.md").display()
+    );
+    for path in [
+        absolute.as_str(),
+        "calc.py;src/AGENTS.md;scripts/AGENTS.md",
+        "src/AGENTS.md",
+    ] {
+        let result = omp(
+            &f,
+            "glob",
+            json!({"path": path, "hidden": true, "gitignore": false, "limit": 50}),
+        );
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_directory_listing");
+    }
+    for path in [
+        "calc.py;src/.env",
+        "calc.py;src/missing/credentials.json",
+        "calc.py;~/.ssh/missing",
+        "calc.py;.git/missing",
+        "calc.py;src/.cache/AGENTS.md",
+        "calc.py;src/../../missing.md",
+        "calc.py;src/missing/*.md",
+        "calc.py;~/clean/notes/AGENTS.md",
+    ] {
+        let result = omp(&f, "glob", json!({"path": path}));
+        assert!(!allowed(&result), "{path}: {}", result.reason_code);
+    }
+    // Content searches keep their own missing-path handling.
+    let result = omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "src;src/AGENTS.md"}),
+    );
+    assert!(!allowed(&result), "grep: {}", result.reason_code);
 }
 
 #[test]
@@ -749,5 +1180,143 @@ fn eval_scalar_options_are_preserved_or_reviewed() {
         "display(await tool.bash({command:'cat calc.py', timeout: 5}))",
     ] {
         assert!(!allowed(&eval_code(&f, code)), "{code}");
+    }
+}
+
+#[test]
+fn read_raw_line_windows_carry_the_file_read_proof() {
+    let f = fixture();
+    // OMP peels one line window plus `raw`, in either order, and reads those
+    // lines of the same file verbatim.
+    for path in [
+        "calc.py:1-5:raw",
+        "calc.py:raw:1-5",
+        "calc.py:raw:-5",
+        "calc.py:1-2,4-6:RAW",
+        "src/main.rs:-3:raw",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_exact_safe_file_read", "{path}");
+    }
+    let project = |rest: &str| format!("{}/{rest}", f.project.display());
+    for path in [
+        "~/secret-dir/.env:1-5:raw".to_owned(),
+        "~/.ssh/id_rsa:raw:1-2".to_owned(),
+        "~/.codex/auth.json:raw:-3".to_owned(),
+        project("calc.py:1-5:1-2"),
+        project("calc.py:raw:raw"),
+        project("calc.py:conflicts:1-5"),
+        project("calc.py:1-5:img"),
+        project("calc.py:-5,1-2:raw"),
+        project("calc.py:0-3:raw"),
+        project("calc.py:1-5:raw:raw"),
+        project("src:1-5:raw"),
+        project("../project/calc.py:1-2:raw"),
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(!allowed(&result), "{path}: {}", result.reason_code);
+    }
+    // OMP's grep rejects the compound for filesystem paths, so it stays
+    // unproven there.
+    let result = omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": project("calc.py:raw:1-5")}),
+    );
+    assert!(!allowed(&result), "{}", result.reason_code);
+}
+
+#[test]
+fn read_lists_prove_every_part() {
+    let f = fixture();
+    let sibling = f.home.join("clean");
+    // Agents read a few line windows of known files in one call; the host
+    // reads each part on its own, so each needs the proof a lone read gets.
+    for path in [
+        format!(
+            "{}:1-5; {}:2-3",
+            f.project.join("calc.py").display(),
+            f.project.join("src/main.rs").display()
+        ),
+        format!(
+            "calc.py:1-2; calc.py:4-9; {}",
+            sibling.join("a.txt").display()
+        ),
+        "src/main.rs;~/clean/a.txt:1;".to_owned(),
+        // The host peels only a selector-shaped tail, so a window on the
+        // first part does not hide the parts after it.
+        "calc.py:1-5; src/main.rs".to_owned(),
+        "src/main.rs:raw; calc.py".to_owned(),
+        "calc.py; src/main.rs:1-5:raw".to_owned(),
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_exact_safe_file_read", "{path}");
+    }
+    // A missing part is a wrong path; the agent should fix it.
+    let result = omp(&f, "read", json!({"path": "calc.py:1-5; missing.py:1-5"}));
+    assert_eq!(result.minimum_action, "block");
+    assert_eq!(result.reason_code, "native_missing_path");
+    // Sensitive, unbounded or rewritten parts keep their review, and a list
+    // of existing parts is never reported as missing.
+    for path in [
+        "calc.py; ~/.ssh/id_rsa",
+        "calc.py; ~/secret-dir/.env",
+        "calc.py; ~/.codex/auth.json:1-3",
+        "calc.py; src",
+        "calc.py; src/*.rs",
+        "calc.py; {src/main.rs,calc.py}",
+        "calc.py; ../project/calc.py:1-2",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(!allowed(&result), "{path}: {}", result.reason_code);
+        assert_ne!(result.reason_code, "native_missing_path", "{path}");
+    }
+    // The host peels quotes per part; that list stays unproven.
+    assert!(!allowed(&omp(
+        &f,
+        "read",
+        json!({"path": "calc.py; \"src/main.rs\""})
+    )));
+    // An existing literal that contains `;` is read whole, never split: a
+    // split here would name a missing part.
+    write(f.project.join("calc.py;missing.py"), "synthetic fixture\n");
+    let result = omp(&f, "read", json!({"path": "calc.py;missing.py:1-5"}));
+    assert_eq!(result.reason_code, "native_exact_safe_file_read");
+    let result = omp(&f, "read", json!({"path": "calc.py;missing.py"}));
+    assert_ne!(result.reason_code, "native_missing_path");
+    let result = omp(&f, "read", json!({"path": "calc.py;missing.py:1-5:raw"}));
+    assert_ne!(result.reason_code, "native_missing_path");
+}
+
+#[test]
+fn json_queries_read_only_the_proven_file() {
+    let f = fixture();
+    write(
+        f.project.join("scripts/queries.json"),
+        "{\"queries\": {}}\n",
+    );
+    let read = |path: String| omp(&f, "read", json!({ "path": path }));
+    for path in [
+        "scripts/queries.json?q=.queries.auth_outcomes".to_owned(),
+        "scripts/queries.json?q=.queries | keys&raw=true".to_owned(),
+        format!("{}/scripts/queries.json?q=.queries", f.project.display()),
+    ] {
+        let result = read(path.clone());
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_exact_safe_file_read", "{path}");
+    }
+    for path in [
+        "scripts/queries.json?q=env".to_owned(),
+        "scripts/queries.json?q=$ENV".to_owned(),
+        "scripts/queries.json?q=input_filename".to_owned(),
+        "missing.json?q=.a".to_owned(),
+        "../project/scripts/queries.json?q=.a".to_owned(),
+        "~/.codex/auth.json?q=.".to_owned(),
+        "~/creds-dir/credentials.json?q=.".to_owned(),
+    ] {
+        let result = read(path.clone());
+        assert!(!allowed(&result), "{path}: {}", result.reason_code);
     }
 }

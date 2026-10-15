@@ -1,5 +1,6 @@
 {
   "schema": "hol-guard-cursor-native-review-answers.v1",
+  "now_micros": 1767323045678901,
   "vectors": [
     {
       "home": "untokened",
@@ -1294,240 +1295,240 @@
       "case": "pause-signed",
       "event": "preToolUse",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": " PreToolUse ",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeShellExecution",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeMCPExecution",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeReadFile",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "preToolUse",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": " PreToolUse ",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeShellExecution",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeMCPExecution",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeReadFile",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "preToolUse",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": " PreToolUse ",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeShellExecution",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeMCPExecution",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeReadFile",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "preToolUse",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": " PreToolUse ",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeShellExecution",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeMCPExecution",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeReadFile",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "preToolUse",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": " PreToolUse ",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeShellExecution",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeMCPExecution",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
     },
     {
       "home": "tokened",
       "case": "pause-signed",
       "event": "beforeReadFile",
       "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "preToolUse",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": " PreToolUse ",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeShellExecution",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeMCPExecution",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",
       "case": "block-with-link",
       "event": "beforeReadFile",
       "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
-      "stdout": null,
-      "exit_code": null
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
     },
     {
       "home": "tokened",

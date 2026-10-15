@@ -140,12 +140,6 @@ class HookWorker(HookWorkerNativeMixin):
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
 
-    @property
-    def last_native_decision_receipt(self) -> dict[str, object] | None:
-        """Return the receipt produced by the most recent native review."""
-
-        return self._last_native_decision_receipt
-
     def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)
 

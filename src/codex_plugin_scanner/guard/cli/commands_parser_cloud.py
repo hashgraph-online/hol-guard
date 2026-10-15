@@ -5,15 +5,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ._commands_shared import _SERVICE_RUNTIME_CHOICES
-
-
 import argparse
 
-from ._commands_shared import *
+from ...argparse_utils import FriendlyArgumentParser
+from ..models import GUARD_ACTION_VALUES
+from .commands_parser_constants import _SERVICE_RUNTIME_CHOICES, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
 
 def _add_cloud_review_connect_consent(parser: argparse.ArgumentParser) -> None:

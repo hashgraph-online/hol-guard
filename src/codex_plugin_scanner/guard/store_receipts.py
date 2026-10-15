@@ -240,18 +240,6 @@ class StoreReceiptsRuntimeMixin:
                 (session_id, daemon_host, daemon_port, started_at, last_heartbeat_at),
             )
 
-    def touch_runtime_state(self, *, session_id: str, last_heartbeat_at: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                update guard_runtime_state
-                set last_heartbeat_at = ?
-                where state_key = 'runtime'
-                  and session_id = ?
-                """,
-                (last_heartbeat_at, session_id),
-            )
-
     def try_touch_runtime_state(
         self,
         *,

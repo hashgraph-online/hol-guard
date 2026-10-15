@@ -196,12 +196,6 @@ def _guard_store_from_argv():
     return GuardStore(Path(home_value))
 
 
-def grok_hook_should_block(*, policy_action: str, event_name: str | None = None) -> bool:
-    if _recording_only_from_guard_home() or is_grok_observe_only_event(event_name):
-        return False
-    return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-
-
 def _recording_only_from_guard_home() -> bool:
     store = _guard_store_from_argv()
     if store is None:
@@ -217,7 +211,6 @@ __all__ = [
     "emit_grok_hook_response",
     "grok_hook_process_exit",
     "grok_hook_response_from_guard",
-    "grok_hook_should_block",
     "is_grok_observe_only_event",
     "prepare_grok_hook_payload",
 ]

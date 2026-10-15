@@ -152,6 +152,7 @@ impl Lab {
                 cdpath_unset: true,
                 npm_config_inert: true,
                 shell_home_matches: true,
+                ripgrep_config_absent: false,
                 ..PathContext::default()
             },
             Some(&environment),

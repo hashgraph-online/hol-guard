@@ -1,7 +1,7 @@
 use super::{
-    classify_source_path, hidden_empty_work_tree_file, hidden_parts_allowed, lowered_parts,
-    resolve_candidate, sensitive_external_filename, sensitive_path_family, SourcePathDecision,
-    EXTERNAL_SENSITIVE_PARTS,
+    classify_source_path, hidden_empty_work_tree_file, hidden_parts_allowed,
+    is_source_code_extension, lowered_parts, resolve_candidate, sensitive_external_filename,
+    sensitive_path_family, SourcePathDecision, EXTERNAL_SENSITIVE_PARTS,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,7 +46,7 @@ pub fn classify_scannable_source_path(
     for path in [&lexical, &candidate] {
         let parts = lowered_parts(path);
         if sensitive_path_family(path).is_some()
-            || sensitive_external_filename(path)
+            || credential_named_file(path)
             || parts
                 .iter()
                 .any(|part| EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str()))
@@ -61,6 +61,18 @@ pub fn classify_scannable_source_path(
         return SourcePathDecision::deny("not_regular_file");
     }
     SourcePathDecision::allow("scannable_explicit_source_path", candidate)
+}
+
+/// A file named for credentials, such as `auth.json` or `api-token.txt`.
+/// Source code named for them, such as `auth-session.ts`, implements a
+/// credential feature rather than storing one, and its content is scanned
+/// like any other file; credential directories still apply to it.
+fn credential_named_file(path: &Path) -> bool {
+    let source_code = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(is_source_code_extension);
+    !source_code && sensitive_external_filename(path)
 }
 
 fn empty_work_tree_marker(target: &str, cwd: &Path, home: Option<&Path>) -> Option<PathBuf> {

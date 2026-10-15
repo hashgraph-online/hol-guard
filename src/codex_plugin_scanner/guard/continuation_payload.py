@@ -32,11 +32,6 @@ def offer_hash(offer: ContinuationOffer) -> str:
     return continuation_authority("identity", offer=offer_wire(offer))["offer_hash"]
 
 
-def public_reason(offer: ContinuationOffer, result: ContinuationResult) -> str:
-    projected = project(offer, result)["payload"]
-    return projected["codexResume" if offer.harness == "codex" else "harnessResume"]["reason"]
-
-
 def attempt_count(value: Mapping[str, object] | None) -> int:
     return continuation_authority("attempt", prior=value)["attempt_count"]
 

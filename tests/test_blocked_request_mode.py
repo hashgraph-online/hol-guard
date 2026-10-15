@@ -64,7 +64,7 @@ def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
         ("native_package_review", "--ignore-scripts"),
         ("native_command_review_required", "read-only"),
         ("native_network_review", "network request"),
-        ("native_pre_tool_unknown_review", "does not recognize"),
+        ("native_pre_tool_unknown_review", "cannot check what this tool call"),
     ],
 )
 def test_specific_deny_text_names_reason_and_inbox_when_approval_queued(code: str, expected: str) -> None:

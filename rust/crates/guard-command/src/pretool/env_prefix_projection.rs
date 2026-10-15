@@ -200,7 +200,8 @@ fn strip_prefixes(
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
         if let Some((name, value)) = shell_assignment(chars, token) {
-            if !literal_word(chars, token) {
+            let reviewed = setting.is_some();
+            if !(literal_word(chars, token) || reviewed && private_temp_word(chars, token)) {
                 return None;
             }
             if !inert_assignment(name, value) {
@@ -326,7 +327,31 @@ fn shell_assignment<'t>(chars: &[char], token: &'t ShellToken) -> Option<(&'t st
 
 /// The raw word has no expansion, substitution, glob or escape.
 fn literal_word(chars: &[char], token: &ShellToken) -> bool {
-    !chars[token.start..token.end].iter().any(|character| {
+    literal_chars(&chars[token.start..token.end])
+}
+
+/// The raw word's only expansions are `$TMPDIR` or `${TMPDIR}` and nothing
+/// in the command rebinds `TMPDIR`. Only a reviewed projection drops such a
+/// setting: the projection never settles below review, and moving it to the
+/// workspace sandbox, which sets `TMPDIR` itself, re-checks the raw command.
+fn private_temp_word(chars: &[char], token: &ShellToken) -> bool {
+    let word: String = chars[token.start..token.end].iter().collect();
+    let command: String = chars.iter().collect();
+    if !crate::pretool::workspace_contained::private_temp_expansions_only(&word)
+        || crate::pretool::workspace_contained::rebinds_private_temp(&command)
+    {
+        return false;
+    }
+    let rest: Vec<char> = word
+        .replace("${TMPDIR}", "")
+        .replace("$TMPDIR", "")
+        .chars()
+        .collect();
+    literal_chars(&rest)
+}
+
+fn literal_chars(word: &[char]) -> bool {
+    !word.iter().any(|character| {
         matches!(
             character,
             '$' | '`'
@@ -383,8 +408,22 @@ fn plain_scalar(value: &str) -> bool {
 
 /// Unsetting removes context; only names whose absence changes which config
 /// or executables a tool loads stay unproven.
+/// Commit identity a caller may clear so Git falls back to its configured
+/// author and committer; clearing one changes no program, path or config.
+const GIT_IDENTITY_SETTINGS: &[&str] = &[
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_DATE",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_DATE",
+];
+
 fn inert_unset(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
+    if GIT_IDENTITY_SETTINGS.contains(&upper.as_str()) {
+        return true;
+    }
     assignment_name_shape(name)
         && !matches!(upper.as_str(), "PATH" | "HOME")
         && ![
@@ -454,6 +493,21 @@ fn code_loading_name(upper: &str) -> bool {
 /// The first leading setting of any simple command that can load other code,
 /// as a shape-checked name a reason may echo.
 pub(super) fn code_loading_setting(command: &str) -> Option<String> {
+    leading_setting(command, |upper| {
+        crate::command_compatibility::code_or_redirect_environment_name(upper)
+    })
+}
+
+/// The first leading setting of any simple command named for a credential
+/// (`API_KEY`, `GH_TOKEN`), as a shape-checked name a reason may echo.
+pub(super) fn credential_setting(command: &str) -> Option<String> {
+    leading_setting(
+        command,
+        crate::command_compatibility::credential_routing_environment_name,
+    )
+}
+
+fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<String> {
     if command.len() > MAX_PROJECTED_CHARS {
         return None;
     }
@@ -483,9 +537,7 @@ pub(super) fn code_loading_setting(command: &str) -> Option<String> {
         };
         if name.len() <= MAX_SETTING_CHARS
             && assignment_name_shape(name)
-            && crate::command_compatibility::code_or_redirect_environment_name(
-                &name.to_ascii_uppercase(),
-            )
+            && matches(&name.to_ascii_uppercase())
         {
             return Some(name.to_owned());
         }

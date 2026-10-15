@@ -169,6 +169,27 @@ pub(super) fn safe_export_segment(
         })
 }
 
+/// `KUBECONFIG=<path> kubectl ...` selects a kubeconfig for that one command,
+/// as `--kubeconfig <path>` does, so it passes the same trust check. Any other
+/// setting, a wrapper, or a value list keeps the command reviewed.
+pub(super) fn trusted_kubeconfig_prefix(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    segment.environment_names == ["KUBECONFIG"]
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && matches!(
+            segment.tokens.as_slice(),
+            [setting, executable, arguments @ ..]
+                if executable == "kubectl"
+                    && arguments == segment.arguments.as_slice()
+                    && setting
+                        .strip_prefix("KUBECONFIG=")
+                        .is_some_and(|path| trust::trusted_kubeconfig(path, context))
+        )
+}
+
 fn option_value_safe(name: &str, value: &str, context: super::PathContext<'_>) -> bool {
     if value.is_empty() || value.starts_with('-') {
         return false;

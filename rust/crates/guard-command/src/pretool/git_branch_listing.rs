@@ -24,7 +24,9 @@ pub(crate) fn is_listing(arguments: &[String]) -> bool {
                 index += 1;
             }
             value => {
-                if let Some(key) = value.strip_prefix("--sort=") {
+                if let Some(flags) = bundled_listing_flags(value) {
+                    listing |= flags.contains('l');
+                } else if let Some(key) = value.strip_prefix("--sort=") {
                     if !bounded_sort_key(key) {
                         return false;
                     }
@@ -51,6 +53,15 @@ pub(crate) fn is_listing(arguments: &[String]) -> bool {
         }
     }
     true
+}
+
+/// Bundled short listing flags such as `-avv` or `-rl`, which Git reads as
+/// the separate flags. Every letter must be a listing flag that takes no value.
+fn bundled_listing_flags(value: &str) -> Option<&str> {
+    let flags = value
+        .strip_prefix('-')
+        .filter(|flags| !flags.starts_with('-'))?;
+    (!flags.is_empty() && flags.chars().all(|flag| "arvli".contains(flag))).then_some(flags)
 }
 
 fn bounded_revision(value: &str) -> bool {
@@ -97,6 +108,10 @@ mod tests {
             "-r",
             "-vv",
             "-a -vv",
+            "-avv",
+            "-rv",
+            "-al feat/*",
+            "-vvi",
             "--show-current",
             "--no-color --no-column",
             "--color=never --list",
@@ -144,6 +159,12 @@ mod tests {
             "--list -d",
             "--color=always",
             "--abbrev=abc",
+            "-ad old",
+            "-avD main",
+            "-vm old new",
+            "-af main",
+            "-au origin/main",
+            "-av new-feature",
         ] {
             assert!(!listing(command), "{command}");
         }

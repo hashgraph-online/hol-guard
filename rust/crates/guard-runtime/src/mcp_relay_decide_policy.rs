@@ -4,7 +4,7 @@
 use super::store;
 use super::POLICY_NEED;
 use crate::mcp_tool_policy_decision::Decision;
-use crate::mcp_tool_policy_flow::{evaluate_pass, Ctx, Pass, Phase, Stop};
+use crate::mcp_tool_policy_flow::{evaluate_pass, Ctx, Pass, PassMemo, Phase, Stop};
 use guard_contracts::McpToolPolicyObservationV1;
 use serde_json::{json, Value};
 
@@ -14,15 +14,19 @@ const POLICY_FAILED: &str = "mcp_relay_policy_failed";
 
 /// Run the tool policy, answering each saved lookup it names from the store:
 /// the saved rows when there are any, the empty store's answer otherwise.
+/// Each round replays the pass over the same subject, so the parts no
+/// observation steers are evaluated once for the call.
 pub(super) fn run_policy(
     subject: &guard_contracts::McpToolPolicySubjectV1,
     saved: Option<&store::Saved<'_>>,
 ) -> Result<Decision, &'static str> {
     let mut observations: Vec<McpToolPolicyObservationV1> = Vec::new();
+    let memo = PassMemo::new(subject);
     for _ in 0..MAX_POLICY_ROUNDS {
         let ctx = Ctx {
             observations: &observations,
             lookup: None,
+            memo: Some(&memo),
         };
         match evaluate_pass(&ctx, subject, Phase::Initial, false) {
             Ok(Pass::Final(decision)) => return Ok(*decision),

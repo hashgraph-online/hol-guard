@@ -134,43 +134,6 @@ def test_recovery_reservation_keeps_live_worker_owner_past_expiry(
     assert replacement is not None and replacement != token
 
 
-def test_recovery_reservation_rejects_reused_pid_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    claimed_at = time.time()
-    clock = [claimed_at]
-    command = "python recovery-worker"
-    start_marker = "linux:worker-generation-a"
-    monkeypatch.setattr(daemon_manager.time, "time", lambda: clock[0])
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_command_for_pid", lambda _pid: command)
-    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid: start_marker)
-
-    token = daemon_manager._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert token is not None
-    assert daemon_manager._bind_guard_daemon_recovery_reservation(  # pyright: ignore[reportPrivateUsage]
-        guard_home,
-        token=token,
-        pid=4242,
-    )
-    reservation = daemon_manager._load_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert isinstance(reservation, dict)
-    assert daemon_manager._guard_daemon_recovery_owner_state(reservation) is True  # pyright: ignore[reportPrivateUsage]
-
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_command_for_pid", lambda _pid: "python unrelated")
-    assert daemon_manager._guard_daemon_recovery_owner_state(reservation) is False  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_command_for_pid", lambda _pid: command)
-    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid: "linux:worker-generation-b")
-    assert daemon_manager._guard_daemon_recovery_owner_state(reservation) is False  # pyright: ignore[reportPrivateUsage]
-
-    clock[0] += 31.0
-    replacement = daemon_manager._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert replacement is not None and replacement != token
-
-
 def test_recovery_scheduler_contains_worker_when_reservation_bind_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -85,10 +85,6 @@ def _read_only_lookup_plain_targets_are_safe(
     return developer_inspection_authority("_read_only_lookup_plain_targets_are_safe", locals())
 
 
-def _read_only_lookup_ls_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
-    return developer_inspection_authority("_read_only_lookup_ls_args_are_safe", locals())
-
-
 def _read_only_lookup_search_args_are_safe(command: str, args: list[str], *, home_dir: Path | None = None) -> bool:
     return developer_inspection_authority("_read_only_lookup_search_args_are_safe", locals())
 
@@ -125,10 +121,6 @@ def _find_exec_ls_args_are_read_only(args: list[str]) -> bool:
     return developer_inspection_authority("_find_exec_ls_args_are_read_only", locals())
 
 
-def _find_exec_ls_resolves_safely(args: list[str], *, prefix_tokens: list[str], cwd: Path, home_dir: Path) -> bool:
-    return developer_inspection_authority("_find_exec_ls_resolves_safely", locals())
-
-
 def _static_shell_segment_is_safe(args: list[str]) -> bool:
     return developer_inspection_authority("_static_shell_segment_is_safe", locals())
 
@@ -154,7 +146,6 @@ __all__ = [
     "_read_only_lookup_date_args_are_safe",
     "_read_only_lookup_fd_args_are_safe",
     "_read_only_lookup_find_args_are_safe",
-    "_read_only_lookup_ls_args_are_safe",
     "_read_only_lookup_plain_targets_are_safe",
     "_read_only_lookup_primary_segment_is_safe",
     "_read_only_lookup_search_args_are_safe",

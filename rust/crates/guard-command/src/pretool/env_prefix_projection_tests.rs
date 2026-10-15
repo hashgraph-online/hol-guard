@@ -21,6 +21,11 @@ fn inert_prefixes_are_removed_in_place() {
         ("GIT_PAGER=cat git log -3", "git log -3"),
         ("env --unset=GH_TOKEN -- git status", "git status"),
         (
+            "env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL git commit -m 'test: isolate output'",
+            "git commit -m 'test: isolate output'",
+        ),
+        ("env --unset=GIT_COMMITTER_DATE git commit --amend --no-edit", "git commit --amend --no-edit"),
+        (
             "git status && LC_ALL=C rg -n 'a b' src | head -5",
             "git status && rg -n 'a b' src | head -5",
         ),
@@ -84,6 +89,8 @@ fn execution_changing_prefixes_leave_the_command_untouched() {
         "env -u PATH git status",
         "env -u HOME git status",
         "env -u GIT_CONFIG_NOSYSTEM git status",
+        "env -u GIT_DIR git status",
+        "env -u GIT_AUTHOR_NAME -u GIT_INDEX_FILE git commit -m x",
         "env FOO=$(id) ls",
         "env -u",
         "LC_ALL=C ls\nrm -rf x",
@@ -144,6 +151,36 @@ fn reviewable_settings_project_and_name_the_first_setting() {
     .unwrap();
     assert_eq!(reviewed.command, "git fetch origin");
     assert_eq!(reviewed.setting, "APP_REGION");
+}
+
+#[test]
+fn private_temp_settings_project_only_for_review() {
+    for command in [
+        r#"OUT_DIR="$TMPDIR/report-test" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR}/report-test" PORT=4173 bunx vitest run a.test.ts"#,
+        "OUT_DIR=$TMPDIR/report-test bunx vitest run a.test.ts",
+    ] {
+        let reviewed =
+            project_reviewed(command, Default::default()).unwrap_or_else(|| panic!("{command}"));
+        assert_eq!(reviewed.command, "bunx vitest run a.test.ts", "{command}");
+        assert_eq!(reviewed.setting, "OUT_DIR", "{command}");
+        assert_eq!(project(command), None, "{command}");
+    }
+    for command in [
+        r#"OUT_DIR="$HOME/report-test" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="$TMPDIRS/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:-/Users/nobody}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="$TMPDIR/$(id -un)" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="$TMPDIR/*" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR='$TMPDIR/x' bunx vitest run a.test.ts"#,
+        r#"TMPDIR=/Users/nobody OUT_DIR="$TMPDIR/x" bunx vitest run a.test.ts"#,
+        r#"export TMPDIR=/Users/nobody; OUT_DIR="$TMPDIR/x" bunx vitest run a.test.ts"#,
+    ] {
+        assert!(
+            project_reviewed(command, Default::default()).is_none(),
+            "{command}"
+        );
+    }
 }
 
 #[test]

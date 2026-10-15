@@ -473,7 +473,7 @@ mod claude_permission_text;
 #[path = "hook_direct_claude_prompt_text.rs"]
 mod claude_prompt_text;
 #[path = "hook_direct_contained.rs"]
-mod contained;
+pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
 mod cursor;
 #[path = "hook_direct_edge.rs"]

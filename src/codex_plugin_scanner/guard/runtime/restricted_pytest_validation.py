@@ -45,7 +45,3 @@ def _path_is_within(path: Path, root: Path) -> bool:
     except (OSError, RuntimeError, ValueError):
         return False
     return True
-
-
-def _path_is_within_any(path: Path, roots: Sequence[Path]) -> bool:
-    return any(_path_is_within(path, root) for root in roots)

@@ -60,6 +60,13 @@ runs:
       cache-on-failure: true
       save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     if: inputs.has-token == 'true'
+  - name: Provision bubblewrap for the Linux workspace sandbox tests
+    # The coverage run executes the same Rust tests as the workspace job.
+    # Without bubblewrap 0.10+ the sandbox reports the host as unavailable,
+    # and tests that expect a contained run see a review instead.
+    shell: bash
+    run: bash ci/containment/install-bubblewrap.sh
+    if: inputs.has-token == 'true'
   - name: Generate current-checkout Rust coverage
     shell: bash
     run: bash scripts/ci/prepare_sonar_rust_coverage.sh

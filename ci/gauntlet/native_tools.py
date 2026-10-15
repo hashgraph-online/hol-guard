@@ -175,7 +175,9 @@ def native_tools_scope_error(
             return "delegated work used an unexpected tool"
     if any(call["name"] not in allowed for call in calls if call["id"] not in set(delegated) | bridged):
         return "the model used a tool outside the scenario"
-    listed = set(scenario.commands)
+    # Evidence names the fixture root `{{fixture}}`; the catalog spells it `{{root}}` so
+    # the prompt a model reads does not frame ordinary work as a fixture.
+    listed = {command.replace("{{root}}", "{{fixture}}") for command in scenario.commands}
     for call in calls:
         if call["name"] == "bash" and call["args"].get("command") not in listed:
             return "the model ran a shell command the scenario did not list"

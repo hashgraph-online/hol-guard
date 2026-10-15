@@ -133,6 +133,17 @@ def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
     assert native_tools_scope_error(temp, [_call("bash", command="mktemp -d"), scratch, scratch], {}) is not None
 
 
+def test_scope_judge_matches_a_fixture_root_command_as_redacted() -> None:
+    from ci.gauntlet.native_tools import native_tools_scope_error
+
+    search = _scenario("omp-native-rg-outside-checkout-test-vectors")
+    (listed,) = search.commands
+    redacted = _call("bash", command=listed.replace("{{root}}", "{{fixture}}"))
+    assert native_tools_scope_error(search, [redacted], {}) is None
+    elsewhere = _call("bash", command=listed.replace("{{root}}", "{{home}}"))
+    assert native_tools_scope_error(search, [elsewhere], {}) is not None
+
+
 def test_scope_judge_accepts_the_windows_profile_temp_spelling() -> None:
     from ci.gauntlet.native_tools import native_tools_scope_error
 

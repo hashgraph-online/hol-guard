@@ -152,6 +152,31 @@ fn composed_profile_orders_denials_last_and_covers_credentials() {
 }
 
 #[test]
+fn only_the_user_database_mach_service_is_reachable() {
+    let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
+    let lookups: Vec<&str> = profile
+        .lines()
+        .filter(|line| line.contains("mach-lookup") || line.contains("global-name"))
+        .collect();
+    assert_eq!(
+        lookups,
+        ["(allow mach-lookup (global-name \"com.apple.system.opendirectoryd.libinfo\"))"]
+    );
+    for service in [
+        "opendirectoryd.api",
+        "SecurityServer",
+        "securityd",
+        "secd",
+        "keychain",
+        "authd",
+        "(allow mach-lookup)",
+        "global-name-prefix",
+    ] {
+        assert!(!profile.contains(service), "{service}");
+    }
+}
+
+#[test]
 fn privileged_binaries_are_denied_execution() {
     let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
     assert!(profile.contains("(deny process-exec (literal \"/usr/bin/sudo\")"));
@@ -295,6 +320,24 @@ fn reopened_reflog_cannot_become_a_bare_repository() {
             seatbelt_string(&carrier)
         )));
     }
+}
+
+#[test]
+fn directories_above_the_workspace_can_be_listed_but_not_read() {
+    let profile = workspace_profile::compose(&input("/w/team/proj"), &[], &[]).unwrap();
+    let listing = profile
+        .lines()
+        .find(|line| line.starts_with("(allow file-read-data"))
+        .unwrap();
+    assert_eq!(
+        listing,
+        "(allow file-read-data (literal \"/w/team\") (literal \"/w\") (literal \"/\"))"
+    );
+    assert!(!profile.contains("(subpath \"/w/team\")"));
+    assert!(!profile.contains("(subpath \"/w\")"));
+    // The credential denials still come after the listing grant.
+    let at = |needle: &str| profile.find(needle).unwrap();
+    assert!(at("(allow file-read-data") < at("(deny file-read* file-write* (regex"));
 }
 
 #[test]

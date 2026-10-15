@@ -102,6 +102,9 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -d src && ls src",
         "test -e src/lib.rs; echo done",
         "test -r src/lib.rs && head -1 src/lib.rs",
+        "test -x src && echo searchable || echo closed",
+        "test -s src/lib.rs && echo non-empty",
+        "[ -f src/lib.rs ] && echo present || echo missing",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -117,7 +120,11 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -f src/lib.rs && rm -rf src",
         "test -f src/lib.rs -o -f .env",
         "test -f $(echo src/lib.rs)",
-        "test -x src/lib.rs",
+        "test -x ~/.ssh/id_rsa",
+        "test -s .env && echo set",
+        "test -w src/lib.rs",
+        "[ -f .env ] && echo set",
+        "[ -f src/lib.rs",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -185,6 +192,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
         ),
         vec![0, 1]

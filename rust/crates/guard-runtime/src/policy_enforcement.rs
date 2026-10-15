@@ -65,10 +65,10 @@ use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
 };
 use policy_enforcement_helpers::{
-    action_rank, join_action, normalized_harness, policy_floor_with_cause, FloorInput,
+    action_rank, join_action, normalized_harness, policy_floor_with_cause, FloorCause, FloorInput,
 };
 use policy_enforcement_policy::CompiledEffectivePolicy;
-use policy_enforcement_reason::policy_override_reason;
+use policy_enforcement_reason::{policy_override_reason, NO_SCRIPT_INSTALL_ALTERNATIVE};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
@@ -346,6 +346,13 @@ pub(crate) fn apply_pre_tool_policy(
         );
         output.reason_code = reason_code.to_owned();
         output.reason = reason;
+        if floor_cause == FloorCause::Risk("package_script")
+            && output.action.action_type == guard_contracts::PreToolActionTypeV1::Package
+            && output.action.operation == guard_contracts::PreToolOperationV1::Install
+        {
+            output.reason.push(' ');
+            output.reason.push_str(NO_SCRIPT_INSTALL_ALTERNATIVE);
+        }
     }
     output.policy_action = effective.clone();
     output.minimum_action = effective.clone();

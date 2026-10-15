@@ -427,7 +427,8 @@
     "src/codex_plugin_scanner/guard/native_package_protect_projection.py",
     "src/codex_plugin_scanner/guard/native_content_sensitivity.py",
     "src/codex_plugin_scanner/guard/native_hook_approval_context.py",
-    "src/codex_plugin_scanner/guard/native_restricted_pytest.py"
+    "src/codex_plugin_scanner/guard/native_restricted_pytest.py",
+    "src/codex_plugin_scanner/guard/native_restricted_linux.py"
    ],
    "current": "mechanical bounded guard-hook-envelope.v2 and guard-archive-inspection.v1 serialization, package-bound native invocation, typed result decoding, and harness response projection; the archive-inspection lease is owned inside the native worker; skill-directory identity and discovery use the existing resident operation with lossless OS paths, request-bound replies and a monotonic transport budget",
    "target": "minimal launcher, serialization, and response projection only"

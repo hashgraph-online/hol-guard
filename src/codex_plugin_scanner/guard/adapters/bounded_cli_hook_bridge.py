@@ -38,6 +38,7 @@ from .bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     bounded_python_argv,
+    daemon_start_command,
     native_bridge_executable,
     take_native_handoff_environment,
 )
@@ -161,6 +162,8 @@ def bounded_cli_hook_command(
         "timeout_seconds": timeout_seconds,
         "frozen_launcher": frozen_launcher,
     }
+    if not frozen_launcher and harness.strip().lower() != "grok":
+        config["start_command"] = daemon_start_command(python_executable, package_root, guard_home, cli_args)
     bootstrap = (
         "import sys;"
         f"sys.path.insert(0,{str(package_root.resolve())!r});"

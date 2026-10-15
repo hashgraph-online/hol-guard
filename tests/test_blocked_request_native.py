@@ -54,6 +54,14 @@ def test_native_review_defaults_to_safe_alternative(
     assert "hol-guard approvals" in reason
     assert "Do not retry the same action until it is approved" in reason
     assert "safe, permitted alternative" not in reason
+    # The agent hands the queued request's link to the user.
+    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
+    if harness == "codex":
+        # Codex gets only signed loopback links, and this daemon has no token to sign with.
+        assert "could not create a signed approval link" in reason
+    else:
+        assert "Open HOL Guard to approve or keep this blocked:" in reason
+        assert request_id in reason
     if "hookSpecificOutput" in response:
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     worker.close()

@@ -361,6 +361,19 @@ impl<'a> super::PathContext<'a> {
                     && !super::npm_environment::inert_npm_config_name(&name)
             }),
         };
+        // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
+        // `--no-config`, and ignores it only when it is empty. A stamped
+        // environment carries names without values, so any name counts.
+        let ripgrep_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| name.eq_ignore_ascii_case(RIPGREP_CONFIG_NAME))
+            }
+            None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
+        };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
         let shell_home = match execution_environment {
@@ -384,9 +397,12 @@ impl<'a> super::PathContext<'a> {
             rustup_override_absent,
             npm_config_inert,
             shell_home_matches,
+            ripgrep_config_absent,
         }
     }
 }
+
+const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")

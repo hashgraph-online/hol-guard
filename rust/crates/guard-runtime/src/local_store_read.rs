@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
+#[path = "local_store_read_cache.rs"]
+mod cache;
+pub(crate) use cache::{open_read_only_cached, CachedConnection};
+
 pub(crate) const STORE_FILE_NAME: &str = "guard.db";
 /// Highest `local_cli_schema_migration` version this build reads.
 pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 11;
@@ -58,11 +62,8 @@ pub(crate) fn open_read_only(store_path: &Path) -> Result<Option<Connection>, St
 
 pub(crate) fn table_exists(connection: &Connection, table: &str) -> Result<bool, StoreReadError> {
     connection
-        .query_row(
-            "select 1 from sqlite_master where type = 'table' and name = ?1",
-            params![table],
-            |_| Ok(()),
-        )
+        .prepare_cached("select 1 from sqlite_master where type = 'table' and name = ?1")
+        .and_then(|mut statement| statement.query_row(params![table], |_| Ok(())))
         .optional()
         .map(|found| found.is_some())
         .map_err(|_| StoreReadError::StoreUnavailable)
@@ -86,11 +87,10 @@ pub(crate) fn schema_version(connection: &Connection) -> Result<Option<i64>, Sto
         return Ok(None);
     }
     let marker: Option<(i64, String)> = connection
-        .query_row(
+        .prepare_cached(
             "select version, checksum from local_cli_schema_migration where singleton = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
         )
+        .and_then(|mut statement| statement.query_row([], |row| Ok((row.get(0)?, row.get(1)?))))
         .optional()
         .map_err(|_| StoreReadError::StoreUnavailable)?;
     let Some((version, checksum)) = marker else {

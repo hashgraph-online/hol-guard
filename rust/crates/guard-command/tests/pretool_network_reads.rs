@@ -127,6 +127,8 @@ fn read_only_kubectl_queries_are_allowed() {
         "kubectl --context staging -n web logs deploy/web --since-time=2026-10-08T00:00:00Z --tail=300".to_owned(),
         format!("kubectl --kubeconfig {home}/kubeconfig.yaml -n web logs web-0 -c app --since 1h | tail -50"),
         "kubectl logs -n web -l app=web --all-containers --prefix --tail 100".to_owned(),
+        format!("KUBECONFIG={home}/kubeconfig.yaml kubectl get pods -A -o wide"),
+        format!("KUBECONFIG='{home}/kubeconfig.yaml' kubectl -n web logs web-0 --tail 50 2>&1 | head -20"),
     ] {
         let result = decide(&space, &command);
         assert_eq!(result.decision, "allow", "{command}: {}", result.reason_code);
@@ -137,6 +139,7 @@ fn read_only_kubectl_queries_are_allowed() {
 fn secret_reads_mutations_and_untrusted_configs_stay_reviewed() {
     let (space, _cleanup) = space("kubectl-review");
     let checkout = space.checkout.to_str().unwrap();
+    let home = space.home.to_str().unwrap();
     for command in [
         "kubectl exec web-0 -- env | grep SECRET".to_owned(),
         "kubectl get secrets -A".to_owned(),
@@ -160,6 +163,15 @@ fn secret_reads_mutations_and_untrusted_configs_stay_reviewed() {
         format!("export KUBECONFIG={checkout}/kubeconfig.yaml && kubectl get pods"),
         "export GIT_SSH_COMMAND=./x && kubectl get pods".to_owned(),
         "KUBECONFIG=./kubeconfig.yaml kubectl get pods".to_owned(),
+        format!("KUBECONFIG={checkout}/kubeconfig.yaml kubectl get pods"),
+        format!("KUBECONFIG={home}/kubeconfig.yaml:{home}/kubeconfig.yaml kubectl get pods"),
+        "KUBECONFIG=$HOME/kubeconfig.yaml kubectl get pods".to_owned(),
+        format!("KUBECONFIG={home}/kubeconfig.yaml kubectl get secrets -A"),
+        format!("KUBECONFIG={home}/kubeconfig.yaml kubectl delete pod web-0"),
+        format!("KUBECONFIG={home}/kubeconfig.yaml GIT_SSH_COMMAND=./x kubectl get pods"),
+        format!("KUBECONFIG={home}/kubeconfig.yaml env kubectl get pods"),
+        format!("KUBECONFIG={home}/kubeconfig.yaml ./kubectl get pods"),
+        format!("KUBECONFIG={home}/kubeconfig.yaml cat {home}/kubeconfig.yaml"),
     ] {
         let result = decide(&space, &command);
         assert_ne!(result.decision, "allow", "{command}");

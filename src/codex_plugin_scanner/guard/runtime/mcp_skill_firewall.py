@@ -13,11 +13,10 @@ from ..native_context import (
     is_unbound_context_digest,
     native_context_failure_reason,
 )
-from ..native_mcp_runtime_evidence import argument_entries, native_runtime_action_record, runtime_action_key
 from ..native_mcp_tool_evidence import native_firewall_metadata_patch
 
 if TYPE_CHECKING:
-    from .actions import GuardActionEnvelope
+    pass
 
 
 def _skill_protection_module():
@@ -92,30 +91,6 @@ def build_mcp_skill_firewall_fingerprints(
     return payload
 
 
-def build_runtime_action_record(
-    *,
-    artifact: GuardArtifact,
-    arguments: object | None = None,
-    action_envelope: GuardActionEnvelope | None = None,
-    risk_categories: tuple[str, ...] = (),
-) -> dict[str, object] | None:
-    """Return the native-owned ``runtimeAction`` evidence record for a tool call."""
-    description = artifact.metadata.get("tool_description")
-    return native_runtime_action_record(
-        tool_description=description if isinstance(description, str) else None,
-        arguments=argument_entries(arguments, mapping_type=dict, relevant=runtime_action_key),
-        risk_categories=risk_categories,
-        envelope=None
-        if action_envelope is None
-        else {
-            "target_paths": list(action_envelope.target_paths),
-            "network_hosts": list(action_envelope.network_hosts),
-            "package_manager": action_envelope.package_manager,
-            "command": action_envelope.command,
-        },
-    )
-
-
 def _legacy_skill_identity(skill: dict[str, object]) -> dict[str, object]:
     return {
         "dependency_hashes": skill.get("dependencyHashes") or [],
@@ -179,7 +154,6 @@ def enrich_artifact_with_mcp_skill_firewall(artifact: GuardArtifact) -> GuardArt
 
 __all__ = [
     "build_mcp_skill_firewall_fingerprints",
-    "build_runtime_action_record",
     "enrich_artifact_with_mcp_skill_firewall",
     "portal_skill_identity",
     "skill_identity_metadata",

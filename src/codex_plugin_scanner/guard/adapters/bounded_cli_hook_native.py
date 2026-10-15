@@ -29,6 +29,23 @@ def bounded_python_argv(argv: Sequence[object]) -> list[object]:
     return values
 
 
+def daemon_start_command(
+    python_executable: str, package_root: Path, guard_home: Path, cli_args: Sequence[str]
+) -> list[str]:
+    """The daemon-start argv the native bridge runs when the daemon is unreachable.
+
+    The native bridge runs it only on that failure path, then asks the daemon
+    once more or fails the hook closed; it never runs the Python bridge.
+    """
+    from ..codex_hook_launch_runtime import isolated_daemon_start_command
+
+    args = list(cli_args)
+    home_dir = next((Path(args[i + 1]) for i in range(len(args) - 1) if args[i] == "--home"), None)
+    return list(
+        isolated_daemon_start_command(python_executable, package_root, guard_home.resolve(strict=False), home_dir)
+    )
+
+
 def native_bridge_executable(harness: str) -> Path | None:
     """The native runtime that launches ``harness`` hooks, or None for Python."""
 

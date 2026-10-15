@@ -87,6 +87,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                     rustup_override_absent: false,
                     npm_config_inert: false,
                     shell_home_matches: false,
+                    ripgrep_config_absent: false,
                 },
             )
             .is_empty(),
@@ -104,6 +105,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
         ),
         vec![0, 1]
@@ -252,6 +254,7 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         rustup_override_absent: false,
         npm_config_inert: false,
         shell_home_matches: false,
+        ripgrep_config_absent: false,
     };
     let cover = |command: &str| {
         benign_command_segments(&parse_command(&request(command)).unwrap(), context)

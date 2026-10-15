@@ -1185,13 +1185,6 @@ def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
     return token
 
 
-def _guard_daemon_recovery_owner_state(reservation: dict[str, object] | None) -> bool | None:
-    """Return whether a claimed recovery worker is still alive."""
-
-    query = {"reservation": _reservation_facts(reservation)}
-    return cast("bool | None", _lifecycle("recovery_owner_state", query)["state"])
-
-
 def _bind_guard_daemon_recovery_reservation(
     guard_home: Path,
     *,
@@ -2364,11 +2357,6 @@ def _implicit_daemon_guard_home() -> Path:
     from ..config import resolve_guard_home
 
     return resolve_guard_home(None)
-
-
-def _guard_daemon_port_from_command(command: str) -> int | None:
-    port = _lifecycle("inspect_command", {"command": command})["port"]
-    return cast("int | None", port)
 
 
 def _split_process_command(command: str) -> list[str] | None:

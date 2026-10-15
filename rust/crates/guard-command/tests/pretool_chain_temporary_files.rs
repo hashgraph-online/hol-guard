@@ -272,3 +272,51 @@ fn single_quoted_pattern_anchors_do_not_change_containment() {
     }
     let _ = std::fs::remove_dir_all(&workspace);
 }
+
+/// `$?` expands to the previous step's exit status, a decimal number, so
+/// printing it cannot reach anything the step alone would not.
+#[test]
+fn exit_status_expansions_keep_containment() {
+    let workspace = std::env::temp_dir().join(format!("hg-chain-status-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&workspace);
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join(".git/config"), "[core]\n\tbare = false\n").unwrap();
+    std::fs::write(workspace.join("package.json"), "{}").unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let controls = controls();
+    let reason = |command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "bash", "tool_input": {"command": command}}),
+            Some(&controls),
+            None,
+            Some("/home/nobody"),
+            workspace.to_str(),
+        )
+        .reason_code
+    };
+    let contained = "native_workspace_containment_required";
+    let alone = reason("corepack pnpm --version");
+    if cfg!(target_os = "macos") {
+        assert_eq!(alone, contained);
+    }
+    for command in [
+        "corepack pnpm --version; printf 'exit=%s\\n' \"$?\"",
+        "corepack pnpm --version; echo \"exit=$?\"",
+        "corepack pnpm --version; echo $?",
+    ] {
+        assert_eq!(reason(command), alone, "{command}");
+    }
+    // Other expansions, or a command substitution beside `$?`, still reach
+    // outside what the step alone would.
+    for command in [
+        "corepack pnpm --version; echo \"$? $HOME\"",
+        "corepack pnpm --version; echo \"$?$PWD\"",
+        "corepack pnpm --version; echo \"$? `cat /etc/hosts`\"",
+        "corepack pnpm --version; echo $?$(cat /etc/hosts)",
+    ] {
+        assert_ne!(reason(command), contained, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&workspace);
+}

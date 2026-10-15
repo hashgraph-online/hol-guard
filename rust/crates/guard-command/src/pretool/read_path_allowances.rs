@@ -126,6 +126,49 @@ pub(in crate::pretool) fn agent_skill_listing_directory(
     admitted
 }
 
+/// A directory a names-only listing may start from inside the session
+/// folder: a project's own `.agents` folder when it holds only a `skills`
+/// tree, or a visible directory at or below `.agents/skills`,
+/// `.claude/skills` or `.codex/skills`. Every component above the marker must
+/// be visible. A listing of the session folder already prints these names,
+/// and each file keeps its own read proof.
+pub(in crate::pretool) fn project_skill_listing_directory(
+    canonical: &std::path::Path,
+    session: &std::path::Path,
+) -> bool {
+    let Ok(relative) = canonical.strip_prefix(session) else {
+        return false;
+    };
+    let Some(parts) = relative
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(part) => part.to_str(),
+            _ => None,
+        })
+        .collect::<Option<Vec<&str>>>()
+    else {
+        return false;
+    };
+    let Some(marker) = parts.iter().position(|part| part.starts_with('.')) else {
+        return false;
+    };
+    let below = &parts[marker + 1..];
+    let skills_tree = matches!(parts[marker], ".agents" | ".claude" | ".codex")
+        && below.first() == Some(&"skills")
+        && below.iter().all(|part| !part.starts_with('.'));
+    let agents_root = parts[marker] == ".agents"
+        && below.is_empty()
+        && std::fs::read_dir(canonical).is_ok_and(|entries| {
+            entries.into_iter().all(|entry| {
+                entry.is_ok_and(|entry| {
+                    entry.file_name() == "skills"
+                        && entry.file_type().is_ok_and(|kind| kind.is_dir())
+                })
+            })
+        });
+    canonical.is_dir() && (skills_tree || agents_root)
+}
+
 const SKILL_ROOTS: [&str; 6] = [
     ".agents/skills",
     // Oh My Pi also discovers user skills from the singular spelling.

@@ -9,6 +9,9 @@ from .store_base import *
 
 
 class StoreApprovalsMixin:
+    def matching_native_review_block(self, **identity: object) -> bool:
+        return self._native_store_call("matching_native_review_block", identity) is True
+
     def consume_native_review_approval(
         self,
         *,

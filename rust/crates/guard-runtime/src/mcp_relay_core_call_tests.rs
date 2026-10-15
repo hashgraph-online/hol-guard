@@ -13,6 +13,7 @@ struct ForwardingAuthority {
     completed: Vec<Value>,
     boundaries: usize,
     settled: usize,
+    reported: Vec<Vec<Value>>,
 }
 
 impl RelayAuthority for ForwardingAuthority {
@@ -43,6 +44,10 @@ impl RelayAuthority for ForwardingAuthority {
 
     fn settle(&mut self) {
         self.settled += 1;
+    }
+
+    fn catalog_complete(&mut self, tools: &[Value]) {
+        self.reported.push(tools.to_vec());
     }
 }
 
@@ -203,6 +208,46 @@ fn tools_list_responses_feed_the_catalog() {
     let snapshot = relay.catalog.snapshot();
     assert_eq!(snapshot.state, "complete");
     assert_eq!(snapshot.generation, 1);
+}
+
+#[test]
+fn a_whole_catalog_is_reported_once_until_it_changes() {
+    let page = |id: i64, tools: &[&str], next: Option<&str>| {
+        let tools: Vec<Value> = tools
+            .iter()
+            .map(|name| json!({"name": name, "inputSchema": {"type": "object"}}))
+            .collect();
+        let mut result = json!({"tools": tools});
+        if let Some(next) = next {
+            result["nextCursor"] = json!(next);
+        }
+        json!({"jsonrpc": "2.0", "id": id, "result": result})
+    };
+    let child = FakeChild::default()
+        .emit(page(1, &["read"], Some("more")))
+        .emit(page(2, &["list"], None))
+        .emit(page(3, &["list", "read"], None))
+        .emit(page(4, &["write"], None));
+    let host = FakeHost::with(vec![
+        request(json!(1), "tools/list"),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {"cursor": "more"}}),
+        request(json!(3), "tools/list"),
+        request(json!(4), "tools/list"),
+    ]);
+    let mut relay = relay(child, host, ForwardingAuthority::default());
+    assert_eq!(relay.serve(), Ok(RelayExit::HostClosed));
+    let names: Vec<Vec<&str>> = relay
+        .authority
+        .reported
+        .iter()
+        .map(|tools| {
+            tools
+                .iter()
+                .filter_map(|tool| tool["name"].as_str())
+                .collect()
+        })
+        .collect();
+    assert_eq!(names, vec![vec!["list", "read"], vec!["write"]]);
 }
 
 #[test]

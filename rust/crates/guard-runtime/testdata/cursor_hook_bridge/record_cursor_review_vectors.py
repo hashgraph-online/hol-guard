@@ -2,12 +2,10 @@
 
 The generated client renders a daemon response with `_emit_cursor_response`.
 `_cursor_reason` passes a review link through `live_approval_review_url`,
-which it imports from Guard; that import succeeds only under an interpreter
-that can load Guard. Each vector is rendered by the client twice, with and
-without the import, from a Guard home that holds no daemon auth token and
-from one that does. A vector whose two answers agree records that answer;
-one whose answers differ records `null`, and the bridge must leave it to the
-client.
+which it imports from Guard, as the client does under Guard's own
+interpreter. Each vector is rendered from a Guard home that holds no daemon
+auth token and from one that does, with the session clock fixed at
+`NOW` so a signed link is reproducible.
 
 Run from the repository root:
 
@@ -20,21 +18,31 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+from datetime import datetime, timezone
 from unittest import mock
 
+from codex_plugin_scanner.guard import local_dashboard_session
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 from codex_plugin_scanner.guard.approval_link_output import native_review_reason
 
 OUT = Path(__file__).with_name("cursor_review_vectors.json")
 SCHEMA = "hol-guard-cursor-native-review-answers.v1"
-IMPORTED = "codex_plugin_scanner.guard.approval_hook_copy"
+NOW = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=timezone.utc)
 TOKEN = "3f" * 32
 LOOPBACK = "http://127.0.0.1:4781/approvals/0123456789abcdef"
 LOCALHOST = "http://localhost:4781/approvals/r-1"
 EXTERNAL = "https://guard.example.test/approvals/r1"
 TOOL_EVENTS = ["preToolUse", " PreToolUse ", "beforeShellExecution", "beforeMCPExecution", "beforeReadFile"]
 PROMPT_EVENTS = ["UserPromptSubmit", "prompt"]
+
+
+class _FixedClock(datetime):
+    """`datetime` with `now` fixed at `NOW`."""
+
+    @classmethod
+    def now(cls, tz: timezone | None = None) -> datetime:  # type: ignore[override]
+        return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
 
 
 def _client(guard_home: Path) -> dict[str, object]:
@@ -160,10 +168,7 @@ def _record(label: str, guard_home: Path, tokened: bool) -> list[dict[str, objec
     for name, response in _responses(guard_home, tokened):
         events = PROMPT_EVENTS if name.startswith("prompt") else TOOL_EVENTS
         for event in events:
-            imported = _rendered(client, event, response)
-            with mock.patch.dict(sys.modules, {IMPORTED: None}):
-                isolated = _rendered(client, event, response)
-            stdout, exit_code = imported if imported == isolated else (None, None)
+            stdout, exit_code = _rendered(client, event, response)
             vectors.append(
                 {
                     "home": label,
@@ -187,10 +192,13 @@ def main() -> None:
         token = tokened / "daemon-auth-token"
         token.write_text(TOKEN, encoding="utf-8")
         token.chmod(0o600)
-        vectors = _record("untokened", untokened, False) + _record("tokened", tokened, True)
-    OUT.write_text(json.dumps({"schema": SCHEMA, "vectors": vectors}, indent=2) + "\n", encoding="utf-8")
-    deferred = sum(vector["stdout"] is None for vector in vectors)
-    print(f"wrote {len(vectors)} vectors ({deferred} left to the client) to {OUT.name}")
+        with mock.patch.object(local_dashboard_session, "datetime", _FixedClock):
+            vectors = _record("untokened", untokened, False) + _record("tokened", tokened, True)
+    now_micros = (NOW - datetime(1970, 1, 1, tzinfo=timezone.utc)) // datetime.resolution
+    document = {"schema": SCHEMA, "now_micros": now_micros, "vectors": vectors}
+    OUT.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    signed = sum("#guard-token=" in vector["stdout"] for vector in vectors)
+    print(f"wrote {len(vectors)} vectors ({signed} with a signed link) to {OUT.name}")
 
 
 if __name__ == "__main__":

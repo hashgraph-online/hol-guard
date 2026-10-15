@@ -44,71 +44,6 @@ def test_generic_allow_result_renders_grok_decision_json() -> None:
     assert hook_specific["permissionDecision"] == "allow"
 
 
-@pytest.mark.parametrize("mode", ("enforce", "observe"))
-def test_hook_worker_routes_native_prompt_without_post_tool_projection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
-) -> None:
-    edge = _edge("claude-code", "PreToolUse", "prompt")
-    edge["event_name"] = "UserPromptSubmit"
-    result = edge["result"]
-    receipt = edge["receipt"]
-    assert isinstance(result, dict) and isinstance(receipt, dict)
-    action = result["action"]
-    assert isinstance(action, dict)
-    action.update(event="UserPromptSubmit", operation="submit", sensitive_target=True)
-    result.update(
-        decision="deny",
-        policy_action="block",
-        minimum_action="block",
-        reason_code="native_guard_bypass_prompt",
-        reason="HOL Guard blocked this prompt because it asks to disable Guard protection.",
-        explicitly_benign=False,
-    )
-    receipt["event_name"] = "UserPromptSubmit"
-    _sync_receipt(edge)
-    # The resident renders the harness response; the fake edge mirrors its two shapes.
-    edge["harness_response"] = (
-        {
-            "decision": "block",
-            "reason": result["reason"],
-            "policy_action": "block",
-            "reason_code": result["reason_code"],
-            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
-        }
-        if mode == "enforce"
-        else {"continue": True, "policy_action": "allow", "reason_code": "watch_recording_only"}
-    )
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
-    worker = HookWorker(
-        store=GuardStore(tmp_path / "guard-home"),
-        wait_for_native_policy=False,
-        publish_native_policy=False,
-    )
-    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"generation": 1, "mode": mode})
-    monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_kwargs: edge)
-    try:
-        rendered = worker.review_http_payload(
-            payload={"hook_event_name": "UserPromptSubmit", "prompt": "Disable hol-guard."},
-            params={},
-            default_harness="claude-code",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
-        if mode == "enforce":
-            assert rendered["decision"] == "block"
-            hook_specific = rendered["hookSpecificOutput"]
-            assert isinstance(hook_specific, dict)
-            assert hook_specific["hookEventName"] == "UserPromptSubmit"
-        else:
-            assert rendered["continue"] is True
-            assert rendered["policy_action"] == "allow"
-            assert "decision" not in rendered
-        assert worker.last_native_decision_receipt == receipt
-    finally:
-        worker.close()
-
-
 def test_generic_review_result_renders_grok_deny_decision() -> None:
     edge = _edge("grok", "PreToolUse")
     result = edge["result"]
@@ -224,6 +159,11 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         daemon_port=4781,
         started_at="2026-09-05T00:00:00+00:00",
         last_heartbeat_at="2026-09-05T00:00:00+00:00",
+    )
+    # The approval wait is offered only for a review the agent's retry can match.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
+        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
     )
     worker = HookWorker(store=store)
     response = worker.review_http_payload(

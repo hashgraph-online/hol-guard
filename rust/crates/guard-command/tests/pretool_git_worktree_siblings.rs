@@ -41,7 +41,8 @@ fn git(home: &Path, repository: &Path, arguments: &[&str]) {
 
 /// A checkout outside home may get a sibling worktree below the shared
 /// temporary directory, but only where no other user could have placed or
-/// redirected a directory on the way, and never directly in it.
+/// redirected a directory on the way. Directly in the sticky root, only a
+/// leaf that does not exist yet is admitted.
 #[test]
 fn worktree_add_admits_fresh_temporary_siblings_only() {
     let unique = format!(
@@ -86,6 +87,7 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
     for (index, destination) in [
         organization.join("app-next").display().to_string(),
         "../app-relative".to_owned(),
+        format!("/tmp/guard-worktree-direct-{unique}"),
     ]
     .iter()
     .enumerate()
@@ -115,7 +117,93 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
         organization.join("missing/next"),
         // An autostart location stays reviewed below an owned temporary root.
         home.join("Library/LaunchAgents/next"),
-        std::path::PathBuf::from(format!("/tmp/guard-worktree-direct-{unique}")),
+        // Directly in the shared root, a directory that already exists.
+        root.clone(),
+    ] {
+        let command = format!("git worktree add {} -b refused HEAD", destination.display());
+        let result = evaluate(&home, &repository, &command);
+        assert_ne!(result.minimum_action, "allow", "{command}");
+    }
+}
+
+fn link(directory: &Path, name: &str, target: &Path) -> std::path::PathBuf {
+    let path = directory.join(name);
+    std::os::unix::fs::symlink(target, &path).unwrap();
+    path
+}
+
+/// A destination reached through a symlink, as `/tmp` is on macOS, is
+/// judged where the link leads, exactly as if that path had been spelled.
+/// A link into an autostart, workflow or credential directory, or out to a
+/// directory others can write, keeps review, as does a link another user
+/// could swap before Git runs.
+#[test]
+fn worktree_add_judges_a_symlinked_parent_where_it_leads() {
+    let unique = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let root = std::fs::canonicalize("/tmp")
+        .unwrap()
+        .join(format!("guard-worktree-symlinked-{unique}"));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let organization = root.join("org");
+    let repository = organization.join("app");
+    for path in [&root, &home, &organization, &repository] {
+        directory(path, 0o755);
+    }
+    git(&home, &repository, &["init", "--quiet"]);
+    git(
+        &home,
+        &repository,
+        &["config", "user.name", "Guard Fixture"],
+    );
+    git(
+        &home,
+        &repository,
+        &["config", "user.email", "guard-fixture@example.invalid"],
+    );
+    std::fs::write(repository.join("tracked.txt"), "fixture\n").unwrap();
+    git(&home, &repository, &["add", "tracked.txt"]);
+    git(&home, &repository, &["commit", "--quiet", "-m", "fixture"]);
+
+    let alias = link(&root, "alias", &organization);
+    let nested = link(&root, "nested", &root);
+    for (index, destination) in [alias.join("app-aliased"), nested.join("org/app-nested")]
+        .iter()
+        .enumerate()
+    {
+        let command = format!(
+            "git worktree add {} -b aliased-{index} HEAD",
+            destination.display()
+        );
+        let result = evaluate(&home, &repository, &command);
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+
+    directory(&home.join("Library/LaunchAgents"), 0o755);
+    directory(&home.join(".ssh"), 0o700);
+    directory(&repository.join(".github"), 0o755);
+    directory(&root.join("shared"), 0o777);
+    directory(&root.join("swappable"), 0o777);
+    let swappable = link(&root.join("swappable"), "org", &organization);
+    for destination in [
+        link(&root, "launch", &home.join("Library/LaunchAgents")).join("next"),
+        link(&repository, "scratch", &home.join(".ssh")).join("next"),
+        link(&root, "github", &repository.join(".github")).join("workflows"),
+        link(&root, "shared-alias", &root.join("shared")).join("next"),
+        link(&root, "system", Path::new("/usr")).join("next"),
+        // The link leads to `org`, but another user could replace it.
+        swappable.join("next"),
     ] {
         let command = format!("git worktree add {} -b refused HEAD", destination.display());
         let result = evaluate(&home, &repository, &command);
@@ -253,7 +341,8 @@ fn worktree_add_attaches_an_existing_branch_beside_the_checkout() {
 
     directory(&home.join(".config"), 0o755);
     directory(&home.join("Library/LaunchAgents"), 0o755);
-    directory(&root.join("elsewhere"), 0o755);
+    // A link out of home into a directory every user can write.
+    directory(&root.join("elsewhere"), 0o777);
     std::os::unix::fs::symlink(root.join("elsewhere"), code.join("linked")).unwrap();
     for command in [
         format!(

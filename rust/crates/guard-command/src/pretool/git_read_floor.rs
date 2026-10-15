@@ -14,6 +14,51 @@ pub(super) fn requires_review(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
+    !matches!(
+        verdict(model, context, deadline, execution_environment),
+        Verdict::Clear
+    )
+}
+
+/// The earlier steps that alone keep the command's Git reads under the
+/// floor: every Git read was proven helper-free, but a step before it could
+/// not be proven to leave Git's configuration unchanged. Run alone, each read
+/// keeps its own proof, so the review reason can say so.
+pub(super) fn unsettled_steps_before_reads(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<Vec<usize>> {
+    match verdict(model, context, deadline, execution_environment) {
+        Verdict::Unsettled(steps) => Some(steps),
+        Verdict::Clear | Verdict::Review => None,
+    }
+}
+
+enum Verdict {
+    Clear,
+    Review,
+    /// Only the order failed: these earlier steps, by index into the model.
+    Unsettled(Vec<usize>),
+}
+
+impl Verdict {
+    fn from_review(review: bool) -> Self {
+        if review {
+            Self::Review
+        } else {
+            Self::Clear
+        }
+    }
+}
+
+fn verdict(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Verdict {
     // Reads in a checkout the same command creates were proven against the
     // repository whose configuration the new worktree shares; reads after a
     // proven worktree removal were each proven helper-free on their own.
@@ -25,15 +70,25 @@ pub(super) fn requires_review(
             execution_environment,
         )
     {
-        return false;
+        return Verdict::Clear;
     }
     // A proven read prefix holds no Git segment and changes nothing a later
     // read depends on, so the floor judges the command from its `cd` onward.
     if let Some(rest) = super::segment_proof::after_read_prefix(model, context) {
-        return requires_review(&rest, context, deadline, execution_environment);
+        return Verdict::from_review(requires_review(
+            &rest,
+            context,
+            deadline,
+            execution_environment,
+        ));
     }
     if let Some(rest) = after_git_read_prefix(model, context, deadline, execution_environment) {
-        return requires_review(&rest, context, deadline, execution_environment);
+        return Verdict::from_review(requires_review(
+            &rest,
+            context,
+            deadline,
+            execution_environment,
+        ));
     }
     // After `cd <dir>;` the rest runs in either directory, so each Git read
     // must be helper-free in both.
@@ -42,8 +97,10 @@ pub(super) fn requires_review(
             cwd: Some(&cwd),
             ..context
         };
-        return requires_review(&rest, moved, deadline, execution_environment)
-            || requires_review(&rest, context, deadline, execution_environment);
+        return Verdict::from_review(
+            requires_review(&rest, moved, deadline, execution_environment)
+                || requires_review(&rest, context, deadline, execution_environment),
+        );
     }
     // `cd <dir> && <head>; <tail>`: the head runs only in `<dir>`, the tail
     // after it there or alone in the original directory when the `cd` failed.
@@ -52,14 +109,16 @@ pub(super) fn requires_review(
             cwd: Some(&cwd),
             ..context
         };
-        return requires_review(&rest, moved, deadline, execution_environment)
-            || requires_review(&tail, context, deadline, execution_environment);
+        return Verdict::from_review(
+            requires_review(&rest, moved, deadline, execution_environment)
+                || requires_review(&tail, context, deadline, execution_environment),
+        );
     }
     // Past this point every Git read is probed in one directory. A later
     // `cd` the read prefixes above did not account for moves the reads after
     // it somewhere this probe never looked.
     if git_after_later_cd(model) {
-        return true;
+        return Verdict::Review;
     }
     let destination = super::segment_proof::verified_cwd_compound_context(model, context);
     let read_context = super::PathContext {
@@ -123,14 +182,22 @@ pub(super) fn requires_review(
                 read_context,
             )
     };
-    // A proven Git read or `origin` fetch writes no configuration, so it
-    // cannot change what a later read in the same command would run.
+    // A proven Git read, `origin` fetch or worktree add writes no
+    // configuration, so it cannot change what a later read in the same
+    // command would run.
     let settled = |prior: usize| {
         let segment = segments[prior];
         benign.contains(&prior)
             || write_free(segment)
             || super::git_remote_ops::verified_fetch(segment, read_context)
             || super::git_remote_ops::verified_fetch(segment, context)
+            || super::worktree_add::proven_alone(
+                model,
+                prior,
+                read_context,
+                deadline,
+                execution_environment,
+            )
             || (inspections[prior] == Some(true)
                 && segment.environment_names.is_empty()
                 && (super::git_reads::safe_git_arguments(&arguments[prior], true, read_context)
@@ -139,26 +206,41 @@ pub(super) fn requires_review(
                         read_context,
                     )))
     };
-    segments.iter().enumerate().any(|(index, segment)| {
-        segment.executable.as_deref().is_some_and(|executable| {
-            if super::executable_basename(executable) != "git" {
-                return false;
-            }
-            let inspection = inspections[index];
-            // Inert names (`CI`, `LANG`, ...) and the commit identity change
-            // no Git behavior, so the segment keeps its own permission decision.
-            segment
-                .environment_names
-                .iter()
-                .any(|name| !crate::command_compatibility::inert_git_environment_name(name))
-                || !super::directory_targets::drive_targets_quoted(segment)
-                || inspection == Some(false)
-                // Only inspection operations have a configuration proof to
-                // invalidate. Other Git operations retain their own native
-                // review/permission floors, not this read floor.
-                || (inspection.is_some() && index > 0 && (0..index).any(|prior| !settled(prior)))
-        })
-    })
+    let mut unsettled = Vec::new();
+    for (index, segment) in segments.iter().enumerate() {
+        let git = segment
+            .executable
+            .as_deref()
+            .is_some_and(|executable| super::executable_basename(executable) == "git");
+        if !git {
+            continue;
+        }
+        let inspection = inspections[index];
+        // Inert names (`CI`, `LANG`, ...) and the commit identity change
+        // no Git behavior, so the segment keeps its own permission decision.
+        if segment
+            .environment_names
+            .iter()
+            .any(|name| !crate::command_compatibility::inert_git_environment_name(name))
+            || !super::directory_targets::drive_targets_quoted(segment)
+            || inspection == Some(false)
+        {
+            return Verdict::Review;
+        }
+        // Only inspection operations have a configuration proof to
+        // invalidate. Other Git operations retain their own native
+        // review/permission floors, not this read floor.
+        if inspection.is_some() {
+            unsettled.extend((0..index).filter(|prior| !settled(*prior)));
+        }
+    }
+    unsettled.sort_unstable();
+    unsettled.dedup();
+    if unsettled.is_empty() {
+        Verdict::Clear
+    } else {
+        Verdict::Unsettled(unsettled)
+    }
 }
 
 /// The command from its only `cd` onward, when everything before the `cd`
@@ -305,6 +387,7 @@ fn may_inspect(arguments: &[String]) -> bool {
                         | "cat-file"
                         | "show-ref"
                         | "for-each-ref"
+                        | "rev-list"
                 )
             }
         }

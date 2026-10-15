@@ -21,6 +21,48 @@ pub(super) fn yield_signal_payload(payload: &Value) -> Option<Value> {
     yield_report::signal_payload(payload)
 }
 
+/// Oh My Pi 18.8 adds `path` and `paths` to an `edit` hook input, copied from
+/// the patch's `[PATH#TAG]` headers. They name no new target, so when they
+/// match the headers exactly they are dropped and the patch keeps its own
+/// proof. Any other value is not Oh My Pi's derivation and stays reviewed.
+pub(super) fn edit_signal_payload(payload: &Value) -> Option<Value> {
+    if payload.get("tool_name")?.as_str()? != "edit" {
+        return None;
+    }
+    let input = strict_tool_input(payload)?;
+    if input.len() < 2
+        || !input
+            .keys()
+            .all(|key| matches!(key.as_str(), "input" | "path" | "paths"))
+    {
+        return None;
+    }
+    let headers = super::super::omp_hashline_writes::header_paths(input.get("input")?.as_str()?)?;
+    let paths = input.get("paths")?.as_array()?;
+    if headers.is_empty()
+        || paths.len() != headers.len()
+        || !paths
+            .iter()
+            .zip(&headers)
+            .all(|(path, header)| path.as_str() == Some(*header))
+    {
+        return None;
+    }
+    match input.get("path") {
+        None if headers.len() > 1 => {}
+        Some(path) if headers.len() == 1 && path.as_str() == Some(headers[0]) => {}
+        _ => return None,
+    }
+    let projected_input = Map::from_iter([("input".to_owned(), input["input"].clone())]);
+    let mut projected = payload.clone();
+    for alias in super::extract::EMBEDDED_ARGUMENT_KEYS {
+        if projected.get(alias).is_some() {
+            projected[alias] = Value::Object(projected_input.clone());
+        }
+    }
+    Some(projected)
+}
+
 pub(super) struct OmpContext<'a> {
     pub(super) harness: &'a str,
     pub(super) event: &'a str,
@@ -235,15 +277,44 @@ fn listing(
         }
     }
     let recursive = signals.tool_name.as_deref() == Some("find") || input.contains_key("pattern");
+    let gitignore = input.get("gitignore").and_then(Value::as_bool) != Some(false);
     let targets = search_targets(input_path(input, signals)?.unwrap_or("."), context)?;
+    let proven =
+        |target: &str| listing_target_proven(target, signals, (recursive, gitignore), context);
+    if targets.iter().all(|target| proven(target)) {
+        return Some(directory_allow(
+            context,
+            "native_omp_directory_listing",
+            "The Rust authority proved this names-only listing targets a verified ordinary directory.",
+        ));
+    }
+    // A literal path that names nothing lists nothing, so stopping the call
+    // costs nothing. A read of the same path gets the same answer, so saying
+    // why reveals no more and lets the agent fix the path instead of waiting
+    // on an approval. Sensitive names keep their review.
+    let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    let missing = |target: &str| {
+        !signals.sensitive_target
+            && super::super::read_paths::missing_read_target(target, home, cwd, false)
+            && !super::super::sensitive_command(target)
+            && !super::super::sensitive_read_path_argument(target)
+    };
     targets
-        .into_iter()
-        .all(|target| listing_target_proven(target, signals, recursive, context))
+        .iter()
+        .all(|target| proven(target) || missing(target))
         .then(|| {
-            directory_allow(
-                context,
-                "native_omp_directory_listing",
-                "The Rust authority proved this names-only listing targets a verified ordinary directory.",
+            generic_result(
+                generic_action(
+                    context.harness,
+                    context.event,
+                    PreToolActionTypeV1::FileRead,
+                    PreToolOperationV1::Read,
+                    true,
+                    false,
+                ),
+                "block",
+                super::evaluate::MISSING_PATH,
+                "HOL Guard did not run this listing because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
             )
         })
 }
@@ -251,27 +322,31 @@ fn listing(
 fn listing_target_proven(
     target: &str,
     signals: &GenericSignals,
-    recursive: bool,
+    (recursive, gitignore): (bool, bool),
     context: &OmpContext<'_>,
 ) -> bool {
     if signals.tool_name.as_deref() == Some("glob") && target.contains(['{', '}']) {
         // Below a literal directory the host matches the alternatives
-        // relative to it and returns only names that match one of them, so
-        // each expansion is proven as its own selector. Without that prefix
-        // the host prepends `**/` and searches every depth, which no single
-        // expansion covers.
+        // relative to it. Without that prefix it searches `**/<pattern>` from
+        // the cwd (`parseFindPattern`), so each expansion is proven that way:
+        // the same proof as an unbraced `**/*.sh`, never wider.
         let anchored = target
             .find(['*', '?', '[', '{'])
             .is_some_and(|index| target[..index].contains('/'));
-        return anchored
-            && brace_expansions(target).is_some_and(|expansions| {
-                expansions
-                    .iter()
-                    .all(|expansion| listing_target_proven(expansion, signals, recursive, context))
-            });
+        let (options, walk) = ((recursive, gitignore), (true, gitignore));
+        return brace_expansions(target).is_some_and(|expansions| {
+            expansions.iter().all(|expansion| {
+                if anchored || expansion.starts_with("**/") {
+                    return listing_target_proven(expansion, signals, options, context);
+                }
+                contained_selector(expansion)
+                    && listing_target_proven(&format!("**/{expansion}"), signals, walk, context)
+            })
+        });
     }
     let has_glob_selector =
         signals.tool_name.as_deref() == Some("glob") && target.contains(['*', '?', '[', '{']);
+    let selector = target;
     // OMP glob uses `path` for the complete selector, not just a directory.
     // Prove its fixed directory prefix; the tool returns names, not contents.
     let target = if signals.tool_name.as_deref() == Some("glob") {
@@ -282,13 +357,23 @@ fn listing_target_proven(
     } else {
         target
     };
-    // A wildcard can traverse hidden or symlinked children even when the
-    // literal prefix is ordinary. Prove the entire reachable prefix tree.
+    // A wildcard walks below its literal prefix and, like `find`, returns
+    // names only, so the walk from that prefix is held to the same rules.
+    // Outside the workspace no sensitive name may be reachable below it.
+    // The proof is skipped when the walk starts inside the session folder and
+    // the last component is a literal ordinary name: then every name the host
+    // returns ends in that name.
+    let recursive = recursive || has_glob_selector;
+    let literal_name = has_glob_selector
+        && literal_name_selector(selector)
+        && walk_inside_session(target, context);
     if has_glob_selector
-        && !super::super::search_scope::unfiltered_directory_scope_proven(
+        && !literal_name
+        && !super::super::search_scope::omp_glob_scope_proven(
             target,
             context.path.home_dir,
             context.path.cwd,
+            gitignore,
         )
     {
         return false;
@@ -296,8 +381,9 @@ fn listing_target_proven(
     // `find` and a `pattern` walk the tree below the root and return names
     // only, so an ordinary project root is fine even with a `.env` inside;
     // reading that file stays gated. A walk from the home directory or above
-    // it reaches credential stores and agent state, so it stays on review.
-    if recursive && walk_covers_home(target, context) {
+    // it reaches credential stores and agent state, so it stays on review,
+    // and so does a literal-name glob that skipped the tree proof.
+    if (recursive || literal_name) && walk_covers_home(target, context) {
         return false;
     }
     // A glob entry without wildcards matches only itself, so the host returns
@@ -309,12 +395,124 @@ fn listing_target_proven(
             context.path.home_dir,
             context.path.cwd,
         );
+    let missing_glob_entry = signals.tool_name.as_deref() == Some("glob")
+        && !has_glob_selector
+        && missing_listing_entry(target, context);
     literal_glob_file
+        || missing_glob_entry
         || super::super::safe_reads::bounded_omp_directory_read_target(
             target,
             context.path.home_dir,
             context.path.cwd,
         )
+        || (!has_glob_selector && project_skill_listing(target, context))
+}
+
+/// A names-only listing of the session's own project skill folders. Only a
+/// literal path with no link component is resolved; the screens are in
+/// `project_skill_listing_directory`.
+fn project_skill_listing(target: &str, context: &OmpContext<'_>) -> bool {
+    let (Some(home), Some(cwd)) = (context.path.home_dir, context.path.cwd) else {
+        return false;
+    };
+    if target.is_empty()
+        || target.trim() != target
+        || target.len() > 4096
+        || target.contains(['\\', '$', '`', '\0', '\n', '\r'])
+        || target.split('/').any(|part| part == "..")
+    {
+        return false;
+    }
+    let candidate = match target.strip_prefix("~/") {
+        Some(rest) => std::path::Path::new(home).join(rest),
+        None if target.starts_with('~') => return false,
+        None => std::path::Path::new(cwd).join(target),
+    };
+    if guard_secure_fs::contains_symlink_component(&candidate) {
+        return false;
+    }
+    let (Ok(canonical), Ok(session)) = (
+        std::fs::canonicalize(&candidate),
+        std::fs::canonicalize(cwd),
+    ) else {
+        return false;
+    };
+    super::super::read_paths::project_skill_listing_directory(&canonical, &session)
+        && super::super::read_paths::resolved_location_allowed(
+            &canonical,
+            context.path.home_dir,
+            context.path.cwd,
+            false,
+        )
+}
+
+/// Whether a glob selector ends in a literal file name, such as
+/// `docs/**/AGENTS.md`, that names no credential or sensitive location.
+fn literal_name_selector(selector: &str) -> bool {
+    let Some((_, name)) = selector.rsplit_once('/') else {
+        return false;
+    };
+    // The host may match case-insensitively, so judge the lowered name too.
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains(['*', '?', '[', ']', '{', '}', '\\'])
+        && !name.chars().any(char::is_control)
+        && [name.to_owned(), name.to_ascii_lowercase()]
+            .iter()
+            .all(|name| {
+                !super::super::sensitive_read_path_argument(name)
+                    && !super::super::sensitive_command(name)
+            })
+}
+
+/// A glob entry that names nothing returns no names: the host skips it in a
+/// list and reports it missing, or fails a single path with "not found". It
+/// reveals no more than a listing of its nearest existing folder, so it
+/// carries that folder's listing proof when it sits in the session folder.
+/// Sensitive and hidden names keep their review.
+fn missing_listing_entry(target: &str, context: &OmpContext<'_>) -> bool {
+    let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    if !super::super::read_paths::missing_read_target(target, home, cwd, false)
+        || super::super::sensitive_command(target)
+        || super::super::sensitive_read_path_argument(target)
+        || target.split(['/', '\\']).any(|part| part == "..")
+    {
+        return false;
+    }
+    let expand = |path: &str| {
+        super::super::read_paths::expand_home_read_path(path, home)
+            .unwrap_or_else(|| path.to_owned())
+    };
+    let Some(session) = cwd.and_then(|root| std::fs::canonicalize(expand(root)).ok()) else {
+        return false;
+    };
+    let path = session.join(expand(target));
+    let Some(folder) = path
+        .ancestors()
+        .skip(1)
+        .find(|folder| std::fs::symlink_metadata(folder).is_ok())
+    else {
+        return false;
+    };
+    let (Ok(canonical), Ok(missing)) = (std::fs::canonicalize(folder), path.strip_prefix(folder))
+    else {
+        return false;
+    };
+    // Only an ordinary folder inside the session qualifies, and no name on
+    // the way down from the session may be hidden.
+    let visible = |path: &std::path::Path| {
+        path.components().all(|part| {
+            matches!(part, std::path::Component::Normal(name)
+                if name.to_str().is_some_and(|name| !name.starts_with('.')))
+        })
+    };
+    canonical.is_dir()
+        && canonical.strip_prefix(&session).is_ok_and(visible)
+        && visible(missing)
+        && folder.to_str().is_some_and(|folder| {
+            super::super::safe_reads::bounded_omp_directory_read_target(folder, home, cwd)
+        })
 }
 
 /// Maximum patterns proven from one glob's `{a,b}` alternatives.
@@ -422,6 +620,22 @@ fn walk_covers_home(target: &str, context: &OmpContext<'_>) -> bool {
     }
 }
 
+fn walk_inside_session(target: &str, context: &OmpContext<'_>) -> bool {
+    let Some(cwd) = context.path.cwd else {
+        return false;
+    };
+    if target.starts_with('~') {
+        return false;
+    }
+    match (
+        std::fs::canonicalize(std::path::Path::new(cwd).join(target)),
+        std::fs::canonicalize(cwd),
+    ) {
+        (Ok(root), Ok(cwd)) => root.starts_with(cwd),
+        _ => false,
+    }
+}
+
 fn glob_directory(target: &str) -> Option<&str> {
     let Some(index) = target.find(['*', '?', '[', '{']) else {
         return Some(target);
@@ -470,29 +684,131 @@ fn grep_scope(
     let targets = search_targets(input_path(input, signals)?.unwrap_or("."), context)?;
     // A single file is proven by the ordinary bounded file-read path. An
     // entry of a list has no such fallback, so it carries the same proof here.
+    // A `file:N-M` entry searches only those lines of one file, so it carries
+    // the proof `read` gives the same selector.
     let list = targets.len() > 1;
+    // A `glob` or `type` override can re-include a gitignored file, so with
+    // either one no ignore file narrows the proof.
+    let gitignore = input.get("gitignore").and_then(Value::as_bool) != Some(false)
+        && !input.contains_key("glob")
+        && !input.contains_key("type");
+    let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    let proven = |target: &str| {
+        super::super::search_scope::omp_grep_scope_proven(target, home, cwd, gitignore)
+            || (list && super::super::read_paths::existing_regular_read_target(target, home, cwd))
+            || super::super::read_paths::bounded_omp_file_selector_target(target, home, cwd)
+    };
+    if targets.iter().all(|target| proven(target)) {
+        return Some(directory_allow(
+            context,
+            "native_bounded_search_scope",
+            "The Rust authority proved this directory search cannot reach a sensitive file.",
+        ));
+    }
+    // A path that names nothing is never searched, so stopping the call costs
+    // nothing. Saying why lets the agent fix the path instead of waiting on
+    // an approval. The other entries of a list still need their proof.
+    let missing = |target: &str| {
+        super::super::read_paths::missing_read_target(target, home, cwd, true)
+            && (super::super::read_paths::bounded_file_read_target(target, home, cwd)
+                || missing_under_searchable_folder(target, home, cwd))
+    };
+    let reason = if list {
+        "HOL Guard did not run this search because a path in its list does not exist. Check each path, for example by listing its parent directory, and try again with the correct ones."
+    } else {
+        "HOL Guard did not run this search because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one."
+    };
     targets
-        .into_iter()
-        .all(|target| {
-            super::super::search_scope::content_search_scope_proven(
-                target,
-                context.path.home_dir,
-                context.path.cwd,
-            ) || (list
-                && super::super::read_paths::existing_regular_read_target(
-                    target,
-                    context.path.home_dir,
-                    context.path.cwd,
-                ))
-        })
+        .iter()
+        .all(|target| proven(target) || missing(target))
         .then(|| {
-            directory_allow(
-                context,
-                "native_bounded_search_scope",
-                "The Rust authority proved this directory search cannot reach a sensitive file.",
+            generic_result(
+                generic_action(
+                    context.harness,
+                    context.event,
+                    PreToolActionTypeV1::FileRead,
+                    PreToolOperationV1::Read,
+                    true,
+                    false,
+                ),
+                "block",
+                super::evaluate::MISSING_PATH,
+                reason,
             )
         })
 }
+
+/// An absolute or `~` name that does not exist cannot resolve as a bounded
+/// read. Its nearest existing folder can: when Guard would let the agent search
+/// that folder, saying the name is missing tells it nothing the search would not.
+/// A folder that is not searchable as a whole still qualifies when it is an
+/// ordinary readable folder other than the filesystem root and the missing
+/// name is not sensitive: a direct read of that name gets the same answer.
+fn missing_under_searchable_folder(target: &str, home: Option<&str>, cwd: Option<&str>) -> bool {
+    if target.split(['/', '\\']).any(|part| part == "..") {
+        return false;
+    }
+    let expanded = super::super::read_paths::expand_home_read_path(target, home)
+        .unwrap_or_else(|| target.to_owned());
+    let path = std::path::Path::new(&expanded);
+    path.is_absolute()
+        && path
+            .ancestors()
+            .skip(1)
+            .find(|folder| std::fs::symlink_metadata(folder).is_ok())
+            .filter(|folder| folder.is_dir())
+            .and_then(std::path::Path::to_str)
+            .is_some_and(|folder| {
+                super::super::search_scope::content_search_scope_proven(folder, home, cwd)
+                    || (std::path::Path::new(folder).parent().is_some()
+                        && super::super::read_paths::bounded_read_target(folder, home, cwd, true)
+                        && guard_secure_fs::sensitive_path_family(path).is_none()
+                        && !guard_secure_fs::credential_named_path(path))
+            })
+}
+
+/// Why a content search that stays under review was not proven, for the
+/// agent to act on. A search path holding a glob is walked from the folder
+/// before the glob, so the note asks for separate folders. Otherwise it names
+/// the first sensitive file a listed folder would reach. Only names are
+/// inspected; no candidate file is opened.
+pub(super) fn grep_review_note(
+    payload: &Value,
+    signals: &GenericSignals,
+    context: &OmpContext<'_>,
+) -> Option<String> {
+    if context.event != "PreToolUse"
+        || !matches!(context.harness, "omp" | "pi")
+        || signals.tool_name.as_deref() != Some("grep")
+    {
+        return None;
+    }
+    let path = input_path(strict_tool_input(payload)?, signals)?.unwrap_or(".");
+    let globbed = |entry: &str| entry.contains(['*', '?', '[', '{']);
+    let Some(targets) = search_targets(path, context) else {
+        return globbed(path).then(|| GLOB_PATH_NOTE.to_owned());
+    };
+    if targets.iter().any(|target| globbed(target)) {
+        return Some(GLOB_PATH_NOTE.to_owned());
+    }
+    let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    targets.iter().find_map(|target| {
+        let blocker = super::super::search_scope::content_search_blocker(target, home, cwd)?;
+        let blocker = blocker.to_str()?;
+        let shown = match target.trim_end_matches('/') {
+            "" | "." => blocker.to_owned(),
+            folder => format!("{folder}/{blocker}"),
+        };
+        (shown.len() <= 512 && !shown.contains('`') && !shown.chars().any(char::is_control))
+            .then(|| {
+                format!(
+                    "The search would reach `{shown}`, which Guard treats as sensitive. Leave out the folder that holds it, for example by listing the folders you need as `;`-separated paths."
+                )
+            })
+    })
+}
+
+const GLOB_PATH_NOTE: &str = "A search path with a glob is checked against everything under the folder before the glob, so list the folders you need as `;`-separated paths instead.";
 
 /// `skill://<name>[/<relative.md>]` names a skill the host resolves from its
 /// own registered skill roots; the name is a bounded token, never a path.
@@ -523,24 +839,29 @@ pub(super) fn host_reference_reason(value: &str) -> Option<&'static str> {
 }
 
 /// `artifact://<digits>` names an Oh My Pi session artifact, never a path.
+/// It may carry an `N-M` line range, `raw`, or one of each in either order;
+/// `raw` only drops line formatting from the same artifact.
 fn artifact_reference(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("artifact://") else {
         return false;
     };
-    let (id, range) = match rest.split_once(':') {
-        Some((id, range)) => (id, Some(range)),
-        None => (rest, None),
+    let mut chunks = rest.split(':');
+    let id = chunks.next().unwrap_or_default();
+    let number = |part: &str| {
+        !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
     };
-    !id.is_empty()
-        && id.len() <= 9
-        && id.bytes().all(|byte| byte.is_ascii_digit())
-        && range.is_none_or(|range| {
-            range.split_once('-').is_some_and(|(start, end)| {
-                [start, end].iter().all(|part| {
-                    !part.is_empty()
-                        && part.len() <= 9
-                        && part.bytes().all(|byte| byte.is_ascii_digit())
-                })
-            })
-        })
+    let (mut raw, mut range) = (false, false);
+    let selectors_ok = chunks.all(|chunk| {
+        if chunk.eq_ignore_ascii_case("raw") && !raw {
+            raw = true;
+            return true;
+        }
+        let is_range = chunk
+            .split_once('-')
+            .is_some_and(|(start, end)| number(start) && number(end));
+        let fresh = is_range && !range;
+        range |= is_range;
+        fresh
+    });
+    number(id) && selectors_ok
 }

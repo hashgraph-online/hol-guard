@@ -94,6 +94,7 @@ fn an_unbound_view_or_harness_hands_the_session_off() {
 fn a_store_with_remote_policy_hands_the_session_off() {
     let (home, connection) = guard_home("session-bundle");
     sync_state(&connection, "policy_bundle", "{}");
+    decide(&connection, "artifact", "block", None, "policy-bundle");
     let binding = decidable(store_binding());
     assert_eq!(
         session_decidable(&binding, home.to_str().unwrap(), "codex"),

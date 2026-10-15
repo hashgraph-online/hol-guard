@@ -18,7 +18,14 @@ from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
 from .evidence import sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
-from .fixtures import create_fixture, digest_file, filesystem_checks, scenario_fixture_name
+from .fixtures import (
+    create_fixture,
+    digest_file,
+    filesystem_checks,
+    remove_scratch_checkout,
+    scenario_fixture_name,
+    scratch_checkout,
+)
 from .guard_tap import GuardTap, read_tap
 from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
@@ -129,7 +136,13 @@ def run_harness_case(
         with LoopbackCollector() as collector:
             replacements[collector.url] = "{{collector_url}}"
             rendered = scenario.render(
-                {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
+                {
+                    "home": str(fixture.home),
+                    "workspace": str(fixture.workspace),
+                    "root": str(fixture.root),
+                    "scratch": str(scratch_checkout(fixture.root)),
+                    "collector_url": collector.url,
+                }
             )
             prompt, context = route_task(
                 scenario,
@@ -234,6 +247,7 @@ def run_harness_case(
             case["credential_write_back_error"] = type(exc).__name__
         finally:
             case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            remove_scratch_checkout(fixture.root)
             if daemon is not None:
                 case.update(cleanup_case_resources(daemon, identity, guard_home, private))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)

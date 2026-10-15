@@ -42,12 +42,6 @@ def git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
     return _ask("binary_trusted", cwd=cwd, git_path=git_path)[0]
 
 
-def git_config_routing_environment_is_clean() -> bool:
-    """Return whether Git configuration discovery follows its default routes."""
-
-    return _ask("config_environment_clean")[0]
-
-
 def trusted_git_binary_for_cwd(cwd: Path) -> Path | None:
     """Resolve Git using the execution cwd and reject user-controlled binaries."""
 
@@ -55,36 +49,7 @@ def trusted_git_binary_for_cwd(cwd: Path) -> Path | None:
     return Path(resolved) if allowed and resolved else None
 
 
-def git_status_args_are_read_only(args: list[str]) -> bool:
-    """Accept only status flags that cannot configure or invoke helpers."""
-
-    return _ask("status_arguments", arguments=list(args))[0]
-
-
-def git_status_has_execution_free_config(cwd: Path, *, git_binary: Path | None = None) -> bool:
-    """Verify status cannot run configured helpers."""
-
-    return _ask("status_config", cwd=cwd, git_binary=git_binary)[0]
-
-
-def git_fetch_origin_has_execution_free_config(cwd: Path, *, git_binary: Path | None = None) -> bool:
-    """Verify a configured-origin fetch cannot redirect execution."""
-
-    return _ask("fetch_origin", cwd=cwd, git_binary=git_binary)[0]
-
-
-def git_worktree_add_has_execution_free_config(cwd: Path, *, git_binary: Path | None = None, ref: str = "HEAD") -> bool:
-    """Reject worktree creation when checkout can invoke configured code."""
-
-    return _ask("worktree_add", cwd=cwd, git_binary=git_binary, reference=ref)[0]
-
-
 __all__ = (
     "git_binary_path_is_trusted",
-    "git_config_routing_environment_is_clean",
-    "git_fetch_origin_has_execution_free_config",
-    "git_status_args_are_read_only",
-    "git_status_has_execution_free_config",
-    "git_worktree_add_has_execution_free_config",
     "trusted_git_binary_for_cwd",
 )

@@ -69,7 +69,7 @@ pub(super) fn answer(
     }
     let now = super::super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
     args.insert("now".to_owned(), json!(now));
-    let request = GuardStoreRequestV1 {
+    let mut request = GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "direct-hook-review-consume".to_owned(),
         store_path: guard_home
@@ -77,11 +77,34 @@ pub(super) fn answer(
             .to_string_lossy()
             .into_owned(),
         guard_home: context.guard_home.to_owned(),
-        method: CONSUME_METHOD.to_owned(),
+        method: "matching_native_review_block".to_owned(),
         source: "default".to_owned(),
         busy_timeout_ms: BUSY_TIMEOUT_MS,
         args,
     };
+    let mut blocked = result.clone();
+    for key in ["minimum_action", "policy_action"] {
+        blocked.insert(key.to_owned(), json!("block"));
+    }
+    blocked.insert("decision".to_owned(), json!("deny"));
+    blocked.insert("reason_code".to_owned(), json!("native_review_user_block"));
+    blocked.insert("reason".to_owned(), json!("The user chose Keep blocked for this action. Do not retry it; continue with a permitted alternative."));
+    let mut blocked_response =
+        render(context.harness, &blocked, "blocked").ok_or(HookDirectDefer::SavedDecision)?;
+    blocked_response
+        .as_object_mut()
+        .ok_or(HookDirectDefer::SavedDecision)?
+        .insert("prompted".to_owned(), json!(false));
+    let refused = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
+    match refused {
+        Ok(Value::Bool(true)) => {
+            repair_store_permissions(guard_home);
+            return Ok(Some(blocked_response));
+        }
+        Ok(Value::Bool(false)) => {}
+        _ => return Err(HookDirectDefer::SavedDecision),
+    }
+    request.method = CONSUME_METHOD.to_owned();
     let spent = crate::guard_store_op::evaluate(&request).map(|(payload, _)| payload);
     repair_store_permissions(guard_home);
     match spent {

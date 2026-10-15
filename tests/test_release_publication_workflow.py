@@ -201,7 +201,8 @@ def test_publish_jobs_use_registered_protected_environments() -> None:
     assert jobs["publish-alpha-testpypi"]["permissions"] == {"contents": "read", "id-token": "write"}
     assert jobs["publish-alpha-pypi"]["permissions"] == {"contents": "read", "id-token": "write"}
     assert jobs["publish-main-testpypi"]["permissions"] == {"contents": "read", "id-token": "write"}
-    assert jobs["publish-main-pypi"]["permissions"] == {"contents": "read", "id-token": "write"}
+    # actions: read lets a repair run download the original run's plugin-scanner files.
+    assert jobs["publish-main-pypi"]["permissions"] == {"actions": "read", "contents": "read", "id-token": "write"}
     for job_name in (
         "publish-alpha-testpypi",
         "publish-alpha-pypi",
@@ -329,12 +330,13 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         }
         assert {step["with"]["packages-dir"] for step in publish_steps} == {
             "pypi-hol-guard/",
-            "dist-plugin-scanner/",
+            "pypi-plugin-scanner/",
         }
-        assert '${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}' in inspect_step["run"]
+        assert inspect_step["run"].count('${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}') == 2
         assert inspect_step["env"]["WHEELS_ONLY_FLAG"] == "${{ steps.pypi_stage.outputs.wheels_only_flag }}"
         assert "pypi-hol-guard/*.publish.attestation" in cleanup_step["run"]
-        assert "dist-plugin-scanner/*.publish.attestation" in cleanup_step["run"]
+        assert "pypi-plugin-scanner/*.publish.attestation" in cleanup_step["run"]
+        assert verify_step["run"].count('${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}') == 2
         assert all(steps.index(step) < steps.index(cleanup_step) for step in publish_steps)
         assert steps.index(cleanup_step) < steps.index(verify_step)
         assert "--download-dir verified-pypi" in verify_step["run"]
@@ -402,3 +404,31 @@ def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> 
     assert "refusing to publish unverified wheels" in script
     assert "Release wheel set does not match" in script
     assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" "$DIST_DIR/"')
+
+
+def test_stable_repair_reuses_original_plugin_scanner_files() -> None:
+    workflow = yaml.safe_load(PUBLISH_WORKFLOW.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["publish-main-pypi"]
+    steps = job["steps"]
+    names = [step.get("name") for step in steps]
+    reuse = steps[names.index("Reuse plugin-scanner files from the original publication")]
+    assert names.index("Prepare project-specific distributions") < names.index(reuse["name"])
+    assert names.index(reuse["name"]) < names.index("Stage wheels-only PyPI upload")
+    assert job["permissions"]["actions"] == "read"
+    script = reuse["run"]
+    assert '"$status" == "404"' in script
+    assert ".predicate.runDetails.metadata.invocationId" in script
+    assert "--name distributions-native --name distribution-sha256-native" in script
+    assert "sha256sum --check" in script
+    assert 'cmp -s "$current" "$original"' in script
+    assert '"${#origin_scanner_files[@]}" == "2"' in script
+
+    stage = steps[names.index("Stage wheels-only PyPI upload")]["run"]
+    assert "cp dist-plugin-scanner/*.whl pypi-plugin-scanner/" in stage
+    assert "cp dist-plugin-scanner/*.whl dist-plugin-scanner/*.tar.gz pypi-plugin-scanner/" in stage
+
+    build = workflow["jobs"]["build"]
+    assert build["permissions"]["statuses"] == "read"
+    version_step = next(step for step in build["steps"] if step.get("id") == "version")
+    assert "REPAIR_ARGS+=(--publication-unrecorded)" in version_step["run"]
+    assert 'hol-guard / published ${RELEASE_VERSION}' in version_step["run"]

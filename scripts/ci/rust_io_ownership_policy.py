@@ -148,6 +148,9 @@ _TRANSPORT_AUTHORITY_PATHS: Final = frozenset(
     {
         # Strict owner-checked native command-control lock and marker transport.
         "src/codex_plugin_scanner/guard/native_command_control_authority_io.py",
+        # Locates the trusted Windows directory a contained-test request is
+        # handed through; it reads no file content.
+        "src/codex_plugin_scanner/guard/windows_paths.py",
     }
 )
 _TRANSPORT_DECODE_PATHS: Final = frozenset(
@@ -359,9 +362,7 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_native_search.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",

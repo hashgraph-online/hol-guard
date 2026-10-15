@@ -28,6 +28,10 @@ from .restricted_pytest_model import (
 
 _RESOURCE_AVAILABLE = os.name == "posix"
 _MAX_REPLAY_BYTES = 1_048_576
+# Output that names a denied file operation. A failed contained run that
+# prints one of these gets the sandbox's own explanation appended, so the
+# agent can move the write instead of treating the failure as a test bug.
+_WRITE_DENIAL_MARKERS = (b"eperm", b"erofs", b"operation not permitted", b"read-only file system")
 _NODE_VIRTUAL_ADDRESS_BYTES = 16 * 1024 * 1024 * 1024
 if _RESOURCE_AVAILABLE:
     import resource as _resource
@@ -86,6 +90,8 @@ def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_r
     if plan.backend == "macos-seatbelt":
         profile = _macos_profile(plan, private_root=private_root, user_site_root=user_site_root)
         return [str(plan.backend_executable), "-p", profile, "--", *plan.command]
+    if plan.backend != "linux-bubblewrap":
+        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected restricted backend.")
     return _bubblewrap_argv(plan, private_root=private_root)
 
 
@@ -169,6 +175,7 @@ def _run_backend_process(
     stdout_capture: bytearray | None = None,
     node_virtual_address_space: bool = False,
     merge_stderr: bool = False,
+    write_denial_note: str | None = None,
 ) -> int:
     if (
         node_virtual_address_space
@@ -230,9 +237,16 @@ def _run_backend_process(
             int | signal.Handlers | Callable[[int, FrameType | None], object] | None,
         ] = {}
 
+        def signal_run(signum: int | None = None) -> None:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL if signum is None else signum)
+            else:
+                # The Windows runner's kill-on-close job ends its descendants.
+                process.kill()
+
         def forward_signal(signum: int, _frame: object) -> None:
             with contextlib.suppress(OSError):
-                os.killpg(process.pid, signum)
+                signal_run(signum)
 
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[signum] = signal.getsignal(signum)
@@ -242,7 +256,7 @@ def _run_backend_process(
                 return_code = process.wait(timeout=timeout_seconds)
             except subprocess.TimeoutExpired as error:
                 with contextlib.suppress(OSError):
-                    os.killpg(process.pid, signal.SIGKILL)
+                    signal_run()
                 _ = process.wait()
                 raise RestrictedPytestError(
                     "pytest_restricted_timeout",
@@ -253,7 +267,7 @@ def _run_backend_process(
             # The run owns this new session/group. Stop lingering workers even
             # if the launcher exited successfully before all descendants did.
             with contextlib.suppress(OSError):
-                os.killpg(process.pid, signal.SIGKILL)
+                signal_run()
             for signum, handler in previous_handlers.items():
                 _ = signal.signal(signum, handler)
             if stdout_capture is None:
@@ -263,18 +277,35 @@ def _run_backend_process(
                 stdout_capture.extend(stdout_file.read(_MAX_REPLAY_BYTES))
             if not merge_stderr:
                 _replay_sandbox_output(stderr_file, sys.stderr)
+        if (
+            write_denial_note is not None
+            and return_code != 0
+            and (_write_denied(stdout_file) or (not merge_stderr and _write_denied(stderr_file)))
+        ):
+            destination = sys.stdout if merge_stderr else sys.stderr
+            destination.write(f"\n[HOL Guard] {write_denial_note}\n")
+            destination.flush()
         return return_code if return_code >= 0 else 128 + abs(return_code)
+
+
+def _write_denied(source: BinaryIO) -> bool:
+    source.seek(0)
+    text = source.read(_MAX_REPLAY_BYTES).lower()
+    return any(marker in text for marker in _WRITE_DENIAL_MARKERS)
 
 
 def _replay_sandbox_output(source: BinaryIO, destination: TextIO) -> None:
     source.seek(0)
     raw = source.read(_MAX_REPLAY_BYTES + 1)
     truncated = len(raw) > _MAX_REPLAY_BYTES
-    text = raw[:_MAX_REPLAY_BYTES].decode("utf-8", errors="replace")
+    # Windows programs end lines with CRLF; a lone CR stays replaced.
+    text = raw[:_MAX_REPLAY_BYTES].decode("utf-8", errors="replace").replace("\r\n", "\n")
     safe_text = "".join(character if character in {"\n", "\t"} or ord(character) >= 32 else "�" for character in text)
     if truncated:
         safe_text += "\n[HOL Guard truncated restricted pytest output]\n"
-    destination.write(safe_text)
+    # A Windows pipe may use a code page without the replacement character.
+    encoding = getattr(destination, "encoding", None) or "utf-8"
+    destination.write(safe_text.encode(encoding, errors="replace").decode(encoding))
     destination.flush()
 
 

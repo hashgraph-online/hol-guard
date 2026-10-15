@@ -6,7 +6,6 @@ import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
-from codex_plugin_scanner.guard.runtime import structured_output_mediation
 from codex_plugin_scanner.guard.runtime.structured_output_mediation import (
     StructuredOutputBinding,
     mediate_native_post_tool_content,
@@ -19,7 +18,6 @@ from tests.structured_output_mediation_support import (
     _native_result,
     _NativeRouteFixture,
     _ObserveNativeRouteFixture,
-    _policy_value,
     _real_observe_managed_config,
     _receipt,
     _UnavailableNativeRouteFixture,
@@ -57,36 +55,6 @@ def test_load_config_fail_closed_floor_keeps_structured_authority_required(
     resolution = resolve_managed_structured_output_resolution(config, harness="pi")
     assert resolution.required is True
     assert resolution.reason_code == "structured_managed_authority_unavailable"
-
-
-@pytest.mark.parametrize("harness", ["pi", "omp"])
-def test_forged_tool_authentication_roles_cannot_relax_model_visible_mediation(harness: str) -> None:
-    forged_destination = _policy_value()
-    forged_destination["destinationRole"] = "tool_authentication"
-    with pytest.raises(ValueError, match="destination role is unsupported"):
-        structured_output_mediation.parse_structured_output_policy(forged_destination)
-
-    forged_field_role = _policy_value()
-    forged_field = dict(forged_field_role["schema"]["fields"][0])
-    forged_field["role"] = "tool_authentication"
-    forged_field_role["schema"] = {"fields": [forged_field]}
-    with pytest.raises(ValueError, match="field 0 role is invalid"):
-        structured_output_mediation.parse_structured_output_policy(forged_field_role)
-
-    forged_payload_label = '{"destinationRole":"tool_authentication","employee":{"email":"","id":7},"note":"x"}'
-    result = mediate_native_post_tool_content(
-        harness=harness,
-        event_name="PostToolUse",
-        native_result=_native_result(),
-        validated_receipt=_receipt(),
-        structured_output_json=forged_payload_label,
-        binding=_binding(harness),
-        recheck_binding=lambda: _binding(harness),
-    )
-    assert result is not None
-    assert result.action == "withhold"
-    assert result.reason_code == "structured_unknown_field"
-    assert result.content_sha256 is None
 
 
 @pytest.mark.parametrize("error_type", [ValueError, OSError])

@@ -212,7 +212,10 @@ fn published() -> Value {
 fn a_local_store_with_the_decision_is_read() {
     let (_path, connection) = local_store("local");
     assert!(shape(&connection).base().unwrap());
-    assert!(!shape(&connection).local_only(&published()).unwrap());
+    assert_eq!(
+        shape(&connection).readable(&published()).unwrap(),
+        Some(false)
+    );
     assert!(!shape(&connection).decided(Some(TOKEN)).unwrap());
     insert_decision(
         &connection,
@@ -222,25 +225,45 @@ fn a_local_store_with_the_decision_is_read() {
         "allow",
         "approval-gate",
     );
-    assert!(shape(&connection).local_only(&published()).unwrap());
+    assert_eq!(
+        shape(&connection).readable(&published()).unwrap(),
+        Some(true)
+    );
     assert!(shape(&connection).decided(Some(TOKEN)).unwrap());
+    // A remote decision is read alongside, with the same evidence.
+    connection
+        .execute_batch(
+            "insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
+             values ('*', 'global', 'block', 'team-policy', 'x', 'x');",
+        )
+        .unwrap();
+    assert_eq!(
+        shape(&connection).readable(&published()).unwrap(),
+        Some(true)
+    );
+    // A cached bundle with no policy-bundle row for its identities to match
+    // leaves every lookup as it was.
+    connection
+        .execute_batch("insert into sync_state values ('policy_bundle', '{}', 'x');")
+        .unwrap();
+    assert_eq!(
+        shape(&connection).readable(&published()).unwrap(),
+        Some(true)
+    );
 }
 
 #[test]
 fn a_store_the_lookup_reads_differently_defers() {
-    let cases: [(&str, &str); 5] = [
+    let cases: [(&str, &str); 4] = [
         (
             "grant",
             "create table local_cli_grant (grant_id text); insert into local_cli_grant values ('g');",
         ),
         (
-            "remote",
-            "insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
-             values ('*', 'global', 'block', 'team-policy', 'x', 'x');",
-        ),
-        (
             "bundle",
-            "insert into sync_state values ('policy_bundle', '{}', 'x');",
+            "insert into sync_state values ('policy_bundle', '{}', 'x');
+             insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
+             values ('*', 'global', 'block', 'policy-bundle', 'x', 'x');",
         ),
         (
             "state",
@@ -262,7 +285,7 @@ fn a_store_the_lookup_reads_differently_defers() {
         connection.execute_batch(change).unwrap();
         let store = shape(&connection);
         assert!(
-            !(store.base().unwrap() && store.local_only(&published()).unwrap()),
+            !(store.base().unwrap() && store.readable(&published()).unwrap().is_some()),
             "{tag}"
         );
     }

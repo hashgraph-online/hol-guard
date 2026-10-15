@@ -218,6 +218,14 @@ pub fn bun_vitest_invocation(command: &[String]) -> Option<(Option<String>, Vec<
     Some((directory, args[1..].to_vec()))
 }
 
+/// `pnpm exec vitest ...`. The sink runs the project's own Vitest, never pnpm,
+/// so only the bare form is read; a pnpm option before the tool (`-c` runs a
+/// shell, `-r`/`--filter` fan out) is not Vitest.
+fn pnpm_exec_vitest(command: &[String]) -> bool {
+    basename(command) == "pnpm"
+        && matches!(command.get(1..3), Some([exec, tool]) if exec == "exec" && tool == "vitest")
+}
+
 pub fn vitest_arguments(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
     let argv = normalized_command(command)?;
     let name = basename(&argv);
@@ -234,6 +242,8 @@ pub fn vitest_arguments(command: &[String]) -> Result<Vec<String>, RestrictedPyt
             return invalid_vitest();
         }
         args[1..].to_vec()
+    } else if pnpm_exec_vitest(&argv) {
+        argv[3..].to_vec()
     } else if name == "vitest" {
         argv[1..].to_vec()
     } else if matches!(name, "node" | "nodejs") {
@@ -323,6 +333,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
         && (matches!(name, "bunx" | "npx" | "vitest")
+            || pnpm_exec_vitest(command)
             || bun.is_some()
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
@@ -330,6 +341,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                     .clone()
                     .any(|v| v.ends_with("/node_modules/vitest/vitest.mjs"))));
     let node_tool = bun.is_none()
+        && !pnpm_exec_vitest(command)
         && !command.is_empty()
         && (matches!(name, "eslint" | "tsc" | "vite" | "bun" | "npm" | "pnpm")
             || (matches!(name, "bunx" | "npx")

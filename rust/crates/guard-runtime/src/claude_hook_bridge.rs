@@ -1,10 +1,9 @@
 //! Native Claude Code hook bridge: a port of `main` in
 //! `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
-//! hook. It forwards the hook to the authenticated loopback Guard daemon,
-//! recovers a dead daemon once, and otherwise falls back to the local Guard
-//! hook command, all inside the harness's hook deadline. Every failure ends
-//! in a hook response that denies or degrades the action; nothing here
-//! decides a verdict itself.
+//! hook. It forwards the hook to the authenticated loopback Guard daemon and
+//! recovers a dead daemon once, all inside the harness's hook deadline. Every
+//! failure ends in a hook response that denies or degrades the action; nothing
+//! here decides a verdict itself, and no Python hook command runs in its place.
 
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
@@ -34,8 +33,6 @@ const HOOK_DEADLINE: Duration = Duration::from_secs(8);
 const DAEMON_IO_TIMEOUT: Duration = Duration::from_millis(5_500);
 const RECOVERY_TIMEOUT: Duration = Duration::from_secs(3);
 const MINIMUM_RECOVERY: Duration = Duration::from_millis(1_500);
-const FALLBACK_RESERVE: Duration = Duration::from_secs(2);
-const FALLBACK_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_HOOK_INPUT_BYTES: usize = 1_000_000;
 const CONTROL_PLANE_FAILURE: &str = "authenticated-control-plane-failure";
 const INVALID_CONFIG: &str = "claude hook bridge configuration is invalid";
@@ -48,7 +45,6 @@ pub(crate) struct BridgeConfig {
     pub(crate) state_path: String,
     pub(crate) fallback_daemon_url: String,
     pub(crate) query: String,
-    pub(crate) fallback_command: Vec<String>,
     pub(crate) recovery_command: Vec<String>,
 }
 
@@ -64,8 +60,9 @@ pub(crate) fn parse_config(text: &str) -> Option<BridgeConfig> {
     let payload: serde_json::Value = serde_json::from_str(text).ok()?;
     let payload = payload.as_object()?;
     let text_field = |key: &str| payload.get(key)?.as_str().map(str::to_owned);
-    let fallback_command = string_list(payload.get("fallback_command"))?;
-    if fallback_command.is_empty() {
+    // Launchers still write a fallback command; the bridge no longer runs it,
+    // but a config without one is not one a launcher wrote.
+    if string_list(payload.get("fallback_command"))?.is_empty() {
         return None;
     }
     let recovery_command = match payload.get("recovery_command") {
@@ -76,7 +73,6 @@ pub(crate) fn parse_config(text: &str) -> Option<BridgeConfig> {
         state_path: text_field("state_path")?,
         fallback_daemon_url: text_field("fallback_daemon_url")?,
         query: text_field("query")?,
-        fallback_command,
         recovery_command,
     })
 }
@@ -210,34 +206,27 @@ impl Bridge<'_> {
         Some(if kind == CONTROL_PLANE_FAILURE {
             control_plane_failure(&reason, &self.data)
         } else if error.is_recoverable() {
-            self.recover_retry_or_fallback(reason, state_path, kind)
+            self.recover_or_degrade(reason, state_path, kind)
         } else {
-            self.local_fallback(&reason)
+            degraded(&reason, &self.data)
         })
     }
 
-    fn recover_retry_or_fallback(
-        &self,
-        mut reason: String,
-        state_path: &Path,
-        kind: &str,
-    ) -> String {
-        let recovery_deadline = self
-            .deadline
-            .checked_sub(FALLBACK_RESERVE)
-            .unwrap_or_else(Instant::now);
-        let window = capped(recovery_deadline, RECOVERY_TIMEOUT);
+    /// Restarts a dead daemon once and retries the hook; the action is
+    /// degraded when that does not produce an answer in time.
+    fn recover_or_degrade(&self, mut reason: String, state_path: &Path, kind: &str) -> String {
+        let window = capped(self.deadline, RECOVERY_TIMEOUT);
         if !self.config.recovery_command.is_empty()
             && window >= MINIMUM_RECOVERY
-            && self.run_recovery(recovery_deadline, kind)
+            && self.run_recovery(self.deadline, kind)
         {
             let malformed = format!("{reason}; recovered daemon returned malformed hook JSON");
-            match self.exchange(state_path, recovery_deadline, &malformed) {
+            match self.exchange(state_path, self.deadline, &malformed) {
                 Ok(body) => return body,
                 Err(error) => reason = format!("{reason}; daemon recovery retry failed: {error}"),
             }
         }
-        self.local_fallback(&reason)
+        degraded(&reason, &self.data)
     }
 
     fn run_recovery(&self, recovery_deadline: Instant, kind: &str) -> bool {
@@ -261,55 +250,6 @@ impl Bridge<'_> {
             None,
         );
         result.returncode == Some(0) && !result.timed_out && !result.output_limit_exceeded
-    }
-
-    /// `_run_local_fallback`. Where Python's `json.loads` would raise on the
-    /// fallback's output (and crash the bridge), this degrades instead.
-    fn local_fallback(&self, reason: &str) -> String {
-        let timeout = capped(self.deadline, FALLBACK_TIMEOUT);
-        if timeout < MINIMUM_OPERATION {
-            return degraded(
-                &format!("{reason}; fallback exhausted the hook deadline"),
-                &self.data,
-            );
-        }
-        let Some(home) = home_directory() else {
-            return degraded(
-                &format!("{reason}; fallback could not resolve the home directory"),
-                &self.data,
-            );
-        };
-        let result = run_isolated_hook_process(
-            &self.config.fallback_command,
-            &self.data,
-            &home,
-            &hook_environment(),
-            Some(timeout.as_secs_f64()),
-            None,
-            None,
-            None,
-        );
-        if result.returncode == Some(0) && !result.timed_out && !result.output_limit_exceeded {
-            let stdout = py_strip(&result.stdout);
-            if should_suppress_output(&self.data, stdout) {
-                return String::new();
-            }
-            let malformed = format!("{reason}; fallback returned malformed hook JSON");
-            return valid_hook_json_or_degraded(stdout, &malformed, &self.data)
-                .unwrap_or_else(|_| degraded(&malformed, &self.data));
-        }
-        if result.output_limit_exceeded {
-            return limit_denied("hook output", &event_name(&self.data));
-        }
-        let suffix = if result.timed_out {
-            "; fallback timed out".to_owned()
-        } else {
-            match result.returncode {
-                Some(code) => format!("; fallback exited {code}"),
-                None => "; fallback exited None".to_owned(),
-            }
-        };
-        degraded(&format!("{reason}{suffix}"), &self.data)
     }
 }
 
@@ -354,7 +294,8 @@ pub(crate) fn hook_response(config_text: &str, input: &mut impl Read) -> Option<
     };
     match state_path_for_query(&config.state_path, &config.query) {
         Ok(state_path) => bridge.respond(&state_path),
-        Err(reason) => Some(bridge.local_fallback(&reason)),
+        // A config whose state path does not match its Guard home is refused.
+        Err(reason) => Some(degraded(&reason, &bridge.data)),
     }
 }
 

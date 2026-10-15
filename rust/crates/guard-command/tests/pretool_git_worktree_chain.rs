@@ -40,7 +40,8 @@ fn git(home: &Path, repository: &Path, arguments: &[&str]) {
 }
 
 /// `org/app` below a fresh home, with a remote-tracking `origin/main`, a
-/// sibling repository and a symlink beside it that leads out of `org`.
+/// sibling repository and a symlink beside it that leads out of `org` into a
+/// directory every user can write, where no checkout is admitted.
 fn repository(name: &str) -> (FixtureCleanup, PathBuf, PathBuf) {
     let unique = format!(
         "{}-{}",
@@ -87,6 +88,11 @@ fn repository(name: &str) -> (FixtureCleanup, PathBuf, PathBuf) {
     directory(&sibling);
     git(&home, &sibling, &["init", "--quiet"]);
     directory(&root.join("elsewhere"));
+    std::fs::set_permissions(
+        root.join("elsewhere"),
+        std::fs::Permissions::from_mode(0o777),
+    )
+    .unwrap();
     std::os::unix::fs::symlink(root.join("elsewhere"), organization.join("link")).unwrap();
     (cleanup, home, repository)
 }
@@ -194,6 +200,68 @@ fn fallback_reads_after_a_routed_add_stay_reviewed() {
     );
 }
 
+/// `git -C <checkout>` names the new checkout without a `cd`, in any
+/// spelling that resolves to it. A `mkdir` may run in the shell's own
+/// directory between the reads.
+#[test]
+fn routed_reads_in_the_new_worktree_are_allowed() {
+    let (_cleanup, home, repository) = repository("chain-dash-c");
+    let destination = repository.parent().unwrap().join("app-flat");
+    let destination = destination.display();
+    for command in [
+        "git worktree add -b flat ../app-flat origin/main && git -C ../app-flat status --short".to_owned(),
+        "git worktree add -b flat ../app-flat origin/main && git -C ../app-flat log --oneline | head -5".to_owned(),
+        "git worktree add -b flat ~/org/app-flat origin/main && git -C ~/org/app-flat status --short".to_owned(),
+        format!("git worktree add -b flat {destination} origin/main && git --no-pager -C {destination} log --oneline -3 && git -C ../app-flat status"),
+        "git worktree add -b flat ~/org/app-flat origin/main && mkdir -p ~/notes && git -C ~/org/app-flat status --short".to_owned(),
+    ] {
+        assert_allowed(&home, &repository, &command);
+    }
+}
+
+/// Reads routed anywhere but the new checkout, writes, a `;` that would run
+/// the read after a failed add, and anything else between the reads keep
+/// their review, as does a `mkdir` in or below the new checkout, which
+/// could follow a link the checkout brings.
+#[test]
+fn other_routed_work_after_a_worktree_add_stays_reviewed() {
+    let (_cleanup, home, repository) = repository("chain-dash-c-reviewed");
+    // A link made before the add that will lead into the new checkout.
+    std::os::unix::fs::symlink(
+        repository.parent().unwrap().join("app-flat"),
+        home.join("pending"),
+    )
+    .unwrap();
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        "&& git -C .. status",
+        "&& git -C ../app-flat/.. status",
+        "&& git -C ../link/../app-flat status",
+        "&& git -C '~/org/app-flat' status",
+        "&& git -C ../app-flat commit --allow-empty -m wip",
+        "&& git -C ../app-flat push origin flat",
+        "&& git -C ../app-flat -c core.fsmonitor=true status",
+        "&& git -C ../app-flat -C ../service status",
+        "&& git -C ../app-flat log -- ../service",
+        "&& git -C ../app-flat status && git status",
+        "&& git -C ../app-flat status && ls",
+        "&& touch ../app-flat/.gitattributes && git -C ../app-flat status",
+        "; git -C ../app-flat status",
+        "|| git -C ../app-flat status",
+        "&& mkdir -p ../app-flat/notes && git -C ../app-flat status",
+        "&& mkdir -p ~/org/app-flat/notes/keys && git -C ../app-flat status",
+        "&& mkdir -p ~/pending/notes && git -C ../app-flat status",
+        "&& mkdir -p ~/.ssh/keys && git -C ../app-flat status",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add} {tail}"));
+    }
+    assert_reviewed(
+        &home,
+        &repository,
+        "git worktree add -b flat ../link/flat origin/main && git -C ../link/flat status",
+    );
+}
+
 /// Without `-b` or `--detach`, `git worktree add <path> <branch>` checks an
 /// existing local branch out into the new checkout, running the same
 /// checkout as the `-b` form. The proof reads that branch's tip.
@@ -265,7 +333,8 @@ fn existing_branch_worktree_add_neighbours_stay_reviewed() {
 /// An unquoted `~/` destination is the shell's HOME, here the declared one,
 /// so it names the same checkout as the absolute spelling. Quoted, Git would
 /// create a literal `~` directory, and other users' homes, hidden leaves,
-/// existing paths and symlinked parents stay reviewed as before.
+/// existing paths and a symlinked parent leading somewhere unowned stay
+/// reviewed as before.
 #[test]
 fn home_relative_worktree_destinations_match_the_absolute_spelling() {
     let (_cleanup, home, repository) = repository("home-relative");
@@ -290,4 +359,62 @@ fn home_relative_worktree_destinations_match_the_absolute_spelling() {
     ] {
         assert_reviewed(&home, &repository, command);
     }
+}
+
+/// A `cd` spelled through a fixed symlinked parent, as `/tmp` is on macOS,
+/// enters the checkout Git creates at the physical path.
+#[test]
+fn cd_through_a_symlinked_temporary_parent_matches_the_checkout() {
+    let (_cleanup, home, repository) = repository("tmp-spelling");
+    let spelled_home = Path::new("/tmp")
+        .join(home.parent().unwrap().file_name().unwrap())
+        .join("home");
+    let leaf = format!("/tmp/guard-worktree-leaf-{}", std::process::id());
+    let in_home = spelled_home.join("app-tmp").display().to_string();
+    for command in [
+        format!("git worktree add --detach {in_home} origin/main && cd {in_home} && git log -1 --format='%H %s'"),
+        format!(
+            "git -C {} worktree add -q --detach {leaf} HEAD && cd {leaf} && git log -1 --format='%H %s'",
+            repository.display()
+        ),
+    ] {
+        assert_allowed(&home, &repository, &command);
+    }
+    assert_reviewed(
+        &home,
+        &repository,
+        &format!("git worktree add --detach {in_home} origin/main && cd {leaf} && git log -1"),
+    );
+}
+
+/// A `cd` through a link someone else could swap before it runs, or a
+/// destination through a fixed link that leads on through such a link,
+/// stays reviewed: the read could land where the proof never looked.
+#[test]
+fn swappable_links_on_the_way_to_the_checkout_stay_reviewed() {
+    let (_cleanup, home, repository) = repository("swappable-link");
+    let organization = repository.parent().unwrap();
+    // `elsewhere` is writable by every user without the sticky bit, so
+    // anyone could repoint a link in it.
+    let swappable = home.parent().unwrap().join("elsewhere").join("org");
+    std::os::unix::fs::symlink(organization, &swappable).unwrap();
+    std::os::unix::fs::symlink(&swappable, home.join("via")).unwrap();
+    let destination = organization.join("app-flat").display().to_string();
+    let add = format!("git worktree add -b flat {destination} origin/main");
+    assert_allowed(
+        &home,
+        &repository,
+        &format!("{add} && cd {destination} && git log -1"),
+    );
+    let swapped = swappable.join("app-flat").display().to_string();
+    assert_reviewed(
+        &home,
+        &repository,
+        &format!("{add} && cd {swapped} && git log -1"),
+    );
+    assert_reviewed(
+        &home,
+        &repository,
+        "git worktree add -b flat ~/via/app-flat origin/main",
+    );
 }

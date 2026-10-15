@@ -20,7 +20,6 @@ from codex_plugin_scanner.guard.adapters.devin_config import (
 )
 from codex_plugin_scanner.guard.adapters.devin_hooks import (
     devin_hook_response_from_guard,
-    devin_hook_should_block,
     emit_devin_hook_response,
     prepare_devin_hook_payload,
 )
@@ -782,11 +781,6 @@ class TestDevinHookResponses:
         emit_devin_hook_response(policy_action="block", reason="no", event_name="PreToolUse", output_stream=stream)
         response = json.loads(stream.getvalue())
         assert response["decision"] == "block"
-
-    def test_should_block_classification(self) -> None:
-        for action in ("review", "require-reapproval", "sandbox-required", "block"):
-            assert devin_hook_should_block(policy_action=action) is True
-        assert devin_hook_should_block(policy_action="allow") is False
 
 
 class TestDevinManagedMarker:

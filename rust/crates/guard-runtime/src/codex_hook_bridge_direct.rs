@@ -36,7 +36,7 @@ const NOTIFICATION: &str = "Notification";
 /// the edge's own response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DirectHarness {
-    name: &'static str,
+    pub(crate) name: &'static str,
     /// `0` turns the direct path off; the daemon then answers every hook.
     switch: &'static str,
 }
@@ -86,7 +86,7 @@ fn hex_value(byte: u8) -> Option<u8> {
 
 /// `unquote(text.replace("+", " "))`. Python replaces bytes that are not
 /// UTF-8; this returns `None` instead, so such a query takes the daemon path.
-fn unquote_plus(text: &str) -> Option<String> {
+pub(crate) fn unquote_plus(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -432,6 +432,30 @@ pub(crate) fn grok_direct_answer(
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
     let request = grok_direct_request(guard_home, home, data, remaining(deadline))?;
+    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response(&output)
+}
+
+/// The harness response a live resident answered for `data` as `harness`
+/// would send it from `workspace`, or `None` when no resident answered.
+/// The contained-workspace sink asks this way for the receipt it runs under.
+#[cfg(unix)]
+pub(crate) fn resident_hook_answer(
+    harness: &str,
+    guard_home: &Path,
+    home: &Path,
+    workspace: &str,
+    data: &str,
+    deadline: Instant,
+) -> Option<String> {
+    let request = request_body(
+        harness,
+        guard_home,
+        Some(home),
+        Some(workspace.to_owned()),
+        data,
+        remaining(deadline),
+    )?;
     let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
     answered_response(&output)
 }

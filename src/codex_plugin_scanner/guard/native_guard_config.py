@@ -1,9 +1,10 @@
-"""Thin client for the native effective Guard configuration loader.
+"""Thin client for the native Guard configuration loader and writer.
 
 Rust reads the Guard home and workspace files, composes the managed policy this
-client resolved, and coerces every value. This module only spawns the loader,
-fails closed when it is unavailable, and keeps a stat-validated memo so an
-unchanged configuration is not reloaded.
+client resolved, and coerces every value. It also validates and writes the
+dashboard settings, the update channel and the settings reset. This module only
+spawns the runtime, fails closed when it is unavailable, and keeps a
+stat-validated memo so an unchanged configuration is not reloaded.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ GUARD_CONFIG_LOAD_COMMAND = "guard-config-load"
 GUARD_CONFIG_LOAD_FEATURE = "native-guard-config-load-v1"
 GUARD_CONFIG_LOAD_SCHEMA = "guard-config-load.v1"
 GUARD_CONFIG_LOAD_TIMEOUT_SECONDS = 10.0
+GUARD_CONFIG_UPDATE_COMMAND = "guard-config-update"
+GUARD_CONFIG_UPDATE_FEATURE = "native-guard-config-update-v1"
+GUARD_CONFIG_UPDATE_SCHEMA = "guard-config-update.v1"
 # Home, two workspace files and a managed policy are each bounded at 1 MiB, so
 # the composed response may exceed the default one-shot output allowance.
 GUARD_CONFIG_LOAD_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
@@ -119,7 +123,7 @@ def _request_text(
     return json.dumps(request, sort_keys=True, separators=(",", ":"))
 
 
-def _runtime_identity(deadline_monotonic: float) -> tuple[Path, str]:
+def _runtime_identity(deadline_monotonic: float, feature: str = GUARD_CONFIG_LOAD_FEATURE) -> tuple[Path, str]:
     """Return the capable runtime's path and digest, or fail closed."""
 
     from .native_runtime import native_runtime_status
@@ -130,13 +134,13 @@ def _runtime_identity(deadline_monotonic: float) -> tuple[Path, str]:
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
-        or GUARD_CONFIG_LOAD_FEATURE not in status.capabilities.features
+        or feature not in status.capabilities.features
     ):
         raise ConfigFileTrustError("native_guard_config_unavailable")
     return status.identity.path, status.identity.sha256
 
 
-def _spawn(request_text: str, path: Path, deadline_monotonic: float) -> dict[str, Any]:
+def _run(command: str, request_text: str, path: Path, deadline_monotonic: float) -> dict[str, Any]:
     from .native_runtime import _run_native_process
 
     remaining = deadline_monotonic - time.monotonic()
@@ -144,7 +148,7 @@ def _spawn(request_text: str, path: Path, deadline_monotonic: float) -> dict[str
         raise ConfigFileTrustError("native_guard_config_unavailable")
     output = _run_native_process(
         path,
-        (GUARD_CONFIG_LOAD_COMMAND, "--stdin"),
+        (command, "--stdin"),
         input_text=request_text,
         timeout_seconds=remaining,
         output_limit=GUARD_CONFIG_LOAD_OUTPUT_LIMIT_BYTES,
@@ -157,13 +161,62 @@ def _spawn(request_text: str, path: Path, deadline_monotonic: float) -> dict[str
         raise ConfigFileTrustError("native_guard_config_invalid") from error
     if not isinstance(response, dict):
         raise ConfigFileTrustError("native_guard_config_invalid")
+    return cast("dict[str, Any]", response)
+
+
+def _raise_failure(response: Mapping[str, object]) -> None:
+    reason = response.get("error")
+    raise ConfigFileTrustError(reason if isinstance(reason, str) and reason else "native_guard_config_invalid")
+
+
+def _spawn(request_text: str, path: Path, deadline_monotonic: float) -> dict[str, Any]:
+    response = _run(GUARD_CONFIG_LOAD_COMMAND, request_text, path, deadline_monotonic)
     if response.get("ok") is not True:
-        reason = response.get("error")
-        raise ConfigFileTrustError(reason if isinstance(reason, str) and reason else "native_guard_config_invalid")
+        _raise_failure(response)
     config = response.get("config")
     if not isinstance(config, dict):
         raise ConfigFileTrustError("native_guard_config_invalid")
     return cast("dict[str, Any]", config)
+
+
+def update_native_guard_config(
+    guard_home: Path,
+    kind: str,
+    value: object,
+    *,
+    managed: Mapping[str, object] | None,
+    cloud_sync_entitled: bool = False,
+) -> dict[str, Any] | None:
+    """Validate and write one settings change, update channel or reset natively.
+
+    Returns the posture state before a settings write, ``None`` otherwise.
+    Raises ``ValueError`` with the user-facing message for an invalid change.
+    """
+
+    request_text = json.dumps(
+        {
+            "schema": GUARD_CONFIG_UPDATE_SCHEMA,
+            "guard_home": str(guard_home),
+            "kind": kind,
+            "value_text": json.dumps(value),
+            "managed": dict(managed) if managed is not None else None,
+            "cloud_sync_entitled": cloud_sync_entitled,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    deadline = time.monotonic() + GUARD_CONFIG_LOAD_TIMEOUT_SECONDS
+    path, _runtime_sha = _runtime_identity(deadline, GUARD_CONFIG_UPDATE_FEATURE)
+    response = _run(GUARD_CONFIG_UPDATE_COMMAND, request_text, path, deadline)
+    if response.get("ok") is not True:
+        message = response.get("invalid")
+        if isinstance(message, str) and message:
+            raise ValueError(message)
+        _raise_failure(response)
+    previous = response.get("previous")
+    if previous is not None and not isinstance(previous, dict):
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    return cast("dict[str, Any] | None", previous)
 
 
 def load_native_guard_config(

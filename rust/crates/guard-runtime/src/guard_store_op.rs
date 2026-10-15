@@ -285,7 +285,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "read_local_cli_command_catalog"
         | "read_local_cli_command_states"
         | "list_cached_advisories"
-        | "policy_source_contexts" => Kind::Read,
+        | "policy_source_contexts"
+        | "matching_native_review_block" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -453,6 +454,7 @@ fn dispatch(
         "cache_advisories" => advisory_cache::cache(connection, args),
         "list_cached_advisories" => advisory_cache::list(connection, args),
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
+        "matching_native_review_block" => native_review_consume::matching_block(connection, args),
         "add_native_review_approval_request" => {
             add_native_review_approval_request(connection, source, args)
         }

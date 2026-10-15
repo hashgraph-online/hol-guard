@@ -150,9 +150,6 @@ class StoreApprovalQueriesMixin:
         value = row["oldest_created_at"]
         return str(value) if isinstance(value, str) and value else None
 
-    def count_pending_requests(self, *, harness: str | None = None, search: str | None = None) -> int:
-        return self.count_approval_requests(status="pending", harness=harness, search=search)
-
     def clear_approval_requests(self, *, harness: str | None = None, status: str | None = None) -> int:
         conditions: list[str] = []
         params: list[object] = []

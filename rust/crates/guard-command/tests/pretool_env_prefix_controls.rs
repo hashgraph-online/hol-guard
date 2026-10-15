@@ -225,3 +225,43 @@ fn a_substituted_setting_is_named_with_a_safe_alternative() {
         );
     }
 }
+
+#[test]
+fn a_credential_setting_is_named_with_a_safe_alternative() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-credential-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("project/scripts")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::write(root.join("project/scripts/report.ts"), "console.log(1)\n").unwrap();
+    for (command, setting) in [
+        ("REPORT_API_KEY=fixture-value ls", "REPORT_API_KEY"),
+        (
+            "REPORT_API_KEY=fixture-value REPORT_ID=7 bun scripts/report.ts --json",
+            "REPORT_API_KEY",
+        ),
+        (
+            "REPORT_ID=7 SERVICE_TOKEN=fixture-value node scripts/report.ts",
+            "SERVICE_TOKEN",
+        ),
+        ("env SERVICE_TOKEN=fixture-value ls", "SERVICE_TOKEN"),
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_command_extension_evaluation_failed"),
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result.reason.contains(setting)
+                && result.reason.contains("passes a credential")
+                && result.reason.contains("ask the user to run the command")
+                && !result.reason.contains("fixture-value")
+                && !result.reason.contains("hol-guard doctor"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}

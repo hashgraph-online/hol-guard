@@ -71,7 +71,7 @@ fn policy_from_response(response: &[(String, PyVal)]) -> String {
 }
 
 /// `hermes_bridge_response(daemon_response, event_name=...)`.
-pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)]) -> Rendered {
+pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)], unmap: bool) -> Rendered {
     let policy_action = policy_from_response(daemon_response);
     let reason = reason_from_response(daemon_response);
     let decision = if matches!(policy_action.as_str(), "allow" | "warn") {
@@ -84,5 +84,5 @@ pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)]) -> Ren
         ("reason".to_owned(), PyVal::Str(reason)),
     ];
     let blocks = BLOCK_ACTIONS.contains(&policy_action.as_str());
-    rendered(&payload, String::new(), if blocks { 2 } else { 0 })
+    rendered(&payload, String::new(), if blocks { 2 } else { 0 }, unmap)
 }

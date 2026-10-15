@@ -94,7 +94,7 @@ fn account_home() -> Option<String> {
 /// the Git path is writable by this account. `getgroups` has no safe binding
 /// on Apple targets, so the system `id` reports them.
 #[cfg(unix)]
-fn groups() -> Option<Vec<u32>> {
+pub(crate) fn groups() -> Option<Vec<u32>> {
     let output = std::process::Command::new("/usr/bin/id")
         .arg("-G")
         .env_clear()
@@ -116,7 +116,7 @@ fn groups() -> Option<Vec<u32>> {
 }
 
 #[cfg(not(unix))]
-fn groups() -> Option<Vec<u32>> {
+pub(crate) fn groups() -> Option<Vec<u32>> {
     None
 }
 

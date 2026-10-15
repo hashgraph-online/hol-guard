@@ -214,11 +214,11 @@ fn decide(
     // One read snapshot for the store checks and every lookup they gate, so a
     // row or state the daemon commits between them cannot slip past.
     let snapshot = connection
-        .as_ref()
+        .as_deref()
         .map(Connection::unchecked_transaction)
         .transpose()
         .map_err(|_| store::STORE_UNREADABLE)?;
-    let mut resolved = resolve(request, &admitted, connection.as_ref())?;
+    let mut resolved = resolve(request, &admitted, connection.as_deref())?;
     drop(snapshot);
     let proxy = crate::mcp_tool_policy_proxy::proxy_payload(
         &McpToolPolicyProxyInputV1 {
@@ -326,7 +326,7 @@ fn resolve(
         .exact_action_control_digest
         .clone()
         .ok_or(BINDING_INCOMPLETE)?;
-    let view = view::harness_view(binding.mcp_relay.as_ref(), &request.build.harness)?;
+    let view = view::bound_harness_view(binding, &request.build.harness)?;
     let saved = match connection {
         Some(connection) => store::saved(connection, binding, &request.guard_home)?,
         None => None,

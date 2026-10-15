@@ -53,6 +53,7 @@ use crate::claude_hook_bridge::home_directory;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_session_start_contract::{contract, settings_current, DaemonHookTemplate};
 use crate::claude_session_start_live::verified_daemon_url;
+use crate::hook_bridge_fallback::{self, Fallback};
 use crate::hook_env_stamp::json_string;
 
 /// argv mode and marker that select this lane, after `claude-hook-bridge`.
@@ -107,6 +108,17 @@ fn object(text: &str) -> Option<Map<String, Value>> {
 /// hands off to Python.
 pub(crate) fn fallback_command(text: &str) -> Option<Vec<String>> {
     strings(object(text)?.get("fallback_command")).filter(|argv| !argv.is_empty())
+}
+
+/// The Guard home holding the bridge's absolute state path, for the
+/// fallback log.
+fn guard_home(text: &str) -> Option<PathBuf> {
+    let payload = object(text)?;
+    let state_path = Path::new(payload.get("bridge_config")?.get("state_path")?.as_str()?);
+    state_path
+        .is_absolute()
+        .then(|| state_path.parent().map(Path::to_path_buf))
+        .flatten()
 }
 
 pub(crate) fn parse_config(text: &str) -> Option<SessionStartConfig> {
@@ -271,7 +283,12 @@ pub(crate) fn run(config_text: &str) -> i32 {
                 Err(_) => 1,
             }
         }
-        Err(_) => hand_off(&fallback),
+        Err(_) => {
+            if let Some(home) = guard_home(config_text) {
+                hook_bridge_fallback::note(&home, "claude-code", Fallback::ContractDrift);
+            }
+            hand_off(&fallback)
+        }
     }
 }
 

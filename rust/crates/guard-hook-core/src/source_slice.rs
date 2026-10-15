@@ -2,10 +2,13 @@
 //!
 //! Oh My Pi's `read` returns a selected range as `N:content` rows under a
 //! `[path#hash]` header, with collapsed regions (`N-M:` rows), omission rows
-//! (`…`) and notes. A secret elsewhere in the file is not in such a slice, so
-//! when the whole file matches a secret rule the review scans only the lines
-//! the slice covers. Every numbered row must equal that line of the current
-//! file; stale or invented output keeps the whole-file decision.
+//! (`…`) and notes. It also anchors the range with the first and last line
+//! of the enclosing block, set apart by omission rows. A secret elsewhere in
+//! the file is not in such a slice, so when the whole file matches a secret
+//! rule the review scans only the lines the slice covers, one run of
+//! consecutive lines at a time; the omitted lines between runs are not shown.
+//! Every numbered row must equal that line of the current file; stale or
+//! invented output keeps the whole-file decision.
 //!
 //! A rule can match across lines: a credential name, its separator and its
 //! value may be split by any run of whitespace, blank lines included. So a
@@ -17,20 +20,14 @@
 
 use std::ops::Range;
 
-/// Lines above a slice that are scanned with it.
+/// Lines above each run of a slice that are scanned with it.
 pub(crate) const CONTEXT_LINES: usize = 3;
 
-/// The first and last file line (1-based, inclusive) a slice covers, when
-/// every numbered row matches the file.
-pub(crate) fn covered_range(output: &str, file: &str) -> Option<(usize, usize)> {
+/// The runs of consecutive file lines (1-based, inclusive, ascending) a
+/// slice covers, when every numbered row matches the file.
+pub(crate) fn covered_runs(output: &str, file: &str) -> Option<Vec<(usize, usize)>> {
     let lines: Vec<&str> = file.lines().collect();
-    let mut covered: Option<(usize, usize)> = None;
-    let mut extend = |first: usize, last: usize| {
-        covered = Some(match covered {
-            Some((low, high)) => (low.min(first), high.max(last)),
-            None => (first, last),
-        });
-    };
+    let mut covered: Vec<(usize, usize)> = Vec::new();
     for row in output.lines() {
         let Some((label, content)) = row.split_once(':') else {
             continue;
@@ -43,7 +40,7 @@ pub(crate) fn covered_range(output: &str, file: &str) -> Option<(usize, usize)> 
             if first > last || last > lines.len() {
                 return None;
             }
-            extend(first, last);
+            covered.push((first, last));
             continue;
         }
         let Some(number) = line_number(label) else {
@@ -53,9 +50,17 @@ pub(crate) fn covered_range(output: &str, file: &str) -> Option<(usize, usize)> 
         if !shows(content, line) {
             return None;
         }
-        extend(number, number);
+        covered.push((number, number));
     }
-    covered
+    covered.sort_unstable();
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    for (first, last) in covered {
+        match runs.last_mut() {
+            Some(run) if first <= run.1 + 1 => run.1 = run.1.max(last),
+            _ => runs.push((first, last)),
+        }
+    }
+    (!runs.is_empty()).then_some(runs)
 }
 
 /// Whether a private key block overlaps lines `first..=last`.
@@ -138,11 +143,10 @@ mod tests {
     #[test]
     fn numbered_rows_must_repeat_the_file() {
         assert_eq!(
-            covered_range("[f.sh#AB12]\n2:two\n3:three\n\n[2 more lines]", FILE),
-            Some((2, 3))
+            covered_runs("[f.sh#AB12]\n2:two\n3:three\n\n[2 more lines]", FILE),
+            Some(vec![(2, 3)])
         );
-        assert_eq!(covered_range("4:fo…\n5-6:  { … }", FILE), Some((4, 6)));
-        assert_eq!(covered_range("1:one\n…\n6:six", FILE), Some((1, 6)));
+        assert_eq!(covered_runs("4:fo…\n5-6:  { … }", FILE), Some(vec![(4, 6)]));
         for output in [
             "2:tw0",
             "2:two\n3:four",
@@ -151,9 +155,27 @@ mod tests {
             "1:on…e",
             "4-9: …",
         ] {
-            assert_eq!(covered_range(output, FILE), None, "{output:?}");
+            assert_eq!(covered_runs(output, FILE), None, "{output:?}");
         }
-        assert_eq!(covered_range("[f.sh#AB12]\nno rows", FILE), None);
+        assert_eq!(covered_runs("[f.sh#AB12]\nno rows", FILE), None);
+    }
+
+    #[test]
+    fn rows_set_apart_by_omissions_are_separate_runs() {
+        // The enclosing block's first and last lines anchor the range.
+        assert_eq!(
+            covered_runs("1:one\n…\n3:three\n4:four\n…\n6:six", FILE),
+            Some(vec![(1, 1), (3, 4), (6, 6)])
+        );
+        assert_eq!(
+            covered_runs("1:one\n…\n6:six", FILE),
+            Some(vec![(1, 1), (6, 6)])
+        );
+        // Adjacent and overlapping rows join one run, in any order.
+        assert_eq!(
+            covered_runs("5:five\n2:two\n3-4:  …\n4:four", FILE),
+            Some(vec![(2, 5)])
+        );
     }
 
     #[test]

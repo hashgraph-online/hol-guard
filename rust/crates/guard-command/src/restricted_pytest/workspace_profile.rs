@@ -32,6 +32,10 @@ const PRIVILEGE_NAMES: &[&str] = &[
     "killall",
     "pkill",
 ];
+/// The libinfo endpoint Apple's own `system.sb` grants for user and group
+/// lookups. Credential, keychain and directory-administration services stay
+/// unreachable.
+pub(super) const USER_DATABASE_SERVICE: &str = "com.apple.system.opendirectoryd.libinfo";
 /// Root-level links (`/var` -> `/private/var`) that system tools name.
 /// xcode-select reads `/var/select/developer_dir`; without metadata on the
 /// link it fails with EPERM instead of falling back to its default.
@@ -295,6 +299,18 @@ pub(super) fn compose(
     roots.extend(extra_reads.iter().cloned());
     let mut metadata = vec![PathBuf::from("/")];
     metadata.extend(ancestor_paths(&roots));
+    // Bun's resolver lists every directory above the working directory while
+    // it looks for project files and fails outright when it cannot. A listing
+    // shows names, never contents, and the credential denials below still
+    // cover any ancestor they name.
+    let mut listed: Vec<PathBuf> = workspace
+        .ancestors()
+        .skip(1)
+        .map(Path::to_path_buf)
+        .collect();
+    if listed.is_empty() {
+        listed.push(PathBuf::from("/"));
+    }
     metadata.extend(existing(ROOT_LINKS));
     let mut files = files.to_vec();
     files.extend(existing(TOOLCHAIN_FILES));
@@ -319,7 +335,13 @@ pub(super) fn compose(
         format!("(deny process-exec {})", filter(&privileged, "literal")),
         "(allow signal (target self) (target children))".to_owned(),
         "(allow sysctl-read)".to_owned(),
-        "(allow file-read-data (literal \"/\"))".to_owned(),
+        // `getpwuid`, `getgrgid` and `getgrouplist` reach the user database
+        // through this one opendirectoryd endpoint; without it `id`, Python's
+        // `pwd`, Go's `os/user`, ssh and git cannot name the current user.
+        // It answers the same account queries any process can make, and no
+        // other mach service is reachable.
+        format!("(allow mach-lookup (global-name \"{USER_DATABASE_SERVICE}\"))"),
+        format!("(allow file-read-data {})", filter(&listed, "literal")),
         format!(
             "(allow file-read-metadata {})",
             filter(&metadata, "literal")

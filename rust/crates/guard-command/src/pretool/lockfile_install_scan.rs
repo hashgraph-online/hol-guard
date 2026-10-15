@@ -67,15 +67,8 @@ pub(super) fn directory_ready(
     {
         return false;
     }
-    let (lockfile, absent): (&str, &[&str]) = match manager {
-        Manager::Bun => ("bun.lock", &["bun.lockb"]),
-        Manager::Pnpm => ("pnpm-lock.yaml", &[".pnpmfile.cjs", ".pnpmfile.mjs"]),
-        Manager::Npm => ("package-lock.json", &["npm-shrinkwrap.json"]),
-    };
-    let lockfile = directory.join(lockfile);
-    if !absent.iter().all(|name| missing(&directory.join(name)))
-        || !regular(&lockfile, MAX_LOCKFILE_BYTES)
-    {
+    let lockfile = directory.join(lockfile_name(manager));
+    if !companions_absent(manager, directory) || !regular(&lockfile, MAX_LOCKFILE_BYTES) {
         return false;
     }
     let Ok(text) = fs::read_to_string(&lockfile) else {
@@ -106,6 +99,61 @@ pub(super) fn directory_ready(
         }
         Manager::Npm => package_lock_registry_only(&text, deadline),
     }
+}
+
+/// The lockfile each manager installs from.
+fn lockfile_name(manager: Manager) -> &'static str {
+    match manager {
+        Manager::Bun => "bun.lock",
+        Manager::Pnpm => "pnpm-lock.yaml",
+        Manager::Npm => "package-lock.json",
+    }
+}
+
+/// Whether `directory` lacks every file that would change what `manager`
+/// installs from its lockfile: Bun's binary lockfile, a pnpmfile, or npm's
+/// shrinkwrap.
+fn companions_absent(manager: Manager, directory: &Path) -> bool {
+    let absent: &[&str] = match manager {
+        Manager::Bun => &["bun.lockb"],
+        Manager::Pnpm => &[".pnpmfile.cjs", ".pnpmfile.mjs"],
+        Manager::Npm => &["npm-shrinkwrap.json"],
+    };
+    absent.iter().all(|name| missing(&directory.join(name)))
+}
+
+/// When `directory` has no lockfile for `manager` but holds exactly one
+/// other manager's lockfile, a sentence naming the no-script install that
+/// fits it. An agent that guessed the wrong package manager can then restore
+/// dependencies instead of stopping on the review.
+pub(super) fn present_lockfile_hint(manager: Manager, directory: &Path) -> Option<String> {
+    if !missing(&directory.join(lockfile_name(manager))) {
+        return None;
+    }
+    let present: Vec<Manager> = [Manager::Bun, Manager::Pnpm, Manager::Npm]
+        .into_iter()
+        .filter(|other| {
+            *other != manager && regular(&directory.join(lockfile_name(*other)), MAX_LOCKFILE_BYTES)
+        })
+        .collect();
+    let [other] = present.as_slice() else {
+        return None;
+    };
+    // A companion file sends the named install to review too, so naming it
+    // would only lead to a second hold.
+    if !companions_absent(*other, directory) {
+        return None;
+    }
+    let form = match other {
+        Manager::Bun => "bun install --frozen-lockfile --ignore-scripts",
+        Manager::Pnpm => "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile",
+        Manager::Npm => "npm ci --ignore-scripts",
+    };
+    Some(format!(
+        "This folder has no `{}`. It has `{}`, so the install that fits it is `{form}`.",
+        lockfile_name(manager),
+        lockfile_name(*other),
+    ))
 }
 
 fn missing(path: &Path) -> bool {

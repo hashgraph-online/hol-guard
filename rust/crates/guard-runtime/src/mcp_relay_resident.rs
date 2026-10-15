@@ -103,6 +103,11 @@ pub(crate) struct ResidentRelayAuthority {
     commits: Commits,
     /// Asks the daemon to prepare the lane when a call is deferred.
     kick: Option<Box<dyn crate::mcp_relay_lane::LaneKick>>,
+    /// The lane was not ready at startup and the first call has not waited
+    /// for it yet.
+    warming: bool,
+    /// The relayed catalog's report, until the resident records it.
+    report: Option<report::CatalogReport>,
 }
 
 /// What a commit request did with one ticket.
@@ -160,6 +165,8 @@ impl ResidentRelayAuthority {
             resident: None,
             commits: Commits::default(),
             kick: None,
+            warming: false,
+            report: None,
         }
     }
 
@@ -240,6 +247,7 @@ impl RelayAuthority for ResidentRelayAuthority {
             return no_decision();
         };
         let guard_home = PathBuf::from(&facts.guard_home);
+        self.warm_up();
         let mut output = self.exchange(&guard_home, &payload);
         if reply_of(output.as_deref()).is_none() && self.rekick(output.as_deref()) {
             output = self.exchange(&guard_home, &payload);
@@ -327,6 +335,11 @@ impl RelayAuthority for ResidentRelayAuthority {
         let mut commits = std::mem::take(&mut self.commits);
         commits.settle(|ticket| self.commit(ticket));
         self.commits = commits;
+        self.poll_report();
+    }
+
+    fn catalog_complete(&mut self, tools: &[Value]) {
+        self.report_server(tools);
     }
 }
 
@@ -445,6 +458,8 @@ mod defer;
 mod lane;
 #[path = "mcp_relay_python_wire.rs"]
 mod python_wire;
+#[path = "mcp_relay_resident_report.rs"]
+mod report;
 #[path = "mcp_relay_resident_request.rs"]
 mod request;
 use python_wire::python_canonical;

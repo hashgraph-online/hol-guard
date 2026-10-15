@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
-from codex_plugin_scanner.guard.models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope
+from codex_plugin_scanner.guard.models import DECISION_SCOPE_VALUES, DecisionScope
 
 GUARD_PRODUCT_MODEL_VERSION = "guard-product-model.v1"
 
@@ -365,36 +365,3 @@ _STABLE_ID_PATTERN = re.compile(
     r"^(?:(act|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{32}|[0-9a-f]{64}|guard-receipt-[0-9a-f]{8}-"
     r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )
-
-
-def export_product_model_v1() -> dict[str, object]:
-    """Export JSON-compatible model data for cross-repo parity tests."""
-
-    return {
-        "version": GUARD_PRODUCT_MODEL_VERSION,
-        "personas": list(PERSONA_VALUES),
-        "activation_stages": list(ACTIVATION_STAGE_VALUES),
-        "guard_actions": list(GUARD_ACTION_VALUES),
-        "decision_scopes": list(DECISION_SCOPE_VALUES),
-        "canonical_harnesses": list(CANONICAL_HARNESS_VALUES),
-        "supported_harnesses": list(SUPPORTED_HARNESS_VALUES),
-        "action_categories": list(ACTION_CATEGORY_VALUES),
-        "severity_labels": SEVERITY_LABELS,
-        "manager_fields": list(MANAGER_FIELD_VALUES),
-        "vibe_coder_fields": list(VIBE_CODER_FIELD_VALUES),
-        "paid_value_fields": list(PAID_VALUE_FIELD_VALUES),
-        "redaction_forbidden_fields": list(REDACTION_FORBIDDEN_FIELD_VALUES),
-        "stable_id_prefixes": STABLE_ID_PREFIXES,
-        "settings_groups": list(SETTINGS_GROUP_VALUES),
-        "external_intel_sources": list(EXTERNAL_INTEL_SOURCE_VALUES),
-        "runtime_models": {key: model.to_dict() for key, model in HERMES_OPENCLAW_RUNTIME_MODELS.items()},
-        "billing_plans": list(BILLING_PLAN_VALUES),
-        "affiliate_fields": list(AFFILIATE_FIELD_VALUES),
-        "seo_content_types": list(SEO_CONTENT_TYPE_VALUES),
-        "funnel_events": list(FUNNEL_EVENT_VALUES),
-        "event_privacy_tiers": list(EVENT_PRIVACY_TIERS),
-        "copy_lint_banned_terms": list(COPY_LINT_BANNED_TERMS),
-        "brand_token_keys": list(BRAND_TOKEN_KEYS),
-        "local_routes": [route.to_dict() for route in LOCAL_ROUTE_OWNERSHIP],
-        "local_apis": [api.to_dict() for api in LOCAL_API_OWNERSHIP],
-    }

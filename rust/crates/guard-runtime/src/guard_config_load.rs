@@ -129,7 +129,7 @@ fn action_text(value: Option<&Value>, fallback: GuardAction) -> &'static str {
 }
 
 /// Derive every field of the loaded configuration from the composed payload.
-fn coerce_config(merged: &Map<String, Value>, managed: Option<&ManagedInput>) -> Value {
+pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&ManagedInput>) -> Value {
     let get = |key: &str| merged.get(key);
     let loaded_mode = coerce::loaded_mode(get("mode"), "prompt");
     let security_level = base::coerce_security_level(get("security_level"));

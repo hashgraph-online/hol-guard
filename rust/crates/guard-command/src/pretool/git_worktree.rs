@@ -35,7 +35,7 @@ pub(super) fn worktree_add_execution_free(
     if !destination.starts_with(&home)
         && !destination
             .parent()
-            .is_some_and(|parent| super::git_routes::owned_temporary_directory(parent, context))
+            .is_some_and(|parent| super::git_routes::temporary_checkout_parent(parent, context))
     {
         return Some(false);
     }

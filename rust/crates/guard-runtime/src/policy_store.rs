@@ -165,6 +165,10 @@ struct PolicyState {
     pub(super) invalid_on_startup: bool,
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
     pub(super) business_policy_floor: Option<String>,
+    /// The snapshot `validate_v3` last accepted and the generation floor it
+    /// was checked against. Everything it checks but the clock is fixed for
+    /// an `Arc` and floor, so a request re-checks only expiry against it.
+    pub(super) verified: Option<(Arc<AdmittedPolicySnapshot>, u64)>,
 }
 
 struct LoadedAuthority {
@@ -304,6 +308,7 @@ impl PolicySnapshotStore {
                 invalid_on_startup: loaded.invalid_on_startup || admission_failed,
                 command_control_floor: loaded.command_control_floor,
                 business_policy_floor: loaded.business_policy_floor,
+                verified: None,
             }),
             direct_lane: Mutex::new(None),
             direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue::default(),
@@ -468,6 +473,7 @@ impl PolicySnapshotStore {
         state.generation_floor = admitted.generation;
         state.policy_digest = Some(admitted.policy_digest.clone());
         state.snapshot = Some(Arc::clone(&admitted));
+        state.verified = None;
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
         state.command_control_floor = control_floor;

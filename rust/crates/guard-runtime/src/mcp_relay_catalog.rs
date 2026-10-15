@@ -84,6 +84,11 @@ impl RelayCatalog {
         }
     }
 
+    /// Every advertised definition, once a listing made the catalog whole.
+    pub(crate) fn complete_tools(&self) -> Option<Vec<Value>> {
+        (self.state == "complete").then(|| self.catalog.values().cloned().collect())
+    }
+
     /// The advertised definition of `name` (`self._tool_catalog.get(name)`).
     pub(crate) fn definition(&self, name: &str) -> Option<&Value> {
         self.catalog.get(name)

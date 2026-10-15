@@ -159,10 +159,6 @@ def _supports_discovery(status: NativeRuntimeStatus) -> bool:
     return _RESIDENT_PROTOCOL_FEATURE in features and DISCOVERY_NATIVE_FEATURE in features
 
 
-def discovery_native_available() -> bool:
-    return _supports_discovery(native_runtime_status())
-
-
 def fetch_discovery_snapshot(
     *,
     opener: DiscoveryOpener | None = None,
@@ -392,7 +388,6 @@ __all__ = [
     "MAX_DISCOVERY_REQUEST_BYTES",
     "MAX_DISCOVERY_RESPONSE_BYTES",
     "DiscoveryReadError",
-    "discovery_native_available",
     "discovery_placement_projection",
     "discovery_rollout_enabled",
     "fetch_discovery_snapshot",

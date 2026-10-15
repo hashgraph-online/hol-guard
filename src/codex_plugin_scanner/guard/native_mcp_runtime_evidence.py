@@ -82,12 +82,6 @@ def command_text_key(key: str) -> bool:
     return key in _COMMAND_TEXT_KEYS
 
 
-def runtime_action_key(key: str) -> bool:
-    """Whether the standalone ``runtime_action`` subop records this key as a path."""
-    lowered = key.lower()
-    return any(token in lowered for token in _PATH_TOKENS)
-
-
 def argument_entries(
     arguments: object,
     *,
@@ -201,28 +195,6 @@ def _request(subop: str, guard_home: Path | None, **fields: Any) -> dict[str, An
         )
     native_record_resident_success(status.identity.sha256, guard_home)
     return payload["payload"]
-
-
-def native_runtime_action_record(
-    *,
-    tool_description: str | None,
-    arguments: list[list[Any]] | None,
-    risk_categories: Sequence[str],
-    envelope: dict[str, object] | None,
-    guard_home: Path | None = None,
-) -> dict[str, object] | None:
-    result = _request(
-        "runtime_action",
-        guard_home,
-        tool_description=tool_description,
-        arguments=arguments,
-        risk_categories=list(risk_categories),
-        envelope=envelope,
-    )
-    record = result.get("runtime_action")
-    if "runtime_action" not in result or not (record is None or isinstance(record, dict)):
-        raise NativeMcpRuntimeEvidenceError(_INVALID_RESULT)
-    return record
 
 
 def native_receipt_evidence(

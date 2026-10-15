@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -36,6 +37,8 @@ from pathlib import Path
 
 import pytest
 
+from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
+from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from codex_plugin_scanner.guard.adapters import codex_contained_tests
 
 _GIT_IDENTITY = {
@@ -86,6 +89,7 @@ class BenignFixture:
     tmp_worktree: Path
     org: Path
     tmp_org: Path
+    scratch: Path
 
     def cleanup(self) -> None:
         """Remove the directories this fixture created outside its own root."""
@@ -93,6 +97,7 @@ class BenignFixture:
         shutil.rmtree(self.contained_requests, ignore_errors=True)
         shutil.rmtree(self.tmp_worktree.parent, ignore_errors=True)
         shutil.rmtree(self.tmp_org.parent, ignore_errors=True)
+        shutil.rmtree(self.scratch, ignore_errors=True)
 
     @property
     def contained_requests(self) -> Path:
@@ -112,6 +117,9 @@ class BenignFixture:
             "${TMP_ORG}": str(self.tmp_org),
             "${TMP_ORG_WT}": str(self.tmp_org.parent / "app-followup"),
             "${TMP_REMOTE}": str(self.tmp_org.parent / "remote" / "app.git"),
+            # The live Gauntlet's fixture root and its fresh scratch leaf directly in /tmp.
+            "${GAUNTLET_ROOT}": str(self.tmp_org.parent),
+            "${SCRATCH}": str(self.scratch),
         }
 
     def cwd(self, name: str) -> Path:
@@ -268,7 +276,9 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / "src" / "password-reset-email.tsx", "export const Email = () => null;\n")
     _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
     _write(parent / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic skill body.\n")
-    _write(parent / ".gitignore", "node_modules/\n")
+    # Git treats a link as a file, so `node_modules/` alone leaves the borrowed
+    # `dashboard/node_modules` link below unignored.
+    _write(parent / ".gitignore", "node_modules/\ndashboard/node_modules\n")
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
@@ -284,9 +294,12 @@ def build_fixture(root: Path) -> BenignFixture:
     _node_toolchain(parent / "dashboard")
     _write(worktree / "dashboard" / "package.json", (parent / "dashboard" / "package.json").read_text())
     (worktree / "dashboard" / "node_modules").symlink_to(parent / "dashboard" / "node_modules")
+    # The live Gauntlet's placeholder docs and field-copy source, read by its shell cases.
+    _write(worktree / "docs" / "review-notes.md", REVIEW_NOTES)
+    _write(worktree / "dashboard" / "src" / "session.js", SESSION_SOURCE)
     # Fresh worktree package whose dependencies are installed only in the canonical checkout.
     _write(parent / "web" / "node_modules" / "left-pad" / "package.json", "{}\n")
-    _write(worktree / "web" / "package.json", "{\"private\": true}\n")
+    _write(worktree / "web" / "package.json", '{"private": true}\n')
 
     # Untracked child repository nested inside the parent working tree.
     nested.mkdir(parents=True)
@@ -335,7 +348,7 @@ def build_fixture(root: Path) -> BenignFixture:
         _write(repository / ".github" / "workflows" / "ci.yml", "name: ci\n")
         _write(repository / "src" / "index.ts", f"export const name = '{name}';\n")
         _write(repository / "README.md", f"# {name}\n")
-        _write(repository / "src" / "lib.rs", "pub fn name() -> &'static str {\n    \"fixture\"\n}\n")
+        _write(repository / "src" / "lib.rs", 'pub fn name() -> &\'static str {\n    "fixture"\n}\n')
         if name == "service-api":
             _write(repository / "contracts" / "commands.json", '{"commands": []}\n')
             _write(repository / "validation" / "schema.json", '{"type": "object"}\n')
@@ -350,6 +363,28 @@ def build_fixture(root: Path) -> BenignFixture:
             _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
     _session_worktree(org, home)
+    # Repositories whose `.gitignore` re-includes literal paths: an ordinary
+    # kept file and editor setting, and a `.env` template that stays reviewed.
+    for name, ignore, files in (
+        (
+            "web-console",
+            "dist/\n*.log\n!keep.log\n.vscode/*\n!.vscode/settings.json\n",
+            {"keep.log": "kept\n", ".vscode/settings.json": "{}\n", "src/index.ts": "export const route = 1;\n"},
+        ),
+        (
+            "billing-api",
+            ".env*\n!.env.example\n",
+            {".env.example": "TOKEN=synthetic-not-a-secret\n", "src/index.ts": "export const route = 2;\n"},
+        ),
+    ):
+        repository = home / "Code" / "ignore-rules" / name
+        repository.mkdir(parents=True)
+        _git(repository, "init", "--quiet", "--initial-branch=main", home=home)
+        _write(repository / ".gitignore", ignore)
+        for relative, text in files.items():
+            _write(repository / relative, text)
+        _git(repository, "add", "-A", home=home)
+        _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
     # A non-repository parent under /tmp whose repository has a linked worktree beside the parent.
     tmp_org = Path(tempfile.mkdtemp(prefix="org.", dir=_system_tmp())).resolve() / "org"
     (tmp_org / "app").mkdir(parents=True)
@@ -374,8 +409,17 @@ def build_fixture(root: Path) -> BenignFixture:
     remote = tmp_org.parent / "remote" / "app.git"
     _git(tmp_org.parent, "clone", "--quiet", "--bare", str(tmp_org / "app"), str(remote), home=home)
     _git(tmp_org / "app", "remote", "add", "origin", str(remote), home=home)
+    # A benchmark checkout outside HOME whose test vectors are named for secrets and tokens.
+    bench = tmp_org.parent / BENCH_CHECKOUT
+    for relative, text in BENCH_FILES.items():
+        _write(bench / relative, text)
+    _git(bench, "init", "--quiet", "--initial-branch=main", home=home)
+    _git(bench, "add", "-A", home=home)
+    _git(bench, "commit", "--quiet", "-m", "bench base", home=home)
+    # A leaf directly in /tmp that does not exist yet, as a throwaway checkout destination.
+    scratch = Path(_system_tmp()) / f"hg-fp-scratch-{os.getpid()}-{secrets.token_hex(4)}"
     return BenignFixture(
-        root, home, parent, worktree, nested, gitlink_repo, guard_home, private_tmp, tmp_worktree, org, tmp_org
+        root, home, parent, worktree, nested, gitlink_repo, guard_home, private_tmp, tmp_worktree, org, tmp_org, scratch
     )
 
 

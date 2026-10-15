@@ -175,8 +175,8 @@ def _native_digest() -> str:
 
 def test_native_bridge_was_ported_from_the_current_client() -> None:
     # A template change must be ported to bounded_hook_bridge_grok.rs before
-    # the digest is updated; until then the native bridge would answer for a
-    # client it does not match.
+    # the digest is updated: the native bridge answers for every client it
+    # can read, with no Python to hand a newer template to.
     digest = hashlib.sha256(BOUNDED_HOOK_SCRIPT_TEMPLATE.encode("utf-8")).hexdigest()
 
     assert digest == _native_digest()

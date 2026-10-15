@@ -27,7 +27,7 @@ from collections import Counter
 from pathlib import Path
 
 import tomllib
-from warm_path_services import alive_pids, ensure_daemon, service_snapshot, stop_services
+from warm_path_services import alive_pids, ensure_daemon, role_cpu_ms_per_call, service_snapshot, stop_services
 from warm_path_stats import describe
 
 _CALL_TIMEOUT_SECONDS = 30
@@ -189,6 +189,7 @@ def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, s
         "warmup_ms": warmup_ms,
         "client_cpu_ms_per_call": client_cpu_ms / max(1, samples),
         "service_cpu_ms_per_call": service_cpu_ms / max(1, samples),
+        "service_cpu_ms_per_call_by_role": role_cpu_ms_per_call(before_service, after_service, samples),
         "service": after_service,
         "handler_shape": {"kind": "shell" if isinstance(handler, str) else "argv", "length": len(handler)},
     }
@@ -399,6 +400,7 @@ def run_mcp_phase(
         "service_cpu_ms_per_call": (float(after_service["cpu_s"]) - float(before_service["cpu_s"]))
         * 1000
         / max(1, samples),
+        "service_cpu_ms_per_call_by_role": role_cpu_ms_per_call(before_service, after_service, samples),
         "service": after_service,
         "setup": {"daemon_ensure": daemon, "warmup_session": warmup_session},
     }

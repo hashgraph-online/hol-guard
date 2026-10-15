@@ -191,26 +191,36 @@ fn a_store_without_saved_rows_answers_as_empty() {
     assert!(read(&home, &binding(), |saved| saved.is_none()).unwrap());
 }
 
-/// A named change to a seeded store.
-type Change = (&'static str, fn(&Connection));
-
 #[test]
-fn remote_and_bundle_rows_defer() {
-    let changes: [Change; 2] = [
-        ("remote", |c| {
-            decide(c, "artifact", "allow", None, "cloud-sync")
-        }),
-        ("bundle", |c| sync_state(c, "policy_bundle", "{}")),
-    ];
-    for (tag, change) in changes {
-        let (home, connection) = guard_home(tag);
-        change(&connection);
-        assert_eq!(
-            read(&home, &binding(), |_| ()).err(),
-            Some("mcp_relay_saved_remote_policy"),
-            "{tag}"
-        );
-    }
+fn a_cached_bundle_defers_and_remote_rows_are_read() {
+    let (home, connection) = guard_home("bundle");
+    sync_state(&connection, "policy_bundle", "{}");
+    // Without a policy-bundle row, the bundle's identities match nothing.
+    assert!(read(&home, &binding(), |saved| saved.is_none()).unwrap());
+    decide(&connection, "artifact", "block", None, "policy-bundle");
+    let deferred = read(&home, &binding(), |_| ()).err();
+    assert_eq!(deferred, Some("mcp_relay_saved_remote_policy"));
+    // The lookup never serves a cloud-sync row, and serves a signed memory
+    // row without local integrity evidence.
+    let (home, connection) = guard_home("remote");
+    decide(&connection, "artifact", "allow", None, "cloud-sync");
+    let answer = |home: &Path| {
+        read(home, &binding(), |saved| {
+            let saved = saved.expect("remote rows");
+            assert!(!saved.has_local_policy);
+            saved.answer(&policy_need(ARTIFACT, None)).unwrap()
+        })
+        .unwrap()
+    };
+    assert_eq!(answer(&home)["decision"], Value::Null);
+    decide(
+        &connection,
+        "artifact",
+        "block",
+        None,
+        "cloud-signed-memory",
+    );
+    assert_eq!(answer(&home)["decision"]["action"], "block");
 }
 
 #[test]

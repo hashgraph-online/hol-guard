@@ -128,6 +128,9 @@ pub(super) fn safe_rg_flag(name: &str) -> bool {
             | "--pcre2-version"
             | "--pretty"
             | "--quiet"
+            // Runs gzip, xz and the like from PATH, as PATH already chose
+            // rg itself, only to decompress files the scope checks admitted.
+            // ripgrep 13 stopped resolving them from the cwd on Windows.
             | "--search-zip"
             | "--smart-case"
             | "--stats"

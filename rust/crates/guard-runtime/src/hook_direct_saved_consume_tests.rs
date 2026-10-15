@@ -107,6 +107,7 @@ fn seed_approval(path: &std::path::Path, connection: &Connection, identity: &str
 fn consume_with(
     tag: &str,
     seed: bool,
+    block: bool,
 ) -> (
     Result<Value, HookDirectDefer>,
     Result<Value, HookDirectDefer>,
@@ -122,6 +123,14 @@ fn consume_with(
     let (path, connection) = local_store(tag);
     if seed {
         seed_approval(&path, &connection, &identity, &workspace);
+        if block {
+            connection
+                .execute(
+                    "update approval_requests set resolution_action = 'block'",
+                    [],
+                )
+                .unwrap();
+        }
     }
     let guard_home = path.parent().unwrap().to_str().unwrap().to_owned();
     let context = Context {
@@ -141,7 +150,7 @@ fn consume_with(
 
 #[test]
 fn an_approve_once_answers_one_retry() {
-    let (first, second) = consume_with("consume-once", true);
+    let (first, second) = consume_with("consume-once", true, false);
     let answered = first.unwrap_or_else(|_| panic!("the approve-once retry deferred"));
     let response = &answered["harness_response"];
     assert_eq!(response["approval_reuse_status"], json!("accepted"));
@@ -156,7 +165,21 @@ fn an_approve_once_answers_one_retry() {
 
 #[test]
 fn a_review_without_an_approval_defers() {
-    let (first, second) = consume_with("consume-none", false);
+    let (first, second) = consume_with("consume-none", false, false);
     assert!(matches!(first, Err(HookDirectDefer::SavedDecision)));
     assert!(matches!(second, Err(HookDirectDefer::SavedDecision)));
+}
+
+#[test]
+fn a_keep_blocked_answers_repeated_retries_without_queueing() {
+    let (first, second) = consume_with("consume-block", true, true);
+    for answer in [first, second] {
+        let response = answer.expect("a matching refusal must not defer");
+        let response = &response["harness_response"];
+        assert_eq!(response["approval_reuse_status"], "blocked");
+        assert_eq!(response["reason_code"], "native_review_user_block");
+        assert_eq!(response["prompted"], false);
+        assert_eq!(response["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert!(response.get("approval_request_id").is_none());
+    }
 }

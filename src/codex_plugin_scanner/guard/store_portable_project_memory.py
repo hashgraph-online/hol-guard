@@ -16,7 +16,7 @@ from .project_identity import (
     resolve_portable_project_identity,
 )
 from .store_base import PolicyDecisionLookupResult
-from .store_policy import _most_restrictive_policy_lookup, memory_lookup_candidates
+from .store_policy import _DEGRADED_AUTHORITY_REVISION, _most_restrictive_policy_lookup, memory_lookup_candidates
 
 _PROJECT_IDENTITY_CACHE_MAX_ITEMS = 128
 _PROJECT_IDENTITY_CACHE: dict[tuple[str, int], str] = {}
@@ -45,6 +45,10 @@ def _cached_portable_project_identity(workspace: str) -> str | None:
         _PROJECT_IDENTITY_CACHE.pop(oldest_key, None)
     _PROJECT_IDENTITY_CACHE[cache_key] = identity
     return identity
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def _portable_lookup_without_permission_elevation(
@@ -168,6 +172,48 @@ class StorePortableProjectMemoryMixin:
             "reuse": {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)},
         }
         return self.send_policy_decision_lookup(request)
+
+    def resolve_runtime_saved_decision(
+        self,
+        current: Mapping[str, object],
+        legacy: Mapping[str, object],
+        alias: Mapping[str, object] | None,
+    ) -> tuple[PolicyDecisionLookupResult, dict[str, Any] | None]:
+        """Resolve a runtime hook evaluation's saved decision in one resident call.
+
+        ``current`` and ``legacy`` probe the request hash and the legacy content
+        hash with their exact-command and memory candidates; ``alias`` probes
+        the Claude alias of a legacy ``claude-code:`` artifact when neither
+        matched. Nothing is consumed. Returns the lookup carrying the trust and
+        integrity evidence, and the decision this artifact may use.
+        """
+        evidence = self.policy_lookup_evidence()
+        if evidence.degraded_trust_status is not None:
+            degraded: PolicyDecisionLookupResult = {
+                "decision": None,
+                "ignored_local_integrity": None,
+                "trust_status": evidence.degraded_trust_status,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
+            }
+            return degraded, None
+        probes = {"current": current, "legacy": legacy, **({"alias": alias} if alias is not None else {})}
+        runtime = {
+            name: {**probe, "portable_workspace": self._portable_project_workspace(_text(probe.get("workspace")))}
+            for name, probe in probes.items()
+        }
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=str(current["harness"]),
+            artifact_id=_text(current.get("artifact_id")),
+            artifact_hash=_text(current.get("artifact_hash")),
+            workspace=_text(current.get("workspace")),
+            publisher=_text(current.get("publisher")),
+            runtime_exact_match_context=_text(current.get("exact_match_context")),
+            consume_one_shot=False,
+        )
+        request["probe_groups"] = {"groups": [], "runtime": runtime}
+        payload = self.send_policy_decision_lookup(request)
+        return payload["lookup"], payload["decision"]
 
     def mcp_policy_lookup_input(
         self,

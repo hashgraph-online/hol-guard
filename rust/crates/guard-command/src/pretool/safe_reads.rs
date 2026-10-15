@@ -26,14 +26,16 @@ pub(super) fn safe_file_predicate_arguments(
     let [predicate, target] = arguments else {
         return false;
     };
+    // Each predicate reads only the target's metadata: its type, permission
+    // bits or size. `-x` is also true for a directory the caller may enter.
     verified_path_context(context.home_dir, context.cwd)
-        && matches!(predicate.as_str(), "-f" | "-d" | "-e" | "-r")
+        && matches!(predicate.as_str(), "-f" | "-d" | "-e" | "-r" | "-x" | "-s")
         && !target.starts_with('-')
         && bounded_read_target(
             target,
             context.home_dir,
             context.cwd,
-            matches!(predicate.as_str(), "-d" | "-e"),
+            matches!(predicate.as_str(), "-d" | "-e" | "-x"),
         )
 }
 

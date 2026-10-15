@@ -14,7 +14,12 @@ _ROOT = Path(__file__).resolve().parents[1]
 _SCENARIOS = _ROOT / "ci" / "gauntlet" / "scenarios.json"
 _GATE = _ROOT / "tests" / "fixtures" / "benign_false_positive_gate.json"
 # Gauntlet fixture placeholders and the gate tokens naming the same layout.
-_TOKENS = {"{{home}}": "${HOME}", "{{workspace}}": "${PARENT}"}
+_TOKENS = {
+    "{{home}}": "${HOME}",
+    "{{workspace}}": "${PARENT}",
+    "{{root}}": "${GAUNTLET_ROOT}",
+    "{{scratch}}": "${SCRATCH}",
+}
 
 
 def _gauntlet_commands() -> set[str]:

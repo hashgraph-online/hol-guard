@@ -15,8 +15,8 @@
 //! - the Python proxy reports a server's catalog once it has the whole of it;
 //! - `mcp_relay_decide` marks a server when it defers a call to the package
 //!   policy, which covers a command the schema did not declare;
-//! - a server the resident has no report of is unknown and runs under the
-//!   proxy, which reports it.
+//! - the native relay reports the catalog it relays the same way, so an
+//!   unknown server's session starts native and reports it.
 //!
 //! A mark never clears while the resident runs. The registry is bounded: a
 //! server past the bound stays unknown. It only steers which launcher runs.
@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub(crate) const MCP_RELAY_SERVER_REPORT_FEATURE: &str = "mcp-relay-server-report-v1";
-const REPORT_SCHEMA: &str = "guard-mcp-relay-server-report-result.v1";
+pub(crate) const REPORT_SCHEMA: &str = "guard-mcp-relay-server-report-result.v1";
 /// No session reported the server's catalog yet.
 pub(crate) const SERVER_UNKNOWN: &str = "mcp_relay_session_server_unknown";
 /// The server offers a tool whose calls the proxy decides.

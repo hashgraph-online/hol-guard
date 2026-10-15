@@ -9,6 +9,14 @@ mod bun_eval_screen;
 const BUN_EVAL_REASON: &str = "native_bun_eval_readonly_containment_required";
 
 fn python_runtime_name(name: &str) -> bool {
+    // Windows resolves `python3` to `python.exe`, case-insensitively.
+    let lowered;
+    let name = if cfg!(windows) {
+        lowered = name.to_ascii_lowercase();
+        lowered.strip_suffix(".exe").unwrap_or(&lowered)
+    } else {
+        name
+    };
     name.strip_prefix("python").is_some_and(|suffix| {
         suffix.is_empty()
             || suffix
@@ -427,6 +435,11 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             };
             matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
                 || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")
+        }
+        // pnpm's spelling of a local-bin run. A pnpm option before the tool
+        // (`-c` runs a shell, `-r`/`--filter` fan out) keeps the review.
+        "pnpm" => {
+            matches!(arguments, [exec, tool, run, ..] if exec == "exec" && tool == "vitest" && run == "run")
         }
         "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
         "node" | "nodejs" => {

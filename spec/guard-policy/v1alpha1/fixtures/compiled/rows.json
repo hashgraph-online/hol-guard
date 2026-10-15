@@ -1,0 +1,189 @@
+{
+  "description": "Rows produced by the normative compiler for each valid fixture, or the compiler error. Row order is significant.",
+  "vectors": [
+    {
+      "document": "valid/basic.yaml",
+      "error": {
+        "code": "unsupported_policy_match",
+        "ruleId": "rule.block-untrusted-install"
+      }
+    },
+    {
+      "document": "valid/extensions-and-scalars.yaml",
+      "error": {
+        "code": "unsupported_policy_lifetime",
+        "ruleId": "rule.allow-once"
+      }
+    },
+    {
+      "document": "valid/business-selector.yaml",
+      "error": {
+        "code": "unsupported_policy_effect",
+        "ruleId": "rule.review-confidential-mail"
+      }
+    },
+    {
+      "document": "valid/with-tests.yaml",
+      "rows": [
+        {
+          "rule_id": "block-mcp",
+          "decision": {
+            "harness": "*",
+            "scope": "harness",
+            "action": "block",
+            "artifact_id": "family:mcp",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "allow-trusted-plugin",
+          "decision": {
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "artifact_id": "pkg:npm/trusted-plugin",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": "2026-12-31T00:00:00Z"
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        }
+      ]
+    },
+    {
+      "document": "valid/enforceable-scopes.yaml",
+      "rows": [
+        {
+          "rule_id": "block-shell-in-ci",
+          "decision": {
+            "harness": "*",
+            "scope": "workspace",
+            "action": "block",
+            "artifact_id": "family:tool-action",
+            "artifact_hash": null,
+            "workspace": "ci-workspace",
+            "publisher": null,
+            "reason": "Shell commands are not allowed in the CI workspace.",
+            "owner": "policy-owner",
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"createdBy\":\"policy-owner\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "allow-mcp",
+          "decision": {
+            "harness": "*",
+            "scope": "harness",
+            "action": "allow",
+            "artifact_id": "family:mcp",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "allow-mcp-in-codex",
+          "decision": {
+            "harness": "codex",
+            "scope": "harness",
+            "action": "allow",
+            "artifact_id": "family:mcp",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "block-acme-publisher",
+          "decision": {
+            "harness": "codex",
+            "scope": "publisher",
+            "action": "block",
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": "acme",
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "block-acme-publisher",
+          "decision": {
+            "harness": "cursor",
+            "scope": "publisher",
+            "action": "block",
+            "artifact_id": null,
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": "acme",
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "allow-acme-reviewed",
+          "decision": {
+            "harness": "codex",
+            "scope": "artifact",
+            "action": "allow",
+            "artifact_id": "pkg:npm/acme-reviewed",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": null
+          },
+          "provenance_json": "{\"createdAt\":\"2026-10-14T00:00:00Z\",\"source\":\"builder\"}"
+        },
+        {
+          "rule_id": "allow-legacy-tool",
+          "decision": {
+            "harness": "*",
+            "scope": "artifact",
+            "action": "allow",
+            "artifact_id": "pkg:npm/legacy-tool",
+            "artifact_hash": null,
+            "workspace": null,
+            "publisher": null,
+            "reason": null,
+            "owner": null,
+            "source": "policy-yaml-import",
+            "expires_at": "2026-06-30T00:00:00Z"
+          },
+          "provenance_json": "{\"createdAt\":\"2026-01-01T00:00:00Z\",\"source\":\"builder\"}"
+        }
+      ]
+    }
+  ]
+}

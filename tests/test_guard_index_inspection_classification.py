@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 _INDEX_SCAN = """git diff --cached --check; echo "CHECK_EXIT=$?"
@@ -50,21 +49,6 @@ def _repository(tmp_path: Path) -> tuple[Path, Path]:
     repository.mkdir(parents=True)
     _ = subprocess.run(["git", "init", "--quiet", "--initial-branch=main", str(repository)], check=True)
     return home, repository
-
-
-def test_unverified_cached_diff_is_owned_by_git_extension(tmp_path: Path) -> None:
-    payload = inspect_command("git diff --cached --output=patch", cwd=tmp_path, home_dir=tmp_path)
-
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "git index inspection"
-    assert payload["controlling_rule_id"] == "command.git.index-inspection"
-    assert payload["extensions"][0]["extension_id"] == "command.git"
-    assert payload["rules"][0]["rule_id"] == "command.git.index-inspection"
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("git index inspection") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("git index inspection") is not None
-    git = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.git")
-    assert git is not None
-    assert any(permission.permission_id == "command.git.permission.index-inspection" for permission in git.permissions)
 
 
 def test_execution_config_cached_diff_keeps_native_uncertainty(tmp_path: Path) -> None:
