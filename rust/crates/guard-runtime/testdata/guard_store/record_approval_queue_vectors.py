@@ -476,7 +476,7 @@ def record(home: Path, scenario: dict[str, object]) -> dict[str, object]:
                 redaction_level=str(scenario.get("redaction_level", "full")),
                 continuation_operation=scenario.get("operation"),  # type: ignore[arg-type]
             )
-        except Exception as raised:  # noqa: BLE001 - the vector records the class
+        except Exception as raised:
             error = {"type": type(raised).__name__, "message": str(raised)}
         finally:
             GuardStore.add_approval_request, approvals.uuid, approvals._current_guard_version = saved
