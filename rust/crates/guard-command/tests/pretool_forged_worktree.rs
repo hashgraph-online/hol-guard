@@ -1,7 +1,6 @@
 use serde_json::json;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 #[test]
 fn forged_worktree_metadata_cannot_hide_external_execution_configuration() {

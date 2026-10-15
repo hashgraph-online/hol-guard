@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.consumer.service import (
     diff_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.types import ProvenanceBundle
 
 
 def _write(path: Path, text: str) -> None:
@@ -76,7 +75,13 @@ def _approval_token(
         content_hash=artifact_hash(artifact),
         capability_snapshot={},
         structured_signals=(),
-        provenance=ProvenanceBundle(),
+        provenance={
+            "source_kind": "none",
+            "publisher_trust": "unknown",
+            "signature_verified": False,
+            "attestation_verified": False,
+            "evidence_refs": [],
+        },
         config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=None),
         configured_action=None,
         effective_default_action=None,

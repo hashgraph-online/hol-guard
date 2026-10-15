@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from .native_policy_snapshot_codec import _canonical_json_bytes_v3, _strict_json_loads_v3
-from .native_policy_snapshot_constants import NativePolicySnapshotError
+from .native_policy_snapshot_constants import BUSINESS_NATIVE_TIMEOUT_SECONDS, NativePolicySnapshotError
 from .policy_document import GuardPolicyDocument, canonical_policy_document_bytes
 
 MAX_DOCUMENT_BYTES = 1_048_576
@@ -49,9 +49,9 @@ def compile_business_policy_document(
         isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic)
     ):
         raise NativePolicySnapshotError("native_policy_snapshot_deadline_invalid")
-    deadline = (
-        min(time.monotonic() + 5.0, deadline_monotonic) if deadline_monotonic is not None else time.monotonic() + 5.0
-    )
+    deadline = time.monotonic() + BUSINESS_NATIVE_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        deadline = min(deadline, deadline_monotonic)
     source = canonical_policy_document_bytes(document)
     if len(source) > MAX_DOCUMENT_BYTES:
         raise NativePolicySnapshotError("native_business_document_bounds")

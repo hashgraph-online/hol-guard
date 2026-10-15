@@ -21,8 +21,8 @@ pub(super) fn compile_fixture_addition(
     trust: &[u8],
 ) -> Result<CompiledSourceCatalog, &'static str> {
     let mut output = catalog::lower_catalog(sources, mcp_sources, trust)?;
-    NativeCommandProgram::from_packaged_bytes(EMBEDDED_PROGRAM)?;
-    let base: Value = serde_json::from_slice(EMBEDDED_PROGRAM)
+    NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())?;
+    let base: Value = serde_json::from_slice(packaged_command_program_bytes())
         .map_err(|_| "command_source_packaged_base_invalid")?;
     let supplied: BTreeSet<String> = rows(&output.program, "extensions", "extension_id")
         .keys()
@@ -90,8 +90,8 @@ mod tests {
         )))
         .unwrap();
         let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../contracts/extensions/trust-class-map.v1.json"
+            env!("OUT_DIR"),
+            "/trust-class-map.v1.json"
         )))
         .unwrap();
         serde_json::json!({

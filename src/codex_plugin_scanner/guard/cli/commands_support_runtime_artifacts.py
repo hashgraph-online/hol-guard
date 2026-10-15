@@ -4,40 +4,35 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from ..native_codex_tool_output import codex_tool_output_native
+from ..native_context import bound_context_digest_home
+from ..native_path_anchor import anchor_to_process_directory
+from ..native_rich_command_model import NativeCommandModelError
+from ..native_sensitive_request import NativeSensitiveRequestError
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.direct_vitest import (
     direct_local_typescript_execution_context,
     direct_local_vitest_execution_context,
 )
+from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..runtime.jsonc import loads_jsonc
-from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
 from ..runtime.secret_file_request_services.github_pr_ephemeral_body import (
     gh_pr_create_uses_safe_ephemeral_body,
 )
-from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
 from ..runtime.shell_execution_context import (
     model_shell_execution_context,
     shell_execution_context_metadata,
-    validate_shell_execution_segment,
 )
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .commands_support_codex_commands import (
-    _codex_command_parts_may_read_local_content,
-    _codex_command_reads_environment_pipeline,
-    _codex_local_secret_source_label,
-    _codex_pipeline_segment_may_read_local_content,
-    _codex_post_tool_command_is_read_only_source_inspection,
-    _codex_post_tool_command_texts,
-    _codex_shell_split,
-    _codex_source_inspection_can_skip_secret_output,
-)
-from .commands_support_codex_git import _codex_git_diff_selection_identity
+from .commands_support_codex_commands import _codex_post_tool_command_texts
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _CODEX_TOOL_RESPONSE_MAX_DEPTH,
@@ -47,26 +42,6 @@ from .commands_support_codex_paths import (
     _with_codex_prompt_display_metadata,
 )
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
-from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
-from .commands_support_codex_tool_output import (
-    _codex_command_captures_combined_shell_output,
-    _codex_command_is_focused_pytest_verification,
-    _codex_command_references_sensitive_local_source,
-    _codex_existing_local_path_match,
-    _codex_focused_pytest_can_skip_secret_output,
-    _codex_path_token_is_url_path,
-    _codex_sensitive_local_source_matches,
-    _codex_sensitive_path_matches_in_text,
-    _codex_token_is_url,
-    _codex_token_prefix_is_url_scheme,
-    _codex_url_like_local_path_tokens,
-    _dedupe_codex_secret_path_matches,
-)
-from .commands_support_codex_tool_output_messages import (
-    _codex_tool_output_request_summary,
-    _codex_tool_output_runtime_reason,
-    _codex_tool_output_runtime_summary,
-)
 from .commands_support_compound_decision import compound_command_decision_metadata
 from .commands_support_hook_payload import _coalesce_string
 from .commands_support_runtime_policy import _runtime_data_flow_summary
@@ -479,6 +454,9 @@ def _compound_runtime_artifact(
     )
     compound_summary = "Compound command findings: " + " ".join(deduped_summaries)
     metadata = dict(primary.metadata)
+    if len(artifacts) > 1:
+        # The hint only covers the extension evaluation; other findings keep reviewing.
+        metadata.pop("extension_allow_hint", None)
     metadata.update(
         {
             "compound_complete": canonical_command is not None and canonical_command.confidence == "exact",
@@ -536,7 +514,30 @@ def _compound_runtime_artifact(
     )
 
 
-def _hook_runtime_artifact(
+def _hook_runtime_artifact(**kwargs: Any) -> GuardArtifact | None:
+    try:
+        with bound_context_digest_home(kwargs.get("guard_home")):
+            return _hook_runtime_artifact_with_native(**kwargs)
+    except (NativeCommandModelError, NativeSensitiveRequestError):
+        harness = _canonical_harness_name(kwargs["harness"])
+        return GuardArtifact(
+            artifact_id=f"{harness}:native-command-unavailable",
+            name="native command runtime unavailable",
+            harness=harness,
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(
+                _runtime_policy_path(harness, kwargs["home_dir"], kwargs.get("workspace"), payload=kwargs["payload"])
+            ),
+            metadata={
+                "guard_default_action": "block",
+                "native_command_evaluation_status": "unavailable",
+                "runtime_request_reason": "Native command runtime is unavailable; repair it before retrying.",
+            },
+        )
+
+
+def _hook_runtime_artifact_with_native(
     *,
     harness: str,
     payload: dict[str, object],
@@ -549,7 +550,7 @@ def _hook_runtime_artifact(
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
     if harness in {"codex", "cline", "pi", "omp"} and event_name == "PostToolUse":
-        output_artifact = _codex_post_tool_output_artifact(
+        output_artifact, read_only = _codex_post_tool_output_review(
             harness=harness,
             payload=payload,
             config_path=str(_runtime_policy_path(harness, home_dir, workspace, payload=payload)),
@@ -559,7 +560,7 @@ def _hook_runtime_artifact(
         )
         if output_artifact is not None:
             return output_artifact
-        if _codex_post_tool_command_is_read_only_source_inspection(payload=payload, cwd=workspace, home_dir=home_dir):
+        if read_only:
             return None
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
@@ -657,6 +658,7 @@ def _hook_runtime_artifact(
             action_envelope_command=action_envelope.command if action_envelope is not None else raw_command_text,
             workspace=workspace,
             home_dir=home_dir,
+            guard_home=guard_home,
         )
     runtime_artifacts: list[GuardArtifact] = []
     native_review = (
@@ -712,6 +714,18 @@ def _hook_runtime_artifact(
                 extension_control_snapshot=(native_review.snapshot if native_review is not None else None),
                 native_extension_evidence=(native_review.payload if native_review is not None else None),
                 native_evaluation=(native_review.evaluation if native_review is not None else None),
+                extension_allow_hint=(
+                    compute_extension_allow_hint(
+                        native_review.evaluation,
+                        command_text=raw_command_text,
+                        snapshot=native_review.snapshot,
+                        native_evidence=native_review.payload,
+                        cwd=workspace,
+                        home_dir=home_dir,
+                    )
+                    if native_review is not None and raw_command_text is not None
+                    else None
+                ),
             )
         )
     if raw_command_text is not None and (action_envelope is None or action_envelope.action_type == "shell_command"):
@@ -805,47 +819,7 @@ def _runtime_data_flow_artifact(
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 
 
-def _direct_codex_git_pathspec_identity(command_text: str, *, cwd: Path | None) -> str | None:
-    pipeline = _split_codex_safe_read_only_pipeline(command_text)
-    git_segment = pipeline[0] if pipeline else command_text
-    try:
-        parts = shlex.split(git_segment)
-    except ValueError:
-        return None
-    if not parts or Path(parts[0]).name != "git":
-        return None
-    return _codex_git_diff_selection_identity(parts[1:], cwd=cwd)
-
-
-def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    if not execution_context.directory_change_present:
-        return _direct_codex_git_pathspec_identity(command_text, cwd=cwd)
-    if not execution_context.complete:
-        return None
-    identities: list[tuple[int, str]] = []
-    for segment in execution_context.segments:
-        if segment.directory_operation is not None:
-            continue
-        segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
-        if segment_cwd is None or reason is not None:
-            return None
-        identity = _direct_codex_git_pathspec_identity(segment.command_text, cwd=segment_cwd)
-        if identity is not None:
-            identities.append((segment.segment_index, identity))
-    if not identities:
-        return None
-    if len(identities) == 1:
-        return identities[0][1]
-    canonical = json.dumps(
-        {"schema": "codex-git-pathspec-context-v1", "identities": identities},
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _codex_post_tool_output_artifact(
+def _codex_post_tool_output_review(
     *,
     harness: str = "codex",
     payload: dict[str, object],
@@ -853,163 +827,55 @@ def _codex_post_tool_output_artifact(
     source_scope: str,
     cwd: Path | None,
     home_dir: Path | None = None,
-) -> GuardArtifact | None:
+) -> tuple[GuardArtifact | None, bool]:
+    """Review a post-tool output in the resident: the artifact, and whether the commands were read-only."""
+
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {"cline": "Cline", "pi": "Pi", "omp": "Oh My Pi"}.get(canonical_harness, "Codex")
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     stdout_text = _optional_string(payload.get("stdout"))
     if stdout_text:
         response_text = f"{response_text}\n{stdout_text}".strip() if response_text else stdout_text
-    tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
-    command_texts = _codex_post_tool_command_texts(payload)
-    command_text = command_texts[0] if command_texts else tool_name
-    local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
-    normalized_command = normalize_transparent_shell_command(
-        command_text, cwd=cwd, home_dir=home_dir
-    ).normalized_command
-    kubernetes_secret_source = kubernetes_secret_read_source(normalized_command)
-    for candidate_command_text in command_texts[1:]:
-        candidate_local_source_matches = _codex_sensitive_local_source_matches(candidate_command_text, cwd=cwd)
-        candidate_normalized_command = normalize_transparent_shell_command(
-            candidate_command_text, cwd=cwd, home_dir=home_dir
-        ).normalized_command
-        candidate_kubernetes_secret_source = kubernetes_secret_read_source(candidate_normalized_command)
-        candidate_references_local_content = (
-            bool(candidate_local_source_matches)
-            or candidate_kubernetes_secret_source is not None
-            or _codex_command_may_read_local_content(candidate_command_text, cwd=cwd)
-        )
-        if not candidate_references_local_content:
-            continue
-        command_text = candidate_command_text
-        local_source_matches = candidate_local_source_matches
-        normalized_command = candidate_normalized_command
-        kubernetes_secret_source = candidate_kubernetes_secret_source
-        if candidate_kubernetes_secret_source is not None:
-            break
-    sensitive_file_request = extract_sensitive_file_read_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-        cwd=cwd,
-        home_dir=home_dir,
+    tool_label = _coalesce_string(payload.get("tool_name"), "Bash")
+    answer = codex_tool_output_native(
+        "post_tool_output",
+        body={
+            "harness_label": harness_label,
+            "tool_label": tool_label,
+            "tool_name": payload.get("tool_name"),
+            "tool_input": payload.get("tool_input"),
+            "arguments": payload.get("arguments"),
+            "tool_input_present": "tool_input" in payload,
+            "command_texts": list(_codex_post_tool_command_texts(payload)),
+            "response_text": response_text,
+            "cwd": None if cwd is None else anchor_to_process_directory(cwd),
+            "home_dir": None if home_dir is None else anchor_to_process_directory(home_dir),
+            "deadline_ms": 8_000,
+        },
+        timeout_seconds=9.0,
     )
-    references_local_content = (
-        bool(local_source_matches)
-        or kubernetes_secret_source is not None
-        or sensitive_file_request is not None
-        or _codex_command_may_read_local_content(command_text, cwd=cwd)
-    )
-    content_matches = classify_secret_content(response_text)
-    if not content_matches and references_local_content:
-        content_matches = classify_secret_content(response_text, suppress_samples=False)
-    if not content_matches:
-        return None
-    if _codex_source_inspection_can_skip_secret_output(
-        command_text=command_text,
-        response_text=response_text,
-        content_matches=content_matches,
-        cwd=cwd,
-        home_dir=home_dir,
-        payload=payload,
-    ):
-        return None
-    if _codex_focused_pytest_can_skip_secret_output(
-        command_text=command_text,
-        response_text=response_text,
-        content_matches=content_matches,
-        cwd=cwd,
-        home_dir=home_dir,
-    ):
-        return None
-    merged_output_capture = _codex_command_captures_combined_shell_output(command_text)
-    focused_pytest = _codex_command_is_focused_pytest_verification(command_text)
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    git_pathspec_selection_identity = _codex_git_pathspec_identity_for_command(normalized_command, cwd=cwd)
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "tool_name": tool_name,
-                "command_text": command_text,
-                "output_class": "credential-looking output",
-                "shell_execution_context_hash": (
-                    execution_context.context_hash if execution_context.directory_change_present else None
-                ),
-                "git_pathspec_selection_identity": git_pathspec_selection_identity,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    local_secret_source = kubernetes_secret_source or _codex_local_secret_source_label(
-        local_source_matches,
-        command_text=command_text,
-    )
-    runtime_default_action = "require-reapproval" if references_local_content else "warn"
-    runtime_request_signals = ["tool output contains credential-looking material"]
-    if references_local_content:
-        source_signal = "command references local secrets"
-        if local_secret_source is not None:
-            source_signal = f"command references local secrets from {local_secret_source}"
-        runtime_request_signals.append(source_signal)
-    local_secret_source = kubernetes_secret_source or _codex_local_secret_source_label(
-        local_source_matches,
-        command_text=command_text,
-    )
-    if local_secret_source is None and sensitive_file_request is not None:
-        local_secret_source = sensitive_file_request.path_match.family
-    request_summary = _codex_tool_output_request_summary(
-        harness_label=harness_label,
-        tool_name=tool_name,
-        command_text=command_text,
-        local_secret_source=local_secret_source,
-        focused_pytest=focused_pytest,
-        merged_output_capture=merged_output_capture,
-    )
-    runtime_request_summary = _codex_tool_output_runtime_summary(
-        local_secret_source,
-        harness_label=harness_label,
-        focused_pytest=focused_pytest,
-        merged_output_capture=merged_output_capture,
-    )
-    metadata: dict[str, object] = {
-        "tool_name": tool_name,
-        "command_text": command_text,
-        "action_class": (
-            (
-                "Kubernetes secret read command"
-                if kubernetes_secret_source is not None
-                else "credential exfiltration shell command"
-            )
-            if references_local_content
-            else "credential-looking tool output"
+    if not answer.allowed or answer.value is None or answer.error_code is not None:
+        raise NativeSensitiveRequestError(answer.error_code or "native_codex_post_tool_unavailable")
+    decoded = json.loads(answer.value)
+    found = decoded.get("artifact")
+    if found is None:
+        return None, decoded.get("read_only") is True
+    return (
+        GuardArtifact(
+            artifact_id=f"{canonical_harness}:{source_scope}:tool-output:{found['fingerprint']}",
+            name=f"{tool_label} credential-looking output",
+            harness=canonical_harness,
+            artifact_type="tool_action_request",
+            source_scope=source_scope,
+            config_path=config_path,
+            metadata={key: value for key, value in found["metadata"]},
         ),
-        "guard_default_action": runtime_default_action,
-        "request_summary": request_summary,
-        "runtime_request_signals": runtime_request_signals,
-        "runtime_request_summary": runtime_request_summary,
-        "runtime_request_reason": _codex_tool_output_runtime_reason(
-            local_secret_source,
-            harness_label=harness_label,
-            focused_pytest=focused_pytest,
-            merged_output_capture=merged_output_capture,
-        ),
-    }
-    if execution_context.directory_change_present:
-        metadata.update(shell_execution_context_metadata(execution_context))
-    if git_pathspec_selection_identity is not None:
-        metadata["git_pathspec_selection_identity"] = git_pathspec_selection_identity
-    if merged_output_capture:
-        metadata["output_capture_mode"] = "merged-stderr"
-    if local_secret_source is not None:
-        metadata["secret_source_family"] = local_secret_source
-    return GuardArtifact(
-        artifact_id=f"{canonical_harness}:{source_scope}:tool-output:{fingerprint}",
-        name=f"{tool_name} credential-looking output",
-        harness=canonical_harness,
-        artifact_type="tool_action_request",
-        source_scope=source_scope,
-        config_path=config_path,
-        metadata=metadata,
+        False,
     )
+
+
+def _codex_post_tool_output_artifact(**kwargs: Any) -> GuardArtifact | None:
+    return _codex_post_tool_output_review(**kwargs)[0]
 
 
 def _post_tool_package_request_was_already_evaluated(
@@ -1028,43 +894,6 @@ def _post_tool_package_request_was_already_evaluated(
     return pre_execution_result is not None
 
 
-def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
-    return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
-
-
-def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    if execution_context.directory_change_present:
-        if not execution_context.complete:
-            return True
-        for segment in execution_context.segments:
-            if segment.directory_operation is not None:
-                continue
-            segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
-            if segment_cwd is None or reason is not None:
-                return True
-            if _codex_command_may_read_local_content(segment.command_text, cwd=segment_cwd):
-                return True
-        return False
-    if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
-        return True
-    if _codex_command_reads_environment_pipeline(command_text):
-        return True
-    if any(marker in command_text for marker in ("$(", "${", "`")):
-        return True
-    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
-    if pipeline_segments is not None:
-        return any(
-            _codex_pipeline_segment_may_read_local_content(segment, index=index, cwd=cwd)
-            for index, segment in enumerate(pipeline_segments)
-        )
-    try:
-        parts = _codex_shell_split(command_text)
-    except ValueError:
-        return True
-    return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
-
-
 __all__ = [
     "_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH",
     "_CODEX_PROMPT_SECRET_KEY_MARKERS",
@@ -1072,18 +901,7 @@ __all__ = [
     "_CODEX_TOOL_RESPONSE_TEXT_LIMIT",
     "_HOOK_EVENT_NAME_MAP",
     "_artifact_id_from_event",
-    "_codex_command_may_read_local_content",
-    "_codex_command_references_sensitive_local_source",
-    "_codex_existing_local_path_match",
-    "_codex_path_token_is_url_path",
     "_codex_post_tool_output_artifact",
-    "_codex_sensitive_local_source_matches",
-    "_codex_sensitive_path_matches_in_text",
-    "_codex_text_contains_sensitive_path_token",
-    "_codex_token_is_url",
-    "_codex_token_prefix_is_url_scheme",
-    "_codex_url_like_local_path_tokens",
-    "_dedupe_codex_secret_path_matches",
     "_hook_event_name",
     "_hook_runtime_artifact",
     "_merged_prompt_runtime_artifact",

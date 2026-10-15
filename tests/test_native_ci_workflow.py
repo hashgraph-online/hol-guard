@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 import sys
@@ -20,26 +21,90 @@ def _workflow(name: str) -> dict:
     return expand_ci_job_actions(yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")))
 
 
-def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
-    """Verify CI Rust cache can only be written by main pushes."""
-    action = expand_ci_job_actions(
-        yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
-    )
+@pytest.mark.parametrize(
+    ("ref", "event", "platform", "opt_in", "allowed"),
+    [
+        ("refs/heads/main", "push", "Linux", "false", True),
+        ("refs/heads/main", "push", "Windows", "false", True),
+        ("refs/heads/main", "schedule", "Windows", "true", True),
+        ("refs/heads/main", "workflow_dispatch", "Windows", "true", True),
+        ("refs/heads/main", "pull_request", "Windows", "true", False),
+        ("refs/pull/3701/merge", "pull_request", "Windows", "true", False),
+        ("refs/heads/contributor", "push", "Windows", "true", False),
+        ("refs/heads/main-other", "workflow_dispatch", "Windows", "true", False),
+        ("refs/heads/main", "schedule", "Windows", "false", False),
+        ("refs/heads/main", "workflow_dispatch", "Windows", None, False),
+        ("refs/heads/main", "workflow_dispatch", "macOS", "true", False),
+        ("refs/heads/main", "schedule", "Linux", "true", False),
+    ],
+)
+def test_effective_cache_write_privilege_is_limited_to_trusted_main_builds(ref, event, platform, opt_in, allowed):
+    assert _cache_write_allowed(ref, event, platform, opt_in, None) is allowed
+
+
+RELEASE_REF = "refs/heads/release-please--branches--main--components--hol-guard"
+
+
+@pytest.mark.parametrize(
+    ("ref", "event", "push_ref", "allowed"),
+    [
+        (RELEASE_REF, "push", RELEASE_REF, True),
+        (RELEASE_REF, "push", None, False),
+        (RELEASE_REF, "workflow_dispatch", RELEASE_REF, False),
+        (RELEASE_REF, "pull_request", RELEASE_REF, False),
+        ("refs/pull/3701/merge", "pull_request", RELEASE_REF, False),
+        ("refs/heads/contributor", "push", RELEASE_REF, False),
+        (RELEASE_REF + "-other", "push", RELEASE_REF, False),
+        ("refs/heads/main", "push", RELEASE_REF, True),
+        ("refs/heads/main", "workflow_dispatch", RELEASE_REF, False),
+    ],
+)
+def test_named_push_ref_may_save_only_its_own_push_builds(ref, event, push_ref, allowed):
+    """A caller-named branch saves only on its own pushes; PR refs and dispatches stay readers."""
+    assert _cache_write_allowed(ref, event, "macOS", None, push_ref) is allowed
+
+
+def test_gauntlet_runtime_builds_on_release_branch_pushes_only() -> None:
+    """The qualify wheel rebuilds on every release-branch push and cancels a stale head's build."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/gauntlet-full-task-runtime.yml").read_text(encoding="utf-8"))
+    triggers = workflow[True]
+    assert triggers["push"] == {"branches": [RELEASE_REF.removeprefix("refs/heads/")]}
+    assert "pull_request_target" not in triggers
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "gauntlet-full-task-runtime-${{ github.ref }}",
+        "cancel-in-progress": True,
+    }
+    steps = workflow["jobs"]["native-build"]["steps"]
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert setup["with"]["save-push-ref"] == RELEASE_REF
+
+
+def _cache_write_allowed(ref, event, platform, opt_in, push_ref) -> bool:
+    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
     cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
-    assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-    assert cache["with"]["cache-workspace-crates"] is True
-    assert cache["with"]["cache-bin"] is True
-    assert "inputs.targets" in cache["with"]["shared-key"]
-    # Reuse the existing trusted dependency cache on the first migration PR.
-    # A new prefix forces several minutes of cold compilation on macOS Intel.
-    assert cache["with"]["prefix-key"] == "v0-rust"
-    assert action["inputs"]["cache-key"]["default"] == "native-wheel"
-    assert action["inputs"]["toolchain"]["default"] == "1.88.0"
-    assert "continue-on-error" not in cache
+    if opt_in is None:
+        opt_in = action["inputs"]["save-main-cache"]["default"]
+    if push_ref is None:
+        push_ref = action["inputs"]["save-push-ref"]["default"]
+    expression = cache["with"]["save-if"].strip()[3:-2]
+    for name, value in {
+        "github.ref": ref,
+        "github.event_name": event,
+        "runner.os": platform,
+        "inputs.save-main-cache": opt_in,
+        "inputs.save-push-ref": push_ref,
+    }.items():
+        expression = expression.replace(name, repr(value))
+    expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
+    tree = ast.parse(expression, mode="eval")
+    permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.NotEq, ast.Constant)
+    assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-policy expression"
+    return bool(eval(compile(tree, "<cache-policy>", "eval"), {"__builtins__": {}}))
 
 
 def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
-    workflow = _workflow("native-wheel-ci.yml")
+    workflow = _workflow("nightly-native.yml")
     build = workflow["jobs"]["macos-build"]
     proof = workflow["jobs"]["macos-proof"]
     assert proof["needs"] == "macos-build"
@@ -64,7 +129,7 @@ def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
 
 def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() -> None:
     """Keep Intel cross-compilation separate from native platform qualification."""
-    jobs = _workflow("native-wheel-ci.yml")["jobs"]
+    jobs = _workflow("nightly-native.yml")["jobs"]
     build = jobs["macos-build"]
     build_targets = {item["target"]: item["runner"] for item in build["strategy"]["matrix"]["include"]}
     proof_targets = {item["target"]: item["runner"] for item in jobs["macos-proof"]["strategy"]["matrix"]["include"]}
@@ -87,7 +152,7 @@ def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() ->
 @pytest.mark.parametrize("failed_stage", ["cargo", "self-test", "capabilities"])
 def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str, failed_stage: str) -> None:
     """Run the workflow's build command and reject each failed native build stage."""
-    job = _workflow("native-wheel-ci.yml")["jobs"]["macos-build"]
+    job = _workflow("nightly-native.yml")["jobs"]["macos-build"]
     commands = next(step["run"] for step in job["steps"] if step.get("name", "").startswith("Build and assemble"))
     (tmp_path / "pyproject.toml").write_text('[project]\nversion="1.2.3"\n', encoding="utf-8")
     binaries = tmp_path / "bin"
@@ -143,39 +208,8 @@ def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str,
         assert cargo_arguments[cargo_arguments.index("--target") + 1] == target
 
 
-def test_native_wheel_prs_only_fan_out_for_native_build_inputs() -> None:
-    workflow = _workflow("native-wheel-ci.yml")
-    trigger = workflow[True]["pull_request"]
-    assert trigger["branches"] == ["main", "release/3.2"]
-    assert set(trigger["paths"]) == {
-        "rust/**",
-        "ci/native_runtime/**",
-        "contracts/extensions/**",
-        "contributions/**",
-        "src/codex_plugin_scanner/guard/*native*.py",
-        "src/codex_plugin_scanner/guard/runtime_transition*.py",
-        "src/codex_plugin_scanner/guard/adapters/*native*.py",
-        "scripts/ci/**",
-        "scripts/build_command_projection_hook.py",
-        "scripts/build_native_command_program.py",
-        "scripts/build_native_hol_guard_wheel.py",
-        "scripts/bench_guard_native_installed_slo.py",
-        "scripts/stress_guard_daemon.py",
-        "scripts/sync_repo_version.py",
-        ".github/workflows/native-wheel-ci.yml",
-        ".github/actions/native-regression/**",
-        ".github/actions/setup-rust/**",
-        ".github/actions/stage-command-projections/**",
-        "pyproject.toml",
-        "requirements.txt",
-        "uv.lock",
-    }
-    assert "src/**" not in trigger["paths"]
-    assert "tests/**" not in trigger["paths"]
-
-
 def test_bounded_stress_never_claims_full_soak_qualification() -> None:
-    workflow = _workflow("native-wheel-ci.yml")
+    workflow = _workflow("nightly-native.yml")
     assert workflow[True]["schedule"]
     assert "workflow_dispatch" in workflow[True]
     steps = workflow["jobs"]["linux-proof"]["steps"]
@@ -193,10 +227,10 @@ def test_bounded_stress_never_claims_full_soak_qualification() -> None:
 
 
 def test_authority_source_and_both_distribution_formats_are_gated_together() -> None:
-    workflow = _workflow("rust-authority-ownership.yml")
+    workflow = _workflow("nightly-native.yml")
     calls = [
         step["run"]
-        for step in workflow["jobs"]["ownership"]["steps"]
+        for step in workflow["jobs"]["linux-native"]["steps"]
         if "python_capability_cleanup_gate.py" in step.get("run", "")
     ]
     assert len(calls) == 1
@@ -205,9 +239,8 @@ def test_authority_source_and_both_distribution_formats_are_gated_together() -> 
     assert "--root ." in calls[0]
 
 
-@pytest.mark.parametrize("name", ["native-wheel-ci.yml", "rust-runtime-windows-resident.yml"])
-def test_windows_build_and_proof_failures_cannot_fall_through(name: str) -> None:
-    for job in _workflow(name)["jobs"].values():
+def test_windows_build_and_proof_failures_cannot_fall_through() -> None:
+    for job in _workflow("nightly-native.yml")["jobs"].values():
         for step in job.get("steps", []):
             if step.get("shell") != "pwsh":
                 continue
@@ -221,48 +254,28 @@ def test_windows_build_and_proof_failures_cannot_fall_through(name: str) -> None
                     assert lines[index + 1] == "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 
 
-@pytest.mark.parametrize(
-    ("name", "integration_job", "runner"),
-    [
-        ("rust-runtime-windows-resident.yml", "windows-resident", "windows-latest"),
-        ("rust-daemon-edge-hardening.yml", "cross-platform", "windows-2025"),
-    ],
-)
-def test_parallel_windows_workspace_checks_remain_required(name: str, integration_job: str, runner: str) -> None:
-    jobs = _workflow(name)["jobs"]
-    checks = jobs["windows-workspace"]
-    integration = jobs[integration_job]
-    assert checks["runs-on"] == runner
-    assert "if" not in checks
-    assert "continue-on-error" not in checks
-    assert "needs" not in checks
-    assert "needs" not in integration
-    commands = "\n".join(step.get("run", "") for step in checks["steps"])
+def test_parallel_windows_workspace_checks_remain_required() -> None:
+    job = _workflow("nightly-native.yml")["jobs"]["native-platform"]
+    assert "windows-2025" in job["strategy"]["matrix"]["os"]
+    assert job["strategy"]["fail-fast"] is False
+    assert "if" not in job
+    assert "continue-on-error" not in job
+    assert "needs" not in job
+    assert all(not step.get("continue-on-error") for step in job["steps"])
+    commands = "\n".join(step.get("run", "") for step in job["steps"])
     assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings" in commands
     assert "cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in commands
-    integration_commands = "\n".join(step.get("run", "") for step in integration["steps"])
-    assert "cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime" in integration_commands
-    if name == "rust-runtime-windows-resident.yml":
-        assert "test_native_managed_resident.py" in integration_commands
-    else:
-        assert "test_native_hook_client.py" in integration_commands
-        assert "test_native_hook_client_transport.py" in integration_commands
+    assert "cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime" in commands
+    assert "test_native_hook_client.py" in commands
+    assert "test_native_hook_client_transport.py" in commands
+    assert "test_rust_daemon_edge_hardening_contracts.py" in commands
+    assert "test_native_managed_resident.py" in commands
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "rust-runtime-differential.yml",
-        "rust-runtime-mutation-differential.yml",
-        "rust-runtime-recovery.yml",
-        "rust-runtime-windows-resident.yml",
-        "rust-command-shadow.yml",
-        "rust-runtime.yml",
-        "rust-runtime-performance.yml",
-    ],
-)
 @pytest.mark.parametrize("event", ["pull_request", "push"])
-def test_production_resident_stream_selects_runtime_qualification(name: str, event: str) -> None:
+def test_production_resident_stream_selects_runtime_performance(event: str) -> None:
     # BaseLoader preserves the YAML `on` key rather than interpreting it as a boolean.
-    workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    workflow = yaml.load(
+        (ROOT / ".github/workflows/rust-runtime-performance.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader
+    )
     assert "src/codex_plugin_scanner/guard/native_resident_stream.py" in workflow["on"][event]["paths"]

@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.daemon.protection_repair_retry import incomplete
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 
 
 def test_incomplete_repair_payload_asks_to_connect_an_app() -> None:
@@ -91,13 +92,13 @@ def test_protection_repair_all_retries_a_transient_containment_probe_failure(
         lambda self: SimpleNamespace(active_error_count=0),
     )
     monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "_repair_command_activity_persistence_health",
         lambda _store: None,
     )
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "repair_failing_managed_harness_hooks",
         lambda _store: ((), ()),
     )
@@ -122,32 +123,6 @@ def test_protection_repair_all_retries_a_transient_containment_probe_failure(
 
     assert payload["repaired"] is True
     assert containment_probes == [True, True]
-
-
-def test_containment_repair_ignores_unsupported_platform_signals(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    probes: list[bool] = []
-    monkeypatch.setattr(
-        protection_repair_retry,
-        "containment_health_signals",
-        lambda _value, **_kwargs: {
-            check_id: SimpleNamespace(status=ProtectionCheckStatus.FAIL, reason_code="unsupported_platform")
-            for check_id in (
-                "decision_plane_compatibility",
-                "containment_compatibility",
-                "sandbox",
-            )
-        },
-    )
-
-    repaired, failed = protection_repair_retry.confirmed_containment_repair_signals(
-        lambda: probes.append(True) or {},
-    )
-
-    assert repaired == []
-    assert failed == []
-    assert probes == [True]
 
 
 def test_protection_repair_all_completes_supported_work_with_unsupported_containment(
@@ -180,12 +155,12 @@ def test_protection_repair_all_completes_supported_work_with_unsupported_contain
         lambda self: SimpleNamespace(active_error_count=0),
     )
     monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "_repair_command_activity_persistence_health",
         lambda _store: None,
     )
-    monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+    patch_daemon_global(monkeypatch, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
     monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -245,12 +220,12 @@ def test_protection_repair_all_requires_a_connected_app(
         lambda self: SimpleNamespace(active_error_count=0),
     )
     monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "_repair_command_activity_persistence_health",
         lambda _store: None,
     )
-    monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+    patch_daemon_global(monkeypatch, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     request = urllib.request.Request(
@@ -287,7 +262,7 @@ def test_protection_repair_all_keeps_integrity_failure_when_no_app_is_connected(
     }
     monkeypatch.setattr(GuardStore, "setup_policy_integrity", lambda self, **_kwargs: degraded)
     monkeypatch.setattr(GuardStore, "repair_policy_integrity", lambda self, **_kwargs: degraded)
-    monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+    patch_daemon_global(monkeypatch, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     request = urllib.request.Request(

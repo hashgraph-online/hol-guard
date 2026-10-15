@@ -1,0 +1,3213 @@
+{
+ "cases": [
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "b"
+     ],
+     "artifact_id": "gemini:global:mcp:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:bare",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "bare",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "b"
+     ],
+     "artifact_id": "gemini:global:mcp:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:bare",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "bare",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:beforetool:0",
+     "artifact_type": "hook",
+     "command": "direct.sh",
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "command": "direct.sh"
+      }
+     },
+     "name": "BeforeTool",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:beforetool:1",
+     "artifact_type": "hook",
+     "command": "a.sh\nb.sh",
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "hooks": [
+        {
+         "command": "a.sh",
+         "type": "command"
+        },
+        {
+         "command": 4
+        },
+        "x",
+        {
+         "command": "b.sh"
+        }
+       ]
+      }
+     },
+     "name": "BeforeTool",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:beforetool:2",
+     "artifact_type": "hook",
+     "command": "both.sh\nnested.sh",
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "command": "both.sh",
+       "hooks": [
+        {
+         "command": "nested.sh"
+        }
+       ],
+       "matcher": "write_file",
+       "timeout": 30
+      }
+     },
+     "name": "BeforeTool",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:beforetool:3",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "flag": true,
+       "n": 1.5,
+       "none": null,
+       "type": "other"
+      }
+     },
+     "name": "BeforeTool",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:beforetool:4",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "hooks": []
+      }
+     },
+     "name": "BeforeTool",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:sessionstart:0",
+     "artifact_type": "hook",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "command": 42
+      }
+     },
+     "name": "SessionStart",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:äupper:0",
+     "artifact_type": "hook",
+     "command": "u.sh",
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "command": "u.sh"
+      }
+     },
+     "name": "ÄUpper",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.gemini/settings.json",
+     "text": "{\"hooks\": {\"BeforeTool\": [{\"command\": \"direct.sh\"}, {\"hooks\": [{\"type\": \"command\", \"command\": \"a.sh\"}, {\"command\": 4}, \"x\", {\"command\": \"b.sh\"}]}, {\"command\": \"both.sh\", \"hooks\": [{\"command\": \"nested.sh\"}], \"matcher\": \"write_file\", \"timeout\": 30}, {\"type\": \"other\", \"n\": 1.5, \"flag\": true, \"none\": null}, {\"hooks\": []}, \"not-a-dict\", 7], \"AfterAgent\": {\"command\": \"x\"}, \"SessionStart\": [{\"command\": 42}], \"\\u00c4Upper\": [{\"command\": \"u.sh\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_hooks",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"hooks\": [\"x\"], \"mcpServers\": []}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_hooks_not_dict",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_empty_object",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{nope"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_invalid_json",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "[{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}]"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_top_level_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf7b226d637053657276657273223a207b2262223a207b7d7d7d",
+     "mode": 420,
+     "path": "home/.gemini/settings.json"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_bom",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b226d637053657276657273223a207b22ff223a207b7d7d7d",
+     "mode": 420,
+     "path": "home/.gemini/settings.json"
+    }
+   ],
+   "home": "home",
+   "name": "settings_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"u\": {}}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.gemini/settings.json"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "settings_is_directory",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:d",
+     "artifact_type": "mcp_server",
+     "command": "two",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "d",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:e",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"d\": {\"command\": \"one\"}, \"e\": {}, \"d\": {\"command\": \"two\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_duplicate_keys",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:café 😀",
+     "artifact_type": "mcp_server",
+     "command": "é",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "café 😀",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"caf\\u00e9 \\ud83d\\ude00\": {\"command\": \"\\u00e9\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_escaped_text",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"\\ud800\": {}}}"
+    }
+   ],
+   "home": "home",
+   "name": "settings_lone_surrogate_server",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:ok",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "ok",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"other\": \"\\ud800\", \"mcpServers\": {\"ok\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_lone_surrogate_unused",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {}, \"x\": [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_deep_nesting",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:linked",
+     "artifact_type": "mcp_server",
+     "command": "l",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "linked",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/settings.json",
+     "text": "{\"mcpServers\": {\"linked\": {\"command\": \"l\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.gemini/settings.json",
+     "target": "<ROOT>/elsewhere/settings.json"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:.hidden",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/.hidden/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": [
+       "a",
+       1
+      ]
+     },
+     "name": ".hidden",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:Beta",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/Beta/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": {
+       "k": [
+        1,
+        2.5,
+        null
+       ]
+      }
+     },
+     "name": "Beta",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:alpha",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/alpha/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "alpha",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:sb",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/servers-bad/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "sb",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:Zeta Ext",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/zeta/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": "GEMINI.md"
+     },
+     "name": "Zeta Ext",
+     "publisher": "acme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "b"
+     ],
+     "artifact_id": "gemini:global:Zeta Ext:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.gemini/extensions/zeta/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:Zeta Ext:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/zeta/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:Zeta Ext:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.gemini/extensions/zeta/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:Zeta Ext:bare",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/zeta/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "bare",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/zeta/gemini-extension.json",
+     "text": "{\"name\": \"Zeta Ext\", \"publisher\": \"acme\", \"contextFileName\": \"GEMINI.md\", \"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, null, \"b\"]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"bare\": {}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/alpha/gemini-extension.json",
+     "text": "{\"version\": \"1\", \"publisher\": 3}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/.hidden/gemini-extension.json",
+     "text": "{\"name\": 7, \"contextFileName\": [\"a\", 1]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/Beta/gemini-extension.json",
+     "text": "{\"contextFileName\": {\"k\": [1, 2.5, null]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/empty/gemini-extension.json",
+     "text": "{}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/broken/gemini-extension.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/listy/gemini-extension.json",
+     "text": "[\"x\"]"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/nomanifest/readme.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/deep/inner/gemini-extension.json",
+     "text": "{\"name\": \"deep\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/gemini-extension.json",
+     "text": "{\"name\": \"root-level\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/servers-bad/gemini-extension.json",
+     "text": "{\"name\": \"sb\", \"mcpServers\": [\"x\"]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/.hidden/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/Beta/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/alpha/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/servers-bad/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/zeta/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "extensions_matrix",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:one",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/one/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "one",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:two",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/extensions/two/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "two",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:two:s",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/extensions/two/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "s",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:mcp:w",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "http://w"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/one/gemini-extension.json",
+     "text": "{\"name\": \"one\"}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/extensions/two/gemini-extension.json",
+     "text": "{\"name\": \"two\", \"mcpServers\": {\"s\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"w\": {\"url\": \"http://w\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/one/gemini-extension.json",
+    "<ROOT>/work/.gemini/extensions/two/gemini-extension.json",
+    "<ROOT>/work/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "extensions_workspace_and_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:linked",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/linked/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "linked",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:linked",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/real/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "linked",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "pack/linked/gemini-extension.json",
+     "text": "{\"name\": \"linked\"}"
+    },
+    {
+     "mode": 420,
+     "path": "pack/file.txt",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/linked/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/real/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "extensions_symlinks",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.gemini/extensions/linked",
+     "target": "<ROOT>/pack/linked"
+    },
+    {
+     "path": "home/.gemini/extensions/afile",
+     "target": "<ROOT>/pack/file.txt"
+    },
+    {
+     "path": "home/.gemini/extensions/dangling",
+     "target": "<ROOT>/pack/missing"
+    },
+    {
+     "path": "home/.gemini/extensions/real/gemini-extension.json",
+     "target": "<ROOT>/pack/linked/gemini-extension.json"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:via-root",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "via-root",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "pack/e/gemini-extension.json",
+     "text": "{\"name\": \"via-root\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/e/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "extensions_root_is_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.gemini/extensions",
+     "target": "<ROOT>/pack"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "extensions_root_is_file",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {
+    "home/.gemini/extensions": 192
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/x/gemini-extension.json",
+     "text": "{\"name\": \"x\"}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "extensions_unreadable_root",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:y",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/y/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "y",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {
+    "home/.gemini/extensions/x": 0
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/x/gemini-extension.json",
+     "text": "{\"name\": \"x\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/y/gemini-extension.json",
+     "text": "{\"name\": \"y\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/y/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "extensions_unreadable_child",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:10",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/10/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "10",
+     "publisher": "10",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:9",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/9/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "9",
+     "publisher": "9",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:C",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/C/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "C",
+     "publisher": "C",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:_",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/_/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "_",
+     "publisher": "_",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:a",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/a/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "a",
+     "publisher": "a",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:a-b",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/a-b/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "a-b",
+     "publisher": "a-b",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:a.b",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/a.b/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "a.b",
+     "publisher": "a.b",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:b",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/b/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "b",
+     "publisher": "b",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:é",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/é/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "é",
+     "publisher": "é",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/b/gemini-extension.json",
+     "text": "{\"publisher\": \"b\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/C/gemini-extension.json",
+     "text": "{\"publisher\": \"C\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/a-b/gemini-extension.json",
+     "text": "{\"publisher\": \"a-b\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/a.b/gemini-extension.json",
+     "text": "{\"publisher\": \"a.b\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/a/gemini-extension.json",
+     "text": "{\"publisher\": \"a\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/é/gemini-extension.json",
+     "text": "{\"publisher\": \"\\u00e9\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/_/gemini-extension.json",
+     "text": "{\"publisher\": \"_\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/10/gemini-extension.json",
+     "text": "{\"publisher\": \"10\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/9/gemini-extension.json",
+     "text": "{\"publisher\": \"9\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/10/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/9/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/C/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/_/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/a/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/a-b/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/a.b/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/b/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/é/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "extensions_sort_order",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:same",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/a/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "same",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:same:s",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/a/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:same",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/b/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "same",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:same:s",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/b/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/a/gemini-extension.json",
+     "text": "{\"name\": \"same\", \"mcpServers\": {\"s\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/b/gemini-extension.json",
+     "text": "{\"name\": \"same\", \"mcpServers\": {\"s\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/a/gemini-extension.json",
+    "<ROOT>/home/.gemini/extensions/b/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "extensions_duplicate_names",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/group/beta/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/skills/.hidden/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/skills/alpha/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/skills/group/beta/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/plain/readme.md",
+     "text": "r"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/plain/readme.md",
+     "text": "r"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+    "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+    "<ROOT>/home/.gemini/skills/group/beta/SKILL.md",
+    "<ROOT>/work/.gemini/skills/.hidden/SKILL.md",
+    "<ROOT>/work/.gemini/skills/alpha/SKILL.md",
+    "<ROOT>/work/.gemini/skills/group/beta/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skills_home_and_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/.",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:5c8943f4544203b445487b725f8bf1f08ea8b5df71a406465fecb3e5894cf34d",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:5c8943f4544203b445487b725f8bf1f08ea8b5df71a406465fecb3e5894cf34d",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:5c8943f4544203b445487b725f8bf1f08ea8b5df71a406465fecb3e5894cf34d",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/."
+      }
+     },
+     "name": "skills/.",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/x.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/skills/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skill_at_root",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/ok",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/ok/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skillDirectoryIdentity": {
+       "entryCount": 2,
+       "incompleteStateHash": "sha256:3aaadc418ff9a8feeb4f7a46e69b97442884879d6d79c83227d482beff8bb0ca",
+       "reason": "symlink_escape",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:3aaadc418ff9a8feeb4f7a46e69b97442884879d6d79c83227d482beff8bb0ca",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/ok"
+      }
+     },
+     "name": "skills/ok",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill-discovery:103adacc9ee3f731",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/linked",
+     "harness": "gemini",
+     "metadata": {
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "reason": "symlink_directory_unsupported",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.guard-discovery/103adacc9ee3f731"
+      }
+     },
+     "name": "Incomplete Gemini skill discovery",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "pack/s/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/ok/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/skills/ok/SKILL.md",
+    "<ROOT>/home/.gemini/skills/linked"
+   ],
+   "home": "home",
+   "name": "skills_symlinked",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.gemini/skills/linked",
+     "target": "<ROOT>/pack/s"
+    },
+    {
+     "path": "home/.gemini/skills/ok/extra.md",
+     "target": "<ROOT>/pack/s/SKILL.md"
+    }
+   ],
+   "warnings": [
+    "Gemini global skill directory identity is incomplete; approval reuse is disabled.",
+    "Gemini global skill discovery is incomplete; approval reuse is disabled."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill-discovery:f3afb602bb9bb266",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills",
+     "harness": "gemini",
+     "metadata": {
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "reason": "symlink_directory_unsupported",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.guard-discovery/f3afb602bb9bb266"
+      }
+     },
+     "name": "Incomplete Gemini skill discovery",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "pack/s/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/skills"
+   ],
+   "home": "home",
+   "name": "skills_root_symlinked",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.gemini/skills",
+     "target": "<ROOT>/pack"
+    }
+   ],
+   "warnings": [
+    "Gemini global skill discovery is incomplete; approval reuse is disabled."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/a/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skillDirectoryIdentity": {
+       "entryCount": 2,
+       "incompleteStateHash": "sha256:966b19becd373942410a16733201df150d4767e4593c80ba4a60ae8d6e327e5d",
+       "reason": "unreadable_entry",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:966b19becd373942410a16733201df150d4767e4593c80ba4a60ae8d6e327e5d",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/a"
+      }
+     },
+     "name": "skills/a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill-discovery:abb01ba87c955631",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/locked/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73",
+       "reason": "unreadable_entry",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.guard-discovery/abb01ba87c955631"
+      }
+     },
+     "name": "Incomplete Gemini skill discovery",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {
+    "home/.gemini/skills/locked": 0
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 0,
+     "path": "home/.gemini/skills/a/data.bin",
+     "text": "d"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/locked/b/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/skills/a/SKILL.md",
+    "<ROOT>/home/.gemini/skills/locked/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skills_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Gemini global skill directory identity is incomplete; approval reuse is disabled.",
+    "Gemini global skill discovery is incomplete; approval reuse is disabled."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/home"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:project:e",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:mcp:h",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "h",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/group/beta/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:e",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:mcp:h",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "h",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/group/beta/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/plain/readme.md",
+     "text": "r"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"h\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/e/gemini-extension.json",
+     "text": "{\"name\": \"e\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+    "<ROOT>/home/.gemini/settings.json",
+    "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+    "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+    "<ROOT>/home/.gemini/skills/group/beta/SKILL.md"
+   ],
+   "home": "home",
+   "name": "workspace_is_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/home/proj"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:h",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "h",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:mcp:p",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/proj/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "p",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/proj/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"p\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"h\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json",
+    "<ROOT>/home/proj/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "workspace_inside_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home/proj"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:e",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:e:m",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "m",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "u"
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:hook:notification:0",
+     "artifact_type": "hook",
+     "command": "n",
+     "config_path": "<ROOT>/home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "command": "n"
+      }
+     },
+     "name": "Notification",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/skills/group/beta/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:hook:beforemodel:0",
+     "artifact_type": "hook",
+     "command": "x",
+     "config_path": "<ROOT>/work/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {
+      "hook_config": {
+       "hooks": [
+        {
+         "command": "x"
+        }
+       ]
+      }
+     },
+     "name": "BeforeModel",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/skills/.hidden/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/skills/alpha/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/skills/group/beta/SKILL.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\"}}, \"hooks\": {\"Notification\": [{\"command\": \"n\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/e/gemini-extension.json",
+     "text": "{\"name\": \"e\", \"mcpServers\": {\"m\": {\"url\": \"u\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/plain/readme.md",
+     "text": "r"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/settings.json",
+     "text": "{\"hooks\": {\"BeforeModel\": [{\"hooks\": [{\"command\": \"x\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/skills/plain/readme.md",
+     "text": "r"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/extensions/e/gemini-extension.json",
+    "<ROOT>/home/.gemini/settings.json",
+    "<ROOT>/home/.gemini/skills/.hidden/SKILL.md",
+    "<ROOT>/home/.gemini/skills/alpha/SKILL.md",
+    "<ROOT>/home/.gemini/skills/group/beta/SKILL.md",
+    "<ROOT>/work/.gemini/settings.json",
+    "<ROOT>/work/.gemini/skills/.hidden/SKILL.md",
+    "<ROOT>/work/.gemini/skills/alpha/SKILL.md",
+    "<ROOT>/work/.gemini/skills/group/beta/SKILL.md"
+   ],
+   "home": "home",
+   "name": "everything",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "gemini",
+    "home": "home",
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:r",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "home/.gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "r",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:e",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "work/.gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"mcpServers\": {\"r\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/extensions/e/gemini-extension.json",
+     "text": "{\"name\": \"e\"}"
+    }
+   ],
+   "found_paths": [
+    "home/.gemini/settings.json",
+    "work/.gemini/extensions/e/gemini-extension.json"
+   ],
+   "home": "home",
+   "name": "relative_context",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "gemini",
+    "home": "home",
+    "workspace": "work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "home": "home",
+   "name": "relative_context_with_skills",
+   "refused": true,
+   "relative": true,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"hooks\": {}, \"n\": 999999999999999999999999999999}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/settings.json"
+   ],
+   "home": "home",
+   "name": "hook_config_huge_integer_unused",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "gemini",
+    "home": ".",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:global:e",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": ".gemini/extensions/e/gemini-extension.json",
+     "harness": "gemini",
+     "metadata": {
+      "context_file": null
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:global:mcp:r",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": ".gemini/settings.json",
+     "harness": "gemini",
+     "metadata": {},
+     "name": "r",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": ".gemini/settings.json",
+     "text": "{\"mcpServers\": {\"r\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": ".gemini/extensions/e/gemini-extension.json",
+     "text": "{\"name\": \"e\"}"
+    }
+   ],
+   "found_paths": [
+    ".gemini/extensions/e/gemini-extension.json",
+    ".gemini/settings.json"
+   ],
+   "home": ".",
+   "name": "home_is_cwd",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/settings.json",
+     "text": "{\"hooks\": {\"X\": [{\"command\": \"\\udc80\"}]}}"
+    }
+   ],
+   "home": "home",
+   "name": "hook_lone_surrogate",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/extensions/e/gemini-extension.json",
+     "text": "{\"name\": \"\\ud800\"}"
+    }
+   ],
+   "home": "home",
+   "name": "extension_name_lone_surrogate",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-gemini-vectors.v1"
+}

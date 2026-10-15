@@ -6,7 +6,7 @@ import threading
 import time
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon.server import cached_containment_health
+from codex_plugin_scanner.guard.daemon.server_control_health import cached_containment_health
 
 
 def _server(**overrides: object) -> SimpleNamespace:

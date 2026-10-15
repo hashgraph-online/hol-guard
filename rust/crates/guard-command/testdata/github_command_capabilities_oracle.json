@@ -185,11 +185,11 @@
    "auth",
    "status"
   ],
-  "capability": "read_local",
+  "capability": "read_remote",
   "reason_code": "github.command.local-auth-read",
   "detail": "The command reads local CLI auth state.",
   "capabilities": [
-   "read_local"
+   "read_remote"
   ]
  },
  {

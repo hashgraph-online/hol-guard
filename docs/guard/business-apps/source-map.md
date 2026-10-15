@@ -10,7 +10,7 @@ advertise a protected mode, or add an enforcing policy dimension.
 | --- | --- | --- |
 | Host input and command evaluation | `rust/crates/guard-command/src/pretool/generic.rs` | Preserve the native decision path and existing floors |
 | Command option semantics | `rust/crates/guard-command/src/command_argument_semantics.rs` | Scalar replacement is not additive recipient/attachment parsing |
-| Contribution source and trust | `contributions/command-sources/`, `contracts/extensions/trust-class-map.v1.json` | External sources remain inert until local authorization |
+| Contribution source and trust | `contributions/command-sources/`, `contracts/extensions/trust/` | External sources remain inert until local authorization |
 | Business facts | `rust/crates/guard-contracts/src/business_action.rs` | Explicit schema negotiation and strict bounded decoding |
 | Frozen input bytes | `rust/crates/guard-command/src/business_input.rs` | Native ownership and digest checks before the existing private review snapshot; no provider invocation |
 | Private review request | `rust/crates/guard-runtime/src/workspace_review_request.rs` | Bind exact facts to the existing authenticated native origin and private snapshot |

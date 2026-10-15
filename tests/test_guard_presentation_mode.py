@@ -14,8 +14,6 @@ from codex_plugin_scanner.guard.config import (
 )
 from codex_plugin_scanner.guard.presentation_mode import (
     PRESENTATION_SCHEMA_VERSION,
-    coerce_persisted_presentation_mode,
-    resolve_presentation_mode,
 )
 
 
@@ -70,17 +68,14 @@ def test_editable_settings_preserve_migration_source(tmp_path: Path) -> None:
     assert _presentation_settings(config)["source"] == "migrated"
 
 
-def test_unknown_mode_falls_back_with_safe_diagnostic() -> None:
-    mode = coerce_persisted_presentation_mode("future-mode")
-    assert mode.value == "everyday"
-    assert mode.diagnostic == "unknown_presentation_mode_fell_back_to_everyday"
-    assert "future-mode" not in mode.diagnostic
-
-
-def test_session_preview_does_not_persist_or_consult_policy() -> None:
-    resolved = resolve_presentation_mode(local_value="everyday", session_preview="technical", cloud_profile="everyday")
-    assert resolved.value == "technical"
-    assert resolved.source == "session-preview"
+def test_unknown_mode_falls_back_with_safe_diagnostic(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('density = "future-mode"\n', encoding="utf-8")
+    config = load_guard_config(guard_home)
+    assert config.presentation_mode == "everyday"
+    assert config.presentation_diagnostic == "unknown_presentation_mode_fell_back_to_everyday"
+    assert "future-mode" not in config.presentation_diagnostic
 
 
 def test_presentation_only_write_round_trips_and_increments_revision(tmp_path: Path) -> None:

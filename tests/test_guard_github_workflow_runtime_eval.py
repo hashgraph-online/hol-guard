@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import hashlib
 import shlex
-from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,13 +17,11 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.approval_context import approval_context_tokens_validation_reason
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from codex_plugin_scanner.guard.runtime.github_workflow_operations import parse_github_workflow_operation
 from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
     _capability_id,
     claim_resolved_github_workflow_authorization,
@@ -32,6 +29,8 @@ from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import canonical_framed_payload, format_utc_timestamp
+from tests.github_workflow_test_support import native_lineage_verified as native_lineage_verified
+from tests.github_workflow_test_support import with_binding
 from tests.test_guard_github_workflow_runtime import _descriptor, _seed_resolved_request
 
 _ISSUED = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
@@ -47,7 +46,7 @@ def _protected_control_authority() -> ExtensionControlAuthorityView:
 
 
 @pytest.fixture(autouse=True)
-def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+def fixed_authority(monkeypatch: pytest.MonkeyPatch, native_lineage_verified: None) -> None:
     monkeypatch.setattr(
         GuardStore,
         "_policy_integrity_secret_material",
@@ -57,15 +56,11 @@ def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _descriptor_for_workspace(workspace: Path):
-    descriptor = _descriptor()
-    return replace(
-        descriptor,
-        binding_context=replace(
-            descriptor.binding_context,
-            workspace_sha256=hashlib.sha256(
-                canonical_framed_payload("github-workspace", str(workspace.resolve()))
-            ).hexdigest(),
-        ),
+    return with_binding(
+        _descriptor(),
+        workspace_sha256=hashlib.sha256(
+            canonical_framed_payload("github-workspace", str(workspace.resolve()))
+        ).hexdigest(),
     )
 
 
@@ -120,22 +115,10 @@ def test_workflow_approval_identity_accepts_exact_bytes_restored_after_drift(
     )
 
     def record() -> GitHubWorkflowApprovalRecord:
-        operation = parse_github_workflow_operation(
-            parse_shell_command(command),
-            repository="example/repo",
-            expected_executable=executable.as_posix(),
-        )
-        assert operation is not None
-        base = _descriptor_for_workspace(workspace)
-        descriptor = replace(
-            base,
-            operation=operation,
-            binding_context=replace(
-                base.binding_context,
-                executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
-            ),
-        )
-        return GitHubWorkflowApprovalRecord.from_descriptor(descriptor)
+        return with_binding(
+            _descriptor_for_workspace(workspace),
+            executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
+        ).record
 
     def token() -> str:
         return _runtime_hook_approval_context_token(

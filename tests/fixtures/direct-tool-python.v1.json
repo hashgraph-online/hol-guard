@@ -1,0 +1,3285 @@
+{
+  "base_commit": "8d96ae755a1d4906394d387cd3af4068c533a848",
+  "cases": [
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a6c696e6b65723d22686f697374656422",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a6c696e6b65723d2269736f6c6174656422",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a736d6f6c3d74727565",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a736d6f6c3d66616c7365",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c2e6c6f636b66696c655d0a736176653d74727565",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c2e6c6f636b66696c655d0a736176653d66616c7365",
+      "check": "bunfig",
+      "expected": true,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c2e6c6f636b66696c655d0a",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a736d6f6c3d31",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a6c696e6b65723d226f7468657222",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c5d0a63616368653d74727565",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c2e6c6f636b66696c655d0a736176653d31",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c2e6c6f636b66696c655d0a736176653d747275650a6f746865723d66616c7365",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b72756e5d0a736d6f6c3d74727565",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "5b696e7374616c6c",
+      "check": "bunfig",
+      "expected": false,
+      "name": "bunfig.toml"
+    },
+    {
+      "bytes_hex": "7b7d",
+      "check": "package_json",
+      "expected": {},
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b226e616d65223a2273796e746865746963222c2276657273696f6e223a22312e322e33227d",
+      "check": "package_json",
+      "expected": {
+        "name": "synthetic",
+        "version": "1.2.3"
+      },
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "5b5d",
+      "check": "package_json",
+      "expected": null,
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "6e756c6c",
+      "check": "package_json",
+      "expected": null,
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "227061636b61676522",
+      "check": "package_json",
+      "expected": null,
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b226e616d65223a317d",
+      "check": "package_json",
+      "expected": {
+        "name": 1
+      },
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b2276657273696f6e223a226669727374222c2276657273696f6e223a227365636f6e64227d",
+      "check": "package_json",
+      "expected": {
+        "version": "second"
+      },
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b226e616d65223a22c3a9227d",
+      "check": "package_json",
+      "expected": {
+        "name": "\u00e9"
+      },
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b226e616d65223a2261222c7d",
+      "check": "package_json",
+      "expected": null,
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "2f2f20636f6d6d656e740a7b7d",
+      "check": "package_json",
+      "expected": null,
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b",
+      "check": "package_json",
+      "expected": null,
+      "name": "package.json"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b7d2c20227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d225d7d7d",
+      "check": "bun_identity",
+      "expected": [
+        "5.9.3",
+        "sha512-CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQ=="
+      ],
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440222c2022222c207b7d2c20227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d225d7d7d",
+      "check": "bun_identity",
+      "expected": [
+        "",
+        "sha512-CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQ=="
+      ],
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b226f7468657240352e392e33222c2022222c207b7d2c20227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b5d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a206e756c6c7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b312c2022222c207b7d2c20227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b7d2c206e756c6c5d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b7d2c20227368613235362d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b7d2c20227368613531322d63326876636e513d225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b7d2c20227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d21225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b7d2c20227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d5c6e225d7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a7b7d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a5b5d7d",
+      "check": "bun_identity",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a7b2274797065736372697074223a5b227479706573637269707440352e392e33222c22222c7b7d2c227368613531322d43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43513d3d222c5d2c7d2c7d",
+      "check": "bun_identity",
+      "expected": [
+        "5.9.3",
+        "sha512-CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQ=="
+      ],
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b22766974657374223a205b2276697465737440322e312e30225d7d7d",
+      "check": "locked_version",
+      "expected": "2.1.0",
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b22766974657374223a205b226f7468657240322e312e30225d7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b22766974657374223a205b5d7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b22766974657374223a205b315d7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b22766974657374223a206e756c6c7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "bun.lock"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b226e6f64655f6d6f64756c65732f766974657374223a207b2276657273696f6e223a2022322e312e30227d7d7d",
+      "check": "locked_version",
+      "expected": "2.1.0",
+      "name": "package-lock.json"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b226e6f64655f6d6f64756c65732f766974657374223a207b2276657273696f6e223a20317d7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "package-lock.json"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b226e6f64655f6d6f64756c65732f766974657374223a207b7d7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "package-lock.json"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b226e6f64655f6d6f64756c65732f766974657374223a206e756c6c7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "package-lock.json"
+    },
+    {
+      "bytes_hex": "7b227061636b61676573223a207b226e6f64655f6d6f64756c65732f766974657374223a205b2276697465737440322e312e30225d7d7d",
+      "check": "locked_version",
+      "expected": null,
+      "name": "package-lock.json"
+    },
+    {
+      "check": "bunfig",
+      "expected": false,
+      "kind": "missing",
+      "name": "bunfig.toml"
+    },
+    {
+      "check": "bunfig",
+      "expected": false,
+      "kind": "directory",
+      "name": "bunfig.toml"
+    },
+    {
+      "check": "bunfig",
+      "expected": false,
+      "kind": "symlink",
+      "name": "bunfig.toml"
+    },
+    {
+      "check": "bunfig",
+      "expected": false,
+      "kind": "oversize",
+      "name": "bunfig.toml"
+    },
+    {
+      "check": "bunfig",
+      "expected": false,
+      "kind": "invalid_utf8",
+      "name": "bunfig.toml"
+    },
+    {
+      "check": "package_json",
+      "expected": null,
+      "kind": "missing",
+      "name": "package.json"
+    },
+    {
+      "check": "package_json",
+      "expected": null,
+      "kind": "directory",
+      "name": "package.json"
+    },
+    {
+      "check": "package_json",
+      "expected": null,
+      "kind": "symlink",
+      "name": "package.json"
+    },
+    {
+      "check": "package_json",
+      "expected": null,
+      "kind": "oversize",
+      "name": "package.json"
+    },
+    {
+      "check": "package_json",
+      "expected": null,
+      "kind": "invalid_utf8",
+      "name": "package.json"
+    },
+    {
+      "check": "bun_identity",
+      "expected": null,
+      "kind": "missing",
+      "name": "bun.lock"
+    },
+    {
+      "check": "bun_identity",
+      "expected": null,
+      "kind": "directory",
+      "name": "bun.lock"
+    },
+    {
+      "check": "bun_identity",
+      "expected": null,
+      "kind": "symlink",
+      "name": "bun.lock"
+    },
+    {
+      "check": "bun_identity",
+      "expected": null,
+      "kind": "oversize",
+      "name": "bun.lock"
+    },
+    {
+      "check": "bun_identity",
+      "expected": null,
+      "kind": "invalid_utf8",
+      "name": "bun.lock"
+    },
+    {
+      "check": "locked_version",
+      "expected": null,
+      "kind": "missing",
+      "name": "bun.lock"
+    },
+    {
+      "check": "locked_version",
+      "expected": null,
+      "kind": "directory",
+      "name": "bun.lock"
+    },
+    {
+      "check": "locked_version",
+      "expected": null,
+      "kind": "symlink",
+      "name": "bun.lock"
+    },
+    {
+      "check": "locked_version",
+      "expected": null,
+      "kind": "oversize",
+      "name": "bun.lock"
+    },
+    {
+      "check": "locked_version",
+      "expected": null,
+      "kind": "invalid_utf8",
+      "name": "bun.lock"
+    },
+    {
+      "check": "tree",
+      "expected": "a5ef43912bcb4d2705349685ae498a31f145cae45c635f8d7c9ba801b2d045f7",
+      "files": []
+    },
+    {
+      "check": "tree",
+      "expected": "938c4aedc828904a2d7319e6335c13de9b2726130f8ca79c8e29680f5a99e8ac",
+      "files": [
+        {
+          "bytes_hex": "",
+          "path": "a"
+        }
+      ]
+    },
+    {
+      "check": "tree",
+      "expected": "875f027680b9477ccbac8bc4b91b6716db202e10b9db876fb79b2d4e325425d6",
+      "files": [
+        {
+          "bytes_hex": "62",
+          "path": "b"
+        },
+        {
+          "bytes_hex": "61",
+          "path": "a"
+        }
+      ]
+    },
+    {
+      "check": "tree",
+      "expected": "1c31233744e1caec22422c065f2bdaa598762be750ee55f55f1dacba5787a5fd",
+      "files": [
+        {
+          "bytes_hex": "7a",
+          "path": "z"
+        },
+        {
+          "bytes_hex": "61",
+          "path": "dir/a"
+        },
+        {
+          "bytes_hex": "62",
+          "path": "dir/deep/b"
+        }
+      ]
+    },
+    {
+      "check": "tree",
+      "expected": "f6ee583291c4f37efe94ac2eb3240a71b685dc5a19e7d7e5899cac3efdad1e3f",
+      "files": [
+        {
+          "bytes_hex": "00ff",
+          "path": "\u00e9/\ud83d\ude00"
+        }
+      ]
+    },
+    {
+      "check": "tree",
+      "expected": "333cbf50b62f382b8a3b487c4bcfb684ac6ff506a4b0d5941837ca3b71bc3e34",
+      "files": [
+        {
+          "bytes_hex": "61",
+          "path": "a\\b"
+        }
+      ]
+    },
+    {
+      "check": "tree",
+      "expected": null,
+      "files": [],
+      "kind": "root_symlink"
+    },
+    {
+      "check": "tree",
+      "expected": null,
+      "files": [],
+      "kind": "file_symlink"
+    },
+    {
+      "check": "tree",
+      "expected": null,
+      "files": [],
+      "kind": "dir_symlink"
+    },
+    {
+      "check": "tree",
+      "expected": null,
+      "files": [],
+      "kind": "oversize"
+    },
+    {
+      "check": "target",
+      "expected": true,
+      "value": "a.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": true,
+      "value": "nested/a.spec.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "nested/../a.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "a.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "missing.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "nested"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "link.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "nested/link.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "../outside.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "/a.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "~/a.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": true,
+      "value": "a.TEST.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "$a.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "`a`.test.ts"
+    },
+    {
+      "check": "target",
+      "expected": false,
+      "value": "a.test.ts>out"
+    },
+    {
+      "check": "heap",
+      "expected": true,
+      "value": "NODE_OPTIONS=--max-old-space-size=256"
+    },
+    {
+      "check": "heap",
+      "expected": true,
+      "value": "NODE_OPTIONS=--max-old-space-size=32768"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=255"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=32769"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=0256"
+    },
+    {
+      "check": "heap",
+      "expected": true,
+      "value": "NODE_OPTIONS=--max-old-space-size=1024"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=256\n"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=256 --preload=x"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=\u0662\u0665\u0666"
+    },
+    {
+      "check": "heap",
+      "expected": false,
+      "value": "NODE_OPTIONS=--max-old-space-size=999999"
+    },
+    {
+      "check": "dynamics",
+      "expected": false,
+      "value": "literal"
+    },
+    {
+      "check": "dynamics",
+      "expected": true,
+      "value": "$value"
+    },
+    {
+      "check": "dynamics",
+      "expected": true,
+      "value": "`value`"
+    },
+    {
+      "check": "dynamics",
+      "expected": true,
+      "value": "a\u0000b"
+    },
+    {
+      "check": "dynamics",
+      "expected": true,
+      "value": "a>b"
+    },
+    {
+      "check": "dynamics",
+      "expected": true,
+      "value": "a<b"
+    },
+    {
+      "check": "dynamics",
+      "expected": false,
+      "value": "a\\b"
+    },
+    {
+      "check": "dynamics",
+      "expected": false,
+      "value": "a;b"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "4.1.8",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "^4.1.8",
+      "version": "4.2.0"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "^4.1.8",
+      "version": "5.0.0"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "~4.1.8",
+      "version": "4.1.9"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "~4.1.8",
+      "version": "4.2.0"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "^0.2.3",
+      "version": "0.2.4"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "^0.0.3",
+      "version": "0.0.4"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "4.1.8-beta.1",
+      "version": "4.1.8-beta.1"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "^4.1.8",
+      "version": "4.2.0-beta.1"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "*",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": ">=4.1.0",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "4.x",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "4.1.8 || 5.0.0",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "v4.1.8",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "4.1.8 ",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "04.01.008",
+      "version": "4.1.8"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "^\u0664.\u0661.\u0668",
+      "version": "4.2.0"
+    },
+    {
+      "check": "semver",
+      "expected": false,
+      "specifier": "4.1.8",
+      "version": "4.1.8+metadata"
+    },
+    {
+      "check": "semver",
+      "expected": true,
+      "specifier": "999999999999999999999999.1.8",
+      "version": "999999999999999999999999.1.8"
+    }
+  ],
+  "public_cases": [
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | head -1",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx vitest run tests/unit.test.ts 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx --no --no-install vitest run tests/unit.test.ts 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts  2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --config attacker.ts 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --watch 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage extra.ts 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage ../outside.test.ts 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -0",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -1001",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail --lines=40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | cat",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40 > output.txt",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=256\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=32768\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=255\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=65536\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --emitDeclarationOnly 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -c ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo OTHER",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"other\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | tail -200 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep error | head -200 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -a ^* | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep error? | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep [error] | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit false src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit --build src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit @response 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit --project tsconfig.json 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit --types @cloudflare/workers-types 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -201 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo 9INVALID",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | grep second ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"src/index\\.ts\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" ; echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx --package=typescript tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo OTHER",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/package.json"
+        }
+      ],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/bun.lock"
+        }
+      ],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/tsc"
+        }
+      ],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/vitest"
+        }
+      ],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/typescript/bin/tsc"
+        }
+      ],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && {runner} run tests/unit.test.ts --no-coverage 2>&1 | tail -40",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/vitest/vitest.mjs"
+        }
+      ],
+      "tool": "vitest",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/package.json"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/bun.lock"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/tsc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/vitest"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/typescript/bin/tsc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/vitest/vitest.mjs"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/package.json"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/bun.lock"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/tsc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/vitest"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/typescript/bin/tsc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/vitest/vitest.mjs"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/package.json"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/bun.lock"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/tsc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/.bin/vitest"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/typescript/bin/tsc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "kind": "remove",
+          "path": "home/subject/node_modules/vitest/vitest.mjs"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "NODE_OPTIONS": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "node_options": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "NODE_PATH": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "NPM_CONFIG_SCRIPT_SHELL": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "npm_config_node_options": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "BASH_ENV": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "ZDOTDIR": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "HTTPS_PROXY": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "DYLD_SYNTHETIC": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {
+        "LD_PRELOAD": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "bytes_hex": "61756469743d66616c73650a72656769737472793d68747470733a2f2f6578616d706c652e696e76616c69640a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "bytes_hex": "6e6f64652d6f7074696f6e733d2d2d726571756972653d73796e7468657469632e6a730a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "bytes_hex": "6d616c666f726d65640a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "bytes_hex": "4073796e7468657469633a72656769737472793d68747470733a2f2f6578616d706c652e696e76616c69640a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "NODE_OPTIONS": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "node_options": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "NODE_PATH": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "NPM_CONFIG_SCRIPT_SHELL": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "npm_config_node_options": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "BASH_ENV": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "ZDOTDIR": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "HTTPS_PROXY": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "DYLD_SYNTHETIC": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {
+        "LD_PRELOAD": "synthetic"
+      },
+      "expected": false,
+      "mutations": [],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "bytes_hex": "61756469743d66616c73650a72656769737472793d68747470733a2f2f6578616d706c652e696e76616c69640a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "bytes_hex": "6e6f64652d6f7074696f6e733d2d2d726571756972653d73796e7468657469632e6a730a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "bytes_hex": "6d616c666f726d65640a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && npx tsc --noEmit 2>&1 | grep -E \"harnesses/page|enterprises/page\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "bytes_hex": "4073796e7468657469633a72656769737472793d68747470733a2f2f6578616d706c652e696e76616c69640a",
+          "kind": "write",
+          "path": "home/subject/.npmrc"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": true,
+      "mutations": [
+        {
+          "bytes_hex": "5b696e7374616c6c5d0a736d6f6c3d747275650a",
+          "kind": "write",
+          "path": "home/subject/bunfig.toml"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "bytes_hex": "5b696e7374616c6c5d0a63616368653d747275650a",
+          "kind": "write",
+          "path": "home/subject/bunfig.toml"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    },
+    {
+      "command": "cd {workspace} && NODE_OPTIONS=\"--max-old-space-size=8192\" bun --smol ./node_modules/typescript/bin/tsc --noEmit 2>&1 | grep \"error TS\" | wc -l ; echo MY_TSC_ERRORS_COUNT_DONE",
+      "environment": {},
+      "expected": false,
+      "mutations": [
+        {
+          "bytes_hex": "5b72756e5d0a7072656c6f61643d2273796e7468657469632e6a73220a",
+          "kind": "write",
+          "path": "home/subject/bunfig.toml"
+        }
+      ],
+      "tool": "typescript",
+      "trusted_commands": [
+        "bun",
+        "grep",
+        "head",
+        "node",
+        "npx",
+        "tail",
+        "wc"
+      ],
+      "trusted_tree_sha256": "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8"
+    }
+  ],
+  "public_fixture": {
+    "files": [
+      {
+        "bytes_hex": "7b22646576446570656e64656e63696573223a207b2274797065736372697074223a20225e352e392e33222c2022766974657374223a20225e342e312e38227d2c20226e616d65223a202273796e746865746963227d",
+        "executable": false,
+        "path": "home/subject/package.json"
+      },
+      {
+        "bytes_hex": "7b227061636b61676573223a207b2274797065736372697074223a205b227479706573637269707440352e392e33222c2022222c207b2262696e223a207b22747363223a202262696e2f747363227d7d2c20227368613531322d6a6c31765a7a5044696e4c7239655574334a2f7437563646674e457739516a7642506479737a394b66514444343166517243325934764b51646961557046543462586c62315248684c70703877746d364d35546753773d3d225d2c2022766974657374223a205b2276697465737440342e312e38222c2022222c207b7d2c202273796e746865746963225d7d7d",
+        "executable": false,
+        "path": "home/subject/bun.lock"
+      },
+      {
+        "bytes_hex": "7b2262696e223a207b22766974657374223a20222e2f7669746573742e6d6a73227d2c20226e616d65223a2022766974657374222c202276657273696f6e223a2022342e312e38227d",
+        "executable": false,
+        "path": "home/subject/node_modules/vitest/package.json"
+      },
+      {
+        "bytes_hex": "23212f7573722f62696e2f656e76206e6f64650a",
+        "executable": true,
+        "path": "home/subject/node_modules/vitest/vitest.mjs"
+      },
+      {
+        "bytes_hex": "7b2262696e223a207b22747363223a20222e2f62696e2f747363227d2c20226e616d65223a202274797065736372697074222c202276657273696f6e223a2022352e392e33227d",
+        "executable": false,
+        "path": "home/subject/node_modules/typescript/package.json"
+      },
+      {
+        "bytes_hex": "23212f7573722f62696e2f656e76206e6f64650a",
+        "executable": true,
+        "path": "home/subject/node_modules/typescript/bin/tsc"
+      },
+      {
+        "bytes_hex": "6578706f7274207b7d3b0a",
+        "executable": false,
+        "path": "home/subject/tests/unit.test.ts"
+      },
+      {
+        "bytes_hex": "6578706f7274207b7d3b0a",
+        "executable": false,
+        "path": "home/subject/src/index.ts"
+      },
+      {
+        "bytes_hex": "7b7d",
+        "executable": false,
+        "path": "home/subject/tsconfig.json"
+      }
+    ],
+    "symlinks": [
+      {
+        "path": "home/subject/node_modules/.bin/vitest",
+        "target": "../vitest/vitest.mjs"
+      },
+      {
+        "path": "home/subject/node_modules/.bin/tsc",
+        "target": "../typescript/bin/tsc"
+      }
+    ]
+  },
+  "schema": "hol-guard.direct-tool-python.v1",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py": "326c426bcd216056ba0850393c5c503e4d92f283e02d7a7a0f43615270789003",
+    "src/codex_plugin_scanner/guard/runtime/direct_vitest.py": "811b2826b08f1ebb7dd1767b98ac0b28b357bb412ee4fe81387c47c9798644d7",
+    "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py": "f9214ef062cb045c35894461f5378f5450a27750c224fcca933c78e6ef765426",
+    "src/codex_plugin_scanner/guard/runtime/jsonc.py": "10ad890f0bf5ced4d3991ec174f9ea401d36c580074f888ed2e70ede30f9d0c4",
+    "src/codex_plugin_scanner/guard/runtime/node_semver.py": "534232af6dc97a8486104ebeccddf473518352a05497e962a4ca0e278e94ab61"
+  }
+}

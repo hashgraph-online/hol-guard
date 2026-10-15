@@ -47,6 +47,119 @@ fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
 }
 
 #[test]
+fn test_named_python_scripts_share_the_inline_eval_boundary() {
+    for command in [
+        "python3 test_calc.py",
+        "python test_calc.py -v",
+        "python3 -I tests/test_parser.py",
+        "/usr/bin/python3.12 src/calc_test.py",
+        "python3 run_tests.py",
+        "python3 tests.py",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+            assert_eq!(
+                result.reason_code, "native_python_eval_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "python3 deploy.py",
+        "python3 testing.py",
+        "python3 test_calc.sh",
+        "python3 ../test_calc.py",
+        "python3 /tmp/test_calc.py",
+        "python3 ~/test_calc.py",
+        "python3 -m test_calc",
+        "python3 -W ignore test_calc.py",
+        "python3 'test calc.py'",
+        "python3 test_calc.py > out.txt",
+        "python3 test_calc.py && rm -rf /",
+        "PYTHONPATH=/tmp python3 test_calc.py",
+        "sudo python3 test_calc.py",
+    ] {
+        assert_ne!(
+            classify("omp", command).reason_code,
+            "native_python_eval_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn unittest_and_final_status_echo_share_the_readonly_boundary() {
+    for (command, reason) in [
+        (
+            "python3 -m unittest",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            "python3 -m unittest -q",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            "python -I -m unittest discover -s tests -p 'test_*.py'",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            "python3 -m unittest -q 2>&1",
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            r#"python3 -m unittest -q 2>&1; echo "exit=$?""#,
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            r#"python3 test_calc.py; echo "EXIT CODE: $?""#,
+            "native_python_eval_readonly_containment_required",
+        ),
+        (
+            r#"python3 -m pytest -q 2>&1 | tail -20; echo "exit=$?""#,
+            "native_pytest_readonly_containment_required",
+        ),
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+            assert_eq!(result.reason_code, reason, "{command}");
+        }
+    }
+    for command in [
+        "python3 -m unittestx",
+        "python3 -m unittest 'a;b'",
+        "python3 -m unittest && rm -rf /",
+        "python3 -m unittest; rm -rf /",
+        r#"python3 -m unittest; echo "exit=$?"; rm -rf /"#,
+        r#"python3 -m unittest && echo "exit=$?""#,
+        r#"python3 -m unittest; echo "exit=$?" > out.txt"#,
+        r#"python3 -m unittest; echo "$(id)$?""#,
+        r#"python3 -m unittest; echo "exit=$?" "$?""#,
+        "python3 -m unittest 2>&1 > out.txt",
+        r#"python3 -m unittest; echo 'exit=$?'"#,
+        r#"python3 -m unittest; echo exit=\$?"#,
+        r#"rm -rf build; echo "exit=$?""#,
+        "sudo python3 -m unittest",
+        "PYTHONPATH=/tmp python3 -m unittest",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert!(
+            !matches!(
+                result.reason_code.as_str(),
+                "native_python_eval_readonly_containment_required"
+                    | "native_pytest_readonly_containment_required"
+            ),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn local_transform_service_is_containment_only_and_argv_bounded() {
     let command = "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping";
     let result = classify("omp", command);
@@ -78,21 +191,23 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
         "./.venv/bin/python3 -m pytest -q",
         "/usr/bin/python3 -m pytest tests/unit -q",
     ] {
-        let result = classify("omp", command);
-        let expected = if cfg!(target_os = "macos") {
-            "sandbox-required"
-        } else {
-            "review"
-        };
-        assert_eq!(result.minimum_action, expected, "{command}");
-        assert_eq!(result.decision, "deny", "{command}");
-        assert!(!result.explicitly_benign, "{command}");
-        let reason = if cfg!(target_os = "macos") {
-            "native_pytest_readonly_containment_required"
-        } else {
-            "native_command_review_required"
-        };
-        assert_eq!(result.reason_code, reason, "{command}");
+        for harness in ["omp", "claude-code", "codex"] {
+            let result = classify(harness, command);
+            let expected = if cfg!(target_os = "macos") {
+                "sandbox-required"
+            } else {
+                "review"
+            };
+            assert_eq!(result.minimum_action, expected, "{command}");
+            assert_eq!(result.decision, "deny", "{command}");
+            assert!(!result.explicitly_benign, "{command}");
+            let reason = if cfg!(target_os = "macos") {
+                "native_pytest_readonly_containment_required"
+            } else {
+                "native_command_review_required"
+            };
+            assert_eq!(result.reason_code, reason, "{command}");
+        }
     }
 }
 
@@ -122,7 +237,7 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         assert_ne!(result.decision, "allow", "{command}");
     }
     assert_ne!(
-        classify("claude-code", "pytest -q").reason_code,
+        classify("cursor", "pytest -q").reason_code,
         "native_pytest_readonly_containment_required"
     );
     let without_cwd = evaluate_pre_tool_envelope_with_context(
@@ -180,7 +295,7 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
 
 #[test]
 fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
-    for harness in ["omp", "zcode"] {
+    for harness in ["omp", "zcode", "claude-code"] {
         for command in [
             "bunx vitest run tests/example.test.ts",
             "bun x vitest run tests/example.test.ts",
@@ -188,6 +303,7 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             "bun --cwd=/project x --no-install vitest run tests/example.test.ts",
             "bunx vitest run __tests__/one.test.ts __tests__/two.test.ts",
             "npx --no-install vitest run",
+            "pnpm exec vitest run __tests__/one.test.ts",
             "vitest run",
             "node /home/tester/project/node_modules/vitest/vitest.mjs run tests/example.test.ts",
         ] {
@@ -195,7 +311,7 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             assert_eq!(result.decision, "deny", "{command}");
             let expected = if cfg!(target_os = "macos") {
                 "native_vitest_readonly_containment_required"
-            } else if command.starts_with("bun ") {
+            } else if command.starts_with("bun ") || command.starts_with("pnpm ") {
                 "native_package_review"
             } else {
                 "native_command_review_required"
@@ -212,8 +328,17 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             "bunx vitest run && rm -rf /",
             "bunx vitest run $(cat .env)",
             "bunx vitest run > .env",
+            "pnpm exec vitest watch",
+            "pnpm exec -c vitest run",
+            "pnpm exec --filter app vitest run",
+            "pnpm -r exec vitest run",
+            "pnpm --dir /elsewhere exec vitest run",
+            "pnpm exec vitest run && rm -rf /",
         ] {
             let result = classify(harness, command);
+            if command == "python3 test_calc.py" {
+                assert_eq!(result.decision, "deny", "{harness} {command}");
+            }
             assert_ne!(
                 result.reason_code, "native_vitest_readonly_containment_required",
                 "{command}"
@@ -404,5 +529,44 @@ fn build_requires_bounded_outputs_and_never_direct_execution() {
             "native_node_build_output_containment_required",
             "{command}"
         );
+    }
+}
+
+#[test]
+fn windows_contains_only_claude_code_python_runs() {
+    let contained = classify("claude-code", "python3 test_calc.py");
+    assert_eq!(contained.decision, "deny");
+    if cfg!(target_os = "macos") || cfg!(windows) {
+        assert_eq!(contained.minimum_action, "sandbox-required");
+        assert_eq!(
+            contained.reason_code,
+            "native_python_eval_readonly_containment_required"
+        );
+    }
+    if cfg!(windows) {
+        let resolved = classify(
+            "claude-code",
+            r"'C:\Program Files\Python312\python.exe' test_calc.py",
+        );
+        assert_eq!(resolved.minimum_action, "sandbox-required");
+        assert_eq!(
+            resolved.reason_code,
+            "native_python_eval_readonly_containment_required"
+        );
+        for (harness, command) in [
+            ("codex", "python3 test_calc.py"),
+            ("omp", "python3 test_calc.py"),
+            ("claude-code", "node -e 'console.log(1)'"),
+            ("claude-code", "python3 -m pytest"),
+        ] {
+            let result = classify(harness, command);
+            if command == "python3 test_calc.py" {
+                assert_eq!(result.decision, "deny", "{harness} {command}");
+            }
+            assert_ne!(
+                result.minimum_action, "sandbox-required",
+                "{harness} {command}"
+            );
+        }
     }
 }

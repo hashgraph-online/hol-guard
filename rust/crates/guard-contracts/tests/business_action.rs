@@ -96,6 +96,55 @@ fn complete_drive_and_calendar_facts_round_trip() {
 }
 
 #[test]
+fn drive_export_is_private_and_every_operation_has_a_fixed_class() {
+    let mut export = prepared_mail();
+    export["provider"]["service"] = json!("google_drive");
+    export["operation"] = json!("drive_export");
+    export["audience"]["kind"] = json!("private");
+    export["audience"]["recipients"] = json!([]);
+    export["volume"]["recipient_count"] = json!(0);
+    decode(&export).unwrap().require_complete_facts().unwrap();
+    for (kind, recipients) in [
+        ("public", json!([])),
+        (
+            "named",
+            json!([{"identity_binding":"e".repeat(64),"domain":"example.test","kind":"collaborator"}]),
+        ),
+    ] {
+        let mut shared = export.clone();
+        shared["audience"]["kind"] = json!(kind);
+        shared["volume"]["recipient_count"] = json!(recipients.as_array().unwrap().len());
+        shared["audience"]["recipients"] = recipients;
+        assert_eq!(decode(&shared), Err(BusinessActionErrorV1::Inconsistent));
+    }
+    let classes = [
+        ("mail_read", "read"),
+        ("mail_draft", "draft"),
+        ("mail_send", "send"),
+        ("mail_label", "update"),
+        ("mail_permanent_delete", "delete"),
+        ("mail_settings", "admin"),
+        ("drive_read", "read"),
+        ("drive_edit", "update"),
+        ("drive_share", "share"),
+        ("drive_export", "export"),
+        ("calendar_read", "read"),
+        ("calendar_invite", "send"),
+    ];
+    for (operation, class) in classes {
+        let operation: BusinessOperationV1 = serde_json::from_value(json!(operation)).unwrap();
+        assert_eq!(
+            serde_json::to_value(operation.action_class()).unwrap(),
+            json!(class)
+        );
+    }
+    // A class is derived, never accepted from the wire.
+    let mut claimed = prepared_mail();
+    claimed["action_class"] = json!("read");
+    assert!(decode(&claimed).is_err());
+}
+
+#[test]
 fn every_object_rejects_unknown_and_missing_fields() {
     for object in [
         None,

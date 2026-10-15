@@ -31,6 +31,7 @@ def cleanup_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         capabilities=[{"id": "retired", "class": "dead_duplicate", "patterns": ["src/retired_*.py"]}],
         package_excluded_candidates=candidates,
         retired_modules=[],
+        retired_bodies=[],
         retired_test_paths=[],
         oracle_tests=[],
         lazy_oracle_modules=[],

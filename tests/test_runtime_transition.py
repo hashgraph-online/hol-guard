@@ -2097,7 +2097,18 @@ def test_revoked_grant_and_reopened_object_cannot_publish_from_signed_record(tra
     reopened = RuntimeTransition(plan.guard_home, runtime.authority)
     with pytest.raises(ApprovalGateError):
         reopened.publish(plan.operation_id, "AuthorizedForExactTransition")
-    approval_gate._invalidate_active_grants(plan.guard_home)
+    # Rotating the approval password changes the factor generation, which the
+    # resident answers by revoking every grant it has issued for this home.
+    rotation = approval_gate.require_high_risk(
+        plan.guard_home,
+        purpose="settings_write",
+        approval_gate_input=ApprovalGateInput(password=password),
+    )
+    update_settings(
+        plan.guard_home,
+        {"new_password": "rotated-transition-password", "confirm_password": "rotated-transition-password"},
+        approval_gate_grant=rotation,
+    )
     with pytest.raises(ApprovalGateError):
         runtime.publish(plan.operation_id, "AuthorizedForExactTransition")
     assert bindings.read_bytes() == b"previous hooks"

@@ -149,3 +149,42 @@ def test_restored_recovery_marks_the_forensics_outcome(
     assert payload["outcome"] == "restored"
     # A monkeypatched decision supplies no probe detail, so the record is null.
     assert payload["probe"] is None
+
+
+def test_forensics_record_header_diagnosis_and_sqlite_version(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    page = bytearray(4096)
+    page[0:8] = bytes([0x0D, 0, 0, 0, 1, 0x0F, 0x85, 0])
+    (guard_home / "guard.db").write_bytes(bytes(page) * 3)
+
+    GuardStore(guard_home, prime_policy_integrity=False)
+
+    record = json.loads(_forensics_records(guard_home)[0].read_text(encoding="utf-8"))
+    assert record["sqlite_version"] == sqlite3.sqlite_version
+    assert isinstance(record["sqlite_wal_reset_bug_possible"], bool)
+    assert record["header"]["header_magic_ok"] is False
+    assert record["header"]["page1_looks_like_btree_page"] == "leaf-table"
+    assert record["header"]["file_size"] == 3 * 4096
+
+
+def test_header_diagnosis_accepts_a_real_database_and_flags_zeroed_files(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.sqlite_quarantine_forensics import (
+        sqlite_header_diagnosis,
+        sqlite_wal_reset_bug_possible,
+    )
+
+    good = tmp_path / "good.db"
+    with sqlite3.connect(good) as connection:
+        connection.execute("create table t (v integer)")
+    diagnosis = sqlite_header_diagnosis(good)
+    assert diagnosis["header_magic_ok"] is True
+    assert diagnosis["size_multiple_of_page"] is True
+    assert "page1_looks_like_btree_page" not in diagnosis
+
+    zeroed = tmp_path / "zero.db"
+    zeroed.write_bytes(bytes(4096))
+    assert sqlite_header_diagnosis(zeroed)["header_zeroed"] is True
+    assert sqlite_header_diagnosis(tmp_path / "missing.db") == {}
+    assert sqlite_wal_reset_bug_possible((3, 45, 0)) is True
+    assert sqlite_wal_reset_bug_possible((3, 51, 3)) is False

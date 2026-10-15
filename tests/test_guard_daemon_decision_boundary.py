@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.receipts.manager import build_receipt
 from codex_plugin_scanner.guard.runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_receipt_rollups import backfill_receipt_rollups
 
 
 def _request(
@@ -335,7 +334,7 @@ def test_legacy_receipt_envelope_contradiction_is_flagged_without_rewriting_hist
     command_detail_candidates = store.list_receipts_for_command_detail_backfill(days=1)
     assert [item["receipt_id"] for item in command_detail_candidates] == [receipt.receipt_id]
     with store._connect() as connection:
-        backfill_receipt_rollups(connection)
+        connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
     backfilled = store.receipt_analytics(top_limit=5)
     assert backfilled["allowed"] == 0
     assert backfilled["blocked"] == 1

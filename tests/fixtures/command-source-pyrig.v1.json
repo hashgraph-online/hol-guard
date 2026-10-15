@@ -1,0 +1,2300 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {
+      "id": "initialize",
+      "command": "pyrig init",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.initialize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "synchronize",
+      "command": "pyrig sync",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "synchronize-paths",
+      "command": "pyrig sync 'src/example project.py' pyproject.toml",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "scratch",
+      "command": "pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "scaffold-command",
+      "command": "pyrig mk cmd example",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "shared-command",
+      "command": "pyrig mk cmd example --shared",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "shared-before-name",
+      "command": "pyrig mk cmd --shared example",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "init-files",
+      "command": "pyrig mk inits",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.create-init-files",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "interactive-subclass",
+      "command": "pyrig mk subcls",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-subclass",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "explicit-subclass",
+      "command": "pyrig mk subcls pyrig.rig.tools.pyrigger Pyrigger",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-subclass",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "remove-bytecode",
+      "command": "pyrig rm pyc",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-bytecode",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "remove-integration",
+      "command": "pyrig rm pyrig",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "initialize-help",
+      "command": "pyrig init --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.initialize",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "synchronize-help",
+      "command": "pyrig sync --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "scratch-help",
+      "command": "pyrig scratch --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "command-help",
+      "command": "pyrig mk cmd --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "init-files-help",
+      "command": "pyrig mk inits --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.create-init-files",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "subclass-help",
+      "command": "pyrig mk subcls --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-subclass",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cache-help",
+      "command": "pyrig rm pyc --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-bytecode",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "removal-help",
+      "command": "pyrig rm pyrig --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "root-help",
+      "command": "pyrig --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.initialize",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "group-help",
+      "command": "pyrig mk --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "version",
+      "command": "pyrig version",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.initialize",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "inactive",
+      "command": "pyrig scratch",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-scratch",
+      "command": "pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.execute-scratch"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "disabled-help",
+      "command": "pyrig scratch --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.execute-scratch"
+      ],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "verbose",
+      "command": "pyrig -vv scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "quiet",
+      "command": "pyrig --quiet sync",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "absolute-executable",
+      "command": "/opt/example/bin/pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "windows-exe",
+      "command": "pyrig.exe rm pyrig",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "windows-cmd",
+      "command": "pyrig.cmd mk inits",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.create-init-files",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uv-run",
+      "command": "uv run pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uv-run-no-sync",
+      "command": "uv run --no-sync pyrig rm pyrig",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "env-independent-floor",
+      "command": "env pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "compound-help",
+      "command": "pyrig scratch --help; pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "two-operations",
+      "command": "pyrig sync && pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "pipeline",
+      "command": "pyrig scratch | cat",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "quoted-name-not-execution",
+      "command": "echo 'pyrig scratch'",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "operand-not-subcommand",
+      "command": "pyrig sync scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-command",
+      "command": "pyrig custom-command",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-option",
+      "command": "pyrig --unknown scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "help-as-operand",
+      "command": "pyrig sync -- --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "unrelated",
+      "command": "pwd",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "independent-block",
+      "command": "pyrig scratch --help; pyrig rm pyrig",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.remove-integration"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "uv-project",
+      "command": "uv run --project '/tmp/example project' pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uv-help",
+      "command": "uv run --no-sync pyrig scratch --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uv-disabled",
+      "command": "uv run pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.execute-scratch"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uv-nontarget",
+      "command": "uv run another-cli scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uv-option-value",
+      "command": "uv run --project pyrig another-cli scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "help-literal-after-terminator",
+      "command": "pyrig mk cmd -- --help",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "unresolved-operation",
+      "command": "pyrig \"$PYRIG_OPERATION\"",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "malformed-quoting",
+      "command": "pyrig scratch '",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "inactive-initialize",
+      "command": "pyrig init",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.initialize",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-initialize",
+      "command": "pyrig init",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.initialize"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.initialize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-synchronize",
+      "command": "pyrig sync",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-synchronize",
+      "command": "pyrig sync",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.synchronize"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.synchronize",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-execute-scratch",
+      "command": "pyrig scratch",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-execute-scratch",
+      "command": "pyrig scratch",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.execute-scratch"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.execute-scratch",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-scaffold-command",
+      "command": "pyrig mk cmd example --shared",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-scaffold-command",
+      "command": "pyrig mk cmd example --shared",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.scaffold-command"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.scaffold-command",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-create-init-files",
+      "command": "pyrig mk inits",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.create-init-files",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-create-init-files",
+      "command": "pyrig mk inits",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.create-init-files"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.create-init-files",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-scaffold-subclass",
+      "command": "pyrig mk subcls pyrig.rig.tools.pyrigger Pyrigger",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.scaffold-subclass",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-scaffold-subclass",
+      "command": "pyrig mk subcls pyrig.rig.tools.pyrigger Pyrigger",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.scaffold-subclass"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.scaffold-subclass",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-remove-bytecode",
+      "command": "pyrig rm pyc",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-bytecode",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-remove-bytecode",
+      "command": "pyrig rm pyc",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.remove-bytecode"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.remove-bytecode",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "inactive-remove-integration",
+      "command": "pyrig rm pyrig",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-remove-integration",
+      "command": "pyrig rm pyrig",
+      "enabled_extensions": [
+        "command.pyrig"
+      ],
+      "disabled_permissions": [
+        "command.pyrig.permission.remove-integration"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.pyrig.remove-integration",
+      "expected_effective_segments": [
+        0
+      ]
+    }
+  ],
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "extension_id": "command.pyrig",
+          "version": "1.0.0",
+          "name": "pyrig command protection",
+          "description": "Reviews pyrig project initialization, synchronization, scratch execution, scaffolding, cache deletion, and integration removal. Covers direct pyrig entrypoints and uv run pyrig, not arbitrary project CLIs, plugin commands, or other launchers. Help and version do not match operation rules; independent Guard requirements still apply. Based on pyrig 18.99.1; installed plugins and overrides can change behavior.",
+          "homepage": "https://github.com/Winipedia/pyrig",
+          "license": "MIT",
+          "action_classes": [
+            "pyrig project initialization",
+            "pyrig project synchronization",
+            "pyrig scratch execution",
+            "pyrig source scaffolding",
+            "pyrig cache deletion",
+            "pyrig integration removal"
+          ],
+          "risk_classes": [
+            "destructive_shell",
+            "dynamic_execution"
+          ],
+          "safer_alternatives": [
+            "Review command help and source before execution.",
+            "Back up the project and review generated diffs before committing.",
+            "Inspect .scratch.py and imported modules before executing project code."
+          ],
+          "reference_urls": [
+            "https://github.com/Winipedia/pyrig/blob/1cc37371a4089f2dbe59c6acdb1b29ff12734aa7/src/pyrig/rig/cli/subcommands.py",
+            "https://github.com/Winipedia/pyrig/blob/1cc37371a4089f2dbe59c6acdb1b29ff12734aa7/src/pyrig/rig/cli/make.py",
+            "https://github.com/Winipedia/pyrig/blob/1cc37371a4089f2dbe59c6acdb1b29ff12734aa7/src/pyrig/rig/cli/remove.py",
+            "https://github.com/Winipedia/pyrig/blob/1cc37371a4089f2dbe59c6acdb1b29ff12734aa7/src/pyrig/rig/tools/pyrigger.py"
+          ],
+          "required": false,
+          "source": "built-in",
+          "aliases": [],
+          "dependencies": [],
+          "conflicts": [],
+          "ecosystem_ids": [],
+          "executables": [
+            "pyrig",
+            "pyrig.exe",
+            "pyrig.cmd"
+          ],
+          "project_markers": [],
+          "permissions": [
+            {
+              "permission_id": "command.pyrig.permission.initialize",
+              "implementation_version": "1.0.0",
+              "label": "Initialize a pyrig project",
+              "description": "Deletes existing removable managed configuration, synchronizes the project, initializes Git, stages files, and creates an initial commit. The existing-commit check does not protect uncommitted configuration.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig project initialization"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Use a new disposable directory or back up existing configuration before initialization."
+              ],
+              "example_command": "pyrig init"
+            },
+            {
+              "permission_id": "command.pyrig.permission.synchronize",
+              "implementation_version": "1.0.0",
+              "label": "Synchronize pyrig-managed files",
+              "description": "Creates or updates managed configuration and mirrored tests, importing source modules during test discovery. Without paths it reconciles the whole project. A nonzero exit can indicate applied changes rather than a failed operation.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig project synchronization"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Review project modules and configuration overrides, back up changes, and inspect the diff after synchronization."
+              ],
+              "example_command": "pyrig sync"
+            },
+            {
+              "permission_id": "command.pyrig.permission.execute-scratch",
+              "implementation_version": "1.0.0",
+              "label": "Execute pyrig scratch code",
+              "description": "Runs the project-root .scratch.py as __main__, executing arbitrary project-local Python code.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig scratch execution"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Read .scratch.py and its imports before execution; use an isolated environment for untrusted code."
+              ],
+              "example_command": "pyrig scratch"
+            },
+            {
+              "permission_id": "command.pyrig.permission.scaffold-command",
+              "implementation_version": "1.0.0",
+              "label": "Scaffold pyrig CLI source",
+              "description": "Appends a CLI stub to the project command module, or to shared_subcommands.py with --shared. Shared commands can be discovered by other pyrig-runtime CLIs in the environment.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig source scaffolding"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Check the command name and target module, and review the generated source before use."
+              ],
+              "example_command": "pyrig mk cmd example --shared"
+            },
+            {
+              "permission_id": "command.pyrig.permission.create-init-files",
+              "implementation_version": "1.0.0",
+              "label": "Create pyrig package initialization files",
+              "description": "Creates missing __init__.py files under the project's source and test package roots.",
+              "risk_tier": "low",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig source scaffolding"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Check the source and test roots and review newly created initialization files."
+              ],
+              "example_command": "pyrig mk inits"
+            },
+            {
+              "permission_id": "command.pyrig.permission.scaffold-subclass",
+              "implementation_version": "1.0.0",
+              "label": "Import and scaffold a pyrig subclass",
+              "description": "Selects or imports a class's module and appends a subclass skeleton to project source. Explicit module references may execute import-time code.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig source scaffolding"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Verify the selected module is trusted and inspect the generated subclass before use."
+              ],
+              "example_command": "pyrig mk subcls pyrig.rig.tools.pyrigger Pyrigger"
+            },
+            {
+              "permission_id": "command.pyrig.permission.remove-bytecode",
+              "implementation_version": "1.0.0",
+              "label": "Remove pyrig bytecode caches",
+              "description": "Recursively removes __pycache__ directories under the source and test package roots.",
+              "risk_tier": "low",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig cache deletion"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Verify the source and test package roots before cache cleanup."
+              ],
+              "example_command": "pyrig rm pyc"
+            },
+            {
+              "permission_id": "command.pyrig.permission.remove-integration",
+              "implementation_version": "1.0.0",
+              "label": "Remove pyrig hooks and dependencies",
+              "description": "Removes pyrig-managed version-control hook entries and removes pyrig and its dependent plugins from the development dependency group. Previously generated files remain.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "pyrig integration removal"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Back up hook and dependency configuration and review the removal diff before committing."
+              ],
+              "example_command": "pyrig rm pyrig"
+            }
+          ],
+          "rules": [
+            {
+              "rule_id": "command.pyrig.initialize",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.initialize",
+              "title": "pyrig project initialization",
+              "description": "Reviews removal of managed configuration and initial project/Git setup.",
+              "severity": "high",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "pyrig project initialization"
+              ],
+              "safer_alternatives": [
+                "Back up existing files or initialize in a new directory."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "init"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "init"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show initialization help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "init"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "init"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.synchronize",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.synchronize",
+              "title": "pyrig project synchronization",
+              "description": "Reviews managed file updates and source imports for mirrored tests.",
+              "severity": "medium",
+              "risk_classes": [
+                "dynamic_execution"
+              ],
+              "action_classes": [
+                "pyrig project synchronization"
+              ],
+              "safer_alternatives": [
+                "Review imported modules and back up changes before synchronization."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "sync"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "sync"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show synchronization help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "sync"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "sync"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.execute-scratch",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.execute-scratch",
+              "title": "pyrig scratch execution",
+              "description": "Reviews execution of .scratch.py.",
+              "severity": "high",
+              "risk_classes": [
+                "dynamic_execution"
+              ],
+              "action_classes": [
+                "pyrig scratch execution"
+              ],
+              "safer_alternatives": [
+                "Inspect .scratch.py before executing it."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "scratch"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "scratch"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show scratch help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "scratch"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "scratch"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.scaffold-command",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.scaffold-command",
+              "title": "pyrig command scaffolding",
+              "description": "Reviews writes to project and shared CLI modules.",
+              "severity": "medium",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "pyrig source scaffolding"
+              ],
+              "safer_alternatives": [
+                "Review the target module and generated source."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "mk",
+                        "cmd"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "mk",
+                        "cmd"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show command scaffolding help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "mk",
+                            "cmd"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "mk",
+                            "cmd"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.create-init-files",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.create-init-files",
+              "title": "pyrig initialization file creation",
+              "description": "Reviews creation of missing source/test __init__.py files.",
+              "severity": "low",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "pyrig source scaffolding"
+              ],
+              "safer_alternatives": [
+                "Review newly generated files before committing."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "mk",
+                        "inits"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "mk",
+                        "inits"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show initialization file help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "mk",
+                            "inits"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "mk",
+                            "inits"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.scaffold-subclass",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.scaffold-subclass",
+              "title": "pyrig subclass scaffolding",
+              "description": "Reviews module imports and subclass source writes.",
+              "severity": "medium",
+              "risk_classes": [
+                "dynamic_execution"
+              ],
+              "action_classes": [
+                "pyrig source scaffolding"
+              ],
+              "safer_alternatives": [
+                "Trust the selected module and inspect generated source."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "mk",
+                        "subcls"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "mk",
+                        "subcls"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show subclass help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "mk",
+                            "subcls"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "mk",
+                            "subcls"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.remove-bytecode",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.remove-bytecode",
+              "title": "pyrig bytecode cache removal",
+              "description": "Reviews recursive deletion of source/test bytecode caches.",
+              "severity": "low",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "pyrig cache deletion"
+              ],
+              "safer_alternatives": [
+                "Verify project source/test roots before cleanup."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "rm",
+                        "pyc"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "rm",
+                        "pyc"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show cache cleanup help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "rm",
+                            "pyc"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "rm",
+                            "pyc"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.pyrig.remove-integration",
+              "rule_version": "1.0.0",
+              "permission_id": "command.pyrig.permission.remove-integration",
+              "title": "pyrig integration removal",
+              "description": "Reviews hook and development dependency removal.",
+              "severity": "high",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "pyrig integration removal"
+              ],
+              "safer_alternatives": [
+                "Back up hook/dependency configuration before removal."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "pyrig",
+                        "pyrig.exe",
+                        "pyrig.cmd"
+                      ],
+                      "subcommands": [
+                        "rm",
+                        "pyrig"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.exe"
+                      ],
+                      "subcommands": [
+                        "run",
+                        "pyrig",
+                        "rm",
+                        "pyrig"
+                      ],
+                      "allow_leading_options": true,
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--no-sync",
+                        "--frozen",
+                        "--locked",
+                        "--offline",
+                        "--no-project",
+                        "--no-config"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "--directory",
+                        "--python",
+                        "--with",
+                        "--with-editable",
+                        "--with-requirements",
+                        "--package"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "Show integration removal help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "pyrig",
+                            "pyrig.exe",
+                            "pyrig.cmd"
+                          ],
+                          "subcommands": [
+                            "rm",
+                            "pyrig"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ]
+                        }
+                      },
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "executables": [
+                            "uv",
+                            "uv.exe"
+                          ],
+                          "subcommands": [
+                            "run",
+                            "pyrig",
+                            "rm",
+                            "pyrig"
+                          ],
+                          "allow_leading_options": true,
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "interspersed_flags": [
+                            "--no-sync",
+                            "--frozen",
+                            "--locked",
+                            "--offline",
+                            "--no-project",
+                            "--no-config"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--project",
+                            "--directory",
+                            "--python",
+                            "--with",
+                            "--with-editable",
+                            "--with-requirements",
+                            "--package"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mcp_sources": [],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.keibidrop",
+          "command.mcp-asdecided",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-loomdesk",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.pyrig"
+        ]
+      }
+    },
+    "base": "packaged"
+  }
+}

@@ -8,10 +8,7 @@ import importlib.metadata
 import io
 import json
 import os
-import re
 import socket
-import subprocess
-import threading
 import time
 import urllib.error
 import urllib.parse
@@ -19,11 +16,9 @@ import urllib.request
 from base64 import urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, cast
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -31,8 +26,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
-from ..action_lattice import is_guard_action, most_restrictive_guard_action
-from ..adapters.base import HarnessAdapter, HarnessContext
+from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
     GuardDpopKeyMaterial,
@@ -44,17 +38,19 @@ from ..cloud_exceptions import (
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
 )
-from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig
+from ..config import VALID_RECEIPT_REDACTION_LEVELS
 from ..edge_events import build_runtime_session_event
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
-from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
-from ..native_prompt import NativePromptAnalysisError
-from ..native_prompt import analyze as _prompt_analyze_native
-from ..native_prompt import artifact_from_dict as _guard_artifact_from_dict
-from ..native_prompt import extract_prompt_requests as extract_prompt_requests
+from ..models import PolicyDecision
+from ..native_policy_bundle import (
+    NATIVE_UNAVAILABLE_REJECTION,
+    PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
+    native_rejection_code,
+)
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
-from ..native_prompt import should_force_reapproval as should_force_reapproval
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
 from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
@@ -68,8 +64,6 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
-    computed_policy_bundle_hash,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -97,26 +91,9 @@ from ..review_contracts import validated_review_verification_keys_from_sync
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
-from ..types import PromptRequest
-from .actions import GuardActionEnvelope, redacted_workspace_label
-from .approval_context import (
-    build_runtime_launch_identity,
-    parse_approval_context_token,
-    resolved_runtime_launch_argv,
-    runtime_launch_identity_is_reusable,
-)
-from .approval_reuse import (
-    APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
-)
-from .composition_rules import compose_action_from_signals
-from .decisions import (
-    AUTHORITATIVE_DECISION_INCONSISTENT,
-    build_authoritative_decision,
-    evaluation_authority_error,
-    rebuild_artifact_authority,
-)
-from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
+from . import runner_native_authority as _authority
+from . import runner_native_sync as _sync
+from .cloud_request_native import cloud_sync_receipt_payloads
 from .extension_catalog_handshake import (
     prepare_extension_catalog_handshake,
     runtime_session_success_summary,
@@ -127,7 +104,8 @@ from .extension_catalog_handshake import (
 )
 from .extension_catalog_sync import build_builtin_extension_catalog_wire
 from .extension_control_authority import ExtensionControlAuthorityView
-from .local_runtime_fallbacks import best_effort_access_token, local_receipt_redaction_level
+from .guard_run_evaluation import _get_default_detector_registry as _get_default_detector_registry
+from .local_runtime_fallbacks import local_receipt_redaction_level
 from .managed_controls_sync import (
     apply_custom_extension_continuity_from_sync,
     effective_managed_controls_for_activation,
@@ -142,7 +120,6 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
-from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
     load_supply_chain_bundle_response,
@@ -156,7 +133,8 @@ _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
 _POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
 _POLICY_CONTRACTS = ("guard-policy-bundle/v1", "guard-policy-bundle/v2")
 _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
-_POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
+# Re-exported for the supply-chain services; the resident derives the endpoint.
+_normalized_receipts_sync_url = _sync.normalized_receipts_sync_url
 
 
 def _hol_guard_runtime_source_sha256(package_root: Path | None = None) -> str:
@@ -185,590 +163,6 @@ def _hol_guard_runtime_package_identity() -> tuple[str | None, str] | None:
 
 
 _LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY = _hol_guard_runtime_package_identity()
-
-
-def _canonical_policy_rollout_percentage() -> int:
-    raw = os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV, "").strip().lower()
-    if raw in {"", "0", "false", "off", "legacy"}:
-        return 0
-    if raw in {"1", "true", "on", "canonical"}:
-        return 100
-    try:
-        percentage = int(raw)
-    except ValueError:
-        return 0
-    return percentage if 1 <= percentage <= 100 else 0
-
-
-def _canonical_policy_enforcement_enabled(
-    *,
-    device_id: str,
-    workspace_id: str | None,
-) -> bool:
-    percentage = _canonical_policy_rollout_percentage()
-    if percentage in {0, 100}:
-        return percentage == 100
-    cohort_key = f"{workspace_id or 'local'}:{device_id}".encode()
-    # This is an in-memory rollout bucket for opaque installation IDs, not a password verifier.
-    # codeql[py/weak-sensitive-data-hashing]
-    cohort = int.from_bytes(hashlib.sha256(cohort_key).digest()[:8], "big") % 100
-    return cohort < percentage
-
-
-def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
-    from ..consumer import detect_harness as _detect_harness
-
-    return _detect_harness(harness, context)
-
-
-def evaluate_detection(
-    detection: HarnessDetection,
-    store: GuardStore,
-    config: GuardConfig,
-    *,
-    default_action: str | None = None,
-    persist: bool = True,
-    trusted_request_overrides: Mapping[str, str] | None = None,
-    trusted_request_override_labels: Mapping[str, str] | None = None,
-    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None = None,
-    claimed_saved_approval_overrides: Mapping[str, str] | None = None,
-    retained_saved_approval_overrides: Mapping[str, str] | None = None,
-    runtime_detector_context: Mapping[str, object] | None = None,
-    runtime_detector_block_reason: str | None = None,
-):
-    from ..consumer.service import evaluate_detection as _evaluate_detection
-
-    return _evaluate_detection(
-        detection,
-        store,
-        config,
-        default_action=default_action,
-        persist=persist,
-        trusted_request_overrides=trusted_request_overrides,
-        trusted_request_override_labels=trusted_request_override_labels,
-        pending_approval_claims=pending_approval_claims,
-        claimed_saved_approval_overrides=claimed_saved_approval_overrides,
-        retained_saved_approval_overrides=retained_saved_approval_overrides,
-        runtime_detector_context=runtime_detector_context,
-        runtime_detector_block_reason=runtime_detector_block_reason,
-    )
-
-
-def get_adapter(harness: str) -> HarnessAdapter:
-    from ..adapters import get_adapter as _get_adapter
-
-    return _get_adapter(harness)
-
-
-def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
-    return computed_policy_bundle_hash(policy_bundle)
-
-
-_APPROVAL_METADATA_KEYS = (
-    "approval_center_url",
-    "approval_delivery",
-    "approval_queue_unavailable",
-    "approval_requests",
-    "approval_wait",
-    "daemon_queue_unavailable",
-    "review_hint",
-)
-
-_RUNTIME_DETECTOR_REVIEW_REASON = "runtime_detector_review"
-_RUNTIME_DETECTOR_WARN_REASON = "runtime_detector_warn"
-_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM = "approval_reuse_context_changed_after_claim"
-# Every prepared launch-environment entry is authority-hashed except this
-# explicit execution-boundary credential. Inherited values are removed before
-# hashing; only Guard's freshly resolved Hermes credential may be added later.
-_HERMES_GUARD_TOKEN_ENV_KEY = "HERMES_GUARD_TOKEN"
-_GUARD_RUN_LATE_CREDENTIAL_ENV_KEYS = frozenset({_HERMES_GUARD_TOKEN_ENV_KEY})
-
-
-def _resolved_exact_request_overrides(evaluation: Mapping[str, object]) -> dict[str, str]:
-    """Extract trusted allow results bound to the exact queued context token."""
-
-    wait_result = evaluation.get("approval_wait")
-    if not isinstance(wait_result, Mapping) or wait_result.get("resolved") is not True:
-        return {}
-    raw_items = wait_result.get("items")
-    if not isinstance(raw_items, list) or not raw_items:
-        return {}
-    items = [item for item in raw_items if isinstance(item, Mapping)]
-    if len(items) != len(raw_items) or any(
-        item.get("status") != "resolved" or item.get("resolution_action") != "allow" for item in items
-    ):
-        return {}
-    overrides: dict[str, str] = {}
-    for item in items:
-        artifact_id = item.get("artifact_id")
-        artifact_hash = item.get("artifact_hash")
-        if (
-            not isinstance(artifact_id, str)
-            or not artifact_id
-            or not isinstance(artifact_hash, str)
-            or parse_approval_context_token(artifact_hash) is None
-        ):
-            return {}
-        overrides[artifact_id] = artifact_hash
-    return overrides
-
-
-_INTERACTIVE_ALLOW_OVERRIDE_LABELS = frozenset({"allow-once", "allow-artifact", "allow-publisher", "allow-harness"})
-
-
-def _resolved_interactive_request_overrides(
-    evaluation: Mapping[str, object],
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Extract exact allow intents returned by the trusted terminal resolver."""
-
-    raw_items = evaluation.get("artifacts")
-    if not isinstance(raw_items, list):
-        return {}, {}
-    overrides: dict[str, str] = {}
-    labels: dict[str, str] = {}
-    for item in raw_items:
-        if not isinstance(item, Mapping) or item.get("policy_action") != "allow":
-            continue
-        user_override = item.get("user_override")
-        artifact_id = item.get("artifact_id")
-        artifact_hash = item.get("approval_context_hash")
-        if (
-            not isinstance(user_override, str)
-            or user_override not in _INTERACTIVE_ALLOW_OVERRIDE_LABELS
-            or not isinstance(artifact_id, str)
-            or not artifact_id
-            or not isinstance(artifact_hash, str)
-            or parse_approval_context_token(artifact_hash) is None
-        ):
-            continue
-        overrides[artifact_id] = artifact_hash
-        labels[artifact_id] = user_override
-    return overrides, labels
-
-
-def _runtime_detector_authority(evaluation: Mapping[str, object]) -> tuple[GuardAction | None, str | None]:
-    composition = evaluation.get("runtime_detector_composition")
-    if not isinstance(composition, Mapping):
-        return None, None
-    action = composition.get("action")
-    reason = composition.get("reason")
-    if not is_guard_action(action) or action not in {"allow", "warn", "review", "block"}:
-        return None, None
-    return action, reason if isinstance(reason, str) and reason else None
-
-
-def _runtime_detector_context(evaluation: Mapping[str, object]) -> dict[str, object] | None:
-    """Return timing-free detector authority suitable for exact context hashing."""
-
-    raw_composition = evaluation.get("runtime_detector_composition")
-    composition = (
-        {
-            "action": raw_composition.get("action"),
-            "reason": raw_composition.get("reason"),
-            "downgraded": raw_composition.get("downgraded") is True,
-            "upgraded": raw_composition.get("upgraded") is True,
-        }
-        if isinstance(raw_composition, Mapping)
-        else {}
-    )
-    raw_signals = evaluation.get("runtime_detector_signals_v2")
-    signals = (
-        [dict(signal) for signal in raw_signals if isinstance(signal, Mapping)] if isinstance(raw_signals, list) else []
-    )
-    telemetry = _normalized_runtime_detector_telemetry(evaluation)
-    if not composition and not signals and not telemetry:
-        return None
-    return {"composition": composition, "signals_v2": signals, "telemetry": telemetry}
-
-
-def _normalized_runtime_detector_telemetry(evaluation: Mapping[str, object]) -> list[dict[str, object]]:
-    """Bind semantic detector outcomes while excluding nondeterministic duration."""
-
-    raw_telemetry = evaluation.get("runtime_detector_telemetry")
-    if not isinstance(raw_telemetry, list):
-        return []
-    telemetry: list[dict[str, object]] = []
-    for raw_item in raw_telemetry:
-        if not isinstance(raw_item, Mapping):
-            continue
-        item = {str(key): value for key, value in raw_item.items() if isinstance(key, str) and key != "elapsed_ms"}
-        categories = item.get("categories")
-        if isinstance(categories, (list, tuple)):
-            item["categories"] = sorted({category for category in categories if isinstance(category, str)})
-        telemetry.append(item)
-    return sorted(
-        telemetry,
-        key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
-    )
-
-
-def _runtime_detector_nonterminal_evidence(
-    action: GuardAction | None,
-    reason: str | None,
-) -> dict[str, object] | None:
-    if action == "warn":
-        return {
-            "source": "runtime_detector_registry",
-            "status": "warning",
-            "reason_code": _RUNTIME_DETECTOR_WARN_REASON,
-            "reason": reason or "runtime detector signals require a warning",
-        }
-    if action == "review":
-        return {
-            "source": "runtime_detector_registry",
-            "status": "review-required",
-            "reason_code": _RUNTIME_DETECTOR_REVIEW_REASON,
-            "reason": reason or "runtime detector signals require review",
-        }
-    return None
-
-
-def _config_with_current_authority(
-    config: GuardConfig,
-    evaluation: Mapping[str, object],
-    authority_action: GuardAction,
-    *,
-    artifact_ids: set[str] | None = None,
-) -> GuardConfig:
-    """Bind runner-only authority into each artifact's current policy context.
-
-    Runtime detector composition happens outside the consumer service.  A
-    synthetic per-artifact override makes that current authority participate
-    in approval-context hashing and saved-decision composition before any
-    one-shot claim. Existing stronger current actions remain authoritative.
-    """
-
-    raw_artifacts = evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list) or not raw_artifacts:
-        return config
-    artifact_actions = dict(config.artifact_actions or {})
-    changed = False
-    for item in raw_artifacts:
-        if not isinstance(item, Mapping):
-            continue
-        artifact_id = item.get("artifact_id")
-        if not isinstance(artifact_id, str) or not artifact_id:
-            continue
-        if artifact_ids is not None and artifact_id not in artifact_ids:
-            continue
-        composition = item.get("policy_composition")
-        current_action = composition.get("current_action") if isinstance(composition, Mapping) else None
-        if not is_guard_action(current_action):
-            current_action = item.get("policy_action")
-        composed = most_restrictive_guard_action(current_action, authority_action, unknown_action="block")
-        if artifact_actions.get(artifact_id) != composed:
-            artifact_actions[artifact_id] = composed
-            changed = True
-    return replace(config, artifact_actions=artifact_actions) if changed else config
-
-
-@dataclass(frozen=True, slots=True)
-class _GuardRunLaunchPlan:
-    """The exact adapter launch vector resolved at an authority boundary."""
-
-    adapter_command: tuple[str, ...]
-    execution_command: tuple[str, ...]
-    environment: Mapping[str, str]
-    environment_sha256: str
-    identity: Mapping[str, object]
-    launch_cwd: Path
-    reusable: bool
-
-
-def _guard_run_launch_environment(
-    adapter: HarnessAdapter,
-    context: HarnessContext,
-) -> tuple[dict[str, str], Path]:
-    environment = os.environ.copy()
-    environment["HOME"] = str(context.home_dir)
-    if os.name == "nt":
-        environment["USERPROFILE"] = str(context.home_dir)
-    environment = adapter.prepare_launch_environment(context, environment)
-    for credential_key in _GUARD_RUN_LATE_CREDENTIAL_ENV_KEYS:
-        environment.pop(credential_key, None)
-    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()):
-        raise ValueError("Harness launch environment must contain only string keys and values.")
-    launch_cwd = (context.workspace_dir or Path.cwd()).expanduser().resolve(strict=True)
-    if not launch_cwd.is_dir():
-        raise NotADirectoryError(f"Harness launch cwd is not a directory: {launch_cwd}")
-    return dict(environment), launch_cwd
-
-
-def _guard_run_launch_environment_hash(environment: Mapping[str, str]) -> str:
-    """Return a canonical, non-reversible digest of the full prepared environment."""
-
-    material = json.dumps(
-        sorted(environment.items()),
-        ensure_ascii=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(b"hol.guard.guard-run-launch-environment:v1\x00" + material).hexdigest()
-
-
-def _guard_run_plan_for_command(
-    adapter_command: Sequence[str],
-    *,
-    environment: Mapping[str, str],
-    launch_cwd: Path,
-) -> _GuardRunLaunchPlan | None:
-    normalized_command = tuple(adapter_command)
-    if not normalized_command or any(not isinstance(part, str) or not part for part in normalized_command):
-        return None
-    identity = build_runtime_launch_identity(
-        normalized_command[0],
-        args=normalized_command[1:],
-        structured_command=True,
-        direct_executable=True,
-        search_path=environment.get("PATH"),
-        cwd=launch_cwd,
-        launch_env=environment,
-    )
-    pinned_command = resolved_runtime_launch_argv(identity, args=normalized_command[1:])
-    reusable = pinned_command is not None and runtime_launch_identity_is_reusable(identity)
-    return _GuardRunLaunchPlan(
-        adapter_command=normalized_command,
-        execution_command=pinned_command if reusable and pinned_command is not None else normalized_command,
-        environment=dict(environment),
-        environment_sha256=_guard_run_launch_environment_hash(environment),
-        identity=identity,
-        launch_cwd=launch_cwd,
-        reusable=reusable,
-    )
-
-
-def _guard_run_launch_previews(
-    harness: str,
-    context: HarnessContext,
-    passthrough_args: list[str],
-) -> tuple[_GuardRunLaunchPlan, ...]:
-    """Content-bind every launch argv without performing adapter setup."""
-
-    adapter = get_adapter(harness)
-    raw_commands: Sequence[Sequence[str]] = adapter.preview_launch_commands(context, passthrough_args)
-    environment, launch_cwd = _guard_run_launch_environment(adapter, context)
-    plans: list[_GuardRunLaunchPlan] = []
-    seen_commands: set[tuple[str, ...]] = set()
-    for raw_command in raw_commands:
-        plan = _guard_run_plan_for_command(
-            raw_command,
-            environment=environment,
-            launch_cwd=launch_cwd,
-        )
-        if plan is None or plan.adapter_command in seen_commands:
-            continue
-        seen_commands.add(plan.adapter_command)
-        plans.append(plan)
-    return tuple(plans)
-
-
-def _guard_run_executable_prefix(launch_plan: _GuardRunLaunchPlan) -> tuple[str, ...] | None:
-    """Recover the canonical prefix prepended while pinning a preview argv."""
-
-    adapter_arguments = launch_plan.adapter_command[1:]
-    prefix_length = len(launch_plan.execution_command) - len(adapter_arguments)
-    if prefix_length < 1:
-        return None
-    if adapter_arguments and launch_plan.execution_command[prefix_length:] != adapter_arguments:
-        return None
-    return launch_plan.execution_command[:prefix_length]
-
-
-def _guard_run_finalize_authorized_launch_plan(
-    harness: str,
-    context: HarnessContext,
-    passthrough_args: list[str],
-    authorized_plans: Sequence[_GuardRunLaunchPlan],
-) -> _GuardRunLaunchPlan | None:
-    """Run authorized setup without re-resolving previewed launch identity."""
-
-    if not authorized_plans or not all(plan.reusable for plan in authorized_plans):
-        return None
-    environment = authorized_plans[0].environment
-    environment_sha256 = authorized_plans[0].environment_sha256
-    if any(
-        plan.environment_sha256 != environment_sha256 or dict(plan.environment) != dict(environment)
-        for plan in authorized_plans[1:]
-    ):
-        return None
-    resolved_prefixes = [_guard_run_executable_prefix(plan) for plan in authorized_plans]
-    if any(prefix is None for prefix in resolved_prefixes):
-        return None
-    prefixes = tuple(dict.fromkeys(cast(tuple[str, ...], prefix) for prefix in resolved_prefixes))
-    adapter = get_adapter(harness)
-    actual_command = adapter.launch_command_from_authorized_plan(
-        context,
-        passthrough_args,
-        authorized_executable_prefixes=prefixes,
-        launch_environment=dict(environment),
-    )
-    normalized_actual = tuple(actual_command)
-    for plan in authorized_plans:
-        if normalized_actual in {plan.adapter_command, plan.execution_command}:
-            return plan
-    return None
-
-
-def _guard_run_launch_plan_signature(launch_plan: _GuardRunLaunchPlan) -> str | None:
-    if not launch_plan.reusable:
-        return None
-    return json.dumps(
-        {
-            "adapter_command": list(launch_plan.adapter_command),
-            "environment_sha256": launch_plan.environment_sha256,
-            "identity": launch_plan.identity,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-
-
-def _guard_run_authority_signature(
-    detection: HarnessDetection,
-    evaluation: Mapping[str, object],
-    launch_previews: Sequence[_GuardRunLaunchPlan] = (),
-) -> tuple[object, ...] | None:
-    """Return the exact launch authority checked on both sides of a claim."""
-
-    raw_artifacts = evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list):
-        return None
-    contexts: dict[str, tuple[str, str]] = {}
-    for item in raw_artifacts:
-        if not isinstance(item, Mapping):
-            return None
-        artifact_id = item.get("artifact_id")
-        approval_context_hash = item.get("approval_context_hash")
-        policy_action = item.get("policy_action")
-        if (
-            not isinstance(artifact_id, str)
-            or not artifact_id
-            or artifact_id in contexts
-            or not isinstance(approval_context_hash, str)
-            or parse_approval_context_token(approval_context_hash) is None
-            or not is_guard_action(policy_action)
-        ):
-            return None
-        contexts[artifact_id] = (approval_context_hash, policy_action)
-    detector_payload = _runtime_detector_context(evaluation)
-    return (
-        detection.harness,
-        detection.installed,
-        detection.command_available,
-        tuple(detection.config_paths),
-        tuple(sorted(contexts.items())),
-        json.dumps(detector_payload, sort_keys=True, separators=(",", ":"), default=str),
-        tuple(_guard_run_launch_plan_signature(plan) for plan in launch_previews),
-    )
-
-
-def _receipt_rowid_cursor(store: GuardStore) -> int:
-    with store._connect() as connection:
-        row = connection.execute("select coalesce(max(rowid), 0) as cursor from runtime_receipts").fetchone()
-    return int(row["cursor"]) if row is not None else 0
-
-
-def _saved_decision_is_retained(decision: Mapping[str, object]) -> bool:
-    """Return whether a successful claim leaves the authority row in place."""
-
-    approval_id = decision.get("approval_id")
-    if isinstance(approval_id, str) and approval_id:
-        artifact_id = decision.get("artifact_id")
-        return isinstance(artifact_id, str) and ":package-request:" in artifact_id
-    decision_id = decision.get("decision_id")
-    if isinstance(decision_id, int) and not isinstance(decision_id, bool):
-        return not (decision.get("source") == "approval-gate" and decision.get("expires_at") is not None)
-    # The store rejects unknown claim identities. Classifying them as retained
-    # is the conservative fallback if an alternate store implementation ever
-    # accepts one: absence may not be treated as proof of consumption.
-    return True
-
-
-def _append_authority_evidence_to_receipts(
-    store: GuardStore,
-    *,
-    after_rowid: int,
-    evaluation: Mapping[str, object],
-    evidence: Mapping[str, object],
-    approval_source: str,
-    source_actions: frozenset[str],
-    replace_existing_source: bool = False,
-) -> None:
-    """Attach runner-composed authority to receipts emitted by one evaluation."""
-
-    raw_artifacts = evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list):
-        return
-    artifact_ids = {
-        artifact_id
-        for item in raw_artifacts
-        if isinstance(item, Mapping)
-        for artifact_id in (item.get("artifact_id"),)
-        if isinstance(artifact_id, str) and artifact_id
-    }
-    if not artifact_ids:
-        return
-    reason_code = evidence.get("reason_code")
-    # Runtime detector authority is composed in this aggregate, so its receipt
-    # evidence is amended in the same local transaction boundary.
-    with store._connect() as connection:
-        rows = connection.execute(
-            """
-            select rowid, artifact_id, policy_decision, scanner_evidence_json, approval_source
-            from runtime_receipts
-            where rowid > ?
-            order by rowid asc
-            """,
-            (after_rowid,),
-        ).fetchall()
-        for row in rows:
-            if str(row["artifact_id"]) not in artifact_ids:
-                continue
-            try:
-                raw_evidence = json.loads(str(row["scanner_evidence_json"]))
-            except (TypeError, ValueError):
-                raw_evidence = []
-            scanner_evidence = list(raw_evidence) if isinstance(raw_evidence, list) else []
-            if replace_existing_source:
-                scanner_evidence = [
-                    item
-                    for item in scanner_evidence
-                    if not isinstance(item, Mapping) or item.get("source") != evidence.get("source")
-                ]
-            if not any(
-                isinstance(item, Mapping)
-                and item.get("source") == evidence.get("source")
-                and item.get("reason_code") == reason_code
-                for item in scanner_evidence
-            ):
-                scanner_evidence.append(dict(evidence))
-            current_source = row["approval_source"]
-            next_source = approval_source if str(row["policy_decision"]) in source_actions else current_source
-            connection.execute(
-                """
-                update runtime_receipts
-                set scanner_evidence_json = ?, approval_source = ?
-                where rowid = ?
-                """,
-                (json.dumps(scanner_evidence, sort_keys=True), next_source, int(row["rowid"])),
-            )
-
-
-_DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
-_DEFAULT_DETECTOR_REGISTRY_LOCK = threading.Lock()
-
-
-def _get_default_detector_registry() -> DetectorRegistry:
-    factory = register_default_detectors
-    cached = _DEFAULT_DETECTOR_REGISTRY
-    if cached is not None and cached[0] is factory:
-        return cached[1]
-    with _DEFAULT_DETECTOR_REGISTRY_LOCK:
-        cached = _DEFAULT_DETECTOR_REGISTRY
-        if cached is None or cached[0] is not factory:
-            cached = (factory, DetectorRegistry(factory()))
-            globals()["_DEFAULT_DETECTOR_REGISTRY"] = cached
-    return cached[1]
 
 
 @contextmanager
@@ -834,1083 +228,6 @@ class GuardSyncAuthorizationExpiredError(GuardSyncNotConfiguredError):
     """Raised when local OAuth material can no longer mint a runtime access token."""
 
 
-def _resolve_hermes_guard_access_token(store: GuardStore) -> str | None:
-    return best_effort_access_token(lambda: _resolve_guard_sync_auth_context(store))
-
-
-def guard_run(
-    harness: str,
-    context: HarnessContext,
-    store: GuardStore,
-    config: GuardConfig,
-    dry_run: bool,
-    passthrough_args: list[str],
-    default_action: str | None = None,
-    interactive_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
-    blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
-    current_config_provider: Callable[[], GuardConfig] | None = None,
-) -> dict[str, Any]:
-    """Evaluate local harness state and optionally launch the harness."""
-
-    # `guard run` is usually the first native caller in a fresh install: the
-    # detection review (including bare `--dry-run`) resolves package-intent and
-    # launch identities through the resident, and the resident refuses every
-    # request until this store's verifier key exists. Reuse the publisher's
-    # store-derived bootstrap; never create a separate authority or substitute
-    # Python when the resident is absent. The digest home is bound too, so those
-    # calls resolve against this store instead of `$HOME`.
-    from ..native_context import bind_context_digest_home
-    from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
-
-    provision_native_verifier_key_for_store(store)
-    bind_context_digest_home(getattr(store, "guard_home", None))
-    detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
-    launch_plan: _GuardRunLaunchPlan | None = None
-    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] = []
-    base_evaluation = evaluate_detection(
-        detection,
-        store,
-        config,
-        default_action=default_action,
-        persist=False,
-        pending_approval_claims=pending_approval_claims,
-    )
-
-    action_envelope = _guard_run_action_envelope(harness, context, passthrough_args)
-    detector_evaluation = _evaluation_with_detector_registry(
-        base_evaluation,
-        action_envelope,
-        context,
-        config,
-    )
-    detector_action, _detector_reason = _runtime_detector_authority(detector_evaluation)
-    detector_context = _runtime_detector_context(detector_evaluation)
-    authority_config = config
-    if detector_action in {"warn", "review"}:
-        # The first evaluation is deliberately non-consuming and exists only
-        # to recover each artifact's current policy action. Re-evaluate with
-        # nonterminal detector authority bound into the current authority
-        # before trusting or scheduling any saved approval claim.
-        authority_config = _config_with_current_authority(config, base_evaluation, detector_action)
-    if detector_context is not None:
-        pending_approval_claims = []
-        evaluation = evaluate_detection(
-            detection,
-            store,
-            authority_config,
-            default_action=default_action,
-            persist=False,
-            pending_approval_claims=pending_approval_claims,
-            runtime_detector_context=detector_context,
-        )
-        evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-    else:
-        evaluation = detector_evaluation
-    detector_block_reason = detector_evaluation.get("blocked_by_detector")
-    authoritative_detector_block = (
-        detector_block_reason if isinstance(detector_block_reason, str) and detector_block_reason else None
-    )
-    if evaluation["blocked"]:
-        evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-
-    resolved_evaluation: dict[str, Any] | None = None
-    trusted_request_overrides: dict[str, str] = {}
-    trusted_request_override_labels: dict[str, str] = {}
-    if (
-        not dry_run
-        and authoritative_detector_block is None
-        and interactive_resolver is not None
-        and evaluation["blocked"]
-    ):
-        resolved_evaluation = interactive_resolver(detection, evaluation)
-        trusted_request_overrides, trusted_request_override_labels = _resolved_interactive_request_overrides(
-            resolved_evaluation
-        )
-    elif (
-        not dry_run and authoritative_detector_block is None and blocked_resolver is not None and evaluation["blocked"]
-    ):
-        resolved_evaluation = blocked_resolver(detection, evaluation)
-        trusted_request_overrides = _resolved_exact_request_overrides(resolved_evaluation)
-        trusted_request_override_labels = {artifact_id: "approval-center" for artifact_id in trusted_request_overrides}
-    if resolved_evaluation is not None:
-        # A terminal prompt or browser wait is an authority boundary even when
-        # the user chose the unpersisted ``allow-once`` path. Reload policy
-        # before applying that exact request override; post-claim refresh below
-        # cannot protect an approval that intentionally created no stored row.
-        resolution_config_refresh_failed = False
-        if current_config_provider is not None:
-            try:
-                provided_config = current_config_provider()
-            except Exception:
-                resolution_config_refresh_failed = True
-            else:
-                if isinstance(provided_config, GuardConfig):
-                    config = provided_config
-                else:
-                    resolution_config_refresh_failed = True
-        if resolution_config_refresh_failed:
-            trusted_request_overrides = {}
-            trusted_request_override_labels = {}
-        detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
-        base_evaluation = evaluate_detection(
-            detection,
-            store,
-            config,
-            default_action=default_action,
-            persist=False,
-        )
-        detector_evaluation = _evaluation_with_detector_registry(
-            base_evaluation,
-            action_envelope,
-            context,
-            config,
-        )
-        detector_action, _detector_reason = _runtime_detector_authority(detector_evaluation)
-        detector_context = _runtime_detector_context(detector_evaluation)
-        authority_config = config
-        if detector_action in {"warn", "review"}:
-            authority_config = _config_with_current_authority(config, base_evaluation, detector_action)
-        pending_approval_claims = []
-        evaluation = evaluate_detection(
-            detection,
-            store,
-            authority_config,
-            default_action=default_action,
-            persist=False,
-            trusted_request_overrides=trusted_request_overrides,
-            trusted_request_override_labels=trusted_request_override_labels,
-            pending_approval_claims=pending_approval_claims,
-            runtime_detector_context=detector_context,
-        )
-        evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-        detector_block_reason = detector_evaluation.get("blocked_by_detector")
-        authoritative_detector_block = (
-            detector_block_reason if isinstance(detector_block_reason, str) and detector_block_reason else None
-        )
-        if evaluation["blocked"]:
-            evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-        for key in _APPROVAL_METADATA_KEYS:
-            if key in resolved_evaluation:
-                evaluation[key] = resolved_evaluation[key]
-    if evaluation["blocked"] or dry_run:
-        receipt_cursor = _receipt_rowid_cursor(store)
-        persisted = evaluate_detection(
-            detection,
-            store,
-            authority_config,
-            default_action=default_action,
-            persist=True,
-            trusted_request_overrides=trusted_request_overrides,
-            trusted_request_override_labels=trusted_request_override_labels,
-            runtime_detector_context=detector_context,
-            runtime_detector_block_reason=authoritative_detector_block,
-        )
-        if persisted["blocked"]:
-            persisted = _evaluation_with_action_envelope(persisted, action_envelope)
-        persisted = _evaluation_with_recorded_detector_result(persisted, detector_evaluation)
-        detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
-        if detector_evidence is not None and detector_action is not None:
-            _append_authority_evidence_to_receipts(
-                store,
-                after_rowid=receipt_cursor,
-                evaluation=persisted,
-                evidence=detector_evidence,
-                approval_source="runtime-detector",
-                source_actions=frozenset({detector_action}),
-            )
-        if resolved_evaluation is not None:
-            for key in _APPROVAL_METADATA_KEYS:
-                if key in resolved_evaluation:
-                    persisted[key] = resolved_evaluation[key]
-        evaluation = persisted
-    else:
-        decisions_to_claim = [decision for decision, _artifact_id, _artifact_hash in pending_approval_claims]
-        preclaim_launch_previews: tuple[_GuardRunLaunchPlan, ...] = ()
-        preclaim_signature: tuple[object, ...] | None = None
-        preclaim_failure_reason: str | None = None
-        if decisions_to_claim:
-            try:
-                preclaim_launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
-            except Exception:
-                preclaim_launch_previews = ()
-            if preclaim_launch_previews and all(plan.reusable for plan in preclaim_launch_previews):
-                preclaim_signature = _guard_run_authority_signature(
-                    detection,
-                    evaluation,
-                    preclaim_launch_previews,
-                )
-            if preclaim_signature is None:
-                preclaim_failure_reason = APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED
-            else:
-                try:
-                    claim_succeeded = store.claim_approval_reuse_decisions(decisions_to_claim, now=_now())
-                except Exception:
-                    claim_succeeded = False
-                if not claim_succeeded:
-                    preclaim_failure_reason = APPROVAL_REUSE_CLAIM_FAILED
-        if decisions_to_claim and preclaim_failure_reason is not None:
-            failed_ids = {artifact_id for _decision, artifact_id, _artifact_hash in pending_approval_claims}
-            failure_config = _config_with_current_authority(
-                authority_config,
-                evaluation,
-                "require-reapproval",
-                artifact_ids=failed_ids,
-            )
-            if preclaim_failure_reason == APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED:
-                failure_reason = (
-                    "saved approval could not be reused because the harness launch identity was not stable "
-                    "and path-pinned"
-                )
-                claim_status = "rejected"
-                revalidation_status = "unverified"
-            else:
-                failure_reason = "saved approval could not be atomically claimed"
-                claim_status = "failed"
-                revalidation_status = "claim-failed"
-            receipt_cursor = _receipt_rowid_cursor(store)
-            evaluation = evaluate_detection(
-                detection,
-                store,
-                failure_config,
-                default_action=default_action,
-                persist=True,
-                trusted_request_overrides=trusted_request_overrides,
-                trusted_request_override_labels=trusted_request_override_labels,
-                runtime_detector_context=detector_context,
-                runtime_detector_block_reason=authoritative_detector_block,
-            )
-            evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-            evaluation = _evaluation_with_preclaim_failure(
-                evaluation,
-                affected_artifact_ids=failed_ids,
-                reason_code=preclaim_failure_reason,
-                reason=failure_reason,
-                claim_status=claim_status,
-                revalidation_status=revalidation_status,
-            )
-            detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
-            if detector_evidence is not None and detector_action is not None:
-                _append_authority_evidence_to_receipts(
-                    store,
-                    after_rowid=receipt_cursor,
-                    evaluation=evaluation,
-                    evidence=detector_evidence,
-                    approval_source="runtime-detector",
-                    source_actions=frozenset({detector_action}),
-                )
-            _append_authority_evidence_to_receipts(
-                store,
-                after_rowid=receipt_cursor,
-                evaluation=evaluation,
-                evidence={
-                    "source": "approval_reuse",
-                    "status": "rejected",
-                    "reason_code": preclaim_failure_reason,
-                    "reason": failure_reason,
-                },
-                approval_source="approval-reuse",
-                source_actions=frozenset({"review", "require-reapproval", "sandbox-required", "block"}),
-                replace_existing_source=True,
-            )
-            if resolved_evaluation is not None:
-                for key in _APPROVAL_METADATA_KEYS:
-                    if key in resolved_evaluation:
-                        evaluation[key] = resolved_evaluation[key]
-            evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-        else:
-            consumed_claim_overrides = {
-                artifact_id: artifact_hash
-                for decision, artifact_id, artifact_hash in pending_approval_claims
-                if not _saved_decision_is_retained(decision)
-            }
-            retained_claim_overrides = {
-                artifact_id: artifact_hash
-                for decision, artifact_id, artifact_hash in pending_approval_claims
-                if _saved_decision_is_retained(decision)
-            }
-            if decisions_to_claim:
-                config_refresh_failed = False
-                fresh_config = config
-                if current_config_provider is not None:
-                    try:
-                        provided_config = current_config_provider()
-                    except Exception:
-                        config_refresh_failed = True
-                    else:
-                        if isinstance(provided_config, GuardConfig):
-                            fresh_config = provided_config
-                        else:
-                            config_refresh_failed = True
-                detection = _detection_with_prompt_artifacts(
-                    detect_harness(harness, context),
-                    context,
-                    passthrough_args,
-                )
-                fresh_base_evaluation = evaluate_detection(
-                    detection,
-                    store,
-                    fresh_config,
-                    default_action=default_action,
-                    persist=False,
-                )
-                fresh_detector_evaluation = _evaluation_with_detector_registry(
-                    fresh_base_evaluation,
-                    action_envelope,
-                    context,
-                    fresh_config,
-                )
-                fresh_detector_action, fresh_detector_reason = _runtime_detector_authority(fresh_detector_evaluation)
-                fresh_detector_context = _runtime_detector_context(fresh_detector_evaluation)
-                fresh_authority_config = fresh_config
-                if fresh_detector_action in {"warn", "review"}:
-                    fresh_authority_config = _config_with_current_authority(
-                        fresh_config,
-                        fresh_base_evaluation,
-                        fresh_detector_action,
-                    )
-                fresh_evaluation = evaluate_detection(
-                    detection,
-                    store,
-                    fresh_authority_config,
-                    default_action=default_action,
-                    persist=False,
-                    trusted_request_overrides=trusted_request_overrides,
-                    trusted_request_override_labels=trusted_request_override_labels,
-                    claimed_saved_approval_overrides=consumed_claim_overrides,
-                    retained_saved_approval_overrides=retained_claim_overrides,
-                    runtime_detector_context=fresh_detector_context,
-                )
-                fresh_evaluation = _evaluation_with_recorded_detector_result(
-                    fresh_evaluation,
-                    fresh_detector_evaluation,
-                )
-                try:
-                    fresh_launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
-                except Exception:
-                    fresh_launch_previews = ()
-                postclaim_signature = (
-                    _guard_run_authority_signature(detection, fresh_evaluation, fresh_launch_previews)
-                    if fresh_launch_previews and all(plan.reusable for plan in fresh_launch_previews)
-                    else None
-                )
-                finalized_launch_plan: _GuardRunLaunchPlan | None = None
-                if (
-                    not config_refresh_failed
-                    and preclaim_signature is not None
-                    and postclaim_signature == preclaim_signature
-                ):
-                    try:
-                        finalized_launch_plan = _guard_run_finalize_authorized_launch_plan(
-                            harness,
-                            context,
-                            passthrough_args,
-                            fresh_launch_previews,
-                        )
-                    except Exception:
-                        finalized_launch_plan = None
-                if (
-                    config_refresh_failed
-                    or preclaim_signature is None
-                    or postclaim_signature != preclaim_signature
-                    or finalized_launch_plan is None
-                ):
-                    stale_config = _config_with_current_authority(
-                        fresh_authority_config,
-                        fresh_evaluation,
-                        "require-reapproval",
-                    )
-                    fresh_block_reason = fresh_detector_evaluation.get("blocked_by_detector")
-                    authoritative_fresh_block = (
-                        fresh_block_reason if isinstance(fresh_block_reason, str) and fresh_block_reason else None
-                    )
-                    receipt_cursor = _receipt_rowid_cursor(store)
-                    evaluation = evaluate_detection(
-                        detection,
-                        store,
-                        stale_config,
-                        default_action=default_action,
-                        persist=True,
-                        runtime_detector_context=fresh_detector_context,
-                        runtime_detector_block_reason=authoritative_fresh_block,
-                    )
-                    evaluation = _evaluation_with_recorded_detector_result(
-                        evaluation,
-                        fresh_detector_evaluation,
-                    )
-                    evaluation = _evaluation_with_claim_context_failure(
-                        evaluation,
-                        claimed_artifact_ids={
-                            artifact_id for _decision, artifact_id, _artifact_hash in pending_approval_claims
-                        },
-                    )
-                    fresh_detector_evidence = _runtime_detector_nonterminal_evidence(
-                        fresh_detector_action,
-                        fresh_detector_reason,
-                    )
-                    if fresh_detector_evidence is not None:
-                        _append_authority_evidence_to_receipts(
-                            store,
-                            after_rowid=receipt_cursor,
-                            evaluation=evaluation,
-                            evidence=fresh_detector_evidence,
-                            approval_source="runtime-detector",
-                            source_actions=frozenset(),
-                        )
-                    _append_authority_evidence_to_receipts(
-                        store,
-                        after_rowid=receipt_cursor,
-                        evaluation=evaluation,
-                        evidence={
-                            "source": "approval_reuse",
-                            "status": "rejected",
-                            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-                            "reason": "launch authority changed after the saved approval was claimed",
-                        },
-                        approval_source="approval-reuse",
-                        source_actions=frozenset({"review", "require-reapproval", "sandbox-required", "block"}),
-                        replace_existing_source=True,
-                    )
-                    evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-                else:
-                    detector_evaluation = fresh_detector_evaluation
-                    detector_action = fresh_detector_action
-                    _detector_reason = fresh_detector_reason
-                    detector_context = fresh_detector_context
-                    authority_config = fresh_authority_config
-                    evaluation = fresh_evaluation
-                    launch_plan = finalized_launch_plan
-
-            if not evaluation["blocked"]:
-                receipt_cursor = _receipt_rowid_cursor(store)
-                evaluation = evaluate_detection(
-                    detection,
-                    store,
-                    authority_config,
-                    default_action=default_action,
-                    persist=True,
-                    trusted_request_overrides=trusted_request_overrides,
-                    trusted_request_override_labels=trusted_request_override_labels,
-                    claimed_saved_approval_overrides=consumed_claim_overrides,
-                    retained_saved_approval_overrides=retained_claim_overrides,
-                    runtime_detector_context=detector_context,
-                )
-                if evaluation["blocked"]:
-                    evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-                evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-                detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
-                if detector_evidence is not None and detector_action is not None:
-                    _append_authority_evidence_to_receipts(
-                        store,
-                        after_rowid=receipt_cursor,
-                        evaluation=evaluation,
-                        evidence=detector_evidence,
-                        approval_source="runtime-detector",
-                        source_actions=frozenset({detector_action}),
-                    )
-                if resolved_evaluation is not None:
-                    for key in _APPROVAL_METADATA_KEYS:
-                        if key in resolved_evaluation:
-                            evaluation[key] = resolved_evaluation[key]
-    if "config_paths" not in evaluation:
-        evaluation["config_paths"] = list(detection.config_paths) or _guard_run_config_paths(
-            detection=detection,
-            context=context,
-            passthrough_args=passthrough_args,
-        )
-    authority_error = evaluation_authority_error(
-        evaluation,
-        require_launch_permitted=not dry_run and evaluation.get("blocked") is False,
-    )
-    if authority_error is not None:
-        evaluation["blocked"] = True
-        evaluation["launched"] = False
-        evaluation["launch_command"] = []
-        evaluation["authority_error"] = AUTHORITATIVE_DECISION_INCONSISTENT
-        evaluation["authority_error_message"] = (
-            "Guard detected contradictory decision fields and refused to launch. "
-            "Re-run the Guard scan or repair the local Guard installation before retrying."
-        )
-        return evaluation
-    if evaluation["blocked"] or dry_run:
-        evaluation["launched"] = False
-        evaluation["launch_command"] = []
-        return evaluation
-
-    if launch_plan is None:
-        try:
-            launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
-            launch_plan = (
-                _guard_run_finalize_authorized_launch_plan(
-                    harness,
-                    context,
-                    passthrough_args,
-                    launch_previews,
-                )
-                if launch_previews and all(plan.reusable for plan in launch_previews)
-                else None
-            )
-        except Exception as error:
-            evaluation["launched"] = False
-            evaluation["launch_command"] = []
-            evaluation["return_code"] = 127
-            evaluation["launch_error"] = str(error)
-            return evaluation
-    if launch_plan is None or not launch_plan.reusable:
-        evaluation["launched"] = False
-        evaluation["launch_command"] = []
-        evaluation["return_code"] = 127
-        evaluation["launch_error"] = "Guard could not resolve a stable, path-pinned harness launch command."
-        return evaluation
-    command = list(launch_plan.execution_command)
-    evaluation["launch_command"] = command
-    environment = dict(launch_plan.environment)
-    if harness == "hermes":
-        _hermes_token = _resolve_hermes_guard_access_token(store)
-        if _hermes_token is not None:
-            # This is the sole intentional environment addition after the
-            # prepared environment was authority-hashed. It is a short-lived
-            # Guard credential resolved only at the execution boundary, not
-            # user-controlled launch configuration. It must NOT leak to
-            # user-configured MCP subprocesses; the proxy layer scrubs it
-            # before launch (see proxy._build_scrubbed_env).
-            environment[_HERMES_GUARD_TOKEN_ENV_KEY] = _hermes_token
-    try:
-        result = subprocess.run(command, cwd=launch_plan.launch_cwd, check=False, env=environment)
-    except FileNotFoundError as error:
-        evaluation["launched"] = False
-        evaluation["return_code"] = 127
-        evaluation["launch_error"] = str(error)
-        return evaluation
-    evaluation["launched"] = True
-    evaluation["return_code"] = result.returncode
-    return evaluation
-
-
-def _guard_run_action_envelope(
-    harness: str,
-    context: HarnessContext,
-    passthrough_args: list[str],
-) -> GuardActionEnvelope:
-    workspace = context.workspace_dir
-    workspace_hash = None
-    if workspace is not None:
-        workspace_path = workspace.expanduser()
-        with suppress(OSError):
-            workspace_path = workspace_path.resolve()
-        workspace_hash = hashlib.sha256(str(workspace_path).encode("utf-8")).hexdigest()
-    return GuardActionEnvelope(
-        schema_version=1,
-        action_id="",
-        harness=harness,
-        event_name="HarnessStart",
-        action_type="harness_start",
-        workspace=redacted_workspace_label(workspace, home_dir=context.home_dir),
-        workspace_hash=workspace_hash,
-        tool_name=None,
-        command=None,
-        prompt_excerpt=None,
-        prompt_text=None,
-        target_paths=(),
-        network_hosts=(),
-        mcp_server=None,
-        mcp_tool=None,
-        package_manager=None,
-        package_name=None,
-        script_name=None,
-        raw_payload_redacted={"passthrough_arg_count": len(passthrough_args)},
-    )
-
-
-def _evaluation_with_action_envelope(
-    evaluation: dict[str, Any],
-    action_envelope: GuardActionEnvelope,
-) -> dict[str, Any]:
-    artifacts = evaluation.get("artifacts")
-    if not isinstance(artifacts, list):
-        return evaluation
-    action_payload = action_envelope.to_dict()
-    normalized_artifacts: list[object] = []
-    changed = False
-    for item in artifacts:
-        if isinstance(item, dict) and "action_envelope_json" not in item:
-            normalized_artifacts.append({**item, "action_envelope_json": action_payload})
-            changed = True
-        else:
-            normalized_artifacts.append(item)
-    if not changed:
-        return evaluation
-    return {**evaluation, "artifacts": normalized_artifacts}
-
-
-def _evaluation_with_detector_registry(
-    evaluation: dict[str, Any],
-    action_envelope: GuardActionEnvelope,
-    context: HarnessContext,
-    config: GuardConfig,
-) -> dict[str, Any]:
-    if not config.runtime_detector_registry:
-        return evaluation
-    detector_context = DetectorContext(
-        config=config,
-        workspace=context.workspace_dir,
-        prior_decisions={},
-        threat_intel={},
-        redaction_settings={},
-    )
-    result = _get_default_detector_registry().run(
-        action_envelope,
-        detector_context,
-        timeout_ms=config.runtime_detector_timeout_ms,
-        disabled_detector_ids=config.runtime_detector_disabled_ids,
-    )
-    trace_error = (
-        _write_detector_debug_trace(config, action_envelope, result) if config.runtime_detector_debug_trace else None
-    )
-    if not result.signals and not result.telemetry:
-        if trace_error is None:
-            return evaluation
-        return {**evaluation, "runtime_detector_trace_error": trace_error}
-    next_evaluation = {
-        **evaluation,
-        "runtime_detector_signals_v2": [signal.to_dict() for signal in result.signals],
-        "runtime_detector_telemetry": [item.to_dict() for item in result.telemetry],
-    }
-    # Compose detector authority independently from the base artifact result.
-    # Otherwise an already-reviewable artifact makes every detector result
-    # appear to be a block and prevents us from identifying a genuine terminal
-    # detector block before entering the approval flow.
-    composition = compose_action_from_signals(result.signals, "allow")
-    next_evaluation["runtime_detector_composition"] = {
-        "action": composition.action,
-        "reason": composition.reason,
-        "downgraded": composition.downgraded,
-        "upgraded": composition.upgraded,
-    }
-    if composition.action == "block":
-        next_evaluation["blocked"] = True
-        next_evaluation["blocked_by_detector"] = composition.reason
-    if trace_error is not None:
-        next_evaluation["runtime_detector_trace_error"] = trace_error
-    return next_evaluation
-
-
-_RUNTIME_DETECTOR_RESULT_KEYS = (
-    "runtime_detector_signals_v2",
-    "runtime_detector_telemetry",
-    "runtime_detector_composition",
-    "runtime_detector_trace_error",
-)
-
-
-def _artifact_with_authority_updates(
-    item: Mapping[str, object],
-    *,
-    reason: str | None,
-    composition_updates: Mapping[str, object],
-    additional_signals: Sequence[RiskSignalV2] = (),
-) -> dict[str, object]:
-    """Apply runner trace changes without allowing serialized aliases to drift."""
-
-    try:
-        return rebuild_artifact_authority(
-            item,
-            reason=reason,
-            composition_updates=composition_updates,
-            additional_signals=additional_signals,
-        )
-    except (TypeError, ValueError):
-        # Preserve evidence for the final gate. The malformed decision remains
-        # intentionally unmodified so evaluation_authority_error fails closed.
-        return {**dict(item), "decision_contract_error": AUTHORITATIVE_DECISION_INCONSISTENT}
-
-
-def _runtime_detector_signals_from_evaluation(
-    evaluation: Mapping[str, object],
-) -> tuple[RiskSignalV2, ...]:
-    raw_signals = evaluation.get("runtime_detector_signals_v2")
-    if raw_signals is None:
-        return ()
-    if not isinstance(raw_signals, list):
-        raise ValueError("runtime_detector_signals_v2 must be a list")
-    signals: list[RiskSignalV2] = []
-    for raw_signal in raw_signals:
-        if not isinstance(raw_signal, Mapping):
-            raise ValueError("runtime detector signal must be an object")
-        signals.append(RiskSignalV2.from_dict(raw_signal))
-    return tuple(signals)
-
-
-def _evaluation_with_recorded_detector_result(
-    evaluation: dict[str, Any],
-    detector_evaluation: Mapping[str, object],
-) -> dict[str, Any]:
-    """Carry one pre-launch detector result across persistence without rerunning it."""
-
-    next_evaluation = dict(evaluation)
-    for key in _RUNTIME_DETECTOR_RESULT_KEYS:
-        if key in detector_evaluation:
-            next_evaluation[key] = detector_evaluation[key]
-    blocked_by_detector = detector_evaluation.get("blocked_by_detector")
-    if isinstance(blocked_by_detector, str) and blocked_by_detector:
-        next_evaluation["blocked"] = True
-        next_evaluation["blocked_by_detector"] = blocked_by_detector
-    detector_action, detector_reason = _runtime_detector_authority(detector_evaluation)
-    try:
-        detector_signals = _runtime_detector_signals_from_evaluation(detector_evaluation)
-    except (TypeError, ValueError):
-        next_evaluation["decision_contract_error"] = AUTHORITATIVE_DECISION_INCONSISTENT
-        return next_evaluation
-    evidence = _runtime_detector_nonterminal_evidence(detector_action, detector_reason)
-
-    raw_artifacts = next_evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list) or not raw_artifacts:
-        if detector_action is not None:
-            authority_reason = detector_reason or (
-                str(evidence["reason"]) if evidence is not None else "runtime detector blocked this launch"
-            )
-            run_decision = build_authoritative_decision(
-                detector_action,
-                reason=authority_reason,
-                composition_trace={"runtime_detector_action": detector_action},
-                signals=detector_signals,
-                authority_finalized=detector_action != "review",
-                source="runtime-detector-registry",
-            )
-            next_evaluation["run_authoritative_decision"] = run_decision.to_dict()
-            next_evaluation["blocked"] = bool(next_evaluation.get("blocked")) or run_decision.enforcement.blocking
-            if run_decision.enforcement.blocking:
-                next_evaluation["blocked_by_detector"] = authority_reason
-        return next_evaluation
-    artifacts: list[object] = []
-    for raw_item in raw_artifacts:
-        if not isinstance(raw_item, Mapping):
-            artifacts.append(raw_item)
-            continue
-        item = dict(raw_item)
-        raw_scanner_evidence = item.get("scanner_evidence")
-        scanner_evidence: list[object] = (
-            [
-                dict(raw_evidence) if isinstance(raw_evidence, Mapping) else raw_evidence
-                for raw_evidence in raw_scanner_evidence
-            ]
-            if isinstance(raw_scanner_evidence, list)
-            else []
-        )
-        if evidence is not None and not any(
-            isinstance(raw_evidence, Mapping)
-            and raw_evidence.get("source") == evidence["source"]
-            and raw_evidence.get("reason_code") == evidence["reason_code"]
-            for raw_evidence in scanner_evidence
-        ):
-            scanner_evidence.append(evidence)
-        item["scanner_evidence"] = scanner_evidence
-        composition_updates: dict[str, object] = {}
-        if detector_action is not None:
-            composition_updates = {
-                "runtime_detector_action": detector_action,
-                "runtime_detector_reason": detector_reason
-                or (str(evidence["reason"]) if evidence is not None else "runtime detector authority"),
-            }
-        item = _artifact_with_authority_updates(
-            item,
-            reason=(
-                str(evidence["reason_code"])
-                if evidence is not None and item.get("policy_action") == detector_action
-                else None
-            ),
-            composition_updates=composition_updates,
-            additional_signals=detector_signals,
-        )
-        artifacts.append(item)
-    next_evaluation["artifacts"] = artifacts
-    return next_evaluation
-
-
-def _evaluation_with_preclaim_failure(
-    evaluation: dict[str, Any],
-    *,
-    affected_artifact_ids: set[str],
-    reason_code: str,
-    reason: str,
-    claim_status: str,
-    revalidation_status: str,
-) -> dict[str, Any]:
-    """Record a terminal, auditable failure before approval authority is claimed."""
-
-    evidence = {
-        "source": "approval_reuse",
-        "status": "rejected",
-        "reason_code": reason_code,
-        "reason": reason,
-    }
-    artifacts: list[object] = []
-    for raw_item in evaluation.get("artifacts", []):
-        if not isinstance(raw_item, Mapping) or raw_item.get("artifact_id") not in affected_artifact_ids:
-            artifacts.append(raw_item)
-            continue
-        item = dict(raw_item)
-        raw_scanner_evidence = item.get("scanner_evidence")
-        scanner_evidence: list[object] = (
-            [
-                dict(raw_evidence)
-                for raw_evidence in raw_scanner_evidence
-                if isinstance(raw_evidence, Mapping) and raw_evidence.get("source") != "approval_reuse"
-            ]
-            if isinstance(raw_scanner_evidence, list)
-            else []
-        )
-        scanner_evidence.append(evidence)
-        item["scanner_evidence"] = scanner_evidence
-        item["approval_reuse_status"] = "rejected"
-        item["approval_reuse_reason_code"] = reason_code
-        approval_reuse = item.get("approval_reuse")
-        item["approval_reuse"] = {
-            **(dict(approval_reuse) if isinstance(approval_reuse, Mapping) else {}),
-            "action": item.get("policy_action"),
-            "status": "rejected",
-            "reason_code": reason_code,
-            "should_claim": False,
-        }
-        item = _artifact_with_authority_updates(
-            item,
-            reason=reason_code,
-            composition_updates={
-                "claim_revalidation": revalidation_status,
-                "claim_revalidation_reason": reason_code,
-            },
-        )
-        artifacts.append(item)
-    return {
-        **evaluation,
-        "artifacts": artifacts,
-        "blocked": True,
-        "approval_claim": {
-            "status": claim_status,
-            "reason_code": reason_code,
-            "artifact_ids": sorted(affected_artifact_ids),
-        },
-    }
-
-
-def _evaluation_with_claim_context_failure(
-    evaluation: dict[str, Any],
-    *,
-    claimed_artifact_ids: set[str],
-) -> dict[str, Any]:
-    """Make a changed post-claim authority terminal and auditable."""
-
-    evidence = {
-        "source": "approval_reuse",
-        "status": "rejected",
-        "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-        "reason": "launch authority changed after the saved approval was claimed",
-    }
-    artifacts: list[object] = []
-    for raw_item in evaluation.get("artifacts", []):
-        if not isinstance(raw_item, Mapping):
-            artifacts.append(raw_item)
-            continue
-        item = dict(raw_item)
-        raw_scanner_evidence = item.get("scanner_evidence")
-        scanner_evidence: list[object] = (
-            [
-                dict(raw_evidence)
-                for raw_evidence in raw_scanner_evidence
-                if isinstance(raw_evidence, Mapping) and raw_evidence.get("source") != "approval_reuse"
-            ]
-            if isinstance(raw_scanner_evidence, list)
-            else []
-        )
-        scanner_evidence.append(evidence)
-        item["scanner_evidence"] = scanner_evidence
-        item["approval_reuse_status"] = "rejected"
-        item["approval_reuse_reason_code"] = _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-        approval_reuse = item.get("approval_reuse")
-        item["approval_reuse"] = {
-            **(dict(approval_reuse) if isinstance(approval_reuse, Mapping) else {}),
-            "action": item.get("policy_action"),
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            "should_claim": False,
-        }
-        item = _artifact_with_authority_updates(
-            item,
-            reason=_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            composition_updates={
-                "claim_revalidation": "changed",
-                "claim_revalidation_reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            },
-        )
-        artifacts.append(item)
-    next_evaluation = {
-        **evaluation,
-        "artifacts": artifacts,
-        "blocked": True,
-        "approval_claim": {
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            "artifact_ids": sorted(claimed_artifact_ids),
-        },
-    }
-    return next_evaluation
-
-
-def _write_detector_debug_trace(
-    config: GuardConfig,
-    action_envelope: GuardActionEnvelope,
-    result: DetectorRunResult,
-) -> dict[str, object] | None:
-    created_at = datetime.now(timezone.utc)
-    action_payload = action_envelope.to_dict()
-    trace_payload = {
-        "schema_version": 1,
-        "created_at": created_at.isoformat(),
-        "action": _redact_detector_debug_payload(action_payload),
-        "signals": [signal.to_dict() for signal in result.signals],
-        "telemetry": [item.to_dict() for item in result.telemetry],
-    }
-    trace_dir = config.guard_home / "debug" / "detectors"
-    action_digest = hashlib.sha256(
-        json.dumps(action_payload, sort_keys=True, default=str).encode("utf-8"),
-    ).hexdigest()[:12]
-    trace_path = trace_dir / f"{created_at.strftime('%Y%m%dT%H%M%S%fZ')}-{action_digest}.json"
-    try:
-        trace_dir.mkdir(parents=True, exist_ok=True)
-        trace_path.write_text(json.dumps(trace_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    except OSError as error:
-        return {"error_type": type(error).__name__, "message": str(error)}
-    return None
-
-
-def _redact_detector_debug_payload(value: object) -> object:
-    if isinstance(value, dict):
-        redacted: dict[str, object] = {}
-        for key, item in value.items():
-            key_text = str(key)
-            if "prompt" in key_text.lower():
-                redacted[key_text] = "[redacted]"
-            else:
-                redacted[key_text] = _redact_detector_debug_payload(item)
-        return redacted
-    if isinstance(value, (tuple, list)):
-        return [_redact_detector_debug_payload(item) for item in value]
-    return value
-
-
-def _guard_run_config_paths(
-    *,
-    detection: HarnessDetection,
-    context: HarnessContext,
-    passthrough_args: list[str],
-) -> list[str]:
-    if detection.config_paths:
-        return list(detection.config_paths)
-    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
-    if prompt_text:
-        return [str(_prompt_policy_path(detection, context))]
-    return []
-
-
-def _detection_with_prompt_artifacts(
-    detection: HarnessDetection,
-    context: HarnessContext,
-    passthrough_args: list[str],
-) -> HarnessDetection:
-    # Disabled Codex skills remain visible to inventory and AIBOM, but cannot
-    # execute in this launch. They must not create launch approval requests.
-    if detection.harness == "codex":
-        detection = replace(
-            detection,
-            artifacts=tuple(
-                replace(
-                    artifact,
-                    runtime_private_metadata={**artifact.runtime_private_metadata, "inventory_only": True},
-                )
-                if artifact.artifact_type == "skill" and artifact.metadata.get("enabled") is False
-                else artifact
-                for artifact in detection.artifacts
-            ),
-        )
-    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
-    if not passthrough_args:
-        return detection
-    prompt_requests = extract_prompt_requests(prompt_text, guard_home=context.guard_home)
-    if not prompt_requests:
-        return detection
-    prompt_artifacts = prompt_requests_to_artifacts(
-        detection=detection,
-        context=context,
-        requests=prompt_requests,
-    )
-    return HarnessDetection(
-        harness=detection.harness,
-        installed=detection.installed,
-        command_available=detection.command_available,
-        config_paths=detection.config_paths,
-        artifacts=(*detection.artifacts, *prompt_artifacts),
-        warnings=detection.warnings,
-    )
-
-
-def prompt_requests_to_artifacts(
-    *,
-    detection: HarnessDetection,
-    context: HarnessContext,
-    requests: list[PromptRequest],
-) -> list[GuardArtifact]:
-    """Convert typed prompt requests into pseudo-artifacts for policy evaluation.
-
-    Rust constructs the artifacts; an unavailable or invalid result stops launch.
-    """
-    config_path = str(_prompt_policy_path(detection, context))
-    native = _prompt_analyze_native(
-        "to_artifacts",
-        harness=str(detection.harness),
-        config_path=config_path,
-        requests=[r.to_dict() for r in requests],
-        guard_home=context.guard_home,
-    )
-    if isinstance(native, list):
-        rebuilt = [a for a in (_guard_artifact_from_dict(item) for item in native) if a is not None]
-        if len(rebuilt) == len(native) == len(requests):
-            return rebuilt
-    raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-
-
-def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
-    from ..adapters import get_adapter
-
-    config_candidates = _prompt_config_candidates(detection, context)
-    if context.workspace_dir is not None:
-        for config_path in config_candidates:
-            candidate = Path(config_path)
-            if candidate.is_relative_to(context.workspace_dir):
-                return candidate
-    if config_candidates:
-        return Path(config_candidates[0])
-    return get_adapter(detection.harness).policy_path(context)
-
-
-def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:
-    if detection.harness == "opencode":
-        configured_path = os.getenv("OPENCODE_CONFIG")
-        configured_candidate = None
-        if configured_path:
-            candidate = Path(configured_path).expanduser()
-            if not candidate.is_absolute():
-                if context.workspace_dir is not None:
-                    candidate = context.workspace_dir / candidate
-                else:
-                    candidate = Path.cwd() / candidate
-            configured_candidate = str(candidate)
-        return tuple(
-            config_path
-            for config_path in detection.config_paths
-            if Path(config_path).name in {"opencode.json", "opencode.jsonc"} or config_path == configured_candidate
-        )
-    return detection.config_paths
-
-
 def _policy_bundle_is_version_downgrade(
     existing_bundle: dict[str, object] | None,
     next_bundle: dict[str, object],
@@ -1926,38 +243,25 @@ def _policy_bundle_is_version_downgrade(
         expected_hash = (
             expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
         )
-        return (
-            validate_policy_bundle_v2_transition(
-                next_bundle,
-                current_bundle_version=(
-                    current_version
-                    if isinstance(current_version, int) and not isinstance(current_version, bool)
-                    else None
-                ),
-                current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
-                expected_last_good_bundle_version=(
-                    expected_version
-                    if isinstance(expected_version, int) and not isinstance(expected_version, bool)
-                    else None
-                ),
-                expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
-            )
-            is not None
+        transition_error = validate_policy_bundle_v2_transition(
+            next_bundle,
+            current_bundle_version=(
+                current_version if isinstance(current_version, int) and not isinstance(current_version, bool) else None
+            ),
+            current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
+            expected_last_good_bundle_version=(
+                expected_version
+                if isinstance(expected_version, int) and not isinstance(expected_version, bool)
+                else None
+            ),
+            expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
         )
+        if transition_error == NATIVE_UNAVAILABLE_REJECTION:
+            # The resident could not decide. That is an outage, never a
+            # downgrade verdict and never an implicit allow.
+            raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
+        return transition_error is not None
     return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
-
-
-def _policy_bundle_utc_datetime(value: str) -> datetime:
-    normalized = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _policy_bundle_numeric_version(value: str) -> tuple[int, ...] | None:
-    tokens = tuple(int(token) for token in re.findall(r"\d+", value))
-    return tokens or None
 
 
 def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
@@ -1968,37 +272,14 @@ def _policy_bundle_downgrade_reference(
     store: GuardStore,
     existing_bundle: dict[str, object] | None,
 ) -> dict[str, object] | None:
-    checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
-    workspace_id = store.get_cloud_workspace_id()
-    candidates = [
-        item
-        for item in (
-            checkpoint,
+    return _sync.policy_bundle_downgrade_reference(
+        (
+            store.get_sync_payload("policy_bundle_acceptance_checkpoint"),
             existing_bundle,
             store.get_sync_payload("policy_bundle_last_good"),
-        )
-        if isinstance(item, dict) and non_empty_string(item.get("issuedAt")) is not None
-        if (workspace_id is None or non_empty_string(item.get("workspaceId")) in {None, workspace_id})
-    ]
-    if not candidates:
-        return None
-
-    def _sort_key(item: dict[str, object]) -> tuple[datetime, tuple[int, ...], str, bool]:
-        issued_at = non_empty_string(item.get("issuedAt"))
-        assert issued_at is not None
-        try:
-            timestamp = _policy_bundle_utc_datetime(issued_at)
-        except ValueError:
-            timestamp = datetime.max.replace(tzinfo=timezone.utc)
-        version = non_empty_string(item.get("bundleVersion")) or ""
-        return (
-            timestamp,
-            _policy_bundle_numeric_version(version) or (),
-            version,
-            non_empty_string(item.get("payloadHash")) is not None,
-        )
-
-    return max(candidates, key=_sort_key)
+        ),
+        store.get_cloud_workspace_id(),
+    )
 
 
 def _validate_cached_policy_bundle(
@@ -2101,137 +382,6 @@ def _build_policy_bundle_decisions(
     )
 
 
-def _policy_shadow_mismatch_reason_codes(
-    legacy: list[PolicyDecision],
-    canonical: list[PolicyDecision],
-) -> tuple[str, ...]:
-    if not legacy:
-        return ("legacy_unavailable",)
-
-    def keyed(
-        decisions: list[PolicyDecision],
-    ) -> dict[tuple[str, str, str | None, str | None, str | None, str | None], PolicyDecision]:
-        return {
-            (
-                decision.harness,
-                decision.scope,
-                decision.artifact_id,
-                decision.artifact_hash,
-                decision.workspace,
-                decision.publisher,
-            ): decision
-            for decision in decisions
-        }
-
-    reasons: list[str] = []
-    legacy_by_key = keyed(legacy)
-    canonical_by_key = keyed(canonical)
-    if len(legacy) != len(canonical):
-        reasons.append("row_count")
-    if legacy_by_key.keys() != canonical_by_key.keys():
-        reasons.append("selector_set")
-    shared_keys = legacy_by_key.keys() & canonical_by_key.keys()
-    if any(legacy_by_key[key].action != canonical_by_key[key].action for key in shared_keys):
-        reasons.append("action")
-    if any(legacy_by_key[key].expires_at != canonical_by_key[key].expires_at for key in shared_keys):
-        reasons.append("expiration")
-    return tuple(reasons[:4])
-
-
-def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    normalized = value.replace("Z", "+00:00")
-    try:
-        return datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-
-
-def _receipt_policy_bundle_matcher_family(receipt: dict[str, object]) -> str | None:
-    artifact_id = non_empty_string(receipt.get("artifact_id"))
-    if artifact_id is None:
-        return None
-    for family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES:
-        if f":{family}:" in artifact_id:
-            return family
-    return None
-
-
-def simulate_policy_bundle_receipts(
-    store: GuardStore,
-    policy_bundle: dict[str, object],
-    *,
-    limit: int = 50,
-    now: str | None = None,
-) -> dict[str, object]:
-    receipts = store.list_receipts(limit=limit)
-    device_id, device_name = _guard_device_metadata(store)
-    decisions = _build_policy_bundle_decisions(policy_bundle, device_id=device_id, device_name=device_name)
-    generated_at = now or _now()
-    generated_at_dt = _parse_policy_simulation_timestamp(generated_at)
-    latest_receipt_at: str | None = None
-    oldest_receipt_at: str | None = None
-    latest_dt: datetime | None = None
-    oldest_dt: datetime | None = None
-    matches: list[dict[str, object]] = []
-    summary = {"allow": 0, "block": 0, "review": 0, "ignore": 0, "matched": 0, "unchanged": 0}
-    for receipt in receipts:
-        receipt_dt = _parse_policy_simulation_timestamp(receipt.get("timestamp"))
-        if receipt_dt is not None and (latest_dt is None or receipt_dt > latest_dt):
-            latest_dt = receipt_dt
-            latest_receipt_at = str(receipt.get("timestamp"))
-        if receipt_dt is not None and (oldest_dt is None or receipt_dt < oldest_dt):
-            oldest_dt = receipt_dt
-            oldest_receipt_at = str(receipt.get("timestamp"))
-        family = _receipt_policy_bundle_matcher_family(receipt)
-        if family is None:
-            continue
-        harness = non_empty_string(receipt.get("harness")) or "*"
-        matched = next(
-            (item for item in decisions if item.artifact_id == f"family:{family}" and item.harness in {harness, "*"}),
-            None,
-        )
-        simulated_action = matched.action if matched is not None else str(receipt.get("policy_decision") or "review")
-        if simulated_action not in {"allow", "block", "review", "ignore"}:
-            simulated_action = "review"
-        summary[simulated_action] = summary.get(simulated_action, 0) + 1
-        if matched is not None:
-            summary["matched"] += 1
-        else:
-            summary["unchanged"] += 1
-        matches.append(
-            {
-                "receipt_id": receipt.get("receipt_id"),
-                "artifact_id": receipt.get("artifact_id"),
-                "harness": harness,
-                "matcher_family": family,
-                "observed_action": receipt.get("policy_decision"),
-                "simulated_action": simulated_action,
-                "matched_rule_id": matched.owner if matched is not None else None,
-                "policy_version": non_empty_string(policy_bundle.get("bundleHash")),
-                "timestamp": receipt.get("timestamp"),
-            }
-        )
-    stale = False
-    if generated_at_dt is not None and latest_dt is not None:
-        stale = (generated_at_dt - latest_dt).total_seconds() > 24 * 60 * 60
-    return {
-        "generated_at": generated_at,
-        "policy_bundle_version": non_empty_string(policy_bundle.get("bundleVersion")),
-        "policy_version": non_empty_string(policy_bundle.get("bundleHash")),
-        "receipt_count": len(receipts),
-        "summary": summary,
-        "matches": matches,
-        "event_freshness": {
-            "latest_receipt_at": latest_receipt_at,
-            "oldest_receipt_at": oldest_receipt_at,
-            "sampled_receipts": len(receipts),
-            "stale": stale,
-        },
-    }
-
-
 def sync_receipts(
     store: GuardStore,
     *,
@@ -2247,7 +397,9 @@ def sync_receipts(
     """Push local receipts to the configured sync endpoint."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
+    sync_url = _sync.normalized_receipts_sync_url(
+        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
+    )
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
     _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
@@ -2311,10 +463,13 @@ def sync_receipts(
             )
         except urllib.error.HTTPError as error:
             if error.code == 401:
+                edge_block = _cloud_edge_block_from_http_error(error)
+                if edge_block is not None:
+                    raise RuntimeError(edge_block) from error
                 if auth_context is None and not auth_refresh_retried:
                     auth_refresh_retried = True
                     resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
-                    sync_url = _normalized_receipts_sync_url(
+                    sync_url = _sync.normalized_receipts_sync_url(
                         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
                     )
                     request = _guard_sync_request(
@@ -2332,6 +487,9 @@ def sync_receipts(
                         )
                     except urllib.error.HTTPError as retry_error:
                         if retry_error.code == 401:
+                            edge_block = _cloud_edge_block_from_http_error(retry_error)
+                            if edge_block is not None:
+                                raise RuntimeError(edge_block) from retry_error
                             raise GuardSyncAuthorizationExpiredError(
                                 _guard_oauth_reauthorization_message()
                             ) from retry_error
@@ -2436,7 +594,7 @@ def sync_receipts(
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
     cloud_workspace_id = store.get_cloud_workspace_id()
-    canonical_enforcement = _canonical_policy_enforcement_enabled(
+    canonical_enforcement = _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,
     )
@@ -2476,18 +634,27 @@ def sync_receipts(
                     expected_workspace_id=store.get_cloud_workspace_id(),
                 )
             )
-        if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+        if existing_policy_bundle_error == NATIVE_UNAVAILABLE_REJECTION:
+            # The downgrade reference could not be validated, so a downgrade
+            # cannot be ruled out. Reject instead of comparing to nothing.
             validated_policy_bundle = None
-            policy_bundle_rejection_reason = "unsupported_daemon_version"
-        if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
+            policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
+        try:
+            if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "unsupported_daemon_version"
+            if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "inactive_rollout_state"
+            if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
+                _policy_bundle_downgrade_reference(store, existing_policy_bundle),
+                validated_policy_bundle,
+            ):
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "bundle_version_downgrade"
+        except PolicyBundleNativeError as error:
             validated_policy_bundle = None
-            policy_bundle_rejection_reason = "inactive_rollout_state"
-        if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-            _policy_bundle_downgrade_reference(store, existing_policy_bundle),
-            validated_policy_bundle,
-        ):
-            validated_policy_bundle = None
-            policy_bundle_rejection_reason = "bundle_version_downgrade"
+            policy_bundle_rejection_reason = native_rejection_code(error)
         candidate_managed_capabilities = _managed_controls_negotiated_capabilities(store, policy_bundle_sync_payload)
         (
             validated_policy_bundle,
@@ -2531,10 +698,19 @@ def sync_receipts(
                         if isinstance(legacy_payload, dict)
                         else []
                     )
-                    mismatch_reasons = _policy_shadow_mismatch_reason_codes(
-                        legacy_decisions,
-                        canonical_decisions,
-                    )
+                    native_shadow_unavailable = False
+                    try:
+                        mismatch_reasons = _authority.policy_shadow_mismatch(
+                            legacy_decisions,
+                            canonical_decisions,
+                        )
+                    except NativeRunnerAuthorityError:
+                        # Rust owns the shadow comparison. Without its verdict
+                        # the candidate cannot be proven equivalent, so treat it
+                        # as a blocking mismatch: keep the existing policy and
+                        # never activate the new bundle.
+                        native_shadow_unavailable = True
+                        mismatch_reasons = ("native_shadow_unavailable",)
                     blocking_mismatch_reasons = tuple(
                         reason for reason in mismatch_reasons if reason != "legacy_unavailable"
                     )
@@ -2554,7 +730,10 @@ def sync_receipts(
                             },
                             now,
                         )
-                    if canonical_enforcement and blocking_mismatch_reasons:
+                    if native_shadow_unavailable:
+                        validated_policy_bundle = None
+                        policy_bundle_rejection_reason = "native_shadow_unavailable"
+                    elif canonical_enforcement and blocking_mismatch_reasons:
                         validated_policy_bundle = None
                         policy_bundle_rejection_reason = "canonical_shadow_mismatch"
                 else:
@@ -2566,6 +745,10 @@ def sync_receipts(
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
                 policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+            except PolicyBundleNativeError as error:
+                candidate_policy_decisions = []
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = native_rejection_code(error)
         if validated_policy_bundle is not None:
             effective_policy_bundle = validated_policy_bundle
             update_last_good = True
@@ -2631,20 +814,24 @@ def sync_receipts(
             managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
             expected_workspace_id=store.get_cloud_workspace_id(),
         )
-        if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
+        try:
+            if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
+                activation_bundle = None
+                activation_reason = "inactive_rollout_state"
+            acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+            if (
+                activation_bundle is not None
+                and isinstance(acceptance_checkpoint, dict)
+                and _policy_bundle_is_version_downgrade(
+                    acceptance_checkpoint,
+                    activation_bundle,
+                )
+            ):
+                activation_bundle = None
+                activation_reason = "bundle_version_downgrade"
+        except PolicyBundleNativeError as error:
             activation_bundle = None
-            activation_reason = "inactive_rollout_state"
-        acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
-        if (
-            activation_bundle is not None
-            and isinstance(acceptance_checkpoint, dict)
-            and _policy_bundle_is_version_downgrade(
-                acceptance_checkpoint,
-                activation_bundle,
-            )
-        ):
-            activation_bundle = None
-            activation_reason = "bundle_version_downgrade"
+            activation_reason = native_rejection_code(error)
         if activation_bundle is None:
             activation_last_error = _policy_bundle_rejection_payload(activation_reason)
             store.add_event("policy_bundle/rejected", activation_last_error, now)
@@ -2671,6 +858,10 @@ def sync_receipts(
                     store.add_event("policy_bundle/rejected", activation_last_error, now)
                     effective_policy_bundle = None
                     retain_existing_policy_authority = True
+    if effective_policy_bundle is None and activation_last_error.get("reason") == NATIVE_UNAVAILABLE_REJECTION:
+        # The resident could not decide. Do not activate anything new, but a
+        # transient outage must not also erase the previously verified policy.
+        retain_existing_policy_authority = True
     if effective_policy_bundle is None:
         if not retain_existing_policy_authority:
             store.clear_policy_bundle_authority(
@@ -2680,119 +871,141 @@ def sync_receipts(
             )
             _reset_cloud_receipt_redaction_authority(store, synced_at=now)
     else:
-        selected_policy_decisions = (
-            candidate_policy_decisions
-            if validated_policy_bundle is not None
-            and effective_policy_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
-            else _build_policy_bundle_decisions(
-                effective_policy_bundle,
+        try:
+            selected_policy_decisions = (
+                candidate_policy_decisions
+                if validated_policy_bundle is not None
+                and effective_policy_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
+                else _build_policy_bundle_decisions(
+                    effective_policy_bundle,
+                    device_id=device_id,
+                    device_name=device_name,
+                    canonical_enforcement=canonical_enforcement,
+                )
+            )
+            policy_bundle_ack = effective_policy_bundle_acknowledgement(
                 device_id=device_id,
                 device_name=device_name,
-                canonical_enforcement=canonical_enforcement,
+                effective_policy_bundle=effective_policy_bundle,
+                validated_policy_bundle=validated_policy_bundle,
+                validated_delivery=validated_policy_bundle_delivery,
+                stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
+                synced_at=now,
             )
-        )
-        remote_decisions.update(selected_policy_decisions)
-        policy_bundle_ack = effective_policy_bundle_acknowledgement(
-            device_id=device_id,
-            device_name=device_name,
-            effective_policy_bundle=effective_policy_bundle,
-            validated_policy_bundle=validated_policy_bundle,
-            validated_delivery=validated_policy_bundle_delivery,
-            stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
-            synced_at=now,
-        )
-        cloud_exception_items = _policy_bundle_cloud_exception_items(
-            store,
-            device_id=device_id,
-            sync_exceptions=[],
-            policy_bundle=effective_policy_bundle,
-            policy_bundle_ack=policy_bundle_ack,
-        )
-        try:
-            custom_extension_continuity = apply_custom_extension_continuity_from_sync(
+        except PolicyBundleNativeError as error:
+            # Fail closed: nothing new is materialized or acknowledged. Only an
+            # outage keeps the prior authority; a deterministic native rejection
+            # is a verdict, so it must not leave a stale bundle in force.
+            activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
+            store.add_event("policy_bundle/rejected", activation_last_error, now)
+            effective_policy_bundle = None
+            if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
+                store.clear_policy_bundle_authority(
+                    now,
+                    policy_bundle_last_error=activation_last_error,
+                    managed_controls_publish=managed_controls_publish,
+                )
+                _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+            selected_policy_decisions = []
+            policy_bundle_ack = {}
+        if effective_policy_bundle is not None:
+            remote_decisions.update(selected_policy_decisions)
+            cloud_exception_items = _policy_bundle_cloud_exception_items(
                 store,
-                effective_policy_bundle,
-                device_id=delivery_device_id,
-                negotiated_capabilities=effective_managed_capabilities,
-                now=now,
-            )
-            activated, activation_rejection_reason = activate_with_reason(
-                store.apply_policy_bundle_authority,
-                list(remote_decisions),
-                now,
+                device_id=device_id,
+                sync_exceptions=[],
                 policy_bundle=effective_policy_bundle,
-                policy_bundle_keyring=policy_bundle_keyring_payload(
-                    trusted_policy_bundle_keys,
-                    workspace_id=store.get_cloud_workspace_id(),
-                ),
-                cloud_exceptions=cloud_exception_items,
                 policy_bundle_ack=policy_bundle_ack,
-                policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(effective_policy_bundle),
-                update_last_good=update_last_good,
-                policy_bundle_last_error=activation_last_error,
-                managed_controls_policy=effective_managed_controls,
-                managed_controls_negotiated_capabilities=effective_managed_capabilities,
-                managed_controls_delivery=validated_policy_bundle_delivery,
-                managed_controls_publish=managed_controls_publish,
-                custom_extension_continuity=custom_extension_continuity,
-                remote_write_authorized=True,
             )
-            if activated is None:
-                cloud_exception_items = []
-                activation_last_error = _policy_bundle_rejection_payload(activation_rejection_reason)
-                persist_activation_rejection(store, activation_last_error, now)
-            else:
-                remote_policies_stored = len(remote_decisions)
-                if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                    canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
-                    if isinstance(canonical_last_good, dict) and canonical_last_good.get(
-                        "bundleHash"
-                    ) != effective_policy_bundle.get("bundleHash"):
+            try:
+                custom_extension_continuity = apply_custom_extension_continuity_from_sync(
+                    store,
+                    effective_policy_bundle,
+                    device_id=delivery_device_id,
+                    negotiated_capabilities=effective_managed_capabilities,
+                    now=now,
+                )
+                activated, activation_rejection_reason = activate_with_reason(
+                    store.apply_policy_bundle_authority,
+                    list(remote_decisions),
+                    now,
+                    policy_bundle=effective_policy_bundle,
+                    policy_bundle_keyring=policy_bundle_keyring_payload(
+                        trusted_policy_bundle_keys,
+                        workspace_id=store.get_cloud_workspace_id(),
+                    ),
+                    cloud_exceptions=cloud_exception_items,
+                    policy_bundle_ack=policy_bundle_ack,
+                    policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(effective_policy_bundle),
+                    update_last_good=update_last_good,
+                    policy_bundle_last_error=activation_last_error,
+                    managed_controls_policy=effective_managed_controls,
+                    managed_controls_negotiated_capabilities=effective_managed_capabilities,
+                    managed_controls_delivery=validated_policy_bundle_delivery,
+                    managed_controls_publish=managed_controls_publish,
+                    custom_extension_continuity=custom_extension_continuity,
+                    remote_write_authorized=True,
+                )
+                if activated is None:
+                    cloud_exception_items = []
+                    activation_last_error = _policy_bundle_rejection_payload(activation_rejection_reason)
+                    persist_activation_rejection(store, activation_last_error, now)
+                else:
+                    remote_policies_stored = len(remote_decisions)
+                    if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+                        canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
+                        if isinstance(canonical_last_good, dict) and canonical_last_good.get(
+                            "bundleHash"
+                        ) != effective_policy_bundle.get("bundleHash"):
+                            store.set_sync_payload(
+                                "policy_bundle_canonical_previous_good",
+                                canonical_last_good,
+                                now,
+                            )
                         store.set_sync_payload(
-                            "policy_bundle_canonical_previous_good",
-                            canonical_last_good,
+                            "policy_bundle_canonical_last_good",
+                            effective_policy_bundle,
                             now,
                         )
-                    store.set_sync_payload(
-                        "policy_bundle_canonical_last_good",
-                        effective_policy_bundle,
-                        now,
-                    )
-                else:
-                    store.set_sync_payload(
-                        "policy_bundle_legacy_last_good",
-                        effective_policy_bundle,
-                        now,
-                    )
-                if validated_policy_bundle is None and policy_bundle_field_provided:
-                    store.add_event(
-                        "policy_bundle/rollback",
-                        {
-                            "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
-                            "restored": "policy_bundle_last_good",
-                        },
-                        now,
-                    )
-                cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
-                if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                    _persist_cloud_receipt_redaction_level(
-                        store,
-                        level=cloud_redaction_level,
-                        synced_at=now,
-                    )
-                else:
-                    _reset_cloud_receipt_redaction_authority(store, synced_at=now)
-        except ApprovalGateError as error:
-            cloud_exception_items = []
-            remote_policy_sync_blocked = True
-            store.add_event(
-                "approval_gate/remote_policy_sync_blocked",
-                {
-                    "error": error.code,
-                    "remote_policies_count": len(remote_decisions),
-                },
-                now,
-            )
+                    else:
+                        store.set_sync_payload(
+                            "policy_bundle_legacy_last_good",
+                            effective_policy_bundle,
+                            now,
+                        )
+                    if validated_policy_bundle is None and policy_bundle_field_provided:
+                        store.add_event(
+                            "policy_bundle/rollback",
+                            {
+                                "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
+                                "restored": "policy_bundle_last_good",
+                            },
+                            now,
+                        )
+                    cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
+                    if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                        _persist_cloud_receipt_redaction_level(
+                            store,
+                            level=cloud_redaction_level,
+                            synced_at=now,
+                        )
+                    else:
+                        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+            except PolicyBundleNativeError as error:
+                cloud_exception_items = []
+                activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
+                persist_activation_rejection(store, activation_last_error, now)
+            except ApprovalGateError as error:
+                cloud_exception_items = []
+                remote_policy_sync_blocked = True
+                store.add_event(
+                    "approval_gate/remote_policy_sync_blocked",
+                    {
+                        "error": error.code,
+                        "remote_policies_count": len(remote_decisions),
+                    },
+                    now,
+                )
     if review_verification_keys_payload is not None:
         if cloud_workspace_id is None:
             raise RuntimeError("review_verification_keys_workspace_missing")
@@ -2820,8 +1033,7 @@ def sync_receipts(
             pain_signals_uploaded = 0
         else:
             raise
-    value_metrics = _build_value_metrics(store)
-    weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
+    value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=_sync.VALUE_METRIC_EVENT_LIMIT), now)
     summary: dict[str, object] = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
@@ -2927,38 +1139,6 @@ def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[
         raise RuntimeError(_sync_url_error_message(error)) from error
 
 
-def _normalized_supply_chain_bundle_index_url(bundle_url: str) -> str:
-    parsed = urllib.parse.urlsplit(bundle_url)
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path.rstrip("/") + "/index",
-            parsed.query,
-            "",
-        )
-    )
-
-
-def _supply_chain_partition_bundle_url(bundle_url: str, *, ecosystem: str, partition: int) -> str:
-    parsed = urllib.parse.urlsplit(bundle_url)
-    query_pairs = [
-        (key, value)
-        for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        if key not in {"ecosystem", "partition"}
-    ]
-    query_pairs.extend((("ecosystem", ecosystem), ("partition", str(partition))))
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            urllib.parse.urlencode(query_pairs),
-            "",
-        )
-    )
-
-
 def _sync_supply_chain_bundle_incremental(
     *,
     bundle_url: str,
@@ -2970,7 +1150,7 @@ def _sync_supply_chain_bundle_incremental(
 ) -> dict[str, object] | None:
     index_request = _guard_sync_request(
         auth_context,
-        request_url=_normalized_supply_chain_bundle_index_url(bundle_url),
+        request_url=_sync.normalized_supply_chain_bundle_index_url(bundle_url),
         method="GET",
         data=None,
         extra_headers={"Accept-Encoding": "identity"},
@@ -3019,7 +1199,7 @@ def _sync_supply_chain_bundle_incremental(
             try:
                 partition_request = _guard_sync_request(
                     auth_context,
-                    request_url=_supply_chain_partition_bundle_url(
+                    request_url=_sync.supply_chain_partition_bundle_url(
                         bundle_url, ecosystem=ecosystem, partition=partition
                     ),
                     method="GET",
@@ -3068,7 +1248,7 @@ def sync_supply_chain_bundle(
     workspace_id = store.get_cloud_workspace_id()
     if workspace_id is None:
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
+    bundle_url = _sync.normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
     cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
     cached_bundle_version = None
     if isinstance(cached_bundle, dict):
@@ -3196,7 +1376,7 @@ def sync_guard_events(
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
+    sync_url = _sync.guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
     total_accepted = 0
@@ -3288,7 +1468,7 @@ def sync_guard_events(
                 message=message,
             )
             raise RuntimeError(_redact_sync_text(message)) from error
-        completed_ids = _completed_guard_event_ids(payload)
+        completed_ids = _sync.completed_guard_event_ids(payload)
         synced_at = _sync_timestamp(payload)
         uploaded = store.mark_guard_events_v1_uploaded(completed_ids, synced_at)
         total_events += len(pending_events)
@@ -3387,7 +1567,7 @@ def sync_runtime_session(
     """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_runtime_sessions_sync_url(
+    sync_url = _sync.normalized_runtime_sessions_sync_url(
         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
     )
     session_payload = _cloud_runtime_session_payload(store, session)
@@ -3495,7 +1675,7 @@ def _local_guard_runtime_session(
         "policy_contracts": list(_POLICY_CONTRACTS),
         "yaml_import": os.environ.get(_POLICY_YAML_IMPORT_ENV) == "1",
     }
-    if _canonical_policy_enforcement_enabled(
+    if _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=workspace_id,
     ):
@@ -3573,7 +1753,7 @@ def sync_pain_signals(
         raise
     except GuardSyncNotConfiguredError:
         return 0
-    normalized_sync_url = _normalized_receipts_sync_url(
+    normalized_sync_url = _sync.normalized_receipts_sync_url(
         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
     )
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
@@ -3590,21 +1770,11 @@ def sync_pain_signals(
         if not candidates:
             break
         last_processed_event_id = _int_value(candidates[-1].get("event_id")) or current_event_id
-        signal_items: list[dict[str, object]] = []
-        for item in candidates:
-            event_name = _optional_string(item.get("event_name"))
-            payload = item.get("payload")
-            if event_name == "install_time_warn" and isinstance(payload, dict):
-                warn_key = _warning_occurrence_key(payload)
-                if warn_key is not None:
-                    warn_occurrences[warn_key] = warn_occurrences.get(warn_key, 0) + 1
-            pain_signal = _pain_signal_item(item, warn_occurrences=warn_occurrences)
-            if pain_signal is not None:
-                signal_items.append(pain_signal)
+        signal_items, warn_occurrences = _sync.pain_signal_batch(candidates, warn_occurrences)
         if signal_items:
             request = _guard_sync_request(
                 resolved_auth_context,
-                request_url=_pain_signal_sync_url(normalized_sync_url),
+                request_url=_sync.pain_signal_sync_url(normalized_sync_url),
                 method="POST",
                 data=json.dumps({"items": signal_items}).encode("utf-8"),
                 extra_headers=None,
@@ -3633,24 +1803,6 @@ def sync_pain_signals(
         if len(candidates) < 500:
             break
     return uploaded_count
-
-
-def _persist_cloud_exceptions(
-    store: GuardStore,
-    *,
-    device_id: str | None = None,
-    sync_exceptions: list[dict[str, object]] | None = None,
-    policy_bundle: dict[str, object] | None = None,
-    now: str,
-) -> list[dict[str, object]]:
-    serialized = _policy_bundle_cloud_exception_items(
-        store,
-        device_id=device_id,
-        sync_exceptions=sync_exceptions,
-        policy_bundle=policy_bundle,
-    )
-    store.set_cloud_exceptions(serialized, now)
-    return serialized
 
 
 def _policy_bundle_cloud_exception_items(
@@ -4058,7 +2210,7 @@ def _refresh_guard_oauth_access_token_once(
                 if _invalid_grant_oauth_payload(payload):
                     raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
                 refresh_error_message = _oauth_refresh_error_message(error)
-                raise GuardSyncAuthorizationExpiredError(
+                raise _GuardOAuthRefreshRejectedError(
                     f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
                 ) from error
             refresh_error_message = _oauth_refresh_error_message(error)
@@ -4111,7 +2263,6 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
 _OAUTH_INVALID_GRANT_MAX_ATTEMPTS = 2
 _OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS = 0.75
-_oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
 
 
 class _GuardOAuthRefreshRateLimitedError(RuntimeError):
@@ -4122,11 +2273,17 @@ class _GuardOAuthRefreshRateLimitedError(RuntimeError):
         super().__init__(f"Guard OAuth token refresh was rate limited. Retry after {retry_after_seconds} seconds.")
 
 
+class _GuardOAuthRefreshRejectedError(GuardSyncAuthorizationExpiredError):
+    """The token endpoint rejected the refresh request with an error other than invalid_grant."""
+
+
 _OAUTH_REFRESH_CIRCUIT_STATE_KEY = "guard_oauth_refresh_circuit"
 _OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_SECONDS"
 _OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_SECONDS"
 _OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS = 30.0
 _OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS = 300.0
+_OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED = "revoked"
+_OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED = "rejected"
 _OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS = 3600.0
 
 
@@ -4220,6 +2377,8 @@ def _oauth_refresh_circuit_check(
     if next_allowed is None or next_allowed <= now:
         return
     if bool(state.get("needs_reauthorization")):
+        if state.get("failure_kind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
     raise _GuardOAuthRefreshRateLimitedError(max(1, int((next_allowed - now).total_seconds())))
 
@@ -4230,12 +2389,17 @@ def _oauth_refresh_circuit_record_dead_grant(
     refresh_token: str,
     issuer: str,
     now: datetime,
+    failure_kind: str = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED,
 ) -> None:
     """Mark the grant permanently invalid and schedule the next probe.
 
     A propagated failure already consumed the bounded invalid_grant retry, so
     one record flips the binding into needs-reauthorization and fires the
     single user-visible notice; later failures only extend the probe backoff.
+    Other rejections (for example invalid_request) record the `rejected` kind
+    so the fast-fail keeps their reauthorization error instead of the revoked
+    one, which would let sign-in cleanup wipe credentials after one bad 400.
+    A rejection sends the notice only once the next probe is rejected too.
     """
     fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
     state = _load_oauth_refresh_circuit(store)
@@ -4259,7 +2423,7 @@ def _oauth_refresh_circuit_record_dead_grant(
         )
     )
     notice_sent = bool(state.get("notice_sent"))
-    if not notice_sent:
+    if not notice_sent and (failure_kind != _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED or failures > 1):
         notice_sent = _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint)
     _save_oauth_refresh_circuit(
         store,
@@ -4267,6 +2431,7 @@ def _oauth_refresh_circuit_record_dead_grant(
             "refresh_token_fingerprint": fingerprint,
             "consecutive_failures": failures,
             "needs_reauthorization": True,
+            "failure_kind": failure_kind,
             "notice_sent": notice_sent,
             "backoff_seconds": backoff,
             "next_refresh_allowed_at": (now + timedelta(seconds=backoff)).isoformat(),
@@ -4302,6 +2467,7 @@ def _oauth_refresh_circuit_record_rate_limit(
             if isinstance(state.get("consecutive_failures"), int)
             else 0,
             "needs_reauthorization": bool(state.get("needs_reauthorization")),
+            **({"failure_kind": state["failure_kind"]} if isinstance(state.get("failure_kind"), str) else {}),
             "notice_sent": bool(state.get("notice_sent")),
             "backoff_seconds": bounded_retry_after,
             "next_refresh_allowed_at": (now + timedelta(seconds=bounded_retry_after)).isoformat(),
@@ -4596,15 +2762,21 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         raise
     except GuardSyncAuthorizationExpiredError as error:
         if str(error) == _guard_oauth_reconnect_after_revoked_message():
-            failed_refresh_token = (
-                _optional_string(effective_credentials_ref["value"].get("refresh_token")) or refresh_token
-            )
-            _oauth_refresh_circuit_record_dead_grant(
-                store=store,
-                refresh_token=failed_refresh_token,
-                issuer=issuer,
-                now=datetime.now(timezone.utc),
-            )
+            failure_kind = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED
+        elif isinstance(error, _GuardOAuthRefreshRejectedError):
+            failure_kind = _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED
+        else:
+            raise
+        failed_refresh_token = (
+            _optional_string(effective_credentials_ref["value"].get("refresh_token")) or refresh_token
+        )
+        _oauth_refresh_circuit_record_dead_grant(
+            store=store,
+            refresh_token=failed_refresh_token,
+            issuer=issuer,
+            now=datetime.now(timezone.utc),
+            failure_kind=failure_kind,
+        )
         raise
     _oauth_refresh_circuit_clear(store)
     effective_credentials = effective_credentials_ref["value"]
@@ -4919,11 +3091,55 @@ def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
     return None
 
 
+CLOUD_EDGE_BLOCK_REASON_PREFIX = "Guard Cloud is unreachable from this network"
+
+
+def _cloud_edge_block_message(error: urllib.error.HTTPError, raw_body: str) -> str | None:
+    """Cloudflare's own block or challenge page instead of a Guard Cloud answer.
+
+    Mirrors ``cloud_edge_block_message`` in guard_sync_transport.rs. The page is HTML
+    a client cannot pass, so its raw text is no use as an error message.
+    """
+    headers = error.headers
+    if headers is None:
+        return None
+    challenged = headers.get("cf-mitigated") is not None
+    from_cloudflare = headers.get("cf-ray") is not None or str(headers.get("server") or "").lower() == "cloudflare"
+    html = str(headers.get("content-type") or "").lower().startswith("text/html")
+    page = raw_body[: 64 * 1024]
+    challenge_page = "Just a moment..." in page or "challenge-platform" in page
+    block_page = "Attention Required! | Cloudflare" in page or "Sorry, you have been blocked" in page
+    if not challenged and not (from_cloudflare and html and (challenge_page or block_page)):
+        return None
+    action = "challenged" if challenged or challenge_page else "blocked"
+    ray = str(headers.get("cf-ray") or "").split("-", 1)[0]
+    if ray.isascii() and ray.isalnum():
+        ray_detail, ray_hint = f", Ray ID {ray}", "; the Guard Cloud operator can look up that Ray ID"
+    else:
+        ray_detail, ray_hint = "", ""
+    return (
+        f"{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request "
+        f"(HTTP {error.code}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    )
+
+
+def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
+    """Read the body once and return the edge-block message, if Cloudflare answered."""
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    return _cloud_edge_block_message(error, raw_body)
+
+
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     try:
         raw_body = error.read().decode("utf-8", errors="replace")
     except OSError:
         raw_body = ""
+    edge_block = _cloud_edge_block_message(error, raw_body)
+    if edge_block is not None:
+        return edge_block
     try:
         payload = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
@@ -4975,6 +3191,9 @@ def _check_plan_restriction_403(
         payload: object = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
         payload = None
+    edge_block = _cloud_edge_block_message(error, raw_body)
+    if edge_block is not None:
+        return False, edge_block
     fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
     if not isinstance(payload, dict):
         return False, fallback
@@ -5129,16 +3348,6 @@ def _urlopen_with_timeout_retry(
     )
 
 
-def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return "*" if allow_wildcard else None
-
-
-def _remote_workspace(item: dict[str, object]) -> str | None:
-    return _optional_string(item.get("workspace")) or _optional_string(item.get("workspacePath"))
-
-
 def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
@@ -5177,13 +3386,6 @@ def _auth_context_sync_url(auth_context: dict[str, object]) -> str:
     return sync_url
 
 
-def _metric_count(metrics: dict[str, dict[str, object]], key: str) -> int:
-    metric = metrics.get(key)
-    if not isinstance(metric, dict):
-        return 0
-    return _int_value(metric.get("value")) or 0
-
-
 def _normalized_timestamp_string(value: object) -> str | None:
     raw_value = _optional_string(value)
     if raw_value is None:
@@ -5201,333 +3403,6 @@ def _last_uploaded_event_id(payload: dict[str, object] | list[object] | None) ->
     return event_id if isinstance(event_id, int) and event_id > 0 else 0
 
 
-def _pain_signal_item(
-    event: dict[str, object],
-    *,
-    warn_occurrences: dict[tuple[str, str], int] | None = None,
-) -> dict[str, object] | None:
-    event_name = _optional_string(event.get("event_name"))
-    payload = event.get("payload")
-    occurred_at = _optional_string(event.get("occurred_at"))
-    if event_name is None or not isinstance(payload, dict) or occurred_at is None:
-        return None
-    artifact_id, artifact_name = _pain_signal_artifact_identity(event_name, payload)
-    if artifact_id is None or artifact_name is None:
-        return None
-    if not _should_emit_pain_signal(
-        event_name=event_name,
-        payload=payload,
-        warn_occurrences=warn_occurrences,
-    ):
-        return None
-    harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor")) or "unknown"
-    artifact_type = _artifact_type_for_signal(payload, artifact_id)
-    latest_summary = _pain_signal_summary(event_name, payload)
-    return {
-        "signalId": f"{event_name}:{harness}:{artifact_id}",
-        "signalName": event_name,
-        "artifactId": artifact_id,
-        "artifactName": artifact_name,
-        "artifactType": artifact_type,
-        "harness": harness,
-        "latestSummary": latest_summary,
-        "occurredAt": occurred_at,
-        "source": "scanner",
-        "publisher": _optional_string(payload.get("publisher")),
-    }
-
-
-def _artifact_type_for_signal(payload: dict[str, object], artifact_id: str) -> str:
-    artifact_type = _optional_string(payload.get("artifact_type"))
-    if artifact_type in {"plugin", "skill"}:
-        return artifact_type
-    if artifact_id.startswith("skill:"):
-        return "skill"
-    return "plugin"
-
-
-def _pain_signal_summary(event_name: str, payload: dict[str, object]) -> str:
-    reason = _optional_string(payload.get("reason"))
-    if reason is not None:
-        return reason
-    changed_fields = payload.get("changed_fields")
-    if event_name == "changed_artifact_caught" and isinstance(changed_fields, list):
-        changed_labels = [str(item) for item in changed_fields if isinstance(item, str)]
-        if changed_labels:
-            return f"Artifact changed across: {', '.join(changed_labels)}."
-    risk_signals = payload.get("risk_signals")
-    if isinstance(risk_signals, list):
-        labels = [str(item) for item in risk_signals if isinstance(item, str)]
-        if labels:
-            return f"Guard flagged install-time risk: {', '.join(labels)}."
-    expires_at = _optional_string(payload.get("expires_at"))
-    if event_name == "exception_expiring" and expires_at is not None:
-        return f"Guard exception expires at {expires_at}."
-    return f"Guard recorded {event_name.replace('_', ' ')} for this artifact."
-
-
-def _build_value_metrics(store: GuardStore) -> dict[str, dict[str, object]]:
-    events = store.list_events(limit=5000)
-    installs_stopped = 0
-    scripts_prevented = 0
-    tokens_protected = 0
-    for event in events:
-        event_name = _optional_string(event.get("event_name")) or ""
-        payload = event.get("payload")
-        if not isinstance(payload, dict):
-            continue
-        if event_name in _INSTALL_TIME_STOP_EVENTS:
-            installs_stopped += 1
-            install_kind = (_optional_string(payload.get("install_kind")) or "").lower()
-            risk_signals = payload.get("risk_signals")
-            script_signal = isinstance(risk_signals, list) and any(
-                "script" in str(signal).lower() for signal in risk_signals
-            )
-            if "script" in install_kind or script_signal:
-                scripts_prevented += 1
-        if event_name == "changed_artifact_caught":
-            changed_fields = payload.get("changed_fields")
-            risk_signals = payload.get("risk_signals")
-            touched_launch_surface = isinstance(changed_fields, list) and any(
-                str(item) in {"command", "args"} for item in changed_fields
-            )
-            secret_signal = isinstance(risk_signals, list) and any(
-                any(token in str(signal).lower() for token in ("token", "secret", ".env", "credential"))
-                for signal in risk_signals
-            )
-            if touched_launch_surface and secret_signal:
-                tokens_protected += 1
-    return {
-        "installs_stopped_before_execution": {
-            "value": installs_stopped,
-            "source": "guard_events:install_time_block|review|require-reapproval|sandbox-required",
-        },
-        "scripts_prevented": {
-            "value": scripts_prevented,
-            "source": "guard_events:risk_signals|install_kind",
-        },
-        "tokens_protected": {
-            "value": tokens_protected,
-            "source": "guard_events:changed_artifact_caught",
-        },
-    }
-
-
-def _build_weekly_firewall_digest(*, metrics: dict[str, dict[str, object]], now: str) -> dict[str, object]:
-    installs_stopped = _metric_count(metrics, "installs_stopped_before_execution")
-    scripts_prevented = _metric_count(metrics, "scripts_prevented")
-    tokens_protected = _metric_count(metrics, "tokens_protected")
-    headline = (
-        "Package firewall summary: "
-        f"{installs_stopped} installs stopped before execution, "
-        f"{scripts_prevented} scripts prevented, "
-        f"{tokens_protected} token-protection incidents."
-    )
-    return {
-        "subject": "HOL Guard weekly package firewall summary",
-        "generated_at": now,
-        "period_days": 7,
-        "headline": headline,
-        "body_preview": (
-            "HOL Guard weekly digest\n"
-            f"{headline}\n"
-            "Review the approval queue and sync health to keep package protection current."
-        ),
-    }
-
-
-def _pain_signal_artifact_identity(event_name: str, payload: dict[str, object]) -> tuple[str | None, str | None]:
-    artifact_id = _optional_string(payload.get("artifact_id"))
-    artifact_name = _optional_string(payload.get("artifact_name"))
-    if artifact_id is not None and artifact_name is not None:
-        return (artifact_id, artifact_name)
-    if event_name == "supply_chain_bundle_refresh_requested":
-        fallback_id = artifact_id or "guard:supply-chain:feed"
-        return (fallback_id, artifact_name or fallback_id)
-    if event_name == "approval_gate/remote_policy_sync_blocked":
-        return ("guard:policy:disable", "remote policy sync disabled")
-    return (None, None)
-
-
-def _warning_occurrence_key(payload: dict[str, object]) -> tuple[str, str] | None:
-    artifact_id = _optional_string(payload.get("artifact_id"))
-    harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor"))
-    if artifact_id is None or harness is None:
-        return None
-    return (harness, artifact_id)
-
-
-def _should_emit_pain_signal(
-    *,
-    event_name: str,
-    payload: dict[str, object],
-    warn_occurrences: dict[tuple[str, str], int] | None,
-) -> bool:
-    if event_name in _INSTALL_TIME_STOP_EVENTS:
-        return True
-    if event_name == "install_time_warn":
-        warn_key = _warning_occurrence_key(payload)
-        if warn_key is None:
-            return False
-        if warn_occurrences is None:
-            return False
-        return warn_occurrences.get(warn_key, 0) >= 2
-    if event_name == "changed_artifact_caught":
-        policy_action = _optional_string(payload.get("policy_action"))
-        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    if event_name == "supply_chain_bundle_refresh_requested":
-        reason = _optional_string(payload.get("reason"))
-        return reason == "feed_stale"
-    return event_name == "approval_gate/remote_policy_sync_blocked"
-
-
-def _pain_signal_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
-    path = parsed.path.rstrip("/")
-    segments = [segment for segment in path.split("/") if segment]
-    if len(segments) >= 2 and segments[-2:] in (["receipts", "sync"], ["inventory", "sync"]):
-        next_segments = [*segments[:-2], "signals", "pain"]
-    elif segments and segments[-1] in {"receipts", "inventory"}:
-        next_segments = [*segments[:-1], "signals", "pain"]
-    else:
-        next_segments = [*segments, "signals", "pain"]
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            "/" + "/".join(next_segments),
-            parsed.query,
-            parsed.fragment,
-        )
-    )
-
-
-def _normalized_receipts_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/registry/api/v1/guard/receipts/sync",
-                parsed.query,
-                "",
-            )
-        )
-    return sync_url
-
-
-def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
-    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
-    parsed = urllib.parse.urlsplit(normalized_receipts_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/registry/api/v1/guard/runtime/sessions/sync",
-                parsed.query,
-                "",
-            )
-        )
-    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/api/guard/runtime/sessions/sync",
-                parsed.query,
-                "",
-            )
-        )
-    if parsed.path.rstrip("/") == "/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/guard/runtime/sessions/sync",
-                parsed.query,
-                "",
-            )
-        )
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path.rstrip("/") + "/runtime/sessions/sync",
-            parsed.query,
-            "",
-        )
-    )
-
-
-def _normalized_supply_chain_bundle_url(sync_url: str, workspace_id: str) -> str:
-    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
-    parsed = urllib.parse.urlsplit(normalized_receipts_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
-        next_path = "/registry/api/v1/guard/supply-chain/bundle"
-    elif parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        next_path = "/api/guard/supply-chain/bundle"
-    elif parsed.path.rstrip("/") == "/guard/receipts/sync":
-        next_path = "/guard/supply-chain/bundle"
-    else:
-        next_path = parsed.path.rstrip("/") + "/supply-chain/bundle"
-    query_pairs = [
-        (key, value)
-        for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        if key != "workspaceId"
-    ]
-    query_pairs.append(("workspaceId", workspace_id))
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            next_path,
-            urllib.parse.urlencode(query_pairs),
-            "",
-        )
-    )
-
-
-def _guard_events_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(_normalized_receipts_sync_url(sync_url))
-    if parsed.path.rstrip("/").endswith("/api/v1/guard/events"):
-        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), parsed.query, ""))
-    path = parsed.path.rstrip("/")
-    for suffix in (
-        "/registry/api/v1/guard/receipts/sync",
-        "/api/guard/receipts/sync",
-        "/guard/receipts/sync",
-    ):
-        if path.endswith(suffix):
-            path = path[: -len(suffix)]
-            break
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            path.rstrip("/") + "/api/v1/guard/events",
-            parsed.query,
-            "",
-        )
-    )
-
-
-def _completed_guard_event_ids(payload: dict[str, object]) -> list[str]:
-    statuses = payload.get("statuses")
-    if not isinstance(statuses, list):
-        return []
-    completed: list[str] = []
-    for item in statuses:
-        if not isinstance(item, dict):
-            continue
-        status = str(item.get("status") or "")
-        event_id = item.get("eventId")
-        if status in {"accepted", "duplicate", "rejected"} and isinstance(event_id, str):
-            completed.append(event_id)
-    return completed
-
-
 def _cloud_sync_receipts_payload(
     receipts: list[dict[str, object]],
     *,
@@ -5535,15 +3410,25 @@ def _cloud_sync_receipts_payload(
     device_name: str,
     redaction_level: str = "full",
 ) -> list[dict[str, object]]:
-    return [
-        _cloud_sync_receipt_payload(
-            receipt,
-            device_id=device_id,
-            device_name=device_name,
-            redaction_level=redaction_level,
-        )
-        for receipt in receipts
-    ]
+    return cloud_sync_receipt_payloads(
+        receipts,
+        device_id=device_id,
+        device_name=device_name,
+        redaction_level=redaction_level,
+        now=_now(),
+    )
+
+
+def _cloud_sync_receipt_payload(
+    receipt: dict[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    redaction_level: str = "full",
+) -> dict[str, object]:
+    return _cloud_sync_receipts_payload(
+        [receipt], device_id=device_id, device_name=device_name, redaction_level=redaction_level
+    )[0]
 
 
 def _dedupe_sync_payload_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -5915,120 +3800,6 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return local_receipt_redaction_level(store.guard_home)
 
 
-def _cloud_sync_command_display_part(value: str) -> str:
-    return " ".join(_cloud_sync_sanitize_text(value, fallback="").split())
-
-
-def _cloud_sync_transport_encode_text(value: str) -> str:
-    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
-
-
-def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction_level: str) -> str | None:
-    tool_name = _optional_string(envelope.get("tool_name"))
-    sanitized_tool_name = _cloud_sync_command_display_part(tool_name) if tool_name is not None else ""
-    command = _optional_string(envelope.get("command"))
-    if command is not None and command not in {"guard_commands_module"}:
-        if redaction_level == "full":
-            return sanitized_tool_name or None
-        return _cloud_sync_command_display_part(command)
-    target_paths = envelope.get("target_paths")
-    if sanitized_tool_name and isinstance(target_paths, list):
-        raw_targets = [target for target in target_paths[:3] if isinstance(target, str) and target.strip()]
-        if raw_targets and redaction_level == "full":
-            target_placeholder = "[targets withheld]" if len(raw_targets) > 1 else "[target withheld]"
-            return " ".join([sanitized_tool_name, target_placeholder])
-        targets = [_cloud_sync_command_display_part(target) for target in raw_targets]
-        targets = [target for target in targets if target]
-        if targets:
-            return " ".join([sanitized_tool_name, *targets])
-        return sanitized_tool_name
-    return None
-
-
-def _cloud_sync_receipt_payload(
-    receipt: dict[str, object],
-    *,
-    device_id: str,
-    device_name: str,
-    redaction_level: str = "full",
-) -> dict[str, object]:
-    receipt_fingerprint = _cloud_sync_receipt_fingerprint(receipt)
-    artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
-    artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
-    policy_decision = _optional_string(receipt.get("policy_decision")) or "review"
-    capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
-    explicit_capabilities = receipt.get("capabilities")
-    if isinstance(explicit_capabilities, list):
-        capabilities = [
-            _cloud_sync_sanitize_text(item, fallback="redacted-capability")
-            for item in explicit_capabilities
-            if isinstance(item, str)
-        ]
-    else:
-        capabilities = []
-    summary_input = (
-        _optional_string(receipt.get("provenance_summary"))
-        or capabilities_summary
-        or f"Guard recorded a {policy_decision} decision."
-    )
-    summary = _cloud_sync_sanitize_text(summary_input, fallback=f"Guard recorded a {policy_decision} decision.")
-    explicit_changed_since_last_approval = receipt.get("changedSinceLastApproval")
-    if not isinstance(explicit_changed_since_last_approval, bool):
-        explicit_changed_since_last_approval = receipt.get("changed_since_last_approval")
-    changed_since_last_approval = explicit_changed_since_last_approval is True
-    # Review-tier decisions always remain changed, even if an explicit false is present.
-    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
-        changed_since_last_approval = True
-    payload: dict[str, object] = {
-        "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
-        "artifactId": artifact_id,
-        "artifactName": artifact_name,
-        "artifactType": _cloud_sync_artifact_type(artifact_id),
-        "artifactSlug": _cloud_sync_artifact_slug(artifact_name, artifact_id),
-        "artifactHash": _optional_string(receipt.get("artifact_hash"))
-        or hashlib.sha256(artifact_id.encode("utf-8")).hexdigest(),
-        "capabilities": capabilities,
-        "capturedAt": _optional_string(receipt.get("timestamp")) or _now(),
-        "changedSinceLastApproval": changed_since_last_approval,
-        "deviceId": device_id,
-        "deviceName": device_name,
-        "harness": _optional_string(receipt.get("harness")) or "unknown",
-        "policyDecision": policy_decision,
-        "recommendation": _cloud_sync_recommendation(policy_decision),
-        "summary": summary,
-    }
-    raw_command_text = _optional_string(receipt.get("raw_command_text"))
-    if raw_command_text is not None:
-        payload["raw_command_text"] = _cloud_sync_command_display_part(raw_command_text)
-    publisher = _optional_string(receipt.get("publisher"))
-    if publisher is not None:
-        payload["publisher"] = publisher
-    redacted_envelope = receipt.get("envelope_redacted_json")
-    if isinstance(redacted_envelope, dict) and redacted_envelope:
-        full_envelope = receipt.get("action_envelope_json")
-        if isinstance(full_envelope, dict):
-            enriched = dict(redacted_envelope)
-            command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
-            if command is not None:
-                enriched.pop("command", None)
-                enriched["commandEncoded"] = _cloud_sync_transport_encode_text(command)
-                enriched["commandTransport"] = "base64url-v1"
-            if redaction_level == "none":
-                target_paths = full_envelope.get("target_paths")
-                if isinstance(target_paths, list):
-                    enriched["target_paths"] = target_paths
-                network_hosts = full_envelope.get("network_hosts")
-                if isinstance(network_hosts, list):
-                    enriched["network_hosts"] = network_hosts
-                package_name = full_envelope.get("package_name")
-                if isinstance(package_name, str) and package_name:
-                    enriched["package_name"] = package_name
-            payload["envelopeRedacted"] = enriched
-        else:
-            payload["envelopeRedacted"] = redacted_envelope
-    return payload
-
-
 def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata(store)
     workspace = _optional_string(session.get("workspace")) or os.getcwd()
@@ -6196,11 +3967,6 @@ def _safe_private_ipv6() -> str | None:
     return None
 
 
-def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
-    encoded_receipt = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(encoded_receipt.encode("utf-8")).hexdigest()
-
-
 def _cloud_package_manager_coverage(
     store: GuardStore,
     *,
@@ -6262,57 +4028,6 @@ def _cloud_package_manager_coverage(
         "nextRefreshAt": next_refresh_at,
     }
     return coverage
-
-
-def _cloud_sync_artifact_type(artifact_id: str) -> str:
-    if artifact_id.startswith("skill:") or ":skill:" in artifact_id:
-        return "skill"
-    return "plugin"
-
-
-def _cloud_sync_artifact_slug(artifact_name: str, artifact_id: str) -> str:
-    base_value = artifact_name.strip() or artifact_id.strip() or "artifact"
-    slug = re.sub(r"[^a-z0-9]+", "-", base_value.lower()).strip("-")
-    if slug:
-        return slug
-    fallback = re.sub(r"[^a-z0-9]+", "-", artifact_id.lower()).strip("-")
-    return fallback or "artifact"
-
-
-def _cloud_sync_recommendation(policy_decision: str) -> str:
-    if policy_decision == "block":
-        return "block"
-    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
-        return "review"
-    return "monitor"
-
-
-def _cloud_sync_sanitize_text(value: str, *, fallback: str) -> str:
-    redacted = redact_sensitive_text(value).strip()
-    if not redacted:
-        return fallback
-    if _looks_like_source_excerpt(redacted):
-        return fallback
-    if len(redacted) > 320:
-        return f"{redacted[:317]}..."
-    return redacted
-
-
-def _looks_like_source_excerpt(value: str) -> bool:
-    lowered = value.lower()
-    suspicious_tokens = (
-        "function ",
-        "def ",
-        "class ",
-        "import ",
-        "from ",
-        " => ",
-        "console.log(",
-        "<script",
-        "#!/bin/",
-    )
-    has_structured_code_shape = "\n" in value and ("{" in value or "}" in value or ";" in value)
-    return has_structured_code_shape or any(token in lowered for token in suspicious_tokens)
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

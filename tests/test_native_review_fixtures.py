@@ -30,6 +30,11 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
             "reason_code": "native_pre_tool_unknown_review" if action_type == "unknown" else "native_network_review",
             "reason": "HOL Guard requires review before this network action can execute.",
         },
+        "harness_response": {
+            "decision": "deny",
+            "reason": "HOL Guard requires review before this network action can execute.",
+            "policy_action": "review",
+        },
     }
 
 
@@ -64,10 +69,6 @@ def request_digest_for_fixture(harness: str, payload: object, workspace: object)
 
 
 def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, object]) -> tuple[HookWorker, GuardStore]:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
 
     def review_raw_hook_native(*_args: object, **kwargs: object) -> dict[str, object]:
         rendered = copy.deepcopy(edge)

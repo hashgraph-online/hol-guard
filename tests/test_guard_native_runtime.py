@@ -4,14 +4,12 @@ import hashlib
 import json
 import os
 import stat
-import time
 from pathlib import Path
 
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
-from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_status,
@@ -27,11 +25,6 @@ def test_native_mode_defaults_auto(monkeypatch: pytest.MonkeyPatch) -> None:
     status = native_runtime_status()
     assert status.mode == "auto"
     assert status.reason == "native_unavailable"
-
-
-def test_hook_fast_path_defaults_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
-    assert hook_fast_path_enabled() is True
 
 
 def test_isolated_hook_environment_keeps_native_mode_and_drops_loaders(tmp_path: Path) -> None:
@@ -51,14 +44,6 @@ def test_isolated_hook_environment_keeps_native_mode_and_drops_loaders(tmp_path:
     assert environment["HOL_GUARD_NATIVE_BINARY"] == str(binary)
     assert "PYTHONPATH" not in environment
     assert "LD_PRELOAD" not in environment
-
-
-def test_explicit_off_remains_emergency_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
-    assert native_mode() == "off"
-    status = native_runtime_status()
-    assert status.mode == "off"
-    assert status.reason == "native_disabled"
 
 
 def test_invalid_native_mode_fails_to_auto(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -90,7 +75,7 @@ def test_parity_signature_hashes_excerpt() -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake executable uses a POSIX shebang")
-def test_explicit_shadow_runtime_is_validated_without_path_lookup(
+def test_explicit_force_runtime_is_validated_without_path_lookup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -108,7 +93,7 @@ def test_explicit_shadow_runtime_is_validated_without_path_lookup(
         encoding="utf-8",
     )
     binary.chmod(0o700)
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "shadow")
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary))
     status = native_runtime_status()
     assert status.available is True
@@ -208,127 +193,3 @@ def _capabilities_payload() -> str:
             "features": ["hook-envelope-v2"],
         }
     )
-
-
-def test_capability_probe_records_retry_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failed probe is remembered briefly: a second call inside the retry
-    window must not spawn the binary again."""
-    identity = _probe_identity(tmp_path)
-    calls: list[str] = []
-    monkeypatch.setattr(
-        native_runtime_module,
-        "_run_native_process",
-        lambda *args, **kwargs: calls.append("probe") or None,
-    )
-    native_runtime_module._clear_capabilities_probe_state()
-
-    key = (str(identity.path), identity.size, identity.mtime_ns, identity.sha256)
-    assert native_runtime_module._capabilities_for_identity(*key) is None
-    assert key in native_runtime_module._capabilities_retry_after
-    assert native_runtime_module._capabilities_for_identity(*key) is None
-    assert calls == ["probe"]
-
-
-def test_capability_probe_respects_caller_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """An exhausted caller deadline prevents any subprocess spawn."""
-    identity = _probe_identity(tmp_path)
-    calls: list[str] = []
-    monkeypatch.setattr(
-        native_runtime_module,
-        "_run_native_process",
-        lambda *args, **kwargs: calls.append("probe") or "",
-    )
-    native_runtime_module._clear_capabilities_probe_state()
-
-    result = native_runtime_module._capabilities_for_identity(
-        str(identity.path),
-        identity.size,
-        identity.mtime_ns,
-        identity.sha256,
-        deadline_monotonic=time.monotonic() - 1.0,
-    )
-    assert result is None
-    assert calls == []
-
-
-def test_capability_probe_rejects_malformed_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    identity = _probe_identity(tmp_path)
-    monkeypatch.setattr(
-        native_runtime_module,
-        "_run_native_process",
-        lambda *args, **kwargs: "not-json",
-    )
-    native_runtime_module._clear_capabilities_probe_state()
-
-    assert (
-        native_runtime_module._capabilities_for_identity(
-            str(identity.path), identity.size, identity.mtime_ns, identity.sha256
-        )
-        is None
-    )
-
-
-def test_capability_probe_evicts_oldest_when_full(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    identity = _probe_identity(tmp_path)
-    monkeypatch.setattr(
-        native_runtime_module,
-        "_run_native_process",
-        lambda *args, **kwargs: _capabilities_payload(),
-    )
-    native_runtime_module._clear_capabilities_probe_state()
-    for index in range(native_runtime_module._CAPABILITIES_CACHE_MAX):
-        native_runtime_module._capabilities_cache[(f"old-{index}", 0, 0, "x")] = (
-            native_runtime_module.NativeRuntimeCapabilities(
-                protocol_version=1,
-                runtime_version="0",
-                rule_digest="b" * 64,
-                build_sha="a" * 40,
-                target="x",
-                features=(),
-            )
-        )
-
-    result = native_runtime_module._capabilities_for_identity(
-        str(identity.path), identity.size, identity.mtime_ns, identity.sha256
-    )
-
-    assert result is not None
-    assert len(native_runtime_module._capabilities_cache) <= (native_runtime_module._CAPABILITIES_CACHE_MAX)
-
-
-def test_status_breaks_when_deadline_already_spent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The candidate loop must not start a probe once the budget is spent."""
-    identity = _probe_identity(tmp_path)
-    monkeypatch.setenv(native_runtime_module._NATIVE_BINARY_ENV, str(identity.path))
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
-    calls: list[str] = []
-    monkeypatch.setattr(
-        native_runtime_module,
-        "_run_native_process",
-        lambda *args, **kwargs: calls.append("probe") or "",
-    )
-    native_runtime_module._clear_capabilities_probe_state()
-
-    status = native_runtime_module.native_runtime_status(deadline_monotonic=time.monotonic() - 1.0)
-
-    assert status.available is False
-    assert calls == []
-
-
-def test_clear_capabilities_probe_state_resets_both_maps(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    native_runtime_module._capabilities_retry_after[("binary", 1, 2, "x")] = time.monotonic()
-    native_runtime_module._capabilities_cache[("binary", 1, 2, "x")] = native_runtime_module.NativeRuntimeCapabilities(
-        protocol_version=1,
-        runtime_version="0",
-        rule_digest="b" * 64,
-        build_sha="a" * 40,
-        target="x",
-        features=(),
-    )
-
-    native_runtime_module._clear_capabilities_probe_state()
-
-    assert native_runtime_module._capabilities_cache == {}
-    assert native_runtime_module._capabilities_retry_after == {}

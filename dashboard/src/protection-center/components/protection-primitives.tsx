@@ -26,8 +26,8 @@ export function ProtectionStatusHero(props: {
       {safe ? <HiMiniShieldCheck className="size-4" /> : <HiMiniExclamationTriangle className="size-4" />}
     </span>
     <div className="min-w-0 flex-1">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Local protection</p>
-      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <p className="text-sm text-brand-dark/60">Local protection</p>
         <h2 id="protection-status-heading" className="text-sm font-semibold text-brand-dark">{props.status.title}</h2>
         <p className="text-sm leading-5 text-brand-dark/70">{props.status.summary}</p>
       </div>
@@ -63,7 +63,7 @@ function ProtectionStatusAction(props: {
   }
   if (props.safe) {
     return (
-      <span className="inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800">
+      <span className="inline-flex shrink-0 items-center gap-1.5 self-center text-xs font-semibold text-emerald-800">
         <HiMiniCheckCircle className="size-3.5" />
         No action required
       </span>
@@ -105,6 +105,9 @@ export function ProtectionModuleRow(props: {
   external?: boolean;
   executables?: readonly string[];
   ecosystemIds?: readonly string[];
+  brand?: string;
+  badge?: string;
+  actionLabel?: string;
   onOpen: () => void;
 }) {
   return <button type="button" onClick={props.onOpen} className={`${EXTENSION_ROW_CLASS} motion-reduce:transition-none`}>
@@ -113,11 +116,12 @@ export function ProtectionModuleRow(props: {
       name={props.name}
       executables={props.executables}
       ecosystem_ids={props.ecosystemIds}
+      brand={props.brand}
       size="md"
     />
     <span className="min-w-0 flex-1">
-      <span className="flex flex-wrap items-center gap-2"><strong className="text-sm text-brand-dark">{props.name}</strong>{props.required ? <span className="text-[11px] font-semibold text-brand-dark/55">Required by Guard</span> : null}{props.mcp ? <span className="text-[11px] font-semibold text-brand-dark/55">MCP</span> : null}{props.external ? <span className="text-[11px] font-semibold text-brand-dark/55">External</span> : null}{props.managed ? <span className="text-[11px] font-semibold text-brand-dark/55">{props.managedLabel ?? "Synced from Guard Cloud"}</span> : null}{props.custom ? <span className="text-[11px] font-semibold text-brand-dark/55">Custom</span> : null}</span>
-      <span className="mt-0.5 block truncate text-sm text-brand-dark/70">{props.behavior}</span>
+      <span className="flex flex-wrap items-center gap-2"><strong className="text-sm text-brand-dark">{props.name}</strong>{props.required ? <span className="text-[11px] font-semibold text-brand-dark/55">Required by Guard</span> : null}{props.mcp ? <span className="text-[11px] font-semibold text-brand-dark/55">MCP</span> : null}{props.external ? <span className="text-[11px] font-semibold text-brand-dark/55">External</span> : null}{props.managed ? <span className="text-[11px] font-semibold text-brand-dark/55">{props.managedLabel ?? "Synced from Guard Cloud"}</span> : null}{props.custom ? <span className="text-[11px] font-semibold text-brand-dark/55">Custom</span> : null}{props.badge ? <span className="rounded-full border border-brand-blue/30 bg-brand-blue/5 px-2 py-0.5 text-[11px] font-semibold text-brand-dark" data-testid="custom-extension-badge">{props.badge}</span> : null}</span>
+      <span className="mt-0.5 block truncate text-sm text-brand-dark/70">{props.behavior}</span>{props.actionLabel ? <span className="mt-1 block text-sm font-semibold text-brand-blue">{props.actionLabel}</span> : null}
     </span>
     <HiMiniChevronRight className="size-5 shrink-0 text-brand-dark/35" aria-hidden="true" />
   </button>;

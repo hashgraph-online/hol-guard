@@ -67,14 +67,13 @@ class _SuccessResponse:
 
 
 def _invalid_grant_http_error() -> urllib.error.HTTPError:
+    return _oauth_error_http_error("invalid_grant", "The grant is missing, expired, or already consumed.")
+
+
+def _oauth_error_http_error(error: str, description: str) -> urllib.error.HTTPError:
     class _ErrorResponse:
         def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "error": "invalid_grant",
-                    "error_description": "The grant is missing, expired, or already consumed.",
-                }
-            ).encode("utf-8")
+            return json.dumps({"error": error, "error_description": description}).encode("utf-8")
 
         def close(self) -> None:
             return None

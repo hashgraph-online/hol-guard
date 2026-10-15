@@ -189,8 +189,10 @@ def _trust_map() -> dict[str, object]:
         packaged = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         value = parse_json((packaged / "trust-class-map.v1.json").read_bytes())
     except (FileNotFoundError, ModuleNotFoundError, OSError):
-        path = Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json"
-        value = read_json(path)
+        from ..runtime.extension_trust import trust_map_from_bindings
+
+        bindings = Path(__file__).resolve().parents[4] / "contracts/extensions/trust"
+        value = trust_map_from_bindings(bindings)
     if not isinstance(value, dict):
         raise BuilderError("native_trust", "The packaged extension trust map is invalid.")
     return value

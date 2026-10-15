@@ -133,3 +133,78 @@ def test_daemon_reconciles_managed_artifacts_before_reporting_ready(
     events = [record["event"] for record in records]
     assert observed == ["reconciled", "started"]
     assert events.index("runtime_artifact_reconciliation_completed") < events.index("daemon_ready")
+
+
+@pytest.fixture
+def clean_startup_phases():
+    from codex_plugin_scanner.guard.daemon import startup_phase
+
+    startup_phase._pending.clear()  # pyright: ignore[reportPrivateUsage]
+    startup_phase._default_sink = None  # pyright: ignore[reportPrivateUsage]
+    yield startup_phase
+    startup_phase._pending.clear()  # pyright: ignore[reportPrivateUsage]
+    startup_phase._default_sink = None  # pyright: ignore[reportPrivateUsage]
+
+
+def test_startup_phase_records_elapsed_milliseconds_and_buffers_until_a_sink_exists(clean_startup_phases) -> None:
+    startup_phase = clean_startup_phases
+    with startup_phase.timed_phase("store_open"):
+        pass
+    events: list[tuple[str, str]] = []
+    startup_phase.flush_pending_phases(lambda event, detail: events.append((event, detail)))
+    with startup_phase.timed_phase("serve_thread_start", lambda event, detail: events.append((event, detail))):
+        pass
+
+    assert [event for event, _ in events] == ["startup_phase", "startup_phase"]
+    assert events[0][1].startswith("phase=store_open elapsed_ms=")
+    assert events[1][1].startswith("phase=serve_thread_start elapsed_ms=")
+    assert "since_first_import_ms=" in events[1][1]
+    startup_phase.flush_pending_phases(lambda event, detail: events.append((event, detail)))
+    assert len(events) == 2
+
+
+def test_startup_phase_flush_installs_the_default_sink(clean_startup_phases) -> None:
+    startup_phase = clean_startup_phases
+    events: list[tuple[str, str]] = []
+    startup_phase.flush_pending_phases(lambda event, detail: events.append((event, detail)))
+    with startup_phase.timed_phase("acquire_owner_lock"):
+        pass
+    startup_phase.record_phase_since("init_http_server", time.monotonic() - 1.5)
+
+    assert events[0][1].startswith("phase=acquire_owner_lock elapsed_ms=")
+    assert events[1][1].startswith("phase=init_http_server elapsed_ms=")
+    assert int(events[1][1].split("elapsed_ms=")[1].split()[0]) >= 1500
+    assert not startup_phase._pending  # pyright: ignore[reportPrivateUsage]
+
+
+def test_startup_phase_buffer_is_bounded(clean_startup_phases) -> None:
+    startup_phase = clean_startup_phases
+    for _ in range(startup_phase._MAX_PENDING + 10):  # pyright: ignore[reportPrivateUsage]
+        with startup_phase.timed_phase("x"):
+            pass
+    assert len(startup_phase._pending) == startup_phase._MAX_PENDING  # pyright: ignore[reportPrivateUsage]
+
+
+def test_releasing_the_default_sink_buffers_phases_for_the_next_daemon(clean_startup_phases) -> None:
+    startup_phase = clean_startup_phases
+    closed: list[tuple[str, str]] = []
+    newer: list[tuple[str, str]] = []
+
+    def closed_sink(event: str, detail: str) -> None:
+        closed.append((event, detail))
+
+    def newer_sink(event: str, detail: str) -> None:
+        newer.append((event, detail))
+
+    startup_phase.flush_pending_phases(closed_sink)
+    startup_phase.release_default_sink(closed_sink)
+    with startup_phase.timed_phase("import_modules"):
+        pass
+    assert not closed
+    assert len(startup_phase._pending) == 1  # pyright: ignore[reportPrivateUsage]
+
+    startup_phase.flush_pending_phases(newer_sink)
+    startup_phase.release_default_sink(closed_sink)
+    with startup_phase.timed_phase("store_open"):
+        pass
+    assert [detail.split()[0] for _event, detail in newer] == ["phase=import_modules", "phase=store_open"]

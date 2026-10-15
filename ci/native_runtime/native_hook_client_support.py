@@ -77,6 +77,7 @@ def _request(
     default_action: str = "allow",
     deadline_budget_ms: int = 1_000,
     risk_actions: dict[str, str] | None = None,
+    generation: int = 1,
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
@@ -104,7 +105,7 @@ def _request(
         runtime_identity=runtime_identity,
         rule_digest=rule_digest,
         verifier_key=derive_native_policy_verifier_key(policy_master),
-        generation=1,
+        generation=generation,
     )
     return json.dumps(
         {
@@ -117,7 +118,7 @@ def _request(
                 "tool_input": {"command": command},
             },
             "deadline_budget_ms": deadline_budget_ms,
-            "policy_generation": 1,
+            "policy_generation": generation,
             "policy_snapshot": policy_snapshot,
             "source": {
                 "cwd": str(root),
@@ -184,6 +185,8 @@ def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
         raise AssertionError("native policy push failed: native_policy_snapshot_ack_invalid") from None
     assert isinstance(acknowledgement, dict)
+    # Surface a typed refusal (exit 0 with an error body) instead of a KeyError.
+    assert "error" not in acknowledgement, f"native policy push refused: {acknowledgement}"
     assert acknowledgement["status"] == "accepted"
 
 

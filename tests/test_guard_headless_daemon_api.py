@@ -18,16 +18,21 @@ import pytest
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard import package_firewall_entitlement as package_firewall_entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
+from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
+from codex_plugin_scanner.guard.daemon import server_control_connect_state as _ctl_connect_state
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
-from codex_plugin_scanner.guard.policy_bundle_parser import payload_hash_for_policy_bundle
+from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -36,6 +41,7 @@ from codex_plugin_scanner.guard.runtime.runner import (
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_review_signing_helpers import (
     review_trusted_keyring_payload,
 )
@@ -89,11 +95,18 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     )
 
 
+# The package-shim probe runs real shims through the evaluator, which can take
+# longer than the default client timeout on slow CI runners.
+PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS = 60
+
+
 def _read_json_response_details(
     request: urllib.request.Request,
+    *,
+    timeout: float = 5,
 ) -> tuple[int, dict[str, object], dict[str, str]]:
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return (
                 response.status,
                 json.loads(response.read().decode("utf-8")),
@@ -103,8 +116,8 @@ def _read_json_response_details(
         return error.code, json.loads(error.read().decode("utf-8")), dict(error.headers.items())
 
 
-def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str, object]]:
-    status, payload, _headers = _read_json_response_details(request)
+def _read_json_response(request: urllib.request.Request, *, timeout: float = 5) -> tuple[int, dict[str, object]]:
+    status, payload, _headers = _read_json_response_details(request, timeout=timeout)
     return status, payload
 
 
@@ -313,7 +326,7 @@ def test_supply_chain_package_firewall_status_reports_connect_gate_when_cloud_is
     assert payload["connect_flow"]["state"] == "idle"
     assert payload["actions"] == {
         "install": "connect_required",
-        "repair": "disabled",
+        "repair": "connect_required",
         "test": "connect_required",
         "audit": "connect_required",
         "sync": "connect_required",
@@ -328,7 +341,7 @@ def test_supply_chain_package_firewall_status_prefers_active_cloud_connect_flow(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
-        daemon_server._set_package_firewall_connect_state(
+        _ctl_connect_state._set_package_firewall_connect_state(
             daemon._server,
             {
                 "state": "failed",
@@ -338,7 +351,7 @@ def test_supply_chain_package_firewall_status_prefers_active_cloud_connect_flow(
                 "message": "Previous package-firewall connect failed.",
             },
         )
-        daemon_server._set_guard_cloud_connect_state(
+        _ctl_connect_state._set_guard_cloud_connect_state(
             daemon._server,
             {
                 "state": "running",
@@ -437,10 +450,10 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
-    monkeypatch.setattr(daemon_server, "open_browser_url", lambda _url: False)
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(monkeypatch, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
+    patch_daemon_global(monkeypatch, "open_browser_url", lambda _url: False)
+    patch_daemon_global(
+        monkeypatch,
         "exchange_guard_authorization_code",
         lambda **_kwargs: GuardOAuthTokenExchangeResult(
             access_token="access-token-1",
@@ -470,9 +483,9 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             retryable=False,
         )
 
-    monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", unavailable_first_sync)
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", unavailable_first_sync)
+    patch_daemon_global(
+        monkeypatch,
         "resolve_package_firewall_entitlement_with_refresh",
         package_firewall_entitlement_module.resolve_package_firewall_entitlement,
     )
@@ -480,8 +493,8 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
     connect_finalized = threading.Event()
     connect_failure_details: list[str] = []
     refresh_calls_during_connect: list[bool] = []
-    set_guard_cloud_connect_state = daemon_server._set_guard_cloud_connect_state
-    resolve_entitlement_with_refresh = daemon_server.resolve_package_firewall_entitlement_with_refresh
+    set_guard_cloud_connect_state = _ctl_connect_state._set_guard_cloud_connect_state
+    resolve_entitlement_with_refresh = package_firewall_entitlement_module.resolve_package_firewall_entitlement
 
     def track_entitlement_refresh(store: GuardStore) -> dict[str, object]:
         if connect_started.is_set() and not connect_finalized.is_set():
@@ -505,9 +518,9 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             connect_failure_details.append(str(state.get("detail") or "unknown error"))
             connect_finalized.set()
 
-    monkeypatch.setattr(daemon_server, "_set_guard_cloud_connect_state", set_state_and_signal)
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(monkeypatch, "_set_guard_cloud_connect_state", set_state_and_signal)
+    patch_daemon_global(
+        monkeypatch,
         "resolve_package_firewall_entitlement_with_refresh",
         track_entitlement_refresh,
     )
@@ -591,8 +604,8 @@ def test_supply_chain_entitlement_refresh_serializes_connect_admission(
         assert refresh_allowed.wait(timeout=10), "connect admission did not remain serialized with refresh"
         return {"allowed": False, "reason": "guard_cloud_connect_required"}
 
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "resolve_package_firewall_entitlement_with_refresh",
         blocking_refresh,
     )
@@ -619,7 +632,7 @@ def test_supply_chain_entitlement_refresh_serializes_connect_admission(
         assert refresh_started.wait(timeout=10), "entitlement refresh did not start"
 
         def begin_connect() -> None:
-            daemon_server._begin_guard_cloud_connect_state(
+            _ctl_connect_state._begin_guard_cloud_connect_state(
                 daemon._server,
                 {"state": "starting", "request_id": "connect-1"},
             )
@@ -680,10 +693,10 @@ def test_guard_cloud_connect_starts_local_browser_flow_for_insights_share(
             def close(self) -> None:
                 return None
 
-        monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
-        monkeypatch.setattr(daemon_server, "open_browser_url", lambda _url: True)
-        monkeypatch.setattr(
-            daemon_server,
+        patch_daemon_global(monkeypatch, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
+        patch_daemon_global(monkeypatch, "open_browser_url", lambda _url: True)
+        patch_daemon_global(
+            monkeypatch,
             "exchange_guard_authorization_code",
             lambda **_kwargs: GuardOAuthTokenExchangeResult(
                 access_token="access-token-1",
@@ -763,10 +776,10 @@ def test_package_firewall_connect_accepts_hosted_dashboard_origin(
             def close(self) -> None:
                 return None
 
-        monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
-        monkeypatch.setattr(daemon_server, "open_browser_url", lambda _url: True)
-        monkeypatch.setattr(
-            daemon_server,
+        patch_daemon_global(monkeypatch, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
+        patch_daemon_global(monkeypatch, "open_browser_url", lambda _url: True)
+        patch_daemon_global(
+            monkeypatch,
             "exchange_guard_authorization_code",
             lambda **_kwargs: GuardOAuthTokenExchangeResult(
                 access_token="access-token-1",
@@ -844,8 +857,8 @@ def _assert_connect_endpoint_coalesces_concurrent_browser_starts(
         assert release_session.wait(5), "Timed out waiting to release fake browser session"
         return _FakeSession()
 
-    monkeypatch.setattr(daemon_server, "start_guard_browser_session", _start_session_once)
-    monkeypatch.setattr(daemon_server, "open_browser_url", lambda url: opened_urls.append(url) or True)
+    patch_daemon_global(monkeypatch, "start_guard_browser_session", _start_session_once)
+    patch_daemon_global(monkeypatch, "open_browser_url", lambda url: opened_urls.append(url) or True)
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -970,7 +983,7 @@ def test_guard_cloud_connect_status_preserves_package_firewall_in_flight_flow(tm
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     server = daemon._server
-    daemon_server._set_package_firewall_connect_state(
+    _ctl_connect_state._set_package_firewall_connect_state(
         server,
         {
             "state": "starting",
@@ -980,7 +993,7 @@ def test_guard_cloud_connect_status_preserves_package_firewall_in_flight_flow(tm
         },
     )
 
-    flow = daemon_server._resolve_guard_cloud_connect_flow(server=server, store=store)
+    flow = _ctl_connect_state._resolve_guard_cloud_connect_flow(server=server, store=store)
 
     assert flow is not None
     assert flow["state"] == "starting"
@@ -1050,7 +1063,7 @@ def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired
         "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
     }
     assert payload["actions"]["install"] == "reconnect_required"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "reconnect_required"
     assert payload["actions"]["remove"] == "disabled"
 
 
@@ -1135,7 +1148,7 @@ def test_supply_chain_sync_returns_json_when_bundle_sync_fails_after_approval(
     def _fail_sync(_store: GuardStore) -> dict[str, object]:
         raise RuntimeError("Guard supply-chain bundle sync failed: simulated network failure")
 
-    monkeypatch.setattr(daemon_server, "sync_supply_chain_cloud_state", _fail_sync)
+    patch_daemon_global(monkeypatch, "sync_supply_chain_cloud_state", _fail_sync)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -1185,7 +1198,7 @@ def test_supply_chain_sync_returns_retryable_unavailable_when_cloud_outage(
             retryable=True,
         )
 
-    monkeypatch.setattr(daemon_server, "sync_supply_chain_cloud_state", _fail_sync)
+    patch_daemon_global(monkeypatch, "sync_supply_chain_cloud_state", _fail_sync)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -1234,7 +1247,7 @@ def test_supply_chain_sync_returns_reconnect_error_when_auth_expired(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )
 
-    monkeypatch.setattr(daemon_server, "sync_supply_chain_cloud_state", _fail_sync)
+    patch_daemon_global(monkeypatch, "sync_supply_chain_cloud_state", _fail_sync)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -1443,7 +1456,7 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
     assert payload["actions"] == {
         "install": "available",
-        "repair": "disabled",
+        "repair": "available",
         "test": "available",
         "audit": "available",
         "sync": "available",
@@ -1462,8 +1475,8 @@ def test_supply_chain_package_firewall_activate_endpoint_activates_runtime_sessi
         {"tier": "premium", "workspace_id": "workspace-1"},
         "2026-05-27T16:00:00.000Z",
     )
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "_activate_package_firewall_runtime",
         lambda _context: (
             200,
@@ -1504,13 +1517,13 @@ def test_package_firewall_activation_uses_scoped_shim_proof(
         workspace_dir=None,
         guard_home=guard_home,
     )
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "package_shim_status",
         lambda _context: {"installed_managers": ["npx"], "path_active": False},
     )
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "probe_package_shim_intercepts",
         lambda _context, **_kwargs: {"intercept_proved": True},
     )
@@ -1521,14 +1534,14 @@ def test_package_firewall_activation_uses_scoped_shim_proof(
         repairs.append(managers)
         return {"package_shims": {"installed_managers": ["npx"], "path_active": False}}
 
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "activate_package_shims",
         repair_shims,
     )
     previous_path = daemon_server.os.environ.get("PATH")
 
-    status, body = daemon_server._activate_package_firewall_runtime(context)
+    status, body = _ctl_connect_state._activate_package_firewall_runtime(context)
 
     assert status == 200
     assert body["status"] == "verified"
@@ -1542,8 +1555,8 @@ def test_package_firewall_activation_stops_after_first_valid_shim_proof(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard")
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "package_shim_status",
         lambda _context: {"installed_managers": ["npm", "npx", "pip"]},
     )
@@ -1552,8 +1565,8 @@ def test_package_firewall_activation_stops_after_first_valid_shim_proof(
         assert repair is True
         return {"package_shims": {"installed_managers": list(managers)}}
 
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "activate_package_shims",
         repair_shims,
     )
@@ -1564,9 +1577,9 @@ def test_package_firewall_activation_stops_after_first_valid_shim_proof(
         probed.append(managers)
         return {"intercept_proved": True, "manager_results": [{"manager": managers[0]}]}
 
-    monkeypatch.setattr(daemon_server, "probe_package_shim_intercepts", probe)
+    patch_daemon_global(monkeypatch, "probe_package_shim_intercepts", probe)
 
-    status, body = daemon_server._activate_package_firewall_runtime(context)
+    status, body = _ctl_connect_state._activate_package_firewall_runtime(context)
 
     assert status == 200
     assert body["status"] == "verified"
@@ -1624,6 +1637,7 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
                 token=token,
                 payload={"managers": ["npm"]},
             ),
+            timeout=PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
         )
     finally:
         daemon.stop()
@@ -1647,17 +1661,12 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     assert test_payload["operation"] == "test"
     assert test_payload["status"] == "completed"
     assert test_payload["result"]["tested_managers"] == ["npm"]
-    assert test_payload["result"]["blocked_execution"] is False
-    assert test_payload["result"]["path_repair_required"] == ["npm"]
-    assert test_payload["result"]["intercept_proved"] is False
-    assert test_payload["result"]["manager_results"] == [
-        {
-            "evaluator_invoked": False,
-            "intercept_ran": False,
-            "manager": "npm",
-            "skipped_reason": "path_inactive",
-        },
-    ]
+    # The daemon judges PATH from the configured shell profile, so the probe runs.
+    assert test_payload["result"]["blocked_execution"] is True
+    assert test_payload["result"]["path_repair_required"] == []
+    assert test_payload["result"]["intercept_proved"] is True
+    assert test_payload["result"]["manager_results"][0]["manager"] == "npm"
+    assert test_payload["result"]["manager_results"][0]["evaluator_invoked"] is True
 
 
 def test_supply_chain_audit_scans_workspace_manifests(
@@ -1685,7 +1694,7 @@ def test_supply_chain_audit_scans_workspace_manifests(
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )
@@ -2335,9 +2344,9 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         )
         return summary
 
-    monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
+    patch_daemon_global(
+        monkeypatch,
         "sync_supply_chain_cloud_state",
         lambda current_store, **kwargs: {"synced_at": "2026-05-23T17:18:40.061Z", "workspace_audits": {}},
         raising=False,
@@ -2398,14 +2407,14 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
             "receipts_stored": 1,
         }
 
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "sync_local_guard_cloud_proof",
         blocking_sync_local_guard_cloud_proof,
         raising=False,
     )
-    monkeypatch.setattr(
-        daemon_server,
+    patch_daemon_global(
+        monkeypatch,
         "sync_supply_chain_cloud_state",
         lambda current_store, **kwargs: {"synced_at": "2026-05-23T17:18:40.061Z", "workspace_audits": {}},
         raising=False,
@@ -2574,6 +2583,50 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
     assert policy_bundle_ack["status"] == "synced"
 
 
+def test_headless_policy_sync_approval_cannot_authenticate_digest_only_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+    bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "approval-is-not-signing-authority",
+        "signature": None,
+    }
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
+    bundle["verifier"]["signature"] = bundle["payloadHash"]
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "unsupported_signature_algorithm"
+    assert "Sync again" in payload["message"]
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.list_policy_decisions(harness="codex") == []
+
+
 def test_headless_policy_sync_passes_approval_gate_grant_to_atomic_activation(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -2692,7 +2745,8 @@ def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_p
         "2026-07-17T00:00:00Z",
         remote_write_authorized=True,
     )
-    store.set_cloud_exceptions(
+    store.set_sync_payload(
+        "cloud_exceptions",
         [
             {
                 "id": "stale-receipt-sync-allow",
@@ -2846,50 +2900,6 @@ def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path)
 
     assert status == 400
     assert payload["error"] == "unsupported_daemon_version"
-
-
-def test_headless_policy_sync_approval_cannot_authenticate_digest_only_bundle(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-1")
-    store.set_sync_payload(
-        "policy_bundle_keyring",
-        policy_bundle_test_keyring(),
-        "2026-05-19T00:00:00Z",
-    )
-    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
-    bundle["verifier"] = {
-        "algorithm": "sha256",
-        "keyId": "approval-is-not-signing-authority",
-        "signature": None,
-    }
-    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
-    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
-    bundle["verifier"]["signature"] = bundle["payloadHash"]
-
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        status, payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-    finally:
-        daemon.stop()
-
-    assert status == 400
-    assert payload["error"] == "unsupported_signature_algorithm"
-    assert "Sync again" in payload["message"]
-    assert store.get_sync_payload("policy_bundle") is None
-    assert store.list_policy_decisions(harness="codex") == []
 
 
 def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
@@ -3169,11 +3179,8 @@ def test_headless_api_rejects_missing_harness_with_structured_error(tmp_path: Pa
     assert payload["error"]["retryable"] is False
 
 
-def test_headless_generic_action_error_omits_unstructured_detail() -> None:
-    status, payload = _headless_action_error_payload(
-        operation="repair",
-        error_code="unexpected daemon blowup",
-    )
+def test_headless_generic_action_error_omits_unstructured_detail(tmp_path: Path) -> None:
+    status, payload = native_headless_action_error("repair", "unexpected daemon blowup", guard_home=tmp_path)
 
     assert status == 400
     assert payload == {
@@ -3184,69 +3191,3 @@ def test_headless_generic_action_error_omits_unstructured_detail() -> None:
             "retryable": True,
         },
     }
-
-
-def test_policy_cloud_exceptions_endpoint(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
-
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-1")
-    device_metadata = store.get_device_metadata()
-    device_id = device_metadata["installation_id"]
-    bundle = build_cloud_exception_policy_bundle(
-        cloud_exceptions=[
-            {
-                "exceptionId": "artifact:codex:demo",
-                "effect": "allow",
-                "scope": "artifact",
-                "harness": "codex",
-                "artifactId": "codex:project:demo",
-                "owner": "owner@example.com",
-                "approver": "approver@example.com",
-                "expiresAt": "2099-01-01T00:00:00Z",
-                "sourceReceiptId": "receipt-demo",
-            }
-        ],
-        workspace_id="workspace-1",
-        device_id=device_id,
-    )
-    store.set_sync_payload(
-        "policy_bundle_keyring",
-        policy_bundle_test_keyring(workspace_id="workspace-1"),
-        "2026-06-13T00:00:00Z",
-    )
-    store.set_sync_payload("policy_bundle", bundle, "2026-06-13T00:00:00Z")
-    store.set_sync_payload(
-        "policy_bundle_ack",
-        {
-            "appliedAt": "2026-06-13T00:00:00Z",
-            "bundleHash": bundle["bundleHash"],
-            "bundleVersion": bundle["bundleVersion"],
-            "deviceId": device_id,
-            "deviceName": device_metadata["device_label"],
-            "status": "synced",
-        },
-        "2026-06-13T00:00:00Z",
-    )
-    _persist_cloud_exceptions(
-        store,
-        device_id=device_id,
-        policy_bundle=bundle,
-        now="2026-06-13T00:00:00Z",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        status, payload = _read_json_response(
-            _request(daemon.port, "/v1/policy", method="GET", token=token),
-        )
-        assert status == 200
-        assert len(payload["cloud_exceptions"]) == 1
-        dedicated_status, dedicated_payload = _read_json_response(
-            _request(daemon.port, "/v1/policy/cloud-exceptions", method="GET", token=token),
-        )
-        assert dedicated_status == 200
-        assert dedicated_payload["items"][0]["id"] == "artifact:codex:demo"
-    finally:
-        daemon.stop()

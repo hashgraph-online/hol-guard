@@ -185,26 +185,26 @@ impl WorkflowCapabilityBinding {
     /// `__post_init__` — Python validates at construction; the Rust binding is
     /// a plain struct so callers invoke this before persisting/signing.
     pub fn validate(&self) -> WfResult<()> {
-        for id in [
-            &self.operation_id,
-            &self.resource_type,
-            &self.policy_id,
-            &self.policy_version,
-            &self.effect_id,
-            &self.effect_version,
-            &self.decision_id,
-            &self.decision_version,
+        for (id, error) in [
+            (&self.operation_id, "invalid_operation_id"),
+            (&self.resource_type, "invalid_resource_type"),
+            (&self.policy_id, "invalid_policy_id"),
+            (&self.policy_version, "invalid_policy_version"),
+            (&self.effect_id, "invalid_effect_id"),
+            (&self.effect_version, "invalid_effect_version"),
+            (&self.decision_id, "invalid_decision_id"),
+            (&self.decision_version, "invalid_decision_version"),
         ] {
-            validate_identifier(id)?;
+            validate_identifier(id).map_err(|_| WorkflowCapabilityError(error))?;
         }
-        for sha in [
-            &self.resource_sha256,
-            &self.repository_sha256,
-            &self.workspace_sha256,
-            &self.executable_sha256,
-            &self.launch_sha256,
+        for (sha, error) in [
+            (&self.resource_sha256, "invalid_resource_sha256"),
+            (&self.repository_sha256, "invalid_repository_sha256"),
+            (&self.workspace_sha256, "invalid_workspace_sha256"),
+            (&self.executable_sha256, "invalid_executable_sha256"),
+            (&self.launch_sha256, "invalid_launch_sha256"),
         ] {
-            validate_sha256(sha)?;
+            validate_sha256(sha).map_err(|_| WorkflowCapabilityError(error))?;
         }
         // Python: `if not self.rules or len > 32 or rules != sorted(set(rules))`
         // — non-empty, bounded, deduplicated, sorted (rule_id, rule_version).

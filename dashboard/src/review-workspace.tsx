@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BusinessQueueReadNotice, useBusinessQueueReadFailure } from "./business-review-queue-status";
 import { HiMiniChevronDown } from "react-icons/hi2";
 import { useRequestReadState } from "./request-read-state";
 import type {
@@ -50,6 +51,9 @@ export type ReviewWorkspaceProps = {
   requests: GuardApprovalRequest[];
   activeRequestId: string | null;
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   runtime: GuardRuntimeSnapshot | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
@@ -74,6 +78,7 @@ export type ReviewWorkspaceProps = {
 
 const QUEUE_PAGE_SIZE = 10;
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
+  const businessQueueReadFailed = useBusinessQueueReadFailure();
   const { requests, activeRequestId, detail } = props;
   const readState = useRequestReadState();
   const queueRef = useRef<HTMLDivElement>(null);
@@ -240,7 +245,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   ]);
 
   if (requests.length === 0) {
-    return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} codexResume={props.codexResume} onRetryResume={props.onRetryResume} />;
+    return <div className="space-y-6">
+      {businessQueueReadFailed && <BusinessQueueReadNotice />}
+      <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage}
+        codexResume={props.codexResume} onRetryResume={props.onRetryResume}
+        queueReadIncomplete={businessQueueReadFailed} />
+    </div>;
   }
 
   const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
@@ -253,6 +263,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
 
   return (
     <div className="space-y-6">
+      {businessQueueReadFailed && <BusinessQueueReadNotice />}
       <ReviewHeader
         count={requests.length}
         filteredCount={filteredRequests.length}
@@ -280,7 +291,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       <div className="md:hidden">
         <button
           onClick={handleToggleMobileQueue}
-          className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
+          className="flex min-h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
         >
           <span>Queue ({filteredRequests.length})</span>
           <HiMiniChevronDown className={`h-4 w-4 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}`} />
@@ -324,6 +335,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         </div>
         <ReviewDecisionCard
           detail={detail}
+          detailError={props.detailError}
+          detailLoading={props.detailLoading}
+          onRetryDetail={props.onRetryDetail}
           onResolve={props.onResolve}
           onGoHome={props.onGoHome}
           approvalGate={props.approvalGate ?? null}

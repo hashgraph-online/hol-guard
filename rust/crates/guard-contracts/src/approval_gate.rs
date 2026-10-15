@@ -15,7 +15,7 @@ pub const APPROVAL_GATE_REQUEST_SCHEMA: &str = "guard-approval-gate-request.v1";
 /// Schema discriminator for the result.
 pub const APPROVAL_GATE_RESULT_SCHEMA: &str = "guard-approval-gate-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const APPROVAL_GATE_FEATURE: &str = "approval-gate-v1";
+pub const APPROVAL_GATE_FEATURE: &str = "approval-gate-v2";
 
 /// Largest canonical request serialization the op will accept.
 pub const APPROVAL_GATE_MAX_BYTES: usize = 512 * 1024;
@@ -153,6 +153,11 @@ pub struct ApprovalGateRequestV1 {
     /// `device_label` for begin_totp_enrollment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_label: Option<String>,
+    /// Caller's local OS-session signals (`sid=..`, terminal env, `ppid=..`).
+    /// Only the calling process can observe its own session; the resident
+    /// hashes these into the recent-TOTP binding. Required on every request:
+    /// a missing field is a contract error, never a resident-side fallback.
+    pub session_signals: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

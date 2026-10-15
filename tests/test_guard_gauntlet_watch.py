@@ -1,12 +1,56 @@
 """Judge and fixture contracts; only live-agent evidence proves product behavior."""
 
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 
+from ci.gauntlet import case_helpers
 from ci.gauntlet.catalog import WATCH_COMMAND, WATCH_OUTPUT, WATCH_PROMPT, Scenario, load_catalog_data
 from ci.gauntlet.evidence import assess_case
 from tests.test_guard_gauntlet import observed_case
+
+
+@pytest.mark.parametrize("settles", [True, False])
+def test_watch_binding_waits_for_startup_review_fact_refresh(monkeypatch, settles):
+    calls = []
+    publisher = SimpleNamespace(_acked=True, _renewal_after_generation=None)
+
+    def refresh():
+        calls.append("refresh")
+        publisher._renewal_after_generation = 1
+
+    class PublicationCondition:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def wait_for(self, predicate, timeout):
+            assert not predicate()
+            assert timeout == 5.0
+            calls.append("wait")
+            if settles:
+                publisher._renewal_after_generation = None
+            return predicate()
+
+    def binding(store):
+        assert publisher._renewal_after_generation is None
+        calls.append("binding")
+        return {"generation": 2}
+
+    publisher._recheck_direct_lane_review_facts = refresh
+    publisher._condition = PublicationCondition()
+    worker = SimpleNamespace(policy_snapshot_publisher=publisher, store=object())
+    monkeypatch.setattr(case_helpers, "_watch_binding", binding)
+    if settles:
+        assert case_helpers.ready_watch_binding(worker) == {"generation": 2}
+        assert calls == ["refresh", "wait", "binding"]
+    else:
+        with pytest.raises(RuntimeError, match="startup publication did not settle"):
+            case_helpers.ready_watch_binding(worker)
+        assert calls == ["refresh", "wait"]
 
 
 def watch_case():

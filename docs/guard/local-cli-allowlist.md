@@ -26,6 +26,14 @@ Package launchers such as `npx` and `uvx` stay in All tools as whole commands. P
 
 Interpreters themselves are never added as a whole. `python3 <skill-root>/scripts/cwv.py --by url` becomes a `cwv.py` custom extension, not every Python command.
 
+## Detected records
+
+Each detected tool or connection shows when Guard last saw it. A change to the launch command, including an added runtime flag such as `node --experimental-strip-types`, is a different identity, so Guard lists it separately. Flags like `--require` or `--import` change what runs, so Guard does not merge them.
+
+Guard drops detected records you never added once they go unused for 30 days. It checks for expired records at most once a day. Guard also rebuilds detected records from recent approval and receipt history, using the time each entry was last recorded, so history alone does not keep a record fresh. A record that aged out comes back if newer history still mentions it.
+
+To clear one sooner, open it and choose **Forget this connection**. **Remove custom extension** clears the grant and returns the record to detected, where you can then forget it. Older history does not bring a forgotten record back. If an agent uses it again or an app still configures it, Guard lists it again. While another added connection shares the same MCP server, Guard keeps its sibling records so that grant stays scoped to the right connection, and the dashboard does not offer to forget them.
+
 ## Guard Cloud
 
 Keeping the same custom extension on other devices, teams, or organizations is a Cloud continuity feature. Adding the extension locally does not invent a free sync path.

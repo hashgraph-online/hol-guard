@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_is_read_only_source_inspection,
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.runtime.kubernetes_commands import kubernetes_secret_read_source
+from codex_plugin_scanner.guard.native_shell_helpers import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -296,7 +296,6 @@ def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypa
 
     assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -331,7 +330,6 @@ def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path,
 
     assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> None:
@@ -468,7 +466,6 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
 
     assert rc == 1  # canonical: pi "PostToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:

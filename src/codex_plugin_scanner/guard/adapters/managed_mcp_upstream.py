@@ -25,6 +25,7 @@ _ALLOWED_PROXY_KEYS = _VALUE_OPTIONS | {"--arg", "--server-env-key"}
 MAX_PROXY_ARGS = 512
 MAX_PROXY_ARGS_BYTES = 262_144
 MAX_PROXY_UNWRAP_LAYERS = 4
+_NATIVE_RELAY_COMMAND = "mcp-relay"
 PROXY_LAUNCHER_ENV_KEYS = frozenset(
     {
         "PYTHONPATH",
@@ -59,6 +60,12 @@ class ManagedMcpUpstream:
 
 
 def proxy_argument_tail(args: tuple[str, ...], commands: frozenset[str]) -> tuple[str, tuple[str, ...]] | None:
+    if len(args) > 2 and args[0] == _NATIVE_RELAY_COMMAND:
+        # ``<runtime> mcp-relay <python> <proxy argv>`` carries the generated module argv unchanged.
+        relayed = args[2:]
+        if len(relayed) >= 4 and relayed[:3] == ("-m", "codex_plugin_scanner.cli", "guard") and relayed[3] in commands:
+            return relayed[3], relayed[4:]
+        return None
     if args and args[0] in commands:
         return args[0], args[1:]
     if len(args) >= 2 and args[0] == "guard" and args[1] in commands:

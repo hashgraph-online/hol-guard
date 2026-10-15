@@ -43,6 +43,11 @@ from ..runtime.command_capability import (
 )
 from ..runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from ..runtime.command_queue import command_queue_status
+from ..supply_chain_workspace_audit import (
+    build_supply_chain_explain_payload,
+    build_workspace_audit_payload,
+    build_workspace_scan_payload,
+)
 from ._commands_shared import *
 from .commands_dispatch_cloud_review import apply_connect_time_cloud_review_consent
 from .commands_parser_helpers import *

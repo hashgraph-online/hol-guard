@@ -10,10 +10,21 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.protect import parse_protect_command
-from codex_plugin_scanner.guard.runtime.package_intent import parse_package_intent
-from codex_plugin_scanner.guard.shim_probe import parse_protect_json_stdout
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
-from tests.shim_execution_helpers import write_fake_manager_script
+from tests.shim_execution_helpers import parse_protect_json_stdout, write_fake_manager_script
+
+
+@pytest.fixture(autouse=True)
+def _native_shim_intents(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _harness_context
+
+    def enrolled_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> HarnessContext:
+        context = original(tmp_path, workspace_dir=workspace_dir)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setitem(globals(), "_harness_context", enrolled_context)
 
 
 def _harness_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> HarnessContext:

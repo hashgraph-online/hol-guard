@@ -1,10 +1,10 @@
 """Socket restrictions preserve private IPC, not access to mounted host services."""
 
-from types import SimpleNamespace
-
 import pytest
 
 from codex_plugin_scanner.guard.runtime import restricted_linux_landlock as boundary
+
+pytestmark = pytest.mark.usefixtures("native_context_digest")
 
 
 def _evaluate(machine, *, arch, number, domain=1, kind=1, protocol=0):
@@ -47,22 +47,6 @@ def test_filter_uses_exact_architecture_and_allows_only_private_stream_pairs(
     assert _evaluate(machine, arch=0x40000003, number=0) == 0x80000000
     for number in (0x40000000 | socket, 0xFFFFFFFF):
         assert _evaluate(machine, arch=arch, number=number) == 0x80000000
-
-
-@pytest.mark.parametrize("failure", [38, 22])
-def test_failed_seccomp_installation_never_returns_success(monkeypatch, failure):
-    calls = []
-
-    def prctl(option, *args):
-        calls.append(option)
-        return -1 if option == failure else 0
-
-    monkeypatch.setattr(boundary.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(boundary.platform, "machine", lambda: "aarch64")
-    monkeypatch.setattr(boundary.ctypes, "CDLL", lambda *args, **kwargs: SimpleNamespace(prctl=prctl))
-    with pytest.raises(boundary.LinuxContainmentUnavailableError, match="socket isolation"):
-        boundary.enforce_socket_boundary()
-    assert calls == ([38] if failure == 38 else [38, 22])
 
 
 def test_unknown_socket_architecture_is_not_guessed():

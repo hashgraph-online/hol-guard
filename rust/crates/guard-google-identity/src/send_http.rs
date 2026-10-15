@@ -25,13 +25,24 @@ impl GoogleSendCredential {
         bytes: &[u8],
         transport: impl FnOnce(&str, &str, &[u8]) -> Option<Reply>,
     ) -> Result<RawSendAttempt, GoogleDispatchError> {
+        // Serialize account revocation/rotation against the bounded HTTP call.
+        // Avoid recursively reading this lock through is_current().
+        let account_lease = self.account_lease.as_ref().map(|lease| lease.read());
+        // Deliberately retain the guard through the entire bounded HTTP call.
+        // Poisoned leases refuse like revoked/expired leases; never recover an
+        // active value or emit credential-bearing panic diagnostics here.
+        let _lease = match account_lease {
+            Some(Ok(active)) if *active => Some(active),
+            Some(_) => return Err(GoogleDispatchError::Expired),
+            None => None,
+        };
         if self.purpose != GrantPurpose::Send {
             return Err(GoogleDispatchError::WrongPurpose);
         }
         if bytes.is_empty() || bytes.len() > 256 * 1024 {
             return Err(GoogleDispatchError::InputChanged);
         }
-        if !self.is_current() {
+        if !self.time_is_current() {
             return Err(GoogleDispatchError::Expired);
         }
         let authorization = Zeroizing::new(format!("Bearer {}", self.access_token.as_str()));

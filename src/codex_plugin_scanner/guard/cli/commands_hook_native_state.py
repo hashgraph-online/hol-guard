@@ -160,6 +160,7 @@ def set_native_artifact_hook_final_action(
         policy_action=normalized_action,
         launch_target=None,
         risk_summary=state.risk_summary,
+        guard_home=state.guard_home,
     )
     for key in ("trigger_summary", "why_now", "risk_headline"):
         state.response_payload[key] = incident[key]

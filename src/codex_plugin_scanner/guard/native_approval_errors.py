@@ -226,6 +226,8 @@ NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES = frozenset(
         "native_frame_timeout_failed",
         "native_frame_version_mismatch",
         "native_frame_write_failed",
+        "native_guard_home_mismatch",
+        "native_hook_event_unsupported",
         "native_json_array_too_wide",
         "native_json_depth_exceeded",
         "native_json_duplicate_key",
@@ -310,6 +312,7 @@ NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES = frozenset(
         "native_resident_spawn_failed",
         "native_resident_spawn_stdin_failed",
         "native_resident_start_in_progress",
+        "native_request_schema_unsupported",
         "native_resident_start_timeout",
         "native_resident_client_retirement_failed",
         "native_resident_state_dir_create_failed",
@@ -446,10 +449,25 @@ FINITE_FAILURE_CODES = (
 )
 
 
+def resident_refusal_code(payload: object) -> str | None:
+    """Return the code of an exact ``{"error", "retryable"}`` resident refusal frame.
+
+    Anything else, including codes outside the finite vocabulary, is not a
+    refusal and returns ``None``.
+    """
+    if not isinstance(payload, dict) or set(payload) != {"error", "retryable"}:
+        return None
+    code = payload["error"]
+    if type(payload["retryable"]) is not bool or not isinstance(code, str):
+        return None
+    return code if code in FINITE_FAILURE_CODES else None
+
+
 __all__ = [
     "FINITE_FAILURE_CODES",
     "GENERIC_FAILURE_CODES",
     "NATIVE_APPROVAL_ERROR_CODES",
     "NATIVE_COMMAND_CONTROL_ERROR_CODES",
     "NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES",
+    "resident_refusal_code",
 ]

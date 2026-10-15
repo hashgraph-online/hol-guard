@@ -106,7 +106,7 @@ def test_controls_help_is_available_from_every_installed_alias(
 @pytest.mark.parametrize(
     ("command", "expected_calls"),
     (
-        ("recover-authority", ("prompt", "require", "consume", "recover", "refresh")),
+        ("recover-authority", ("prompt", "require", "consume", "recover", "daemon-recover")),
         ("acknowledge-degraded", ("prompt", "ensure", "acknowledge")),
     ),
 )
@@ -146,6 +146,11 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
         def refresh_extension_controls(self) -> dict[str, object]:
             calls.append("refresh")
             return {"health": "protected", "revision": 7}
+
+        def recover_extension_control_authority(self, payload: dict[str, object]) -> dict[str, object]:
+            assert payload == {}
+            calls.append("daemon-recover")
+            return {"health": "protected", "revision": 0}
 
         def acknowledge_degraded_extension_controls(
             self,

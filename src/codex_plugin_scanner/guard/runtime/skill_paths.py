@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from urllib.parse import unquote
 
 from .false_positive_rules import KNOWN_SKILL_DOC_ROOT_SUFFIXES
 
@@ -28,37 +27,6 @@ PI_INLINE_RESOURCE_SCHEMES = frozenset(
 )
 _PI_INLINE_RESOURCE_MAX_CHARS = 8192
 _PI_INLINE_RESOURCE_MAX_DECODE_PASSES = 8
-
-
-def is_safe_pi_inline_resource_uri(target: str) -> bool:
-    """Return true for a lexically safe OMP virtual read resource."""
-    scheme, separator, resource = target.partition("://")
-    if (
-        len(target) > _PI_INLINE_RESOURCE_MAX_CHARS
-        or separator != "://"
-        or scheme.casefold() not in PI_INLINE_RESOURCE_SCHEMES
-    ):
-        return False
-    if (
-        not resource
-        or "\\" in resource
-        or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in resource)
-    ):
-        return False
-
-    path = resource.split("?", maxsplit=1)[0].split("#", maxsplit=1)[0]
-    for _ in range(_PI_INLINE_RESOURCE_MAX_DECODE_PASSES):
-        decoded = unquote(path)
-        if decoded == path:
-            break
-        path = decoded
-    else:
-        return False
-    if "\\" in path:
-        return False
-    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in path):
-        return False
-    return all(part not in {".", ".."} for part in path.split("/"))
 
 
 def resolve_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -> Path | None:
@@ -91,6 +59,5 @@ def resolve_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -
 
 __all__ = [
     "PI_INLINE_RESOURCE_SCHEMES",
-    "is_safe_pi_inline_resource_uri",
     "resolve_known_skill_doc_path",
 ]

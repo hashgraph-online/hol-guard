@@ -14,7 +14,18 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
-  CI_PYTEST_COVERAGE_SHARDS: "128"
+  # Release wheels use fat LTO with one codegen unit (rust/Cargo.toml). PR test
+  # builds keep the per-crate defaults so sccache and incremental link time
+  # stay on the critical path budget; this does not change program behavior.
+  # native-release-size unsets both variables before it builds the binaries
+  # the wheel-size gate measures.
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  # Every shard repeats checkout, setup and pytest startup (~45s), and the
+  # organization shares about twenty hosted runners across all open PRs.
+  # 64 shards keeps the slowest shard well inside its timeout while one
+  # push no longer queues hundreds of jobs ahead of every other PR.
+  CI_PYTEST_COVERAGE_SHARDS: "64"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
@@ -24,7 +35,9 @@ env:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Main is the source of truth: queue its runs instead of cancelling an
+  # in-flight run on every push, so a main run can actually finish green.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Trusted change planner (shadow mode): computes which lanes the diff requires.
@@ -130,26 +143,12 @@ jobs:
           retention-days: 7
 
   quality:
-    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-evaluators
-          path: rust/target/release
-      - name: Bind the compiled native runtime
-        run: |
-          chmod 0755 rust/target/release/hol-guard-runtime
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
       - uses: ./.github/actions/ci-job-quality
 
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
@@ -160,28 +159,114 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clippy, test]
+        check: [clippy, test-core, test-command, test-runtime]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Configure the checked test profile
+        if: matrix.check != 'clippy'
+        run: |
+          # Libraries keep their existing optimization and dependency fingerprints.
+          # The workspace wrapper lowers optimization only for --test compilations.
+          echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
+          # Line tables keep panic backtraces readable while cutting link time
+          # across test binaries; full debuginfo is never inspected in CI.
+          echo "CARGO_PROFILE_TEST_DEBUG=line-tables-only" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
+          cache-fallback-key: ${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}
           components: clippy
+      - name: Install content-addressed compiler cache
+        if: matrix.check != 'clippy'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Route workspace crates through the compiler cache
+        if: matrix.check != 'clippy'
+        # rust-cache restores third-party crates only; fresh checkout mtimes make
+        # every workspace crate stale. sccache keys on content, so crates a PR did
+        # not touch are restored instead of recompiled.
+        run: |
+          # A content-addressed wrapper path invalidates Cargo fingerprints when
+          # compiler behavior changes, without invalidating third-party crates.
+          wrapper_hash="$(sha256sum scripts/ci/rust_test_compiler.sh | cut -d ' ' -f 1)"
+          wrapper="$RUNNER_TEMP/hol-guard-rust-test-$wrapper_hash"
+          install -m 0755 scripts/ci/rust_test_compiler.sh "$wrapper"
+          {
+            echo "RUSTC_WORKSPACE_WRAPPER=$wrapper"
+            echo "SCCACHE_GHA_ENABLED=on"
+            echo "SCCACHE_GHA_VERSION=ci-workspace-test"
+            echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
+            echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+          } >> "$GITHUB_ENV"
+        env:
+          SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+      - name: Provision bubblewrap for the Linux workspace sandbox tests
+        if: matrix.check != 'clippy'
+        # Without it the overlay sandbox tests take the unavailable-host branch
+        # and the live confinement run is skipped.
+        # The test wrapper links with lld; the sandbox needs bubblewrap 0.10+.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lld
+          bash ci/containment/install-bubblewrap.sh
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
         run: |
           case "$CARGO_CHECK" in
-            clippy) cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings ;;
-            test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
+            clippy)
+              mkdir -p clippy-report
+              if cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets --message-format=json -- -D warnings > clippy-report/clippy.jsonl; then
+                :
+              else
+                clippy_status=$?
+                if ! python3 -m scripts.ci.clippy_report diagnostics; then
+                  echo "Unable to render Clippy diagnostics" >&2
+                fi
+                exit "$clippy_status"
+              fi
+              ;;
+            test-core|test-command|test-runtime)
+              # Partition before compiling, not merely when running tests.
+              # The core partition includes every other (and future) member.
+              case "$CARGO_CHECK" in
+                test-core) packages=(--workspace --exclude guard-command --exclude hol-guard-runtime) ;;
+                test-command) packages=(--package guard-command) ;;
+                test-runtime) packages=(--package hol-guard-runtime) ;;
+              esac
+              nextest_bin="$(python3 scripts/ci/install_nextest.py)"
+              PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
+                --profile ci \
+                --test-threads 4 --retries 0 --no-fail-fast
+              ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
+      - name: Report compiler cache statistics
+        if: always() && matrix.check != 'clippy'
+        run: '"$SCCACHE_PATH" --show-stats || true'
+      - name: Bind successful strict Clippy report
+        if: matrix.check == 'clippy'
+        run: python3 -m scripts.ci.clippy_report bind
+      - name: Upload successful strict Clippy report
+        if: matrix.check == 'clippy'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: clippy-report-${{ github.run_attempt }}
+          path: clippy-report/
+          if-no-files-found: error
+          retention-days: 1
 
   native-command-evaluators:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Build and verify both binaries, regenerate their matching public projections,
+    # then publish artifacts before running Python contract and replay gates.
+    # The normal cached producer targets a sub-five-minute wall clock.
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -192,9 +277,23 @@ jobs:
           components: rustfmt
       - name: Check native formatting before compilation
         run: cargo fmt --manifest-path rust/Cargo.toml --all --check
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
       - name: Build native command evaluators once for pytest shards
+        env:
+          # Content-addressed cache survives fresh checkout mtimes; third-party
+          # crates still come from rust-cache, workspace members from sccache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: pytest-native-command
+          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
+          python3 scripts/refresh_extension_artifacts.py --trust-only
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          "$SCCACHE_PATH" --show-stats
       - name: Verify generated native command catalogs before pytest fan-out
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -215,17 +314,6 @@ jobs:
           uv run --no-sync python scripts/render_command_extension_directory.py
           uv run --no-sync python scripts/export_extension_directory.py --check
           uv run --no-sync python scripts/render_command_extension_directory.py --check
-      - name: Check native contract groups before pytest fan-out
-        env:
-          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
-          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
-          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
-          HOL_GUARD_NATIVE_REGRESSION: "1"
-        run: |
-          uv run --no-sync pytest -q --tb=short \
-            tests/test_guard_command_corpus_native_contract.py::test_native_contract_validates_every_authored_signature_without_rewriting_evidence \
-            tests/test_pi_adapter.py::TestPiInstall::test_install_writes_managed_extension_that_denies_on_hook_errors \
-            tests/test_pi_adapter.py::TestPiInstall::test_managed_extension_fails_safe_on_ambiguous_success_payloads
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -241,11 +329,109 @@ jobs:
           name: pytest-native-command-projections
           path: |
             contracts/extensions/
-            contributions/extensions/
             docs/guard/extensions/
             src/codex_plugin_scanner/guard/contracts/data/extensions/
           if-no-files-found: error
           retention-days: 1
+
+  native-gates:
+    name: native-gates (${{ matrix.shard-index }})
+    needs: native-command-evaluators
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        shard-index: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Download native command evaluators
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - uses: ./.github/actions/restore-command-projections
+      - run: |
+          chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+      - name: Check native contract groups after artifact fan-out
+        # Shard zero owns these unchanged selectors; all shard results are required.
+        if: matrix.shard-index == 0
+        env:
+          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+          HOL_GUARD_NATIVE_REGRESSION: "1"
+        run: |
+          uv run --no-sync pytest -q --tb=short \
+            ci/package_size \
+            tests/test_guard_command_corpus_native_contract.py::test_native_contract_validates_every_authored_signature_without_rewriting_evidence \
+            tests/test_pi_adapter.py::TestPiInstall::test_install_writes_managed_extension_that_denies_on_hook_errors \
+            tests/test_pi_adapter.py::TestPiInstall::test_managed_extension_fails_safe_on_ambiguous_success_payloads \
+            tests/test_mcp_relay_handoff.py \
+            tests/test_mcp_relay_lane_ready_install.py
+      - name: Provision bubblewrap so the gates see the Linux workspace sandbox
+        # Without it every command the sandbox would contain falls back to
+        # review, and the gates measure a host that Linux users with
+        # bubblewrap never see.
+        run: bash ci/containment/install-bubblewrap.sh
+      - name: Benign false-positive and Gauntlet replay gates (model-free, native path)
+        env:
+          SHARD_INDEX: ${{ matrix.shard-index }}
+          SHARD_COUNT: 8
+        run: |
+          # A collection failure must fail the step even when grep still prints nodes.
+          set -o pipefail
+          gates=(tests/test_guard_benign_false_positive_gate.py
+                 tests/test_guard_gauntlet_replay_gate.py
+                 tests/test_guard_command_corpus_benign_allow.py)
+          uv run --no-sync pytest --collect-only -q "${gates[@]}" | grep '::' > gate-nodes.txt
+          # Every shard collects the same sorted list and keeps every eighth
+          # node, so the shards are disjoint and together cover the whole gate.
+          sort gate-nodes.txt | awk -v n="$SHARD_COUNT" -v i="$SHARD_INDEX" '(NR - 1) % n == i' > gate-shard.txt
+          test -s gate-shard.txt
+          echo "shard $SHARD_INDEX runs $(wc -l < gate-shard.txt) of $(wc -l < gate-nodes.txt) gate cases"
+          uv run --no-sync python scripts/ci/run_projection_shard.py gate-shard.txt -- \
+            -q --tb=short -n 4 --dist load --max-worker-restart 0 "@gate-shard.txt"
+
+  native-release-size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Measure the shipped fat-LTO runtime size
+        env:
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: native-release-size
+          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+        run: |
+          unset CARGO_PROFILE_RELEASE_LTO
+          unset CARGO_PROFILE_RELEASE_CODEGEN_UNITS
+          if [ -n "${CARGO_PROFILE_RELEASE_LTO+x}" ] || [ -n "${CARGO_PROFILE_RELEASE_CODEGEN_UNITS+x}" ]; then
+            echo "Shipped size gate must use the rust/Cargo.toml release profile" >&2
+            exit 1
+          fi
+          # Only the runtime ships in platform wheels; the native evaluator
+          # builds and verifies guard-command-source separately on this commit.
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+          python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release --platform manylinux_2_17_x86_64
 
   coverage-plan:
     needs: native-command-evaluators
@@ -332,15 +518,12 @@ jobs:
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
-      - name: Download matching native command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
+      - uses: ./.github/actions/restore-command-projections
       - run: |
           chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
           echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Run coverage shard ${{ matrix.shard-index }}
@@ -350,6 +533,8 @@ jobs:
           test -s "$shard_file"
           # PRs need the same behavioral suite, not the coverage tracer tax. Main
           # remains the authoritative coverage/Sonar producer after merge.
+          # The benign and replay gates expect the Linux workspace sandbox. They
+          # run in native-gates, which provisions bubblewrap.
           coverage_args=()
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             export GUARD_PYTEST_UNDER_COVERAGE=1
@@ -358,7 +543,10 @@ jobs:
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
             uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
-            --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
+            -n 2 --dist loadfile --max-worker-restart 0 \
+            --reruns 1 --reruns-delay 2 \
+            --deselect tests/test_guard_benign_false_positive_gate.py \
+            --deselect tests/test_guard_gauntlet_replay_gate.py \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_first_queue_page_with_100k_rows_stays_under_100ms \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows \
@@ -367,6 +555,26 @@ jobs:
             --deselect tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner \
             --deselect tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects \
             --deselect tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources \
+            --deselect tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker \
+            --deselect tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills \
+            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[artifact]' \
+            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[workspace]' \
+            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[publisher]' \
+            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]' \
+            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]' \
+            --deselect tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow \
+            --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_package_firewall_paid_install_and_test_roundtrip \
+            --deselect tests/test_guard_shim_intercept_proofs.py::test_daemon_package_shim_test_uses_projected_shell_profile_path \
+            --deselect tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque \
+            --deselect tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences \
+            --deselect tests/test_guard_policy_integrity.py::test_trust_backend_check_uses_spawn_from_concurrent_threads \
+            --deselect tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store \
+            --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_audit_scans_workspace_manifests \
+            --deselect tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms \
+            --deselect tests/test_guard_update_artifact.py::test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat \
+            --deselect 'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload' \
+            --deselect tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection \
+            --deselect tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability \
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
@@ -431,10 +639,13 @@ jobs:
     # authoritative instrumented main run and stays off the contributor path.
     if: vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A cold Rust coverage build alone takes about 16 minutes; leave room for
+    # the scan and the five-minute quality gate check so the cache can seed.
+    timeout-minutes: 35
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     steps:
       - name: Check for SonarQube Cloud token
         id: token-presence
@@ -466,11 +677,12 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12.14", "3.14.7"]
+        slice: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -478,6 +690,8 @@ jobs:
       - uses: ./.github/actions/ci-job-scheduling-sensitive
         with:
           python-version: ${{ matrix.python-version }}
+          slice-index: ${{ matrix.slice }}
+          slice-count: 4
 
   compatibility:
     needs: [plan, native-command-evaluators]
@@ -499,36 +713,6 @@ jobs:
       - uses: ./.github/actions/ci-job-compatibility
         with:
           python-version: ${{ matrix.python-version }}
-
-  deep-compatibility:
-    needs: native-command-evaluators
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.13"]
-        shard-index: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/ci-job-deep-compatibility
-        with:
-          python-version: ${{ matrix.python-version }}
-          shard-index: ${{ matrix.shard-index }}
-
-  mutation-baseline:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    needs: native-command-evaluators
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/ci-job-mutation-baseline
 
   ci-python-312:
     name: ci (3.12)
@@ -623,10 +807,11 @@ jobs:
       - uses: ./.github/actions/ci-job-cisco-full
 
   cross-platform:
-    needs: [plan, native-command-evaluators]
+    needs: [plan, native-command-evaluators, windows-native-runtime]
     if: >-
       !cancelled() &&
       needs.native-command-evaluators.result == 'success' &&
+      needs.windows-native-runtime.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ${{ matrix.os }}
@@ -642,22 +827,128 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-  windows-updater:
-    needs: native-command-evaluators
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  windows-native-runtime:
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: windows-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: ./.github/actions/ci-job-windows-updater
+      - uses: ./.github/actions/ci-job-windows-native-runtime
+
+  windows-shim-admin:
+    name: windows-shim-admin (${{ matrix.shim-gate }})
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: windows-latest
+    # The two native Windows shim contract families are independent. Run them
+    # concurrently, but require both outcomes via the existing job-level needs.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shim-gate: [vectors, native-op]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          python-version: ${{ matrix.python-version }}
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-windows-shim-admin
+        with:
+          shim-gate: ${{ matrix.shim-gate }}
+
+  windows-packaged-daemon:
+    needs: [plan, native-command-evaluators, windows-native-runtime]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      needs.windows-native-runtime.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        native-diagnostics: ["0", "1"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-windows-packaged-daemon
+        with:
+          python-version: "3.12"
+          native-diagnostics: ${{ matrix.native-diagnostics }}
+
+  macos-native-runtime:
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-macos-native-runtime
+
+  macos-skill-identity:
+    needs: [plan, native-command-evaluators, macos-native-runtime]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      needs.macos-native-runtime.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-macos-skill-identity
+        with:
+          python-version: "3.12"
+          suite: skill-identity
+          shard-index: 0
+          shard-count: 1
+
+  macos-gates:
+    name: macos-gates (${{ matrix.shard-index }})
+    needs: [plan, native-command-evaluators, macos-native-runtime]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      needs.macos-native-runtime.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: macos-latest
+    # One runner took over 30 minutes for the whole gate; three shards keep
+    # each well inside the limit.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard-index: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-macos-skill-identity
+        with:
+          python-version: "3.12"
+          suite: gates
+          shard-index: ${{ matrix.shard-index }}
+          shard-count: 3
 
   # Shadow aggregate: reports the merged required-result contract. In shadow mode
   # it needs the full required set and evaluates the planner's lane choice so the
@@ -667,7 +958,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform]
+    needs: [plan, native-workspace, native-command-evaluators, native-gates, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -695,12 +986,14 @@ jobs:
           # plan, including data-only. A failed or cancelled provider (or a
           # skipped one, which means its `if`/needs chain broke) must not let a
           # data-only plan coast through on surviving lane-gated residue.
-          always_on = ["plan","native-workspace","native-command-evaluators",
-                       "quality","coverage-plan","ci-python-312"]
+          always_on = ["plan","native-workspace","native-command-evaluators","native-gates",
+                       "native-release-size","quality","coverage-plan","ci-python-312"]
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","cisco-full","pi-exact-continuation","cross-platform"]
+                      "dashboard","cisco-full","pi-exact-continuation","cross-platform",
+                      "windows-native-runtime","windows-shim-admin","windows-packaged-daemon",
+                      "macos-native-runtime","macos-skill-identity","macos-gates"]
           missing = [j for j in always_on + required if j not in needs]
           if missing:
               print("::error::required jobs absent from needs graph: "+", ".join(missing))

@@ -26,7 +26,6 @@ from .repository_edits import (
     BINDINGS_DIR,
     PYPROJECT_PATH,
     STAGING_PATH,
-    TRUST_PATH,
     conflict,
     edit_pyproject,
     edit_staging,
@@ -248,7 +247,7 @@ def _contribution_collisions(root: Path, metadata: Metadata) -> None:
 
 
 def _shared_files(root: Path, metadata: Metadata) -> dict[str, str]:
-    paths = [PYPROJECT_PATH, TRUST_PATH, STAGING_PATH]
+    paths = [PYPROJECT_PATH, STAGING_PATH]
     files = {path: text_from_bytes(read_bytes(root / path)) for path in paths}
     bindings_dir = root / BINDINGS_DIR
     if bindings_dir.is_dir():
@@ -258,9 +257,7 @@ def _shared_files(root: Path, metadata: Metadata) -> dict[str, str]:
 
 
 def _edited_shared(files: dict[str, str], metadata: Metadata) -> dict[str, str]:
-    # The builder authors a per-extension binding file, not a shared-array
-    # append; the committed aggregate is regenerated as the projection of all
-    # bindings including the new one.
+    # Author only the reviewed binding; package builds derive the aggregate.
     binding_path = trust_binding_path(metadata)
     binding_content = trust_binding_content(metadata)
     bindings = {path: content for path, content in files.items() if path.startswith(f"{BINDINGS_DIR}/")}
@@ -270,12 +267,7 @@ def _edited_shared(files: dict[str, str], metadata: Metadata) -> dict[str, str]:
         raise conflict("The builder cannot modify an existing trusted extension or change its trust class.")
     if metadata.catalog_id not in classes["external"]:
         bindings[binding_path] = binding_content
-    aggregate = project_trust_map(bindings)
-    # Preserve the committed file's line endings so CRLF checkouts stay byte-stable.
-    if "\r\n" in files.get(TRUST_PATH, ""):
-        aggregate = aggregate.replace("\n", "\r\n")
     edited = {
-        TRUST_PATH: aggregate,
         PYPROJECT_PATH: edit_pyproject(files[PYPROJECT_PATH], metadata),
         STAGING_PATH: edit_staging(files[STAGING_PATH], metadata),
     }

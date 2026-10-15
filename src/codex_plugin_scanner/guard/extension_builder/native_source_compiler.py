@@ -1,9 +1,10 @@
 """Bounded access to the packaged declarative source compiler.
 
-The compiler is a native release resource.  This module only locates a
-manifest-bound executable and exchanges one bounded JSON document over stdin;
-it never discovers Cargo, reads a checkout, imports contributor code, or
-provides a Python compilation fallback.
+The compiler operations are hosted by the packaged native runtime executable,
+whose bytes are bound to the source-compiler manifest.  This module only
+locates that manifest-bound executable and exchanges one bounded JSON document
+over stdin; it never discovers Cargo, reads a checkout, imports contributor
+code, or provides a Python compilation fallback.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ _DEFAULT_TIMEOUT_SECONDS = 30.0
 _SHA40 = 40
 _SHA64 = 64
 _MANIFEST_NAME = "source-compiler-manifest.json"
-_COMPILER_NAME = "guard-command-source.exe" if os.name == "nt" else "guard-command-source"
+_COMPILER_NAME = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
 _NATIVE_PACKAGE = Path(__file__).resolve().parents[2] / "_native"
 _DEVELOPMENT_COMPILER_ENV = "HOL_GUARD_NATIVE_SOURCE_COMPILER"
 # Both environment overrides are restricted to source checkouts without a
@@ -152,8 +153,10 @@ def _packaged_program_digest() -> str:
 
 def _verify_manifest(path: Path) -> dict[str, object]:
     manifest = _manifest(path)
-    if manifest.get("schema") != "hol-guard-native-source-compiler.v1":
+    if manifest.get("schema") != "hol-guard-native-source-compiler.v2":
         raise NativeSourceCompilerError("source compiler manifest schema is unsupported")
+    if manifest.get("executable") != _COMPILER_NAME:
+        raise NativeSourceCompilerError("source compiler manifest executable is unsupported")
     if manifest.get("protocol_version") != 1:
         raise NativeSourceCompilerError("source compiler manifest protocol is unsupported")
     package_version = manifest.get("package_version")
@@ -195,7 +198,7 @@ def _verify_manifest(path: Path) -> dict[str, object]:
 
 
 def find_packaged_source_compiler() -> Path:
-    """Return the verified compiler from the installed package resources."""
+    """Return the verified runtime executable that hosts the source compiler."""
     if not _NATIVE_PACKAGE.is_dir() or _NATIVE_PACKAGE.is_symlink():
         raise NativeSourceCompilerError("packaged native resources are unavailable")
     _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
@@ -252,7 +255,7 @@ def _decode_output(
 def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
     with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-", ignore_cleanup_errors=True) as directory:
-        name = "guard-command-source.exe" if os.name == "nt" else "guard-command-source"
+        name = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
         path = Path(directory) / name
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
         descriptor = os.open(path, flags, 0o700)

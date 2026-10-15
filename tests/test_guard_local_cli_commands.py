@@ -7,6 +7,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliComman
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def _identity(tmp_path: Path):
     script = tmp_path / "ship.py"
