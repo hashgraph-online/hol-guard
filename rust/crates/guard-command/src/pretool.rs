@@ -198,12 +198,15 @@ pub(super) fn normalized_haystack(value: &str) -> String {
 
 /// Floors no extension permission can settle: Guard self-protection, secret
 /// exfiltration, a glob that could name a secret file, and Git configuration
-/// that runs a program Guard cannot read.
+/// that runs a program Guard cannot read. An unproven model has no segments
+/// to screen, so it is a floor itself rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .any(crate::command_compatibility::git_runs_configured_program)
+    model.confidence != "exact"
+        || model.segments.is_empty()
+        || model
+            .segments
+            .iter()
+            .any(crate::command_compatibility::git_runs_configured_program)
         || crate::command_critical_floors::guard_control_block_in_launcher_text(
             &model.normalized_text,
         )

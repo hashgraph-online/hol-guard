@@ -224,21 +224,27 @@ def _parse_package_intent_native(
     workspace: Path | None,
     guard_home: Path,
 ) -> PackageIntent | None:
-    """Try the resident ``package_intent_parse`` op.
+    """Ask the resident ``package_intent_parse`` op for the command's intent.
 
-    ``None`` means the resident was unreachable or found no intent —
-    ``parse_package_intent`` is resident-sole-authority, so no Python
-    re-parse exists to fall back to."""
+    ``None`` means the resident found no package intent. An unreachable
+    resident or an unusable answer raises ``NativeProtectRequestError``, so
+    the wrapped install fails closed instead of skipping the package firewall.
+    """
+    from .native_protect_request import NativeProtectRequestError
+
     try:
         intent = _native_package_authority_module().package_intent_parse_native(
             raw_command,
             workspace=workspace,
             environment=dict(environment) if environment is not None else None,
             guard_home=guard_home,
+            require_answer=True,
         )
-    except Exception:
-        return None
-    return intent if isinstance(intent, PackageIntent) else None
+    except Exception as error:
+        raise NativeProtectRequestError("native_package_intent_unavailable") from error
+    if intent is None or isinstance(intent, PackageIntent):
+        return intent
+    raise NativeProtectRequestError("native_package_intent_malformed")
 
 
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
@@ -856,8 +862,11 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
         )
-        if reuse is not None:
-            resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
+        # An unreachable resident cannot reject the unclaimed approval, so fall
+        # back to the current evaluation rather than launching on it.
+        resolved = (
+            current_evaluation if reuse is None else _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
+        )
     return current, resolved
 
 

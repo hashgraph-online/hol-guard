@@ -346,8 +346,8 @@ mod tests {
         std::fs::create_dir_all(home.join(".ssh")).unwrap();
         std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
         let (home, repo) = (
-            std::fs::canonicalize(home).unwrap(),
-            std::fs::canonicalize(repo).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
         );
         let context = crate::pretool::PathContext {
             home_dir: home.to_str(),
@@ -385,8 +385,8 @@ mod tests {
         std::fs::create_dir_all(repo.join("src")).unwrap();
         std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
         let (home, repo) = (
-            std::fs::canonicalize(home).unwrap(),
-            std::fs::canonicalize(repo).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
         );
         let context = crate::pretool::PathContext {
             home_dir: home.to_str(),

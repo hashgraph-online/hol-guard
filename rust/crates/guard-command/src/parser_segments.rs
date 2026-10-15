@@ -259,7 +259,7 @@ pub(super) fn is_stderr_to_null_redirect(
 /// open fails without writing anything while the drive has no `\dev`. The
 /// shell may have changed drive since Guard started, or earlier in the same
 /// command, so the sink is inert only while no drive letter has a `\dev`.
-fn stderr_null_sink_is_inert() -> bool {
+pub(super) fn stderr_null_sink_is_inert() -> bool {
     cfg!(unix)
         || (cfg!(windows)
             && (b'A'..=b'Z').all(|drive| {

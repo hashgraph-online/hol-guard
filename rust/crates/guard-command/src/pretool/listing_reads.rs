@@ -407,8 +407,8 @@ mod tests {
             std::fs::write(file, "synthetic\n").unwrap();
         }
         let (home, project) = (
-            std::fs::canonicalize(home).unwrap(),
-            std::fs::canonicalize(project).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&project).unwrap(),
         );
         let context = crate::pretool::PathContext {
             home_dir: home.to_str(),

@@ -14,7 +14,7 @@ fn fixture_root() -> PathBuf {
             std::process::id()
         ));
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::canonicalize(root).unwrap()
+    crate::runtime_read_paths::canonicalize_text(&root).unwrap()
 }
 
 fn listed(value: &Path, home: &Path, cwd: &Path) -> bool {

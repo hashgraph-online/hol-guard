@@ -159,6 +159,33 @@ def test_package_authority_refuses_unavailable_or_malformed_resident(
     assert native_package_authority.package_intent_parse_native(huge, guard_home=home) is None
 
 
+def test_package_intent_parse_requiring_an_answer_raises_without_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "home"
+    parse = native_package_authority.package_intent_parse_native
+    unavailable = native_package_authority.NativePackageIntentUnavailableError
+    _patch_authority(monkeypatch, _status(available=False), b"{}")
+    with pytest.raises(unavailable, match="native_package_intent_unavailable"):
+        parse("npm install left-pad", guard_home=home, require_answer=True)
+    _patch_authority(
+        monkeypatch,
+        _status(),
+        b'{"schema":"guard-package-authority-result.v1","status":"ok","payload":["nope"]}',
+    )
+    with pytest.raises(unavailable, match="native_package_intent_malformed"):
+        parse("npm install left-pad", guard_home=home, require_answer=True)
+    _patch_authority(monkeypatch, _status(), b'{"schema":"guard-package-authority-result.v1","status":"ok"}')
+    with pytest.raises(unavailable, match="native_package_intent_malformed"):
+        parse("npm install left-pad", guard_home=home, require_answer=True)
+    _patch_authority(
+        monkeypatch,
+        _status(),
+        b'{"schema":"guard-package-authority-result.v1","status":"ok","payload":null}',
+    )
+    assert parse("echo hi", guard_home=home, require_answer=True) is None
+
+
 def test_program_digest_stamp_keeps_snapshot_when_runtime_digests_disagree() -> None:
     extensions = {"program_digest": OTHER, "catalog_digest": DIGEST, "trust_digest": DIGEST}
     assert _stamp_runtime_program_digest(extensions, None) is extensions
@@ -180,35 +207,56 @@ def _raise_transport(*_args: object, **_kwargs: object) -> dict[str, object]:
     raise RuntimeError("transport")
 
 
-def test_supply_chain_native_bridge_rejects_bad_call_shapes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_supply_chain_native_bridge_fails_closed_without_an_answer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.native_protect_request import NativeProtectRequestError
+
     monkeypatch.setattr(
         local_supply_chain,
         "_native_package_authority_module",
         lambda: SimpleNamespace(package_intent_parse_native=_raise_transport),
     )
-    assert (
+    with pytest.raises(NativeProtectRequestError, match="native_package_intent_unavailable"):
         local_supply_chain._parse_package_intent_native(
             "npm install left-pad",
             environment={"PATH": "/usr/bin"},
             workspace=tmp_path,
             guard_home=tmp_path,
         )
-        is None
-    )
     monkeypatch.setattr(
         local_supply_chain,
         "_native_package_authority_module",
         lambda: SimpleNamespace(package_intent_parse_native=lambda *_args, **_kwargs: {"intent_kind": "nope"}),
     )
-    assert (
+    with pytest.raises(NativeProtectRequestError, match="native_package_intent_malformed"):
         local_supply_chain._parse_package_intent_native(
             "npm install left-pad",
             environment=None,
             workspace=tmp_path,
             guard_home=tmp_path,
         )
+    calls: list[dict[str, object]] = []
+
+    def _no_intent(*_args: object, **kwargs: object) -> None:
+        calls.append(kwargs)
+        return None
+
+    monkeypatch.setattr(
+        local_supply_chain,
+        "_native_package_authority_module",
+        lambda: SimpleNamespace(package_intent_parse_native=_no_intent),
+    )
+    assert (
+        local_supply_chain._parse_package_intent_native(
+            "echo hi",
+            environment=None,
+            workspace=tmp_path,
+            guard_home=tmp_path,
+        )
         is None
     )
+    assert calls[0]["require_answer"] is True
 
 
 def test_package_evaluation_without_resident_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -245,3 +293,42 @@ def test_retained_archive_evaluation_without_resident_blocks(monkeypatch: pytest
     assert result.decision == "block"
     assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
     assert result.external_archive_downloads == ()
+
+
+def test_unclaimed_saved_package_approval_is_dropped_without_a_resident(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    evaluation = SimpleNamespace(policy_action="review", name="current")
+    saved = SimpleNamespace(policy_action="allow", name="saved")
+    current = SimpleNamespace(
+        artifact=SimpleNamespace(artifact_id="package:npm:left-pad"),
+        artifact_hash="hash",
+        evaluation=evaluation,
+        current_action="review",
+        execution_context=None,
+        observe_mode=False,
+        additional_current_action=None,
+        additional_policy_context=None,
+        invoking_harness=None,
+    )
+    monkeypatch.setattr(local_supply_chain, "_build_package_protect_authority", lambda **_kwargs: current)
+    monkeypatch.setattr(local_supply_chain, "approval_context_tokens_validation_reason", lambda *_args: None)
+    monkeypatch.setattr(local_supply_chain, "_apply_stored_package_policy_override", lambda *_args, **_kwargs: saved)
+    monkeypatch.setattr(
+        local_supply_chain, "_evaluation_uses_saved_package_approval", lambda candidate: candidate is saved
+    )
+    monkeypatch.setattr(local_supply_chain, "evaluate_approval_reuse", lambda *_args, **_kwargs: None)
+    authority, result = local_supply_chain._final_package_protect_authority(
+        initial=current,
+        initial_saved_evaluation=None,
+        saved_approval_pending=False,
+        command=["npm", "install", "left-pad"],
+        store=SimpleNamespace(guard_home=tmp_path),
+        workspace_dir=tmp_path,
+        now="2026-10-15T00:00:00Z",
+        config=None,
+        current_config_provider=None,
+        additional_authority_provider=None,
+    )
+    assert authority is current
+    assert result is evaluation

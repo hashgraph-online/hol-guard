@@ -223,6 +223,16 @@ fn replace_with_current_ack_until(root: &Path, policy_digest: &str, lease_expire
     .unwrap();
 }
 
+/// Returns once a hook has claimed the settle wait for `generation`, so the
+/// ACK lands while that hook is polling rather than racing its start. Gives up
+/// after ten seconds so a regression fails the test instead of hanging it.
+fn await_settle_wait(claimed: &std::sync::atomic::AtomicU64, generation: u64) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while claimed.load(Ordering::Acquire) < generation && std::time::Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+}
+
 #[test]
 fn an_ack_behind_the_bound_snapshot_is_awaited_briefly() {
     let fixture = fixture("ack-settle");
@@ -230,13 +240,14 @@ fn an_ack_behind_the_bound_snapshot_is_awaited_briefly() {
     let digest = fixture.snapshot.policy_digest.clone();
     let lease = now_ms().unwrap() + 30_000;
     write_ack(&fixture.root, 0, &digest, lease, 0o600);
-    let root = fixture.root.clone();
-    let writer = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        replace_with_current_ack(&root, &digest);
+    let claimed = &fixture.store.direct_lane_ack_wait_claimed;
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            await_settle_wait(claimed, 1);
+            replace_with_current_ack(&fixture.root, &digest);
+        });
+        assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
     });
-    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
-    writer.join().unwrap();
     assert_eq!(
         fixture
             .store
@@ -252,17 +263,19 @@ fn an_ack_that_expires_during_the_wait_is_expired() {
     push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
     let digest = fixture.snapshot.policy_digest.clone();
     write_ack(&fixture.root, 0, &digest, now_ms().unwrap() + 30_000, 0o600);
-    let root = fixture.root.clone();
-    let writer = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        // Already past by the time the waiting hook reads it.
-        replace_with_current_ack_until(&root, &digest, now_ms().unwrap());
+    let claimed = &fixture.store.direct_lane_ack_wait_claimed;
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            await_settle_wait(claimed, 1);
+            // Already past when the waiting hook reads it.
+            let lease = now_ms().unwrap().saturating_sub(1);
+            replace_with_current_ack_until(&fixture.root, &digest, lease);
+        });
+        assert_eq!(
+            fixture.store.admit_direct_lane("/work/repo").err(),
+            Some(DirectLaneDefer::AckExpired)
+        );
     });
-    assert_eq!(
-        fixture.store.admit_direct_lane("/work/repo").err(),
-        Some(DirectLaneDefer::AckExpired)
-    );
-    writer.join().unwrap();
 }
 
 #[test]

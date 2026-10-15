@@ -716,6 +716,8 @@ fn secret_selecting_globs_are_a_fixed_floor() {
         // A brace value is screened per alternative, whatever else it holds.
         "dd if={safe:dummy,.env} of=copy",
         "dd if={x\\\"y,.env} of=copy",
+        // An unterminated quote leaves no proven segment to screen.
+        "dd if='{x,.env} of=copy",
         // A `/` makes the word a path, whatever its first component holds.
         "git log -p -1 -- 'x=y/../.en*'",
         "git diff --no-index a=b/{.env,x} README.md",
