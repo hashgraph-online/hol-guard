@@ -62,6 +62,9 @@ runs:
     - name: Publish pytest shard plan
       shell: bash
       run: cat pytest-shards/plan.json
+    - name: Publish complete protected test inventory
+      shell: bash
+      run: cat pytest-shards/test-inventory.json
     - name: Upload pytest shard plan
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:

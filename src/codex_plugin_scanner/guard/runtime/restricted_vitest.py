@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import json
 import os
-import stat
+import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from itertools import pairwise
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
+from ..native_restricted_pytest import native_launch_plan, restricted_native
 from .restricted_node_capabilities import linux_node_environment
-from .restricted_node_test import _node_runtime_args, prepare_restricted_node_test
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -20,127 +22,68 @@ from .restricted_pytest_model import (
     RestrictedPytestPlan,
 )
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
-from .restricted_pytest_validation import _normalized_command, _path_is_within
+
+# Appended when a read-only run fails after printing a denied file operation.
+READ_ONLY_WRITE_DENIAL_NOTE = (
+    "This run hit a denied file operation (EPERM or EROFS). HOL Guard runs these tests with "
+    "the project read-only; only $TMPDIR is writable. If a test writes reports, caches or other "
+    "files into the project, point that output at $TMPDIR and run the same command again."
+)
+
+
+def _tsx_package_dir(command: Sequence[str]) -> Path | None:
+    """Directory of the tsx package named by a contained `--import` loader."""
+    for flag, value in pairwise(command):
+        if flag != "--import" or not value.startswith("file:"):
+            continue
+        path = Path(unquote(urlparse(value).path))
+        if path.name == "loader.mjs" and path.parent.name == "dist" and path.parent.parent.name == "tsx":
+            return path.parent.parent
+    return None
 
 
 def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str, ...]] | None:
-    """Recognize only Bun's direct x wrapper, optionally with a leading cwd."""
-    if not command or Path(command[0]).name != "bun":
+    result = restricted_native("bun_vitest_invocation", {"command": list(command)}, (list, type(None)))
+    if result is None:
         return None
-    args = tuple(command[1:])
-    directory = None
-    if args and args[0] == "--cwd":
-        if len(args) < 2 or not args[1] or args[1].startswith("-"):
-            return None
-        directory, args = args[1], args[2:]
-    elif args and args[0].startswith("--cwd="):
-        directory, args = args[0][6:], args[1:]
-        if not directory:
-            return None
-    if not args or args[0] != "x":
+    if (
+        len(result) != 2
+        or (result[0] is not None and not isinstance(result[0], str))
+        or not isinstance(result[1], list)
+    ):
+        raise ValueError("Invalid native Bun invocation")
+    return result[0], tuple(result[1])
+
+
+def tsx_test_invocation(command: Sequence[str]) -> tuple[str, tuple[str, ...]] | None:
+    result = restricted_native("tsx_test_invocation", {"command": list(command)}, (list, type(None)))
+    if result is None:
         return None
-    args = args[1:]
-    if args and args[0] == "--no-install":
-        args = args[1:]
-    if len(args) < 2 or args[:2] != ("vitest", "run"):
-        return None
-    return directory, args[1:]
+    if len(result) != 2 or not isinstance(result[0], str) or not isinstance(result[1], list):
+        raise ValueError("Invalid native tsx invocation")
+    return result[0], tuple(result[1])
 
 
 def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
-    argv = _normalized_command(command)
-    name = Path(argv[0]).name
-    runtime_args = _node_runtime_args(argv)
-    if name == "bun" and (invocation := bun_vitest_invocation(argv)) is not None:
-        args = invocation[1]
-    elif name in {"bunx", "npx"}:
-        args = argv[1:]
-        if args and args[0] == "--no-install":
-            args = args[1:]
-        if not args or args[0] != "vitest":
-            raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
-        args = args[1:]
-    elif name == "vitest":
-        args = argv[1:]
-    elif name in {"node", "nodejs"}:
-        node_args = argv[1 + len(runtime_args) :]
-        if len(node_args) < 2 or not node_args[0].endswith("/node_modules/vitest/vitest.mjs"):
-            raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
-        args = node_args[1:]
-    else:
-        raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
-    if not args or args[0] != "run" or any(item in {";", "&&", "||", "|", "|&", "&"} for item in args):
-        raise RestrictedPytestError("vitest_restricted_invalid_command", "Protected Vitest requires direct run argv.")
-    return tuple(args)
+    return tuple(restricted_native("vitest_arguments", {"command": list(command)}, list))
 
 
 def prepare_restricted_vitest(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None
 ) -> RestrictedPytestPlan:
-    args = vitest_arguments(command)
-    runtime_args = _node_runtime_args(command)
-    invocation = bun_vitest_invocation(command)
-    if invocation is not None and invocation[0] is not None:
-        # Resolve against the original hook cwd, not the daemon's process cwd.
-        target = Path(invocation[0]).expanduser()
-        if not target.is_absolute():
-            target = (cwd or workspace) / target
-        try:
-            workspace = target.resolve(strict=True)
-            if not workspace.is_dir():
-                raise OSError("not a directory")
-        except (OSError, RuntimeError) as error:
-            raise RestrictedPytestError(
-                "vitest_restricted_invalid_command", "Vitest working directory is unavailable."
-            ) from error
-        cwd = workspace
-    plan = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd)
-    lexical = plan.workspace / "node_modules" / "vitest" / "vitest.mjs"
-    try:
-        entry = lexical.resolve(strict=True)
-        if not entry.is_file() or not _path_is_within(entry, plan.workspace / "node_modules"):
-            raise OSError("invalid local Vitest entrypoint")
-        if (
-            Path(command[0]).name in {"node", "nodejs"}
-            and Path(command[1 + len(runtime_args)]).resolve(strict=True) != entry
-        ):
-            raise OSError("unexpected Vitest entrypoint")
-    except (OSError, RuntimeError) as error:
-        raise RestrictedPytestError(
-            "vitest_restricted_dependency_unavailable",
-            "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
-        ) from error
-    args = _readonly_config_arguments(args, entry.parent / "package.json")
-    return replace(
-        plan,
-        profile_version=VITEST_READ_ONLY_PROFILE_VERSION,
-        command=(str(plan.executable), *runtime_args, str(entry), *args),
+    return native_launch_plan(
+        "prepare_vitest",
+        command,
+        workspace=workspace,
+        cwd=cwd or workspace,
+        platform=sys.platform,
+        backend_executable=None,
+        profile=VITEST_READ_ONLY_PROFILE_VERSION,
     )
 
 
 def _readonly_config_arguments(args: tuple[str, ...], manifest: Path) -> tuple[str, ...]:
-    """Avoid Vite's source-tree config bundle without overriding explicit loaders."""
-    if any(value == "--configLoader" or value.startswith("--configLoader=") for value in args):
-        return args
-    try:
-        descriptor = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        with os.fdopen(descriptor, "rb") as handle:
-            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-                return args
-            raw = handle.read(65537)
-        if len(raw) > 65536:
-            return args
-        package = json.loads(raw)
-        if not isinstance(package, dict):
-            return args
-        version = package.get("version", "")
-        major = version.split(".", 1)[0] if isinstance(version, str) else ""
-        # Older releases are not assumed to support this CLI/Vite capability.
-        if package.get("name") == "vitest" and major.isascii() and major.isdigit() and int(major) >= 4:
-            return (*args, "--configLoader", "runner")
-    except (OSError, ValueError):
-        pass
-    return args
+    return tuple(restricted_native("readonly_config_arguments", {"command": args, "path": manifest}, list))
 
 
 def run_restricted_vitest(
@@ -152,6 +95,7 @@ def run_restricted_vitest(
     timeout_seconds: int = 1800,
     prepared_plan: RestrictedPytestPlan | None = None,
     authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
+    merge_stderr: bool = False,
 ) -> int:
     if timeout_seconds <= 0 or timeout_seconds > 86400:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Protected Vitest timeout is out of bounds.")
@@ -159,8 +103,30 @@ def run_restricted_vitest(
     if plan.profile_version != VITEST_READ_ONLY_PROFILE_VERSION:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Unexpected Vitest profile.")
     return run_restricted_node_plan(
-        plan, env=env, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
+        plan,
+        env=env,
+        timeout_seconds=timeout_seconds,
+        authorize_capability=authorize_capability,
+        merge_stderr=merge_stderr,
     )
+
+
+def _transform_image(anchor: Path, workspace: Path, images: Path, *, required: bool) -> tuple[Path, Path, str] | None:
+    """The private esbuild image, or None when a build can run without one.
+
+    A build that never loads esbuild (tsc, a plain JavaScript config) keeps
+    running when the image cannot be prepared; Vitest always needs it.
+    """
+    from .restricted_esbuild import snapshot_esbuild
+    from .restricted_node_test import nearest_project_root
+
+    try:
+        project = nearest_project_root(anchor, workspace, "node_modules/esbuild/package.json")
+        return snapshot_esbuild(project, images)
+    except RestrictedPytestError:
+        if required:
+            raise
+        return None
 
 
 def run_restricted_node_plan(
@@ -169,6 +135,7 @@ def run_restricted_node_plan(
     env: Mapping[str, str] | None = None,
     timeout_seconds: int = 1800,
     authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
+    merge_stderr: bool = False,
 ) -> int:
     if (
         not 0 < timeout_seconds <= 86400
@@ -192,12 +159,14 @@ def run_restricted_node_plan(
         home.mkdir(mode=0o700)
         tmp.mkdir(mode=0o700)
         esbuild = None
-        if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION:
-            from .restricted_esbuild import snapshot_esbuild
-
+        # Vite bundles a TypeScript config with esbuild before a build starts,
+        # so a contained build needs the same transform image as Vitest.
+        if plan.profile_version in {VITEST_READ_ONLY_PROFILE_VERSION, NODE_BUILD_OUTPUT_PROFILE_VERSION}:
             # Executable images have a separate read-only tree. A child cannot
             # replace the image by renaming a writable scratch ancestor.
-            esbuild = snapshot_esbuild(plan.workspace, Path(images).resolve())
+            anchor = _tsx_package_dir(plan.command) or plan.cwd
+            required = plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION
+            esbuild = _transform_image(anchor, plan.workspace, Path(images).resolve(), required=required)
             if esbuild is not None:
                 source, image, version = esbuild
                 if authorize_capability is None:
@@ -240,4 +209,8 @@ def run_restricted_node_plan(
             timeout_seconds=timeout_seconds,
             cwd=plan.cwd,
             node_virtual_address_space=plan.backend == "linux-bubblewrap",
+            merge_stderr=merge_stderr,
+            write_denial_note=(
+                READ_ONLY_WRITE_DENIAL_NOTE if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION else None
+            ),
         )

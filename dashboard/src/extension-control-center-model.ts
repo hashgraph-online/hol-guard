@@ -1,6 +1,7 @@
 import type {
   EffectiveExtensionControls,
   ExtensionCatalogItem,
+  ExtensionCatalogSummary,
   ExtensionPermission,
   ExtensionRule,
 } from "./extension-controls-api";
@@ -116,7 +117,7 @@ export function extensionDetailHref(extensionId: string, state = DEFAULT_EXTENSI
   return `/extensions/${encodeURIComponent(canonical)}${extensionDetailSearch(state)}`;
 }
 
-export function canonicalExtensionId(catalog: ExtensionCatalogItem[], candidate: string | null): string | null {
+export function canonicalExtensionId(catalog: readonly ExtensionCatalogSummary[], candidate: string | null): string | null {
   if (!candidate) return null;
   const normalized = candidate.trim().toLowerCase();
   const direct = catalog.find((extension) => extension.extension_id === normalized);
@@ -165,7 +166,7 @@ export function managedPermissionState(
 
 export function extensionEffectiveState(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary,
 ): "enabled" | "disabled" {
   const projected = effective.projection?.extensions.find((item) => item.extension_id === extension.extension_id);
   if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
@@ -181,7 +182,7 @@ export function extensionEffectiveState(
 
 export function permissionEffectiveState(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary,
   permission: ExtensionPermission,
 ): "enabled" | "disabled" {
   const projected = effective.projection?.permissions.find((item) => item.permission_id === permission.permission_id);
@@ -211,7 +212,7 @@ export function extensionDisplayName(name: string): string {
 
 export function extensionStateLabel(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary,
 ): "Allowed" | "Blocked" | "Required" | "Managed" | "Lockdown" | "Unavailable" {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
@@ -220,7 +221,7 @@ export function extensionStateLabel(
   return extensionEffectiveState(effective, extension) === "enabled" ? "Allowed" : "Blocked";
 }
 
-export function catalogRowSecondLine(extension: ExtensionCatalogItem, state: string): string {
+export function catalogRowSecondLine(extension: ExtensionCatalogSummary, state: string): string {
   if (state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
   if (extension.trust_class === "external" && state !== "Allowed" && state !== "Required") {
     return "Off until you turn it on";
@@ -232,7 +233,7 @@ export function catalogRowSecondLine(extension: ExtensionCatalogItem, state: str
 
 export function permissionStateLabel(
   effective: EffectiveExtensionControls,
-  extension: ExtensionCatalogItem,
+  extension: ExtensionCatalogSummary,
   permission: ExtensionPermission,
 ): "Allowed" | "Blocked" | "Required" | "Managed" | "Inherited" | "Lockdown" | "Unavailable" {
   if (effective.health !== "protected") return "Unavailable";

@@ -25,6 +25,7 @@ from .memory_decision_event import (
     MemoryDecisionSource,
     build_memory_decision_event,
     event_to_cloud_payload,
+    is_approval_wrapper,
 )
 from .receipts.manager import build_receipt
 
@@ -171,7 +172,11 @@ def _ensure_source_receipt_id(
     add_receipt = getattr(store, "add_receipt", None)
     if not callable(add_receipt):
         return None
+    # A tool call has no command text, and review_command then holds only the
+    # "hol-guard approvals approve <id>" wrapper, which is not the action.
     raw_command = _request_string(request, "raw_command_text", "review_command")
+    if raw_command is not None and is_approval_wrapper(raw_command):
+        raw_command = None
     artifact_id = _request_string(request, "artifact_id") or f"approval-request:{request_id}"
     artifact_identity = raw_command or artifact_id
     artifact_hash = _request_string(request, "artifact_hash") or (
@@ -187,6 +192,9 @@ def _ensure_source_receipt_id(
         provenance_summary="Guard approval decision",
         artifact_name=_request_string(request, "artifact_name"),
         source_scope=scope,
+        # A person made this decision; without an override the receipt reads
+        # as "Guard allowed it automatically".
+        user_override=f"approval-{decision_action}",
         approval_source="memory_decision",
         approval_request_id=request_id,
         raw_command_text=raw_command,

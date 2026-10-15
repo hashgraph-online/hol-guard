@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
+from codex_plugin_scanner.guard import native_mcp_tool_policy
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
@@ -16,8 +17,8 @@ from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy import stdio as stdio_module
 from codex_plugin_scanner.guard.proxy.stdio import ProxyIoTimeoutError, _readline_with_timeout
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -1315,6 +1316,7 @@ def test_codex_guard_proxy_never_forwards_unknown_stored_policy_action(monkeypat
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         store,
         "resolve_policy_decision_lookup_with_memory_pattern",

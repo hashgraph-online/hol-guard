@@ -12,6 +12,9 @@ fn fixture() -> (PathBuf, PathBuf) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")
         .join(format!("guard-search-scope-{}-{nonce}", std::process::id()));
+    // A cached target directory can hold a fixture from an earlier run whose
+    // process id this run reuses; start from an empty tree.
+    let _ = std::fs::remove_dir_all(&root);
     let home = root.join("home");
     let project = home.join("project");
     std::fs::create_dir_all(project.join(".git").join("info")).unwrap();
@@ -204,6 +207,7 @@ fn basename_globs_narrow_the_scope_conservatively() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn links_are_not_followed_but_sensitive_link_targets_keep_review() {
     let (home, project) = fixture();

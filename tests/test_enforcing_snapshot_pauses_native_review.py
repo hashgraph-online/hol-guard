@@ -6,7 +6,16 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import hook_native_review_approval
 from tests.test_native_review_fixtures import _edge, _worker
+
+# Only a review the agent's retry can match pauses for approval; without a
+# retry binding the review stays a silent block. These tests cover the pause.
+_RETRY_BINDING = f"native-review-v4:{'ab' * 32}:ask:review:review:r"
+
+
+def _bind_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hook_native_review_approval, "native_review_binding", lambda *_args, **_kwargs: _RETRY_BINDING)
 
 
 def _review(worker: object, tmp_path: Path, harness: str) -> dict[str, object]:
@@ -46,6 +55,7 @@ def test_protected_config_still_pauses_under_enforcing_snapshot(
         encoding="utf-8",
     )
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "enforce"})
+    _bind_retry(monkeypatch)
 
     response = _review(worker, tmp_path, "codex")
 
@@ -76,6 +86,7 @@ def test_watch_config_still_pauses_while_acknowledged_snapshot_enforces(
         encoding="utf-8",
     )
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "enforce"})
+    _bind_retry(monkeypatch)
 
     response = _review(worker, tmp_path, harness)
 

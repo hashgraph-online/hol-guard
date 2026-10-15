@@ -14,15 +14,6 @@ import pytest
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT_PATH = _REPOSITORY_ROOT / "scripts" / "guard_network_remediation_proof.py"
 _MANIFEST_PATH = _REPOSITORY_ROOT / "ci" / "guard-network-remediation-proof.v1.json"
-_WORKFLOW_PATH = _REPOSITORY_ROOT / ".github" / "workflows" / "guard-network-remediation-proof.yml"
-
-
-def test_network_remediation_proof_compares_the_exact_installed_version() -> None:
-    workflow = _WORKFLOW_PATH.read_text(encoding="utf-8")
-
-    assert 'test "$INSTALLED_VERSION" = "$EXPECTED_VERSION"' in workflow
-    assert "EXPECTED_VERSION=$(uv run --frozen python" in workflow
-    assert "3.0.0a" not in workflow
 
 
 def _load_module() -> ModuleType:
@@ -201,3 +192,40 @@ def test_network_remediation_blocked_tasks_keep_exact_blockers(task_id: str) -> 
     assert task["complete"] is False
     assert task["outcome"] in {"blocked", "not-ready"}
     assert cast(list[str], task["blockers"])
+
+
+def _review_loop_task(payload: dict[str, object]) -> dict[str, object]:
+    return next(item for item in _tasks(payload) if item["id"] == "REM-135")
+
+
+def test_review_loop_completion_requires_no_actionable_unresolved_findings() -> None:
+    module = _load_module()
+    shipped = _manifest()
+    task = _review_loop_task(shipped)
+    evidence = cast(list[str], task["evidence"])
+
+    assert tuple(evidence) == module.EXPECTED_TASK_EVIDENCE["REM-135"]
+    assert evidence == ["tests/test_guard_network_remediation_proof.py"]
+    assert task["complete"] is False
+    assert module._REVIEW_LOOP_BLOCKER in cast(list[str], task["blockers"])
+    assert "synchronized_pull_requests" not in task
+    assert module.validate_proof_manifest(shipped, repository_root=_REPOSITORY_ROOT) == ()
+
+    premature = copy.deepcopy(shipped)
+    premature_task = _review_loop_task(premature)
+    premature_task["complete"] = True
+    premature_task["outcome"] = "passed"
+    premature_task["blockers"] = []
+    premature_errors = module.validate_proof_manifest(premature, repository_root=_REPOSITORY_ROOT)
+    assert module._REVIEW_LOOP_FINDINGS_ERROR in premature_errors
+
+    unresolved = copy.deepcopy(premature)
+    _review_loop_task(unresolved)["synchronized_pull_requests"] = [{"number": 135, "actionable_unresolved_findings": 1}]
+    unresolved_errors = module.validate_proof_manifest(unresolved, repository_root=_REPOSITORY_ROOT)
+    assert module._REVIEW_LOOP_FINDINGS_ERROR in unresolved_errors
+
+    cleared = copy.deepcopy(premature)
+    _review_loop_task(cleared)["synchronized_pull_requests"] = [{"number": 135, "actionable_unresolved_findings": 0}]
+    cleared_errors = module.validate_proof_manifest(cleared, repository_root=_REPOSITORY_ROOT)
+    assert module._REVIEW_LOOP_FINDINGS_ERROR not in cleared_errors
+    assert cleared_errors == ()

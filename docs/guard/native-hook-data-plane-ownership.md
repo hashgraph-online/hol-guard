@@ -3,8 +3,8 @@
 Status: executable migration contract for `main`.
 
 The machine-readable source of truth is
-`docs/guard/contracts/hook-data-plane-ownership.v2.json`. The always-selected
-`Rust authority ownership` workflow rejects protected hook/data-plane changes
+`docs/guard/contracts/hook-data-plane-ownership.v2.json`. The
+nightly native workflow (`nightly-native.yml`) rejects protected hook/data-plane changes
 that do not match a declared ownership node.
 
 ## Pinned baselines

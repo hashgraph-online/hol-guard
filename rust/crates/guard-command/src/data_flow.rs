@@ -48,8 +48,8 @@ pub fn extract_pipes(command: &str) -> Vec<ShellPipe> {
             continue;
         }
         for pair in parts.windows(2) {
-            let left = pair[0].trim();
-            let right = pair[1].trim();
+            let left = pair[0].trim_matches(crate::command_option_parsing::python_is_whitespace);
+            let right = pair[1].trim_matches(crate::command_option_parsing::python_is_whitespace);
             if !left.is_empty() && !right.is_empty() {
                 pipes.push(ShellPipe {
                     left: left.to_owned(),
@@ -80,7 +80,7 @@ fn dedupe(values: Vec<String>) -> Vec<String> {
 
 /// `_strip_shell_quotes` (:244-248).
 fn strip_shell_quotes(value: &str) -> String {
-    let stripped = value.trim();
+    let stripped = value.trim_matches(crate::command_option_parsing::python_is_whitespace);
     let chars: Vec<char> = stripped.chars().collect();
     if chars.len() >= 2
         && chars[0] == chars[chars.len() - 1]
@@ -138,7 +138,7 @@ fn is_background_separator(chars: &[char], index: usize) -> bool {
 }
 
 /// `_split_top_level_pipes` (:286-304).
-fn split_top_level_pipes(command: &str) -> Vec<String> {
+pub(crate) fn split_top_level_pipes(command: &str) -> Vec<String> {
     let chars: Vec<char> = command.chars().collect();
     let n = chars.len();
     let mut parts: Vec<String> = Vec::new();
@@ -172,7 +172,7 @@ fn split_top_level_pipes(command: &str) -> Vec<String> {
 /// `_append_segment` (:307-310).
 fn append_segment(parts: &mut Vec<String>, slice: &[char]) {
     let value: String = slice.iter().collect();
-    let stripped = value.trim();
+    let stripped = value.trim_matches(crate::command_option_parsing::python_is_whitespace);
     if !stripped.is_empty() {
         parts.push(stripped.to_owned());
     }

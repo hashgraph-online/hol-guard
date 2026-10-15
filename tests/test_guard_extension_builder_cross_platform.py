@@ -8,7 +8,6 @@ from codex_plugin_scanner.guard.extension_builder.repository_edits import (
     BINDINGS_DIR,
     PYPROJECT_PATH,
     STAGING_PATH,
-    TRUST_PATH,
 )
 from codex_plugin_scanner.guard.extension_builder.repository_write import apply_kit
 from tests.extension_builder_support import make_kit, repository_fixture, use_built_native_source_compiler
@@ -26,7 +25,7 @@ def test_crlf_checkout_preserves_shared_newlines_and_replays(tmp_path: Path, kin
     binding_paths = sorted(
         path.relative_to(repository).as_posix() for path in (repository / BINDINGS_DIR).glob("*.v1.json")
     )
-    shared = (PYPROJECT_PATH, TRUST_PATH, STAGING_PATH, *binding_paths)
+    shared = (PYPROJECT_PATH, STAGING_PATH, *binding_paths)
     for name in shared:
         path = repository / name
         path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))

@@ -83,10 +83,7 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
         return False
     if _isolated_bounded_hook_is_current(command, context=context):
         return True
-    bounded_argv = _split_hook_command(command, posix=True)
-    if len(bounded_argv) not in {3, 4} or bounded_argv[1] != "-I":
-        bounded_argv = _split_hook_command(command, posix=False)
-    if len(bounded_argv) in {3, 4} and bounded_argv[1] == "-I":
+    if _isolated_client_argv(command) is not None:
         return False
     marker = f'"timeout_seconds":{GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}'
     if marker not in command.replace(" ", ""):
@@ -152,10 +149,8 @@ def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) 
         return False
     if not is_grok_hook_command(command, context=context):
         return False
-    argv = _split_hook_command(command, posix=True)
-    if len(argv) not in {3, 4} or argv[1] != "-I":
-        argv = _split_hook_command(command, posix=False)
-    if len(argv) not in {3, 4} or argv[1] != "-I":
+    argv = _isolated_client_argv(command)
+    if argv is None:
         return False
     try:
         if Path(argv[0]).resolve() != Path(interpreter).resolve():
@@ -170,6 +165,17 @@ def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) 
         harness="grok",
         timeout_seconds=GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
     )
+
+
+def _isolated_client_argv(command: str) -> list[str] | None:
+    """The generated stdlib client argv, also inside a native runtime prefix."""
+    from ..adapters.bounded_cli_hook_native import bounded_python_argv
+
+    for posix in (True, False):
+        argv = [str(argument) for argument in bounded_python_argv(_split_hook_command(command, posix=posix))]
+        if len(argv) in {3, 4} and argv[1] == "-I":
+            return argv
+    return None
 
 
 def _hook_config_from_command(command: str) -> dict[str, object] | None:

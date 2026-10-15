@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_help import (
     parse_cli_help_text,
     run_cli_help,
 )
-from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
+from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
 
 WRANGLER_HELP = """
 Usage: wrangler [OPTIONS] COMMAND [ARGS]...
@@ -50,6 +50,89 @@ def test_parse_wrangler_style_help() -> None:
     names = [command.name for command in commands]
     assert names == ["docs", "init", "dev", "deploy", "pages"]
     assert "help" not in names
+
+
+YARGS_WRANGLER_HELP = """
+wrangler
+
+COMMANDS
+  wrangler docs [search..]        Open Wrangler's command documentation in your browser
+  wrangler init [name]            Create a new project
+
+ACCOUNT
+  wrangler login                  Login to Cloudflare
+  wrangler whoami                 Retrieve your user information
+
+COMPUTE & AI
+  wrangler d1                     Manage Workers D1 databases
+
+GLOBAL FLAGS
+  -c, --config  Path to Wrangler configuration file  [string]
+  -h, --help    Show help  [boolean]
+
+EXAMPLES
+  wrangler tail my-worker         Stream logs
+"""
+
+YARGS_WRANGLER_D1_HELP = """
+wrangler d1
+
+COMMANDS
+  wrangler d1 list                List D1 databases
+  wrangler d1 execute <database>  Execute a command or SQL file
+"""
+
+
+def test_parse_yargs_rows_strip_program_name() -> None:
+    commands = parse_cli_help_text(YARGS_WRANGLER_HELP, invocation=("wrangler",))
+    assert [command.command_id for command in commands] == ["docs", "init", "login", "whoami", "d1"]
+    nested = parse_cli_help_text(YARGS_WRANGLER_D1_HELP, invocation=("wrangler", "d1"))
+    assert [command.command_id for command in nested] == ["list", "execute"]
+
+
+KUBECTL_STYLE_HELP = """
+kubectl controls the Kubernetes cluster manager.
+
+Commands:
+  get           Display one or many resources
+
+Examples:
+  # List all pods
+  kubectl get pods -o wide
+"""
+
+
+def test_colon_terminated_yargs_group_heading() -> None:
+    text = "ACCOUNT:\n  wrangler login   Login\n  wrangler whoami  Show user\n"
+    commands = parse_cli_help_text(text, invocation=("wrangler",))
+    assert [command.command_id for command in commands] == ["login", "whoami"]
+
+
+def test_program_prefixed_prose_and_examples_are_not_commands() -> None:
+    commands = parse_cli_help_text(KUBECTL_STYLE_HELP, invocation=("kubectl",))
+    assert [command.command_id for command in commands] == ["get"]
+    nested = parse_cli_help_text(KUBECTL_STYLE_HELP, invocation=("kubectl", "get"))
+    assert [command.command_id for command in nested] == ["get"]
+
+
+def test_discover_yargs_help_has_no_program_named_commands() -> None:
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.wrangler-00000000",
+        name="wrangler",
+        kind="executable",
+        identity_hash="0" * 64,
+        example_label="wrangler",
+    )
+
+    def _probe(argv):
+        return YARGS_WRANGLER_D1_HELP if "d1" in argv else YARGS_WRANGLER_HELP
+
+    commands, status = discover_local_cli_commands(identity, ("wrangler", "--help"), runner=_probe)
+    ids = [command.command_id for command in commands]
+    assert status == "ok"
+    assert "wrangler" not in ids
+    assert not any(command_id.startswith("wrangler.") for command_id in ids)
+    assert {"docs", "whoami", "d1.list", "d1.execute"} <= set(ids)
 
 
 def test_parse_argparse_help() -> None:

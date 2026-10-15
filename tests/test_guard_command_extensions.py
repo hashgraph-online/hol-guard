@@ -85,8 +85,10 @@ def test_command_inspection_maps_existing_sensitive_actions_to_extensions(
 
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] == action_class
-    assert payload["extensions"][0]["extension_id"] == extension_id
-    assert payload["rules"][0]["rule_id"].startswith(f"{extension_id}.")
+    # Read-only identification rules from sibling extensions may also match;
+    # the classification above proves which extension governs the decision.
+    assert extension_id in {extension["extension_id"] for extension in payload["extensions"]}
+    assert any(rule["rule_id"].startswith(f"{extension_id}.") for rule in payload["rules"])
     assert payload["command_model"]["transport"] == "shell_string"
     assert payload["policy_evaluation"] == "not_run"
     assert payload["side_effects"] == "none"
@@ -809,7 +811,9 @@ def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: 
     }
 
 
-def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Path) -> None:
+def test_explicit_permission_allow_cannot_override_explicit_policy(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     command = "gh pr merge 5115 --repo example/project --squash --auto"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
     layer = _github_permission_layer("command.github.permission.merge-remote", ControlState.ENABLED)
@@ -836,13 +840,19 @@ def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Pat
 
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}), artifact, "codex"
+            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "block"
     )
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}), artifact, "codex"
+            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "allow"
     )
@@ -914,11 +924,14 @@ def test_discovery_artifact_cannot_authorize_unbound_permission_layers(tmp_path:
             ("command.github.permission.merge-remote",),
             "require-reapproval",
         ),
+        # An explicit force-remote Allow is the user's decision for this exact
+        # extension permission, so it takes precedence over the native block.
         (
             "gh repo sync example/project --force",
             ("command.github.permission.force-remote",),
-            "block",
+            "allow",
         ),
+        ("gh repo sync example/project --force", (), "block"),
         (
             "sh -c 'gh pr merge 5115 --repo example/project --squash --auto'",
             ("command.github.permission.merge-remote",),
@@ -1053,17 +1066,23 @@ def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_pa
 
 
 def test_inspection_parses_each_command_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.runtime import command_inspection as inspection_module
+    import sys
 
-    real_parser = inspection_module.parse_shell_command
+    from codex_plugin_scanner.guard.runtime import command_model
+
     calls = 0
+    real_model_parser = command_model.parse_shell_command
 
-    def counting_parser(*args: object, **kwargs: object):
+    def counting_model_parser(*args: object, **kwargs: object):
         nonlocal calls
         calls += 1
-        return real_parser(*args, **kwargs)
+        return real_model_parser(*args, **kwargs)
 
-    monkeypatch.setattr(inspection_module, "parse_shell_command", counting_parser)
+    for module in tuple(sys.modules.values()):
+        if module is not None:
+            for name, binding in tuple(vars(module).items()):
+                if binding is real_model_parser:
+                    monkeypatch.setattr(module, name, counting_model_parser)
 
     payload = inspect_command("git push origin main --force", cwd=tmp_path, home_dir=tmp_path)
 

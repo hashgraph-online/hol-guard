@@ -11,24 +11,23 @@ from typing import TYPE_CHECKING, cast
 from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
+from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
+from .native_policy_effective import compose_effective_native_policies
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
     NATIVE_RUNTIME_STATE_DIRECTORY,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_policy import (
-    _merge_effective_native_policies,
-    _stricter_action,
-    effective_native_policy_v3,
-)
+from .native_policy_snapshot_direct_lane import NativePolicySnapshotDirectLaneAck
+from .native_policy_snapshot_policy import _stricter_action
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
     from .store import GuardStore
 
 
-class NativePolicySnapshotPublisherInputs:
+class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     """Mixin containing filesystem observation outside synchronous hooks."""
 
     store: GuardStore  # pyright: ignore[reportUninitializedInstanceVariable]
@@ -36,14 +35,23 @@ class NativePolicySnapshotPublisherInputs:
     _observe_extension_refresh: bool = False
     guard_home: Path  # pyright: ignore[reportUninitializedInstanceVariable]
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
-    _acked: bool  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _deferred_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    # The blocked-request mode every config of the last compile agreed on.
+    _compiled_blocked_request_mode: str | None = None
+    # The managed-policy view every config of the last compile agreed on.
+    _compiled_structured_output_view: dict[str, object] | None = None
+    # The MCP relay harness views every config of the last compile agreed on.
+    _compiled_mcp_relay_harnesses: dict[str, object] | None = None
 
-    def _current_input_fingerprint(
+    def _current_policy_input_stats(
         self,
-    ) -> tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]]:
+    ) -> tuple[tuple[str, tuple[int, int, int, int] | None], ...]:
+        """Stat policy inputs without sampling the resident generation fence."""
+
         values: list[tuple[str, tuple[int, int, int, int] | None]] = []
         # The database and both journal modes are watched for cross-process
         # changes. WAL-only writes are included because they can contain an
@@ -78,7 +86,12 @@ class NativePolicySnapshotPublisherInputs:
                         (metadata.st_mtime_ns, metadata.st_size, metadata.st_ino, metadata.st_ctime_ns),
                     )
                 )
-        return tuple(values), self._current_resident_fingerprint()
+        return tuple(values)
+
+    def _current_input_fingerprint(
+        self,
+    ) -> tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]]:
+        return self._current_policy_input_stats(), self._current_resident_fingerprint()
 
     def _current_resident_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
         """Observe resident generation metadata without policy/config reads."""
@@ -197,27 +210,48 @@ class NativePolicySnapshotPublisherInputs:
         # resident is definitively stale.
         return not generations or max(generations) == resident_generation
 
+    @staticmethod
+    def _overlay_paths(workspaces: tuple[Path, ...]) -> tuple[Path, ...]:
+        return tuple(workspace / name for workspace in workspaces for name in WORKSPACE_CONFIG_FILENAMES)
+
     def _workspace_policy_paths(self) -> tuple[Path, ...]:
         with self._condition:
-            workspaces = tuple(self._workspace_paths)
-        paths: list[Path] = []
-        for workspace in workspaces:
-            paths.extend(workspace / filename for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
-        return tuple(paths)
+            return self._overlay_paths(tuple(self._workspace_paths))
 
-    def _compiled_effective_policy(self) -> dict[str, object]:
-        """Build the native snapshot input off the synchronous hook path."""
+    def _pending_workspace_policy_paths(self) -> set[str]:
+        with self._condition:
+            return {str(path) for path in self._overlay_paths(tuple(self._pending_workspace_paths))}
+
+    def _compiled_effective_policy(
+        self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None
+    ) -> dict[str, object]:
+        """Build the native snapshot input off the synchronous hook path.
+
+        ``settled_only`` omits workspaces still awaiting their first ACK so
+        observation compares like with the published snapshot. ``workspaces``
+        pins publication to the set its ACK will release.
+        """
 
         from .config import load_guard_config
+        from .native_policy_snapshot_direct_lane_mcp_relay import uniform_harness_views
+        from .native_policy_snapshot_direct_lane_review import uniform_blocked_request_mode
+        from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
         from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
-            workspaces = tuple(sorted(self._workspace_paths, key=str))
+            selected = self._workspace_paths if workspaces is None else self._workspace_paths & workspaces
+            if settled_only:
+                selected = selected - self._pending_workspace_paths
+            selected_workspaces = tuple(sorted(selected, key=str))
+        # A compile that fails before the view is read binds none.
+        self._compiled_structured_output_view = None
+        self._compiled_mcp_relay_harnesses = None
         configs = [load_guard_config(self.guard_home)]
-        configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
-        policy = _merge_effective_native_policies(
-            tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
-        )
+        configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
+        policy = compose_effective_native_policies(tuple(configs))
+        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
+        self._compiled_structured_output_view = uniform_structured_output_view(configs)
+        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
         except sqlite3.Error as error:
@@ -299,6 +333,12 @@ class NativePolicySnapshotPublisherInputs:
 
         force_republish = False
         if changed_paths:
+            # A pending workspace already has a publish queued that reads its
+            # overlay. Treating its files as an effective-input change would
+            # withdraw the ACK home-wide and bump the epoch, which is how a
+            # stream of new workspaces starves readiness for every hook.
+            changed_paths = changed_paths - self._pending_workspace_policy_paths()
+        if changed_paths:
             database_paths = {
                 str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
             }
@@ -319,7 +359,7 @@ class NativePolicySnapshotPublisherInputs:
                     self._condition.notify_all()
         source = None
         try:
-            effective_policy = self._compiled_effective_policy()
+            effective_policy = self._compiled_effective_policy(settled_only=True)
             # ``_compiled_effective_policy`` carries the raw mode beside the
             # bounded policy so snapshot generation can derive enforce versus
             # observe. ``config_digest`` deliberately covers only the
@@ -328,13 +368,19 @@ class NativePolicySnapshotPublisherInputs:
             # and continuously revoke the ACKed snapshot.
             policy_for_digest = dict(effective_policy)
             policy_for_digest.pop("mode", None)
+            # Per-harness postures ride the ACK side channel, not the digest.
+            policy_for_digest.pop("harness_postures", None)
             source = self._compiled_business_source()
             current_fingerprint = (
                 cast(str, _digest_v3(policy_for_digest)),
                 cast(str, effective_policy["mode"]),
                 self._source_control_fingerprint(self._compiled_command_extensions(), source),
             )
-        except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
+        except NativePolicySnapshotError:
+            # A missing composer cannot prove the database write left the
+            # effective policy unchanged. Record unavailable and withdraw.
+            current_fingerprint = ("unavailable", "", "")
+        except (OSError, TypeError, ValueError, RuntimeError):
             current_fingerprint = ("unavailable", "", "")
         # Observation is independent of acknowledgment: unchanged inputs must
         # not reset a failed publication's retry backoff on every database write.

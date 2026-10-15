@@ -364,6 +364,18 @@ def _run_guard_doctor_command(
     if getattr(args, "repair", False):
         command_queue_payload["repair"] = repair_command_queue_state(store)
     payload["command_queue"] = command_queue_payload
+    if getattr(args, "repair", False):
+        # `doctor --repair` and `hol-guard repair` share one engine. Shims and
+        # the queue were repaired above with doctor's own payload shape.
+        from ..repair_engine import run_repair
+
+        payload["guard_repair"] = run_repair(
+            guard_home=guard_home,
+            context=context,
+            store=store,
+            skip_steps=frozenset({"package_shims", "command_queue"}),
+            harness=args.harness or None,
+        )
     with nullcontext() if args.harness else without_command_probes():
         availability = doctor_native_availability()
     payload["native_runtime"] = {
@@ -375,9 +387,11 @@ def _run_guard_doctor_command(
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     with nullcontext() if args.harness else without_command_probes():
         payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    payload.update(harness_posture_summary(config))
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

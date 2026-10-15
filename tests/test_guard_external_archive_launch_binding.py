@@ -22,14 +22,13 @@ from codex_plugin_scanner.guard.local_supply_chain import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.proxy.runtime_mcp import _bound_external_archive_mcp_request
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
-from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _TARBALL_SCAN_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_archive_fakes import install_download, install_inspection
+
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
 
 def _hook_inputs(
@@ -95,7 +94,6 @@ def _package_artifact(workspace: Path, command: str) -> GuardArtifact:
 def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    native_hook_force: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -115,27 +113,9 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
         package_info.size = len(package_json)
         archive.addfile(package_info, io.BytesIO(package_json))
     archive_payload = archive_buffer.getvalue()
-    archive_path = tmp_path / "approved-demo.tgz"
-    archive_path.write_bytes(archive_payload)
-    archive_path.chmod(0o400)
     download_calls: list[str] = []
-
-    def downloaded_archive(
-        source_url: str,
-        *,
-        timeout_seconds: float = _TARBALL_SCAN_TIMEOUT_SECONDS,
-    ) -> RestrictedArchiveDownload:
-        del timeout_seconds
-        download_calls.append(source_url)
-        return RestrictedArchiveDownload(
-            path=archive_path,
-            sha256=hashlib.sha256(archive_payload).hexdigest(),
-            size=len(archive_payload),
-            source_url=source_url,
-            final_url=source_url,
-        )
-
-    monkeypatch.setattr(package_services, "_download_external_tarball", downloaded_archive)
+    blobs = install_download(monkeypatch, tmp_path, payload=archive_payload, calls=download_calls)
+    install_inspection(monkeypatch)
     baseline = build_package_protect_payload(
         command=command,
         store=store,
@@ -194,8 +174,9 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     assert approved_payload["executed"] is True
     assert download_calls == ["https://packages.example.com/demo.tgz"]
     assert len(launches) == 1
-    assert launches[0][-3:] == [str(fake_npm), "install", f"demo@{archive_path}"]
-    assert archive_path.exists() is False
+    assert len(blobs) == 1
+    assert launches[0][-3:] == [str(fake_npm), "install", f"demo@{blobs[0]}"]
+    assert blobs[0].exists() is False
 
 
 def test_package_firewall_rejects_archive_blob_changed_after_inspection(tmp_path: Path) -> None:
@@ -245,7 +226,9 @@ def test_mcp_package_forward_replaces_external_url_with_verified_blob(tmp_path: 
     }
     message = {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": params}
 
-    bound = _bound_external_archive_mcp_request(message, params, evaluation=evaluation)
+    bound = _bound_external_archive_mcp_request(
+        message, params, evaluation=evaluation, guard_home=tmp_path / "guard-home"
+    )
 
     assert bound is not None
     bound_message, bound_params = bound
@@ -278,7 +261,9 @@ def test_mcp_package_forward_shell_quotes_digest_bound_path(tmp_path: Path) -> N
     params = {"name": "shell", "arguments": {"command": f"npm install demo@{source_url}"}}
     message = {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": params}
 
-    bound = _bound_external_archive_mcp_request(message, params, evaluation=evaluation)
+    bound = _bound_external_archive_mcp_request(
+        message, params, evaluation=evaluation, guard_home=tmp_path / "guard-home"
+    )
 
     assert bound is not None
     _bound_message, bound_params = bound

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.musiccontext",
+  "version": "1.0.0",
+  "name": "MusicContext",
+  "description": "Music direction for AI agents: analyzes a video's cuts, narration and story, plans a timed soundtrack, generates music offline and renders the mix with FFmpeg. Local-first and sandboxed to the working directory. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.aagam17",
+    "displayName": "Aagam Shah",
+    "url": "https://github.com/AAGAM17/MusicContext"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/AAGAM17/MusicContext",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "musiccontext"
+  },
+  "riskClasses": ["local-media-read", "local-file-write"],
+  "tools": [
+    { "name": "musiccontext_inspect", "state": "inherit" },
+    { "name": "musiccontext_analyze", "state": "inherit" },
+    { "name": "musiccontext_plan", "state": "review" },
+    { "name": "musiccontext_recommend", "state": "review" },
+    { "name": "musiccontext_search", "state": "inherit" },
+    { "name": "musiccontext_library_search", "state": "inherit" },
+    { "name": "musiccontext_providers", "state": "inherit" },
+    { "name": "musiccontext_get_artifact", "state": "inherit" },
+    { "name": "musiccontext_generate", "state": "review" },
+    { "name": "musiccontext_sync", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/AAGAM17/MusicContext",
+    "https://github.com/AAGAM17/MusicContext/blob/main/docs/agents/mcp.md",
+    "https://github.com/AAGAM17/MusicContext/blob/main/SECURITY.md"
+  ],
+  "saferAlternatives": [
+    "Start the server from the intended project directory and pass musiccontext mcp --roots /path/to/project (or set MUSICCONTEXT_ROOTS); --roots adds allowed directories and the working directory stays reachable.",
+    "Set MUSICCONTEXT_LOCAL_ONLY=1 to refuse any provider that would send data off the machine; remote URL input is already off by default.",
+    "Keep musiccontext_generate and musiccontext_sync on review: they write new audio and video files, and sync can replace an existing output when force is true."
+  ]
+}

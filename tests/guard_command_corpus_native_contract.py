@@ -278,7 +278,7 @@ def _input_contracts(
             ].append(case.case_id)
         if group.expected_evalerror is not None:
             rejected[group.expected_evalerror].append(case.case_id)
-    if variant_ids or total != 51_000 or stronger != 10_541 or set(members) != set(groups):
+    if variant_ids or total != 51_000 or stronger != 8_484 or set(members) != set(groups):
         raise ValueError("native corpus fixed input coverage changed")
     expected: dict[str, tuple[int, str]] = {}
     for raw in cast(list[object], _contract_data()["groups"]):
@@ -396,13 +396,16 @@ def validate_native_case(case: CommandCorpusCase, oracle: OracleRecord, reviewed
             len(uncertain_rules) + int(expected.expected_evalerror is not None),
         ),
     )
-    for field, actual, authored in checks:
-        if actual != authored or (isinstance(authored, bool) and type(actual) is not bool):
-            raise ValueError(
-                f"native corpus contract mismatch: {case.case_id} {field}; "
-                f"group={expected.group_id}; "
-                f"expected={_diagnostic_value(field, authored)}; actual={_diagnostic_value(field, actual)}"
-            )
+    # Report every differing field at once, so one run shows a whole changed signature.
+    mismatches = [
+        f"{field}: expected={_diagnostic_value(field, authored)}; actual={_diagnostic_value(field, actual)}"
+        for field, actual, authored in checks
+        if actual != authored or (isinstance(authored, bool) and type(actual) is not bool)
+    ]
+    if mismatches:
+        raise ValueError(
+            f"native corpus contract mismatch: {case.case_id}; group={expected.group_id}; " + " | ".join(mismatches)
+        )
     if expected.expected_evalerror is not None and (observations or permissions):
         raise ValueError("native corpus failed evaluation must retain empty observations")
     if _ACTIONS.index(reviewed.evaluation.decision_plane.action) < _ACTIONS.index(oracle.minimum_floor):

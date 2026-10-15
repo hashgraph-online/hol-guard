@@ -86,3 +86,20 @@ def test_complete_release_absent_from_pypi_can_resume_deferred_publication() -> 
         release_missing=True,
         deferred_pypi=True,
     )
+
+
+def test_complete_release_without_recorded_publication_can_finish() -> None:
+    assert stable_dispatch_is_allowed(
+        requested="3.7.2",
+        expected_next="3.7.3",
+        latest_pypi="3.7.2",
+        asset_names=COMPLETE,
+        publication_unrecorded=True,
+    )
+    assert not stable_dispatch_is_allowed(
+        requested="3.7.1",
+        expected_next="3.7.3",
+        latest_pypi="3.7.2",
+        asset_names=COMPLETE,
+        publication_unrecorded=True,
+    )

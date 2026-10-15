@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as package_eval_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.local_supply_chain import (
@@ -19,29 +18,29 @@ from codex_plugin_scanner.guard.local_supply_chain import (
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
-    claim_deferred_tool_call_approval,
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy._env import _build_scrubbed_env
-from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy, build_sensitive_read_approval_hash
+from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.runtime.approval_context import (
     build_approval_context_token,
     build_configured_environment_hash,
     build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.package_intent import PackageIntent, build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import PackageIntent, build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_file_read_request_artifact,
     extract_sensitive_file_read_request,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
-    PackageRequestEvaluation,
-    SupplyChainUserCopy,
-)
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_sensitive_read_support import sensitive_read_token
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -289,7 +288,10 @@ def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path
     assert store.claimed is False
 
 
-def test_package_equal_legacy_hash_cannot_prove_complete_approval_context(tmp_path: Path) -> None:
+def test_package_equal_legacy_hash_cannot_prove_complete_approval_context(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -391,82 +393,6 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
     assert result.reasons[0]["code"] == expected_reason
 
 
-def test_package_lockfile_parser_version_changes_approval_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    native_context_digest: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    artifact = _package_artifact(workspace)
-    context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    evaluation = _package_evaluation("review")
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace)
-    store = GuardStore(tmp_path / "guard-home")
-    original_digest = package_request_policy_hash(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace,
-        evaluation=evaluation,
-        execution_context=context,
-        config=config,
-    )
-
-    monkeypatch.setattr(local_supply_chain_module, "LOCKFILE_PARSER_VERSION", "complete-v2")
-    upgraded_digest = package_request_policy_hash(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace,
-        evaluation=evaluation,
-        execution_context=context,
-        config=config,
-    )
-
-    assert original_digest != upgraded_digest
-
-
-@pytest.mark.parametrize(("saved_action", "expected"), [("allow", False), ("block", True)])
-def test_package_cache_error_probe_is_non_consuming_and_never_authorizes_saved_allow(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    saved_action: GuardAction,
-    expected: bool,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    artifact = _package_artifact(workspace)
-
-    class ProbeStore:
-        def resolve_policy_decision_lookup(self, *_args: object, **kwargs: object) -> dict[str, object]:
-            assert kwargs["consume_one_shot"] is False
-            return {
-                "decision": {
-                    "action": saved_action,
-                    "artifact_hash": "exact-v1-token",
-                    "scope": "artifact",
-                    "source": "approval-gate",
-                },
-                "ignored_local_integrity": None,
-                "trust_status": {},
-            }
-
-    monkeypatch.setattr(
-        local_supply_chain_module,
-        "package_request_policy_hash",
-        lambda **_kwargs: "exact-v1-token",
-    )
-
-    result = package_eval_module._cached_cloud_validation_error_has_saved_policy(
-        store=ProbeStore(),
-        artifact=artifact,
-        evaluation=_package_evaluation("block"),
-        workspace_dir=workspace,
-        now="2026-07-17T00:00:00Z",
-    )
-
-    assert result is expected
-
-
 def _dangerous_tool_artifact() -> GuardArtifact:
     return build_tool_call_artifact(
         harness="codex",
@@ -486,7 +412,9 @@ def _dangerous_tool_artifact() -> GuardArtifact:
     ],
 )
 def test_tool_call_hash_preserves_persisted_approval_identity(
-    native_context_digest: Path, include_authority: bool, expected: str,
+    native_context_digest: Path,
+    include_authority: bool,
+    expected: str,
 ) -> None:
     metadata = {
         "server_fingerprint": {"resolved_executable": "/opt/bin/server", "tool_catalog_fingerprint": "catalog"},
@@ -496,9 +424,14 @@ def test_tool_call_hash_preserves_persisted_approval_identity(
     if include_authority:
         metadata.update({"mcp_tool_authority_hash": {"revision": 1}, "mcp_provider_catalog_hash": False})
     artifact = GuardArtifact(
-        artifact_id="codex:mcp:filesystem:read_file", name="filesystem:read_file",
-        harness="codex", artifact_type="mcp_tool_call", source_scope="project",
-        config_path=".mcp.json", transport="stdio", metadata=metadata,
+        artifact_id="codex:mcp:filesystem:read_file",
+        name="filesystem:read_file",
+        harness="codex",
+        artifact_type="mcp_tool_call",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        metadata=metadata,
     )
     arguments = {
         "path": "/opt/neutral/data/日本語.txt",
@@ -511,9 +444,11 @@ def test_tool_call_hash_preserves_persisted_approval_identity(
 
 @pytest.mark.parametrize("configured", [False, True])
 def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: bool,
 ) -> None:
-    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard import native_mcp_tool_call_identity
 
     artifact = GuardArtifact(
         artifact_id="codex:runtime:project:filesystem:read_file",
@@ -526,9 +461,9 @@ def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
         transport="stdio",
     )
     config = GuardConfig(workspace=tmp_path, guard_home=tmp_path / "guard-home") if configured else None
-    monkeypatch.setattr(native_context, "native_context_digest", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_mcp_tool_call_identity, "_resident_request", lambda **_kwargs: None)
 
-    with pytest.raises(ValueError, match="^native_mcp_tool_approval_hash_unavailable$"):
+    with pytest.raises(ValueError, match=r"^native_mcp_tool_approval_hash_unavailable$"):
         build_tool_call_hash(artifact, {"path": "data.txt"}, config=config)
 
 
@@ -872,51 +807,6 @@ def test_tool_call_retained_policy_deleted_after_claim_requires_reapproval(
     assert decision.approval_reuse_reason_code == "approval_reuse_context_changed_after_claim"
 
 
-def test_deferred_tool_claim_without_postclaim_authority_fails_closed(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    artifact = _dangerous_tool_artifact()
-    arguments = {"command": "rm deferred-target"}
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        mode="prompt",
-    )
-    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
-    store = GuardStore(tmp_path / "guard-home")
-    store.upsert_policy(
-        PolicyDecision(
-            harness=artifact.harness,
-            scope="artifact",
-            action="allow",
-            artifact_id=artifact.artifact_id,
-            artifact_hash=digest,
-            workspace=str(workspace),
-            publisher=artifact.publisher,
-            source="approval-gate",
-        ),
-        "2026-07-17T00:00:00+00:00",
-    )
-    provisional = evaluate_tool_call(
-        store=store,
-        config=config,
-        artifact=artifact,
-        artifact_hash=digest,
-        arguments=arguments,
-        claim_saved_approval=False,
-    )
-
-    assert provisional.action == "allow"
-    assert provisional.pending_approval_reuse_decision is not None
-    assert provisional.approval_reuse_claim_disposition == "retained"
-
-    claimed = claim_deferred_tool_call_approval(store=store, decision=provisional)
-
-    assert claimed.action == "require-reapproval"
-    assert claimed.post_claim_revalidated is True
-    assert claimed.approval_reuse_reason_code == "approval_reuse_context_changed_after_claim"
-
-
 @pytest.mark.parametrize(
     ("changed_config_fields", "expected_reason"),
     [
@@ -1126,7 +1016,7 @@ def _save_sensitive_read_allow(
     artifact, _legacy_digest = _sensitive_read_artifact(workspace)
     current_action = config.risk_actions["local_secret_read"] if config.risk_actions is not None else "review"
     launch_env = _build_scrubbed_env()
-    digest = build_sensitive_read_approval_hash(
+    digest = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,

@@ -1,0 +1,1303 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "rungs gate execution command",
+            "rungs module install command",
+            "rungs module upgrade command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews rungs runs that execute registered gates or write module files, gates and records into a repository, and keeps doctor and the documented previews unreviewed.",
+          "ecosystem_ids": [
+            "rungs"
+          ],
+          "executables": [
+            "rungs",
+            "rungs.cmd",
+            "rungs.exe"
+          ],
+          "extension_id": "command.rungs",
+          "homepage": "https://docs.rungscli.com/",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "rungs command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "rungs gate execution command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml \u2014 commands the repository owns, not rungs \u2014 and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
+              "example_command": "rungs check",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "rungs gate execution",
+              "permission_id": "command.rungs.permission.check",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Read .ai/gates.toml first; each `kind = \"command\"` gate is a repository-owned command that will run.",
+                "Use `rungs doctor --explain` to run the in-process detectors without executing any command gate."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "rungs module install command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `rungs add`, which writes module files, the gate registry, the install record and the rendered harness instruction files into the target repository. `--dry-run` reports the same plan and writes nothing, and is the only preview form.",
+              "example_command": "rungs add backlog",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "rungs module install",
+              "permission_id": "command.rungs.permission.add",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `rungs add <module> --dry-run` first: it prints every file, gate and record it would write.",
+                "Run `rungs doctor` to see what the repository already has before installing over it."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "rungs module upgrade command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `rungs upgrade --apply`, which rewrites stale and missing module files, replaces gate registry blocks and updates the install record. Without --apply, upgrade only prints the plan; it never reads --dry-run, so `--apply --dry-run` still writes.",
+              "example_command": "rungs upgrade --apply",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "rungs module upgrade",
+              "permission_id": "command.rungs.permission.upgrade",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `rungs upgrade` without --apply: it prints the stale, missing and diverged files and writes nothing."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.rungs",
+            "url": "https://github.com/ThroughTheWind/rungs"
+          },
+          "reference_urls": [
+            "https://docs.rungscli.com/",
+            "https://github.com/ThroughTheWind/rungs/blob/v0.4.0/src/cli.ts"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell",
+            "execution"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "rungs gate execution command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml \u2014 commands the repository owns, not rungs \u2014 and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "rungs",
+                        "rungs.cmd",
+                        "rungs.exe"
+                      ],
+                      "forbidden_flags": [
+                        "--apply",
+                        "--confirm-conflict",
+                        "--confirm-paradigm",
+                        "--confirm-threshold",
+                        "--copilot",
+                        "--dry-run",
+                        "--explain",
+                        "--fast",
+                        "--full",
+                        "--help",
+                        "--into",
+                        "--params",
+                        "--set",
+                        "--version",
+                        "-h"
+                      ],
+                      "options_with_values": [
+                        "--set"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "check"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.rungs.permission.check",
+              "risk_classes": [
+                "execution",
+                "destructive_shell"
+              ],
+              "rule_id": "command.rungs.check",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Read .ai/gates.toml first; each `kind = \"command\"` gate is a repository-owned command that will run.",
+                "Use `rungs doctor --explain` to run the in-process detectors without executing any command gate."
+              ],
+              "severity": "high",
+              "title": "rungs gate execution"
+            },
+            {
+              "action_classes": [
+                "rungs module install command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `rungs add`, which writes module files, the gate registry, the install record and the rendered harness instruction files into the target repository. `--dry-run` reports the same plan and writes nothing, and is the only preview form.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "rungs",
+                        "rungs.cmd",
+                        "rungs.exe"
+                      ],
+                      "forbidden_flags": [
+                        "--apply",
+                        "--confirm-conflict",
+                        "--confirm-paradigm",
+                        "--confirm-threshold",
+                        "--copilot",
+                        "--dry-run",
+                        "--explain",
+                        "--fast",
+                        "--full",
+                        "--help",
+                        "--into",
+                        "--params",
+                        "--set",
+                        "--version",
+                        "-h"
+                      ],
+                      "options_with_values": [
+                        "--set"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "add"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.rungs.permission.add",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.rungs.add",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "executables": [
+                        "rungs",
+                        "rungs.cmd",
+                        "rungs.exe"
+                      ],
+                      "forbidden_flags": [
+                        "--apply",
+                        "--confirm-conflict",
+                        "--confirm-paradigm",
+                        "--confirm-threshold",
+                        "--copilot",
+                        "--dry-run",
+                        "--explain",
+                        "--fast",
+                        "--full",
+                        "--help",
+                        "--into",
+                        "--params",
+                        "--set",
+                        "--version",
+                        "-h"
+                      ],
+                      "options_with_values": [
+                        "--set"
+                      ],
+                      "required_flags_anywhere": [
+                        "--dry-run"
+                      ],
+                      "subcommands": [
+                        "add"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  "title": "rungs add dry run",
+                  "variant_id": "dry-run"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `rungs add <module> --dry-run` first: it prints every file, gate and record it would write.",
+                "Run `rungs doctor` to see what the repository already has before installing over it."
+              ],
+              "severity": "high",
+              "title": "rungs module install"
+            },
+            {
+              "action_classes": [
+                "rungs module upgrade command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `rungs upgrade --apply`, which rewrites stale and missing module files, replaces gate registry blocks and updates the install record. Without --apply, upgrade only prints the plan; it never reads --dry-run, so `--apply --dry-run` still writes.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "rungs",
+                        "rungs.cmd",
+                        "rungs.exe"
+                      ],
+                      "forbidden_flags": [
+                        "--apply",
+                        "--confirm-conflict",
+                        "--confirm-paradigm",
+                        "--confirm-threshold",
+                        "--copilot",
+                        "--dry-run",
+                        "--explain",
+                        "--fast",
+                        "--full",
+                        "--help",
+                        "--into",
+                        "--params",
+                        "--set",
+                        "--version",
+                        "-h"
+                      ],
+                      "options_with_values": [
+                        "--set"
+                      ],
+                      "required_flags_anywhere": [
+                        "--apply"
+                      ],
+                      "subcommands": [
+                        "upgrade"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.rungs.permission.upgrade",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.rungs.upgrade",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run `rungs upgrade` without --apply: it prints the stale, missing and diverged files and writes nothing."
+              ],
+              "severity": "high",
+              "title": "rungs module upgrade"
+            }
+          ],
+          "safer_alternatives": [
+            "Inspect with `rungs doctor`, preview with `rungs add --dry-run` or `rungs upgrade` without --apply, and read .ai/gates.toml before `rungs check`."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "rungs check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check .",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-dot",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check . full",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-full-pos",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check --fast",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-fast",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check --full",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-full",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-dry",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-help",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs.cmd check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-cmd",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs.exe check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-exe",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs check add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "check-add",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs add backlog",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog gates session",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-multi",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --into ../repo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-into",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add --set backlog.root=docs/backlog backlog",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-set",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --confirm-paradigm --confirm-threshold",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-confirms",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --copilot",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-copilot",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-bare",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-help",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --apply",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-apply",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-check",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --set --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-set-dry",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --set backlog.root=--dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-set-eq-dry",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs upgrade --apply",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "upgrade",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade . --apply",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "up-dot",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade --apply .",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "up-dot2",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade --apply --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "up-apply-dry",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade --apply=false",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "up-apply-false",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade --apply --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "up-apply-help",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs add backlog --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add --dry-run backlog",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-lead",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog gates --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-multi",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --into ../repo --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-into",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --dry-run --into ../repo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-into2",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add --set backlog.root=docs/backlog backlog --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-set",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --set=backlog.root=docs --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-set-eq",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --confirm-paradigm --confirm-conflict --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-confirms",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --dry-run=yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-eq-yes",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --dry-run=false",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-eq-false",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add backlog --mystery --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-mystery",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs add --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-bare",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs.cmd add backlog --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dry-cmd",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs --full check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "lead-full",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs --fast check .",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "lead-fast",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs --dry-run add backlog",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "lead-dry",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs --copilot add backlog",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "lead-copilot",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs --set backlog.root=docs/backlog add backlog",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "lead-set",
+      "rule_id": "command.rungs.add"
+    },
+    {
+      "command": "rungs --apply upgrade",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "lead-apply",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs --mystery upgrade --apply",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "lead-mystery",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs doctor",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "doctor",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs doctor --explain",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "doctor-explain",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs doctor --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "doctor-dry",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs doctor check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "doctor-check",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs upgrade",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "up-bare",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade .",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "up-plan",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "up-dry",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs upgrade --set --apply",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "up-set-apply",
+      "rule_id": "command.rungs.upgrade"
+    },
+    {
+      "command": "rungs",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bare",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "h",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-cmd",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs modules --params",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "modules",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs bogus",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bogus",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "rungs init . tracked",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "init",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "exec rungs check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "xargs -n1 rungs check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs",
+      "rule_id": "command.rungs.check"
+    },
+    {
+      "command": "echo rungs check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rungs"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "echo",
+      "rule_id": "command.rungs.check"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

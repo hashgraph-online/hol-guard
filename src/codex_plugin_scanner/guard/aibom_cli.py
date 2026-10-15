@@ -147,6 +147,7 @@ def sync_aibom_snapshots(
 ) -> dict[str, object]:
     """Sync compatible snapshots and upload content only after cloud acknowledgment."""
     runner = _runner_module()
+    runner_native_sync = importlib.import_module(".runtime.runner_native_sync", __package__)
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
     with store.hold_oauth_credential_lock():
@@ -190,7 +191,7 @@ def sync_aibom_snapshots(
         return summary
 
     resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
-    sync_url = runner._guard_events_sync_url(str(resolved_auth_context["sync_url"]))
+    sync_url = runner_native_sync.guard_events_sync_url(str(resolved_auth_context["sync_url"]))
     events = [
         _inventory_snapshot_event(
             snapshot=snapshot,

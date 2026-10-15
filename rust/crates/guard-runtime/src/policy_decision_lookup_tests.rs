@@ -1,14 +1,14 @@
 use super::*;
 use std::path::PathBuf;
 
-fn tmp_store(tag: &str) -> PathBuf {
+pub(crate) fn tmp_store(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("hg-pdl-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir.join("guard.db")
 }
 
 /// Minimal `guard.db` schema matching the columns the op selects/inserts.
-fn seed_store(path: &std::path::Path) {
+pub(crate) fn seed_store(path: &std::path::Path) {
     let conn = Connection::open(path).unwrap();
     conn.execute_batch(
         "create table policy_decisions (
@@ -72,6 +72,7 @@ fn base_request(store_path: &std::path::Path) -> PolicyDecisionLookupRequestV1 {
         now: "2030-01-01T00:00:00+00:00".to_owned(),
         runtime_exact_match_context: None,
         consume_one_shot: true,
+        local_once_only: false,
         // Matches `_refresh_policy_integrity_state` output shape (backend set).
         integrity_state: Some(json!({
             "backend": "encrypted-file",
@@ -85,6 +86,7 @@ fn base_request(store_path: &std::path::Path) -> PolicyDecisionLookupRequestV1 {
         local_once_integrity_key_b64: None,
         local_once_integrity_key_id: None,
         policy_bundle_decision_identities: None,
+        probe_groups: None,
     }
 }
 
@@ -408,4 +410,79 @@ fn family_scoped_row_is_eligible_for_concrete_lookup() {
         None,
         None
     ));
+}
+
+/// Vectors recorded from the retired Python
+/// `_scoped_runtime_row_requires_exact_match` test: a contextual key matches
+/// itself, a legacy-keyed row is not reachable through the contextual key's
+/// request, and a request with no exact key must not reach a scoped row.
+#[test]
+fn scoped_runtime_row_exact_match_vectors() {
+    let artifact_id = "codex:project:tool-action:shell";
+    let contextual = runtime_scoped_exact_match_key(Some(artifact_id), Some("ctx-a")).unwrap();
+    let legacy = runtime_scoped_exact_match_key(Some(artifact_id), None).unwrap();
+    assert_ne!(contextual, legacy);
+    let requires = |stored_hash: &str, requested_key: Option<&str>| {
+        scoped_runtime_row_requires_exact_match(
+            "harness",
+            Some(artifact_id),
+            Some(stored_hash),
+            "claude-native-approval",
+            Some(artifact_id),
+            None,
+            requested_key,
+            None,
+            None,
+        )
+    };
+    assert!(!requires(&contextual, Some(&contextual)));
+    // The legacy key is still derived from the artifact id alone.
+    assert!(!requires(&legacy, Some(&contextual)));
+    assert!(requires(&contextual, None));
+}
+
+/// `local_once_only` peeks the exact local-once approval and must neither read
+/// nor consume policy rows.
+#[test]
+fn local_once_only_never_touches_policy_rows() {
+    let (store, mut request) = seed_one_shot("local-once-only");
+    request.local_once_only = true;
+    request.consume_one_shot = false;
+    let result = evaluate(&request).unwrap();
+    assert!(result["decision"].is_null());
+    let conn = Connection::open(store).unwrap();
+    let remaining: i64 = conn
+        .query_row("select count(*) from policy_decisions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(remaining, 1);
+}
+
+/// The exact peek matches only the caller-supplied hash; the id-derived
+/// runtime-exact fallback used by ordinary lookups must not widen it.
+#[test]
+fn local_once_only_ignores_runtime_exact_fallback_hash() {
+    let store = tmp_store("local-once-exact-hash");
+    seed_store(&store);
+    let artifact_id = "codex:project:tool-action:shell";
+    let mut request = base_request(&store);
+    request.artifact_id = Some(artifact_id.to_owned());
+    request.artifact_hash = Some("sha256:caller-supplied".to_owned());
+    request.consume_one_shot = false;
+    let derived = runtime_scoped_exact_match_key(Some(artifact_id), None).unwrap();
+    let conn = Connection::open(&store).unwrap();
+    conn.execute(
+        "insert into guard_local_once_approvals
+         (approval_id,request_id,harness,artifact_id,artifact_hash,action,created_at,expires_at,authority_kind)
+         values ('derived','request','codex',?,?,'allow',
+                 '2029-01-01T00:00:00+00:00','2031-01-01T00:00:00+00:00','legacy')",
+        params![artifact_id, derived],
+    )
+    .unwrap();
+    // Ordinary lookups still probe the derived key and see the row.
+    let ordinary = evaluate(&request).unwrap();
+    assert!(!ordinary["ignored_local_integrity"].is_null());
+    request.local_once_only = true;
+    let peek = evaluate(&request).unwrap();
+    assert!(peek["decision"].is_null());
+    assert!(peek["ignored_local_integrity"].is_null());
 }

@@ -1,0 +1,2969 @@
+{
+  "extension": {
+    "action_classes": [
+      "Kranz action execution command",
+      "Kranz runtime lifecycle command",
+      "Kranz retained evidence deletion command",
+      "Kranz configuration replacement command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Kranz action execution, runtime lifecycle changes, configuration replacement, and retained evidence deletion.",
+    "ecosystem_ids": [
+      "kranz"
+    ],
+    "executables": [
+      "kranz",
+      "kranz.exe"
+    ],
+    "extension_id": "command.kranz",
+    "homepage": "https://github.com/kranz-org/kranz",
+    "icon": {
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine",
+      "background": "#334155"
+    },
+    "license": "MIT",
+    "name": "Kranz command protection",
+    "permissions": [
+      {
+        "permission_id": "command.kranz.permission.actions-run",
+        "implementation_version": "1.0.0",
+        "label": "Kranz action execution",
+        "description": "Runs a configured action, including commands with typed parameters and plan-bound CLI confirmation.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz action execution command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect the action with `kranz actions info OWNER/ACTION` and review its parameters before running it."
+        ],
+        "example_command": "kranz actions run api/seed --param env=staging",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.up",
+        "implementation_version": "1.0.0",
+        "label": "Kranz runtime creation",
+        "description": "Creates a runtime and can start selected or all enabled services.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect `kranz plan SELECTOR ...` and the chosen runtime configuration before starting services."
+        ],
+        "example_command": "kranz up -d --start",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.start",
+        "implementation_version": "1.0.0",
+        "label": "Kranz service start",
+        "description": "Starts selected services and their dependencies in an existing runtime.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review `kranz plan SELECTOR ...` before starting services."
+        ],
+        "example_command": "kranz start api",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.stop",
+        "implementation_version": "1.0.0",
+        "label": "Kranz service stop",
+        "description": "Stops selected services and may affect dependent services.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review `kranz plan --operation stop SELECTOR ...` and attached clients before stopping services."
+        ],
+        "example_command": "kranz stop api",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.restart",
+        "implementation_version": "1.0.0",
+        "label": "Kranz service restart",
+        "description": "Restarts selected services and may affect dependent services.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review `kranz plan --operation restart SELECTOR ...` before restarting services."
+        ],
+        "example_command": "kranz restart api",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.reload",
+        "implementation_version": "1.0.0",
+        "label": "Kranz runtime reload",
+        "description": "Applies changed configuration to the running runtime and can update, start, or stop services.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the effective configuration and affected services before reloading."
+        ],
+        "example_command": "kranz reload",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.down",
+        "implementation_version": "1.0.0",
+        "label": "Kranz runtime shutdown",
+        "description": "Stops the whole project runtime and removes its retained in-memory state; --force recovers an unresponsive runtime.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect `kranz status` and `kranz clients` before shutting down the runtime."
+        ],
+        "example_command": "kranz down",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.logs-clear",
+        "implementation_version": "1.0.0",
+        "label": "Kranz log buffer deletion",
+        "description": "Discards retained log output for a target, or for every stream when --force is supplied.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz retained evidence deletion command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Export or inspect needed output with `kranz logs TARGET` before clearing it."
+        ],
+        "example_command": "kranz logs clear api",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.runs-delete",
+        "implementation_version": "1.0.0",
+        "label": "Kranz retained run deletion",
+        "description": "Permanently deletes a completed run and its buffered output after explicit CLI confirmation.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz retained evidence deletion command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect the target with `kranz runs TARGET` before deleting the retained run."
+        ],
+        "example_command": "kranz runs delete api#3 --confirm",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.kranz.permission.init-force",
+        "implementation_version": "1.0.0",
+        "label": "Kranz configuration replacement",
+        "description": "Allows non-interactive replacement of an existing Kranz configuration file.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kranz configuration replacement command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the destination file and the proposed configuration before replacing it."
+        ],
+        "example_command": "kranz init --from Procfile --force",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.kranz",
+      "display_name": "Community",
+      "url": "https://github.com/kranz-org"
+    },
+    "reference_urls": [
+      "https://kranz-org.github.io/kranz/reference/cli"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "rule_id": "command.kranz.actions-run",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.actions-run",
+        "title": "Kranz action execution",
+        "description": "Runs a configured action, including commands with typed parameters and plan-bound CLI confirmation.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "Kranz action execution command"
+        ],
+        "safer_alternatives": [
+          "Inspect the action with `kranz actions info OWNER/ACTION` and review its parameters before running it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "actions",
+                  "run"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "actions",
+                      "run"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "actions",
+                      "run"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "actions",
+                      "run"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "actions",
+                      "run"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.up",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.up",
+        "title": "Kranz runtime creation",
+        "description": "Creates a runtime and can start selected or all enabled services.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Inspect `kranz plan SELECTOR ...` and the chosen runtime configuration before starting services."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "up"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "up"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "up"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "up"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "up"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.start",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.start",
+        "title": "Kranz service start",
+        "description": "Starts selected services and their dependencies in an existing runtime.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Review `kranz plan SELECTOR ...` before starting services."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "start"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "start"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "start"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "start"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "start"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.stop",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.stop",
+        "title": "Kranz service stop",
+        "description": "Stops selected services and may affect dependent services.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Review `kranz plan --operation stop SELECTOR ...` and attached clients before stopping services."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "stop"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stop"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stop"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stop"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stop"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.restart",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.restart",
+        "title": "Kranz service restart",
+        "description": "Restarts selected services and may affect dependent services.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Review `kranz plan --operation restart SELECTOR ...` before restarting services."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "restart"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "restart"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "restart"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "restart"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "restart"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.reload",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.reload",
+        "title": "Kranz runtime reload",
+        "description": "Applies changed configuration to the running runtime and can update, start, or stop services.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Review the effective configuration and affected services before reloading."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "reload"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reload"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reload"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reload"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reload"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.down",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.down",
+        "title": "Kranz runtime shutdown",
+        "description": "Stops the whole project runtime and removes its retained in-memory state; --force recovers an unresponsive runtime.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Kranz runtime lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Inspect `kranz status` and `kranz clients` before shutting down the runtime."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "down"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "down"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "down"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "down"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "down"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.logs-clear",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.logs-clear",
+        "title": "Kranz log buffer deletion",
+        "description": "Discards retained log output for a target, or for every stream when --force is supplied.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Kranz retained evidence deletion command"
+        ],
+        "safer_alternatives": [
+          "Export or inspect needed output with `kranz logs TARGET` before clearing it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "logs",
+                  "clear"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "logs",
+                      "clear"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "logs",
+                      "clear"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "logs",
+                      "clear"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "logs",
+                      "clear"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.runs-delete",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.runs-delete",
+        "title": "Kranz retained run deletion",
+        "description": "Permanently deletes a completed run and its buffered output after explicit CLI confirmation.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Kranz retained evidence deletion command"
+        ],
+        "safer_alternatives": [
+          "Inspect the target with `kranz runs TARGET` before deleting the retained run."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param"
+                ],
+                "required_flags": [
+                  "--confirm"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "runs",
+                  "delete"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--confirm",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "runs",
+                      "delete"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--confirm",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "runs",
+                      "delete"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--confirm",
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "runs",
+                      "delete"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param"
+                    ],
+                    "required_flags": [
+                      "--confirm",
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "runs",
+                      "delete"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.kranz.init-force",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kranz.permission.init-force",
+        "title": "Kranz configuration replacement",
+        "description": "Allows non-interactive replacement of an existing Kranz configuration file.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "Kranz configuration replacement command"
+        ],
+        "safer_alternatives": [
+          "Review the destination file and the proposed configuration before replacing it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kranz",
+                  "kranz.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--follow-symlinks",
+                  "--yes"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-f",
+                  "--config",
+                  "-C",
+                  "--directory",
+                  "-p",
+                  "--project",
+                  "--output",
+                  "--override"
+                ],
+                "options_with_values": [
+                  "--param",
+                  "--no-param",
+                  "--from",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "init"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks",
+                      "--yes"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param",
+                      "--from",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks",
+                      "--yes"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param",
+                      "--from",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks",
+                      "--yes"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param",
+                      "--from",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-version",
+            "title": "Version information",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "kranz",
+                      "kranz.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--follow-symlinks",
+                      "--yes"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-f",
+                      "--config",
+                      "-C",
+                      "--directory",
+                      "-p",
+                      "--project",
+                      "--output",
+                      "--override"
+                    ],
+                    "options_with_values": [
+                      "--param",
+                      "--no-param",
+                      "--from",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the action, lifecycle plan, configuration, or retained output before changing it."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

@@ -16,6 +16,13 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import normalize_transparent_shell_command
 
 
+@pytest.fixture(autouse=True)
+def _native_package_intent(package_intent_native):
+    """Parse intents through the resident authority."""
+
+    return package_intent_native
+
+
 def test_option_operand_is_consumed_exactly_once() -> None:
     parsed = parse_env_wrapper(
         ["-u", "-i", "python", "-c", "pass"],

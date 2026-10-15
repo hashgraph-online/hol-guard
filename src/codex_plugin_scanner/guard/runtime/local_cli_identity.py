@@ -2,27 +2,23 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 import shlex
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .approval_context import (
-    build_runtime_launch_identity,
-    runtime_launch_identity_is_reusable,
-)
+from ..native_local_cli_identity import native_unlisted_cli_identities
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
 from .command_tokens import executable_name
-from .custom_extension_suggestion import common_utility_reject_message, is_common_shell_utility
+from .custom_extension_suggestion import NATIVE_UNAVAILABLE_MESSAGE, common_utility_verdict
 
 LocalCliKind = Literal["executable", "script"]
 
+REGISTRY_PACKAGE_PATH_CLASS = "registry-package"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
-_SLUG_MAX = 32
 _INTERPRETER_NAMES = frozenset(
     {
         "ash",
@@ -49,8 +45,6 @@ _INTERPRETER_NAMES = frozenset(
         "zsh",
     }
 )
-_PACKAGE_SCRIPT_KINDS = frozenset({"bun-package-script"})
-_INLINE_KINDS = frozenset({"python-c", "python-m", "node-eval", "inline-script"})
 _RESERVED_TOOL_NAMES = frozenset({"hol-guard", "hol_guard", "guard"})
 _SCRIPT_LAUNCHERS = {
     ".py": "python3",
@@ -73,6 +67,20 @@ class UnlistedCliIdentity:
     example_label: str
     interpreter_name: str | None = None
     source_path: str | None = None
+    # Stored observation class; derived from ``source_path`` when unset.
+    path_class: str | None = None
+    # Package runner (``npx``) that launched the CLI, if any.
+    runner: str | None = None
+    # Verified launch material the native runtime derived this identity from.
+    # The grant decision re-derives the identity from it, so it is never part
+    # of equality, hashing, or the public payload.
+    identity_source: Mapping[str, object] | None = field(default=None, compare=False, repr=False)
+
+    @property
+    def is_registry_package(self) -> bool:
+        """Runner fetches without a proven local bin never carry a persistent allow."""
+
+        return self.runner is not None and self.path_class == REGISTRY_PACKAGE_PATH_CLASS
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -93,63 +101,40 @@ def catalog_owned_executables(
     return registry.owned_executables
 
 
-def identify_unlisted_cli(
-    command_text: str,
-    *,
-    cwd: Path,
-    home_dir: Path | None,
-    registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-) -> UnlistedCliIdentity | None:
+def identify_unlisted_cli(command_text: str, *, cwd: Path, home_dir: Path | None) -> UnlistedCliIdentity | None:
     """Return an unlisted CLI identity when the command is a single safe invocation."""
 
-    try:
-        model = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    except ValueError:
-        return None
-    return identify_unlisted_cli_from_command(model, cwd=cwd, home_dir=home_dir, registry=registry)
+    identities = _native_identities(command_text, cwd=cwd, home_dir=home_dir, compound=False)
+    return identities[0] if identities else None
 
 
-def identify_unlisted_cli_from_command(
-    command: CanonicalCommand,
-    *,
-    cwd: Path,
-    home_dir: Path | None,
-    registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-) -> UnlistedCliIdentity | None:
-    """Return an unlisted CLI identity from an already parsed command."""
+def identify_unlisted_cli_identities(
+    command_text: str, *, cwd: Path, home_dir: Path | None
+) -> tuple[UnlistedCliIdentity, ...]:
+    """Return unlisted CLI identities from a single invocation or compound shell."""
 
-    if not unlisted_cli_invocation_is_safe(command):
-        return None
-    segment = command.segments[0]
-    launch = build_runtime_launch_identity(
-        segment.executable,
-        args=segment.arguments,
-        structured_command=True,
-        cwd=cwd,
-        home_dir=home_dir,
+    return _native_identities(command_text, cwd=cwd, home_dir=home_dir, compound=True)
+
+
+def _native_identities(
+    command_text: str, *, cwd: Path, home_dir: Path | None, compound: bool
+) -> tuple[UnlistedCliIdentity, ...]:
+    records = native_unlisted_cli_identities(command_text, cwd=cwd, home_dir=home_dir, compound=compound)
+    return tuple(
+        UnlistedCliIdentity(
+            cli_id=record["cli_id"],
+            name=record["name"],
+            kind=record["kind"],
+            identity_hash=record["identity_hash"],
+            example_label=record["example_label"],
+            interpreter_name=record["interpreter_name"],
+            source_path=record["source_path"],
+            path_class=record["path_class"],
+            runner=record["runner"],
+            identity_source=record["identity_source"],
+        )
+        for record in records
     )
-    if not runtime_launch_identity_is_reusable(launch):
-        return None
-    executable = launch.get("executable")
-    entrypoint = launch.get("entrypoint")
-    if not isinstance(executable, dict) or not isinstance(entrypoint, dict):
-        return None
-    owned = catalog_owned_executables(registry)
-    exe_name = executable_name(segment.executable)
-    entrypoint_kind = str(entrypoint.get("kind") or "")
-    entrypoint_status = str(entrypoint.get("status") or "")
-    script_cli = _script_identity(entrypoint, interpreter_name=exe_name)
-    if script_cli is not None:
-        return script_cli
-    if exe_name is None:
-        return None
-    if _is_interpreter_name(exe_name):
-        return None
-    if is_common_shell_utility(exe_name) or is_reserved_tool_name(exe_name):
-        return None
-    if exe_name in owned and not _looks_like_script_kind(entrypoint_kind, entrypoint_status):
-        return None
-    return _executable_identity(executable, exe_name)
 
 
 def unlisted_cli_invocation_is_safe(command: CanonicalCommand) -> bool:
@@ -195,12 +180,16 @@ def recognize_operator_cli(
     )
     owned = catalog_owned_executables(registry)
     for candidate in candidates:
-        identity = identify_unlisted_cli(candidate, cwd=cwd, home_dir=home_dir, registry=registry)
+        identity = identify_unlisted_cli(candidate, cwd=cwd, home_dir=home_dir)
         if identity is not None:
             return identity, "", ""
         exe = _first_executable_name(candidate, cwd=cwd, home_dir=home_dir)
-        if exe is not None and is_common_shell_utility(exe):
-            return None, "common_shell_utility", common_utility_reject_message(exe)
+        if exe is not None:
+            verdict = common_utility_verdict(exe)
+            if verdict is None:
+                return None, "native_unavailable", NATIVE_UNAVAILABLE_MESSAGE
+            if verdict["common_utility"]:
+                return None, "common_shell_utility", verdict["reject_message"]
         if exe is not None and is_reserved_tool_name(exe):
             return None, "reserved_tool", "Guard itself is not added as a custom extension."
         if exe is not None and exe in owned and not _is_interpreter_name(exe):
@@ -222,72 +211,6 @@ def _safe_primary_segment(segment: CommandSegment) -> bool:
     )
 
 
-def _script_identity(entrypoint: dict[str, object], *, interpreter_name: str | None) -> UnlistedCliIdentity | None:
-    kind = str(entrypoint.get("kind") or "")
-    status = str(entrypoint.get("status") or "")
-    if not _looks_like_script_kind(kind, status):
-        return None
-    digest = _sha256_hex(entrypoint.get("sha256"))
-    path = _nonempty_string(entrypoint.get("path"))
-    if digest is None or path is None:
-        return None
-    name = Path(path).name
-    slug = _slug(name)
-    path_fingerprint = _path_fingerprint(path)
-    identity_hash = _identity_digest(
-        {
-            "kind": "script",
-            "entrypoint_kind": kind,
-            "content_sha256": digest,
-            "path_fingerprint": path_fingerprint,
-        }
-    )
-    return UnlistedCliIdentity(
-        cli_id=f"local-cli.{slug}-{path_fingerprint[:8]}",
-        name=name,
-        kind="script",
-        identity_hash=identity_hash,
-        example_label=_example_label(interpreter_name, name),
-        interpreter_name=interpreter_name,
-        source_path=path,
-    )
-
-
-def _executable_identity(executable: dict[str, object], exe_name: str) -> UnlistedCliIdentity | None:
-    if str(executable.get("status") or "") != "verified":
-        return None
-    digest = _sha256_hex(executable.get("sha256"))
-    path = _nonempty_string(executable.get("path"))
-    if digest is None or path is None:
-        return None
-    slug = _slug(exe_name)
-    path_fingerprint = _path_fingerprint(path)
-    identity_hash = _identity_digest(
-        {
-            "kind": "executable",
-            "content_sha256": digest,
-            "path_fingerprint": path_fingerprint,
-        }
-    )
-    return UnlistedCliIdentity(
-        cli_id=f"local-cli.{slug}-{path_fingerprint[:8]}",
-        name=exe_name,
-        kind="executable",
-        identity_hash=identity_hash,
-        example_label=exe_name,
-        interpreter_name=None,
-        source_path=path,
-    )
-
-
-def _looks_like_script_kind(kind: str, status: str) -> bool:
-    if status != "verified":
-        return False
-    if kind in _PACKAGE_SCRIPT_KINDS or kind in _INLINE_KINDS:
-        return False
-    return kind.endswith("-script") or kind == "direct-script"
-
-
 def _is_interpreter_name(name: str) -> bool:
     base = name.lower()
     if base.endswith(".exe") or base.endswith(".cmd"):
@@ -295,41 +218,6 @@ def _is_interpreter_name(name: str) -> bool:
     if base in _INTERPRETER_NAMES:
         return True
     return base.startswith("python3.")
-
-
-def _example_label(interpreter_name: str | None, script_name: str) -> str:
-    if interpreter_name:
-        return f"{interpreter_name} {script_name}"
-    return script_name
-
-
-def _slug(value: str) -> str:
-    lowered = value.strip().lower()
-    compact = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
-    if not compact:
-        return "cli"
-    return compact[:_SLUG_MAX].strip("-") or "cli"
-
-
-def _path_fingerprint(path: str) -> str:
-    return hashlib.sha256(path.encode("utf-8")).hexdigest()
-
-
-def _identity_digest(payload: dict[str, object]) -> str:
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
-
-
-def _sha256_hex(value: object) -> str | None:
-    if not isinstance(value, str) or len(value) != 64:
-        return None
-    if any(character not in "0123456789abcdef" for character in value):
-        return None
-    return value
-
-
-def _nonempty_string(value: object) -> str | None:
-    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _normalize_tool_name(name: str) -> str:

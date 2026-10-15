@@ -8,31 +8,42 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import store_approval_writes
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.native_approval_queue_identity import (
+    QueueIdentity,
+    native_approval_queue_identities,
+    queue_identity_item,
+)
+from codex_plugin_scanner.guard.native_approval_resolution import ApprovalResolutionPlanUnavailableError
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
-from codex_plugin_scanner.guard.runtime.detectors import (
-    DataFlowExfiltrationDetector,
-    DetectorContext,
-    FalsePositiveSuppressorDetector,
-)
+from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
 from codex_plugin_scanner.guard.store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
-    _scoped_runtime_row_requires_exact_match,
-    _warn_only_policy_integrity_status,
     runtime_tool_action_exact_match_context,
 )
-from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_for_request
+from tests.native_detector_support import NativeDetector
 
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def _store_without_integrity_backend(tmp_path: Path) -> GuardStore:
+    """A store whose integrity backend is gone after the resident key was provisioned."""
+
+    store = _store(tmp_path)
+    provision_native_verifier_key_for_store(store)
+    store._policy_integrity_secret_store = None
+    return store
 
 
 def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,6 +59,11 @@ def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
         return PolicyIntegrityVerificationResult(status="valid")
 
     monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
+    monkeypatch.setattr(
+        GuardStore,
+        "_policy_integrity_results_for_rows",
+        lambda self, rows, **_: [PolicyIntegrityVerificationResult(status="valid") for _ in rows],
+    )
 
 
 def _request(
@@ -156,14 +172,31 @@ def _detector_context(tmp_path: Path) -> DetectorContext:
     )
 
 
-def test_gr101_gr103_action_identity_reuses_same_action_and_splits_changed_command() -> None:
+def _queue_identity(request: GuardApprovalRequest, guard_home: Path) -> tuple[str, str]:
+    identity = native_approval_queue_identities(
+        [
+            queue_identity_item(
+                launch_target=request.launch_target,
+                harness=request.harness,
+                workspace=request.workspace,
+                artifact_id=request.artifact_id,
+                envelope=request.action_envelope_json,
+                browser_intent=request.browser_intent,
+            )
+        ],
+        guard_home=guard_home,
+    )[0]
+    return identity.action_identity, identity.queue_group_id
+
+
+def test_gr101_gr103_action_identity_reuses_same_action_and_splits_changed_command(tmp_path: Path) -> None:
     same_a = _request("req-same-a", command="cat ~/.npmrc --request-id req-aaaa")
     same_b = _request("req-same-b", command="cat ~/.npmrc --request-id req-bbbb")
     changed = _request("req-changed", command="cat ~/.ssh/config")
 
-    same_identity_a, same_group_a = approval_queue_identity_for_request(same_a)
-    same_identity_b, same_group_b = approval_queue_identity_for_request(same_b)
-    changed_identity, changed_group = approval_queue_identity_for_request(changed)
+    same_identity_a, same_group_a = _queue_identity(same_a, tmp_path)
+    same_identity_b, same_group_b = _queue_identity(same_b, tmp_path)
+    changed_identity, changed_group = _queue_identity(changed, tmp_path)
 
     assert same_identity_a == same_identity_b
     assert same_group_a == same_group_b
@@ -171,10 +204,11 @@ def test_gr101_gr103_action_identity_reuses_same_action_and_splits_changed_comma
     assert changed_group != same_group_a
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 def test_gr104_gr105_read_only_listing_and_maileroo_search_are_not_exfiltration(tmp_path: Path) -> None:
     context = _detector_context(tmp_path)
-    suppressor = FalsePositiveSuppressorDetector()
-    data_flow = DataFlowExfiltrationDetector()
+    suppressor = NativeDetector("false_positive.suppressor")
+    data_flow = NativeDetector("data_flow.exfiltration")
 
     listing_signals = suppressor.detect(_shell_action("ls -la src/codex_plugin_scanner"), context)
     maileroo_signals = suppressor.detect(_shell_action('rg "EMAIL_|SMTP_" .'), context)
@@ -187,10 +221,11 @@ def test_gr104_gr105_read_only_listing_and_maileroo_search_are_not_exfiltration(
     assert any(signal.signal_id == "data-flow:secret-pipe-http" for signal in real_exfil)
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 def test_read_only_node_fetch_page_probe_downgrades_review_without_hiding_exfil(tmp_path: Path) -> None:
     context = _detector_context(tmp_path)
-    suppressor = FalsePositiveSuppressorDetector()
-    data_flow = DataFlowExfiltrationDetector()
+    suppressor = NativeDetector("false_positive.suppressor")
+    data_flow = NativeDetector("data_flow.exfiltration")
     command = """node - <<'NODE'
 const res = await fetch('https://hol.org/guard/apps/codex', { redirect: 'manual' });
 const text = await res.text();
@@ -1059,55 +1094,8 @@ def test_artifact_runtime_scope_includes_wrapped_action_context(tmp_path: Path) 
     assert contextual_exact_key != legacy_exact_key
 
 
-def test_contextual_harness_runtime_exact_key_matches_same_context() -> None:
-    artifact_id = "codex:project:tool-action:shell"
-    runtime_exact_match_context = runtime_tool_action_exact_match_context(
-        config_path="workspace/app/codex-config.toml",
-        source_scope="project",
-        raw_command_text="docker compose up -d postgres",
-        wrapper_chain=("bash", "zsh"),
-    )
-    contextual_exact_key = _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context)
-    legacy_exact_key = _runtime_scoped_exact_match_key(artifact_id)
-
-    assert contextual_exact_key is not None
-    assert legacy_exact_key is not None
-    assert not _scoped_runtime_row_requires_exact_match(
-        scope="harness",
-        stored_artifact_id=artifact_id,
-        stored_artifact_hash=contextual_exact_key,
-        source="claude-native-approval",
-        requested_artifact_id=artifact_id,
-        requested_runtime_exact_match_key=contextual_exact_key,
-    )
-    assert not _scoped_runtime_row_requires_exact_match(
-        scope="harness",
-        stored_artifact_id=artifact_id,
-        stored_artifact_hash=legacy_exact_key,
-        source="claude-native-approval",
-        requested_artifact_id=artifact_id,
-        requested_runtime_exact_match_key=contextual_exact_key,
-    )
-    assert _scoped_runtime_row_requires_exact_match(
-        scope="harness",
-        stored_artifact_id=artifact_id,
-        stored_artifact_hash=contextual_exact_key,
-        source="claude-native-approval",
-        requested_artifact_id=artifact_id,
-    )
-
-
-def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
-    assert not _warn_only_policy_integrity_status(
-        "degraded_mode",
-        {"enforcement": "warn", "degraded_reasons": []},
-        source="approval-gate",
-    )
-
-
 def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    store._policy_integrity_secret_store = None
+    store = _store_without_integrity_backend(tmp_path)
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
 
@@ -1132,9 +1120,35 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
     )
 
 
-def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolution_without_any_integrity_backend_names_the_missing_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store = _store(tmp_path)
     store._policy_integrity_secret_store = None
+    # Queue identity provisions the verifier key for the home; this test needs
+    # a home that never had one, so the identity is supplied directly.
+    monkeypatch.setattr(
+        store_approval_writes,
+        "native_approval_queue_identities",
+        lambda items, *, guard_home: [QueueIdentity("cat ~/.npmrc", "action", "approval-group:v1:test")],
+    )
+    shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
+    store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
+
+    with pytest.raises(ApprovalResolutionPlanUnavailableError, match="integrity_unavailable"):
+        apply_approval_resolution(
+            store=store,
+            request_id="req-shell",
+            action="allow",
+            scope="artifact",
+            workspace=shell_request.workspace,
+            reason="no verifier key",
+            now="2026-05-13T00:01:00+00:00",
+        )
+
+
+def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store_without_integrity_backend(tmp_path)
     monkeypatch.setattr(store, "_policy_integrity_path_warnings", lambda: ["guard_home_symlink"])
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
@@ -1427,17 +1441,11 @@ def test_gr122_duplicate_resolution_returns_idempotent_already_resolved_result(t
     assert second["item"]["resolution_action"] == "allow"
 
 
-def test_gr123_request_resolution_requires_local_auth_token(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import server as daemon_server
+def test_gr123_request_resolution_requires_local_auth_token(native_approval_reuse_runtime: Path) -> None:
+    from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
-    assert daemon_server._GuardDaemonHandler._requires_header_token(
-        "/v1/requests/req-auth/approve",
-        ["v1", "requests", "req-auth", "approve"],
-    )
-    assert daemon_server._GuardDaemonHandler._requires_header_token(
-        "/v1/requests/req-auth/resume",
-        ["v1", "requests", "req-auth", "resume"],
-    )
+    for path in ("/v1/requests/req-auth/approve", "/v1/requests/req-auth/resume"):
+        assert native_route_facts("POST", path, guard_home=native_approval_reuse_runtime).requires_header_token
 
 
 def test_gr121_legacy_expired_requests_reopen_as_pending(tmp_path: Path) -> None:

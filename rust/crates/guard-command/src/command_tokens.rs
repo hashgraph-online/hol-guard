@@ -35,7 +35,7 @@ pub fn executable_name(value: Option<&str>) -> Option<String> {
 /// `_windows_shell_tokens` (:36-92). Quoted POSIX escapes preserved; unquoted
 /// path separators kept literal.
 #[allow(dead_code)]
-fn windows_shell_tokens(command: &str) -> Vec<String> {
+pub fn windows_shell_tokens(command: &str) -> (Vec<String>, bool) {
     let mut tokens: Vec<String> = Vec::new();
     let mut token: Vec<char> = Vec::new();
     let mut started = false;
@@ -94,20 +94,23 @@ fn windows_shell_tokens(command: &str) -> Vec<String> {
     }
     if quote != '\0' || escaped {
         // Python raises ValueError; caller's split() fallback applies.
-        return command.split_whitespace().map(str::to_owned).collect();
+        return (
+            command.split_whitespace().map(str::to_owned).collect(),
+            false,
+        );
     }
     if started {
         tokens.push(token.iter().collect());
     }
-    tokens
+    (tokens, true)
 }
 
 /// `shell_tokens` (:95-103) → `(tokens, exact)`.
 pub fn shell_tokens(command: &str) -> (Vec<String>, bool) {
     if cfg!(windows) {
-        return (windows_shell_tokens(command), true);
+        return windows_shell_tokens(command);
     }
-    match crate::shell_tokens(command, false) {
+    match crate::parser_segments::shell_tokens_preserving_redirects(command) {
         Ok(tokens) => (tokens, true),
         Err(_) => (
             command.split_whitespace().map(str::to_owned).collect(),
@@ -181,7 +184,7 @@ pub fn leading_environment(tokens: &[String]) -> (Vec<String>, usize, Vec<String
 }
 
 /// `_after_sudo_options` (:136-152).
-fn after_sudo_options(tokens: &[String], mut index: usize) -> usize {
+pub fn after_sudo_options(tokens: &[String], mut index: usize) -> usize {
     while index < tokens.len() {
         let token = &tokens[index];
         if token == "--" {

@@ -143,7 +143,7 @@ pub(super) fn review_reason(action_type: PreToolActionTypeV1) -> (&'static str, 
         ),
         PreToolActionTypeV1::Command => (
             "native_command_review_required",
-            "HOL Guard requires review because the Rust authority could not prove this command explicitly benign.",
+            "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review.",
         ),
         PreToolActionTypeV1::Unknown => (
             "native_pre_tool_unknown_review",

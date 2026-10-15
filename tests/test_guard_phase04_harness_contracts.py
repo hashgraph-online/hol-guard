@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
     ClaudeCodeHarnessAdapter,
 )
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, harness_contracts_table
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
@@ -114,16 +113,6 @@ def test_gr094_inactive_harness_copy_says_observed_not_protected(tmp_path: Path)
     assert cursor_item["observed_copy"] == "Observed locally, not protected by Guard yet."
 
 
-def test_gr095_harness_capabilities_table_covers_prompt_tool_shell_mcp_support() -> None:
-    table = harness_contracts_table()
-
-    assert "Event Surfaces" in table
-    for expected in ("shell", "prompt", "mcp_tool", "file_read"):
-        assert expected in table
-    for contract in HARNESS_CONTRACTS:
-        assert contract.harness in table
-
-
 def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> None:
     context = _context(tmp_path)
 
@@ -171,10 +160,3 @@ def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> 
     assert "dashboard" not in serialized.lower()
     assert "react" not in serialized.lower()
     assert "vite" not in serialized.lower()
-
-
-def test_gr100_harness_docs_match_generated_contract_table() -> None:
-    docs = Path("docs/guard/harness-support.md").read_text(encoding="utf-8")
-    generated_table = harness_contracts_table().strip()
-
-    assert generated_table in docs

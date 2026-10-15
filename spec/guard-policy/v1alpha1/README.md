@@ -14,6 +14,7 @@ GuardPolicy is HOL Guard's portable policy document. The alpha contract is inten
 - [`rollback-runbook.md`](rollback-runbook.md): legacy kill switch, previous-good restoration, and recovery verification.
 - [`schema-compatibility-runbook.md`](schema-compatibility-runbook.md): producer/consumer matrix, change procedure, and TestPyPI boundary.
 - [`rfc.md`](rfc.md): public alpha questions and stabilization criteria.
+- [`extensions/`](extensions/): registered extension schemas and their registration records.
 - [`fixtures/manifest.json`](fixtures/manifest.json): valid, invalid, hash, and decision conformance vectors.
 
 ## Reference validation

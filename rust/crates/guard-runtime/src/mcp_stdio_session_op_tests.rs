@@ -45,6 +45,7 @@ fn send_recv_close_unknown_session_is_terminal() {
         schema: guard_contracts::MCP_STDIO_SESSION_IO_REQUEST_SCHEMA.to_owned(),
         session_id: "nope".into(),
         message: json!({"jsonrpc":"2.0","id":1,"result":{}}),
+        exchange: None,
     })
     .unwrap();
     assert_eq!(decode(send)["payload"], "mcp_session_not_found");
@@ -76,6 +77,7 @@ fn open_send_recv_close_roundtrip_via_cat_echo() {
             schema: guard_contracts::MCP_STDIO_SESSION_IO_REQUEST_SCHEMA.to_owned(),
             session_id: id.into(),
             message: frame.clone(),
+            exchange: None,
         })
         .unwrap(),
     );
@@ -140,6 +142,7 @@ fn close_interrupts_a_blocked_send_without_stalling_other_sessions() {
             schema: guard_contracts::MCP_STDIO_SESSION_IO_REQUEST_SCHEMA.to_owned(),
             session_id: id.into(),
             message: json!({"jsonrpc":"2.0", "id":1, "params":"x".repeat(500_000)}),
+            exchange: None,
         })
     });
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
@@ -248,4 +251,163 @@ fn open_rejects_an_invalid_owner_without_spawning() {
         "invalid_mcp_session_owner"
     );
     assert!(lookup("invalid-owner").is_err());
+}
+
+fn exchange(id: &str, message: Value, quiet_ms: u64, response_timeout_ms: u64) -> Value {
+    decode(
+        session_send(&McpStdioSessionSendRequestV1 {
+            schema: guard_contracts::MCP_STDIO_SESSION_IO_REQUEST_SCHEMA.to_owned(),
+            session_id: id.into(),
+            message,
+            exchange: Some(guard_contracts::McpStdioSessionExchangeV1 {
+                quiet_ms,
+                response_timeout_ms,
+            }),
+        })
+        .unwrap(),
+    )
+}
+
+#[test]
+fn exchange_writes_after_quiet_and_returns_the_correlated_response() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-response";
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/cat"])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(
+        id,
+        json!({"jsonrpc":"2.0","id":7,"result":{"ok":true}}),
+        5,
+        5000,
+    );
+    assert_eq!(reply["status"], "sent", "{reply:?}");
+    assert_eq!(reply["payload"]["outcome"], "response");
+    assert_eq!(reply["payload"]["written"], true);
+    assert_eq!(reply["payload"]["frame"]["id"], 7);
+    close(id);
+}
+
+#[test]
+fn exchange_returns_a_frame_seen_during_the_quiet_edge_without_writing() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-boundary";
+    let script =
+        r#"printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}'; cat"#;
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/sh", "-c", script])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(id, json!({"jsonrpc":"2.0","id":3,"result":{}}), 2000, 2000);
+    assert_eq!(reply["payload"]["outcome"], "boundary", "{reply:?}");
+    assert_eq!(reply["payload"]["written"], false);
+    assert_eq!(reply["payload"]["event_kind"], "child_notification");
+    // Nothing was written, so the echoing child has nothing to return.
+    let recv = decode(
+        session_recv(&McpStdioSessionRecvRequestV1 {
+            schema: guard_contracts::MCP_STDIO_SESSION_IO_REQUEST_SCHEMA.to_owned(),
+            session_id: id.into(),
+            timeout_ms: Some(100),
+            await_request_id: None,
+            poll_only: false,
+        })
+        .unwrap(),
+    );
+    assert_eq!(recv["status"], "timeout");
+    close(id);
+}
+
+#[test]
+fn exchange_waits_for_a_notification_that_is_still_arriving() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-partial-boundary";
+    // The notification starts before the quiet edge ends and finishes after it.
+    let script = r#"printf '%s' '{"jsonrpc":"2.0","method":"notifications/tools/'; sleep 1; printf '%s\n' 'list_changed"}'; cat"#;
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/sh", "-c", script])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(id, json!({"jsonrpc":"2.0","id":3,"result":{}}), 600, 2000);
+    assert_eq!(reply["payload"]["outcome"], "boundary", "{reply:?}");
+    assert_eq!(reply["payload"]["written"], false);
+    assert_eq!(reply["payload"]["event_kind"], "child_notification");
+    close(id);
+}
+
+#[test]
+fn exchange_refuses_when_a_partial_frame_outlives_the_extension() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-partial-busy";
+    // The child starts a notification then holds it open past the one second
+    // extension: the quiet edge never becomes genuine silence, so the guarded
+    // call must be refused rather than written.
+    let script = r#"printf '%s' '{"jsonrpc":"2.0","method":"notifications/tools/'; sleep 3; printf '%s\n' 'list_changed"}'; cat"#;
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/sh", "-c", script])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(id, json!({"jsonrpc":"2.0","id":3,"result":{}}), 200, 2000);
+    assert_eq!(reply["status"], "error", "{reply:?}");
+    assert_eq!(reply["payload"], "mcp_exchange_quiet_edge_busy");
+    close(id);
+}
+
+#[test]
+fn exchange_times_out_after_writing_when_the_child_stays_silent() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-timeout";
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/sleep", "30"])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(
+        id,
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call"}),
+        5,
+        100,
+    );
+    assert_eq!(reply["payload"]["outcome"], "timeout", "{reply:?}");
+    assert_eq!(reply["payload"]["written"], true);
+    close(id);
+}
+
+#[test]
+fn exchange_surfaces_a_frame_that_is_not_the_awaited_response() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-event";
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/cat"])).unwrap())["status"],
+        "opened"
+    );
+    // cat echoes the request back, which is a child request, not the response.
+    let reply = exchange(
+        id,
+        json!({"jsonrpc":"2.0","id":9,"method":"tools/call"}),
+        5,
+        5000,
+    );
+    assert_eq!(reply["payload"]["outcome"], "event", "{reply:?}");
+    assert_eq!(reply["payload"]["written"], true);
+    assert_eq!(reply["payload"]["event_kind"], "child_request");
+    close(id);
+}
+
+#[test]
+fn exchange_without_a_request_id_is_refused_before_any_write() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-no-id";
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/cat"])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(
+        id,
+        json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+        5,
+        100,
+    );
+    assert_eq!(reply["status"], "error");
+    assert_eq!(reply["payload"], "mcp_exchange_requires_request_id");
+    close(id);
 }

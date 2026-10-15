@@ -238,6 +238,7 @@ class GuardApprovalRequest:
     first_seen_guard_version: str | None = None
     last_seen_guard_version: str | None = None
     continuation_snapshot: dict[str, object] | None = None
+    extension_allow_hint: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)

@@ -5,6 +5,51 @@ fn field_is_static(value: &str) -> bool {
     !value.contains(['$', '`', '@', '\0', '\n', '\r'])
 }
 
+/// `-f`/`--raw-field` values are always literal strings, and a typed `-F`/`--field`
+/// value reads a file only when it starts with `@`. Either may mention an `@user`.
+fn literal_field_is_static(name: &str, value: &str) -> bool {
+    let Some((key, text)) = value.split_once('=') else {
+        return false;
+    };
+    let reads_file = matches!(name, "--field" | "-F") && text.starts_with('@');
+    !reads_file && field_is_static(key) && !text.contains(['$', '`', '\0', '\r'])
+}
+
+/// GraphQL documents may span lines and declare `$variables`. Every `$name` must be
+/// declared in the document itself, so a shell-expanded `$HOME` never qualifies.
+pub(super) fn graphql_text_is_static(value: &str) -> bool {
+    if value.contains(['`', '@', '\0', '\r']) {
+        return false;
+    }
+    let mut rest = value;
+    while let Some(position) = rest.find('$') {
+        rest = &rest[position + 1..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty()
+            || !value.contains(&format!("${name}:")) && !value.contains(&format!("${name} :"))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+/// gojq can print the process environment (`env`) or load modules from disk
+/// (`import`, `include`). A response filter needs none of them.
+pub(super) fn jq_is_static(value: &str) -> bool {
+    !value
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|word| {
+            matches!(
+                word,
+                "env" | "import" | "include" | "input_filename" | "get_search_list"
+            )
+        })
+}
+
 fn safe_header(value: &str) -> bool {
     let lowered = value.to_ascii_lowercase();
     let Some((name, value)) = lowered.split_once(':') else {
@@ -66,6 +111,7 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
     let mut endpoint: Option<&str> = None;
     let mut method: Option<&str> = None;
     let mut fields: Vec<(&str, &str)> = Vec::new();
+    let mut relaxed_query = false;
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         if argument == "--" {
@@ -89,7 +135,13 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         }
         if matches!(
             name,
-            "--include" | "--paginate" | "--silent" | "--slurp" | "--verbose" | "-i"
+            "--allow-escape-sequences"
+                | "--include"
+                | "--paginate"
+                | "--silent"
+                | "--slurp"
+                | "--verbose"
+                | "-i"
         ) {
             if attached.is_some() {
                 return None;
@@ -122,7 +174,19 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 index += 1;
                 arguments.get(index)?.as_str()
             };
-            if !field_is_static(value) {
+            let query_field = matches!(name, "--field" | "--raw-field" | "-f" | "-F")
+                && value.split_once('=').is_some_and(|(key, _)| key == "query");
+            if query_field {
+                let (_, text) = value.split_once('=')?;
+                if !graphql_text_is_static(text) {
+                    return None;
+                }
+                relaxed_query |= !field_is_static(text);
+            } else if matches!(name, "--field" | "--raw-field" | "-f" | "-F") {
+                if !literal_field_is_static(name, value) {
+                    return None;
+                }
+            } else if !field_is_static(value) {
                 return None;
             }
             match name {
@@ -135,6 +199,7 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                     fields.push((key, value));
                 }
                 "--header" | "-H" if !safe_header(value) => return None,
+                "--jq" if !jq_is_static(value) => return None,
                 "--input" => return None,
                 _ => {}
             }
@@ -146,6 +211,13 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         index += 1;
     }
     let endpoint = endpoint?;
+    if endpoint.trim_matches('/').eq_ignore_ascii_case("graphql") && !endpoint.contains(['%', '?'])
+    {
+        return graphql_read(method, &fields);
+    }
+    if relaxed_query {
+        return None;
+    }
     let method = method
         .unwrap_or(if fields.is_empty() { "GET" } else { "POST" })
         .to_ascii_uppercase();
@@ -161,6 +233,47 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         return one("read_remote");
     }
     Some(mutation_capabilities(endpoint, &method, &fields))
+}
+
+/// A single static `query` field against the GraphQL endpoint is attributed by the
+/// shared GraphQL classifier. That classifier ignores strings and comments, so a field
+/// argument that mentions "mutation" stays a read, and every mutation root field maps
+/// to its own capability owner. Unclassifiable documents stay unsupported.
+fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
+    use crate::github_capability_contract::GitHubCommandCapability as Cap;
+    if !method.is_none_or(|value| value.eq_ignore_ascii_case("POST")) {
+        return None;
+    }
+    let mut queries = fields.iter().filter(|(key, _)| *key == "query");
+    let (_, document) = queries.next()?;
+    if queries.next().is_some() {
+        return None;
+    }
+    let owned: Vec<(String, String)> = fields
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect();
+    if crate::github_command_capabilities::is_routine_review_thread_resolution(document, &owned) {
+        return one("routine_review_thread_remote");
+    }
+    let assessment = crate::github_command_capabilities::classify_graphql_document(document);
+    if assessment.capabilities.contains(&Cap::Unknown)
+        || (assessment
+            .capabilities
+            .iter()
+            .any(|capability| *capability != Cap::ReadRemote)
+            && !crate::github_command_capabilities::graphql_mutation_fields_proven(document))
+    {
+        return None;
+    }
+    let mut capabilities: Vec<&'static str> = assessment
+        .capabilities
+        .iter()
+        .map(|capability| capability.as_str())
+        .collect();
+    capabilities.sort_unstable();
+    capabilities.dedup();
+    (!capabilities.is_empty()).then_some(capabilities)
 }
 
 fn mutation_capabilities(

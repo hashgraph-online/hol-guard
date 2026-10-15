@@ -1,9 +1,10 @@
 name: Guard Harness Smoke
 
+# Manual only. Every job targets self-hosted `guard` runners, which are not
+# registered, so a nightly schedule only queued runs that never started.
+# Dispatch this workflow when a matching runner is online.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 7 * * *"
 
 permissions:
   contents: read

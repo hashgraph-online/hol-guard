@@ -8,12 +8,10 @@ from pathlib import Path
 from ..adapters.cursor_native_approval import (
     after_shell_proof_from_env,
     cursor_observer_event_for_payload,
-    ensure_cursor_hook_attestation_secret,
     managed_cursor_hook_invocation,
-    normalize_cursor_shell_command,
     resolve_cursor_approval_binding,
-    verify_cursor_after_observer_proof,
 )
+from ..native_cursor_observer_proof import native_cursor_observer_proof_valid
 from .harness_attribution import cursor_runtime_detected
 
 
@@ -33,17 +31,13 @@ def cursor_command_activity_observer_trusted(
     proof = after_shell_proof_from_env(env)
     if approval_binding is None or proof is None:
         return False
-    try:
-        secret = ensure_cursor_hook_attestation_secret(guard_home)
-    except OSError:
-        return False
-    return verify_cursor_after_observer_proof(
-        secret=secret,
+    return native_cursor_observer_proof_valid(
+        guard_home=guard_home,
         conversation_id=conversation_id,
-        command=normalize_cursor_shell_command(command),
+        command=command,
         approval_binding=approval_binding,
-        proof=proof,
         observer_event=cursor_observer_event_for_payload(payload),
+        proof=proof,
     )
 
 

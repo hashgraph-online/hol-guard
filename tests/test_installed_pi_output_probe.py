@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ci.native_runtime import probe_daemon_calls as daemon_calls
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_installed_pi_output import (
     ProbeCleanupError,
@@ -844,33 +845,33 @@ def test_daemon_constructor_failure_closes_public_resources_and_stays_unsafe(
 def test_bounded_daemon_call_redelivers_expired_prior_timer(monkeypatch: pytest.MonkeyPatch) -> None:
     timer_calls: list[tuple[object, ...]] = []
     monotonic_values = iter((0.0, 0.02))
-    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(probe.signal, "getsignal", lambda _signal: "previous-handler")
-    monkeypatch.setattr(probe.signal, "getitimer", lambda _timer: (0.01, 0.02))
-    monkeypatch.setattr(probe.signal, "signal", lambda *_args: None)
-    monkeypatch.setattr(probe.signal, "setitimer", lambda *args: timer_calls.append(args))
+    monkeypatch.setattr(daemon_calls.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(daemon_calls.signal, "getsignal", lambda _signal: "previous-handler")
+    monkeypatch.setattr(daemon_calls.signal, "getitimer", lambda _timer: (0.01, 0.02))
+    monkeypatch.setattr(daemon_calls.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(daemon_calls.signal, "setitimer", lambda *args: timer_calls.append(args))
 
     probe._bounded_daemon_call(SimpleNamespace(stop=lambda: None), "stop")
 
-    assert timer_calls[0] == (probe.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds())
-    assert timer_calls[1] == (probe.signal.ITIMER_REAL, 0)
-    assert timer_calls[2] == (probe.signal.ITIMER_REAL, 0.001, 0.02)
+    assert timer_calls[0] == (daemon_calls.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds())
+    assert timer_calls[1] == (daemon_calls.signal.ITIMER_REAL, 0)
+    assert timer_calls[2] == (daemon_calls.signal.ITIMER_REAL, 0.001, 0.02)
 
 
 def test_bounded_daemon_call_restores_alarm_after_setup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     timer_calls: list[tuple[object, ...]] = []
     signal_calls: list[object] = []
 
-    monkeypatch.setattr(probe.signal, "getsignal", lambda _signal: "previous-handler")
-    monkeypatch.setattr(probe.signal, "getitimer", lambda _timer: (0.5, 0.25))
+    monkeypatch.setattr(daemon_calls.signal, "getsignal", lambda _signal: "previous-handler")
+    monkeypatch.setattr(daemon_calls.signal, "getitimer", lambda _timer: (0.5, 0.25))
 
     def setitimer(*args: object) -> None:
         timer_calls.append(args)
         if len(timer_calls) == 1:
             raise RuntimeError("timer setup failed")
 
-    monkeypatch.setattr(probe.signal, "setitimer", setitimer)
-    monkeypatch.setattr(probe.signal, "signal", lambda _signal, handler: signal_calls.append(handler))
+    monkeypatch.setattr(daemon_calls.signal, "setitimer", setitimer)
+    monkeypatch.setattr(daemon_calls.signal, "signal", lambda _signal, handler: signal_calls.append(handler))
     invoked = False
 
     def stop() -> None:
@@ -884,10 +885,10 @@ def test_bounded_daemon_call_restores_alarm_after_setup_failure(monkeypatch: pyt
     assert len(signal_calls) == 2
     assert signal_calls[1] == "previous-handler"
     assert timer_calls[:2] == [
-        (probe.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds()),
-        (probe.signal.ITIMER_REAL, 0),
+        (daemon_calls.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds()),
+        (daemon_calls.signal.ITIMER_REAL, 0),
     ]
-    assert timer_calls[2][0:2] == (probe.signal.ITIMER_REAL, pytest.approx(0.5, abs=0.001))
+    assert timer_calls[2][0:2] == (daemon_calls.signal.ITIMER_REAL, pytest.approx(0.5, abs=0.001))
     assert timer_calls[2][2] == 0.25
 
 

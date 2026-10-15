@@ -52,9 +52,12 @@ def pytest_sessionstart() -> None:
 
 
 def pytest_sessionfinish(session: object, exitstatus: int) -> None:
-    """Write the shard artifact only when CI requested a destination."""
+    """Write the shard artifact only when CI requested a destination (controller only)."""
 
-    _ = session, exitstatus
+    _ = exitstatus
+    config = getattr(session, "config", None)
+    if getattr(config, "workerinput", None) is not None:
+        return
     output_value = os.environ.get(OUTPUT_ENV)
     if not output_value:
         return

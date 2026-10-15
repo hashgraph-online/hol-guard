@@ -15,16 +15,6 @@ RecognizePayload = Callable[[str, dict[str, object], str, str], dict[str, object
 RecognizeSummary = Callable[[str, str, int], str]
 
 
-def stored_mcp_has_tools(payload: dict[str, object]) -> bool:
-    item = payload.get("item")
-    if not isinstance(item, dict):
-        return False
-    commands = item.get("commands")
-    if not isinstance(commands, list) or not commands:
-        return False
-    return any(isinstance(entry, dict) and entry.get("command_id") for entry in commands)
-
-
 def stored_mcp_recognition(
     store: object,
     command: str,
