@@ -46,6 +46,12 @@ def test_peels_verified_cd_and_bounded_filters(tmp_path: Path) -> None:
         None,
     )
     assert peel_contained_wrapper("pytest -q", workspace=tmp_path) is None
+    # An inline program's `;` is code: `node -e` runs as one argv in the sandbox.
+    assert peel_contained_wrapper(f"cd '{web}' && node -e \"a(); b()\"", workspace=tmp_path) == (
+        "node -e 'a(); b()'",
+        resolved,
+        None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -113,6 +119,10 @@ def test_status_echo_reports_the_shell_status() -> None:
         "pytest -q # note | tail -5",
         "cd $HOME && pytest -q",
         "pytest -k 'a;b' | tail -5",
+        "node -e 'a;b' extra | tail -5",
+        "node -p 'a;b' | tail -5",
+        "bash -c 'a;b' | tail -5",
+        "cd {web} && sh -c 'a;b'",
         'pytest -k "a>b" | tail -5',
         "pytest -q foo2>&1 | tail -5",
         "pytest -q 2>&1 > out.txt | tail -5",
@@ -145,6 +155,16 @@ def test_other_operators_are_left_to_the_strict_unwrapped_path(tmp_path: Path, c
         ("pytest tests/a\\ b.py | head -3", "pytest 'tests/a b.py'", OutputFilter("head", 3, False)),
         ('pytest -k "a \\"b\\" (c)" | head -n 2', "pytest -k 'a \"b\" (c)'", OutputFilter("head", 2, False)),
         ("pytest -q '|' x | tail -1", "pytest -q x", None),
+        (
+            'node -e "a(); if (!b) c(1); d()" | tail -3',
+            "node -e 'a(); if (!b) c(1); d()'",
+            OutputFilter("tail", 3, False),
+        ),
+        (
+            "python3 -c 'import sys; print(1 if sys else 0)' 2>&1 | head -2",
+            "python3 -c 'import sys; print(1 if sys else 0)'",
+            OutputFilter("head", 2, True),
+        ),
     ],
 )
 def test_quoted_words_are_single_arguments(tmp_path: Path, command: str, core: str, output: OutputFilter) -> None:

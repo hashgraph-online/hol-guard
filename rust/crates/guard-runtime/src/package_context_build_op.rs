@@ -6,9 +6,9 @@
 //! typed `error` result; the caller never computes a context itself.
 
 use guard_contracts::{
-    PackageContextBuildComponentV1, PackageContextBuildContextV1, PackageContextBuildRequestV1,
-    PackageContextBuildResultV1, PACKAGE_CONTEXT_BUILD_MAX_BYTES,
-    PACKAGE_CONTEXT_BUILD_REQUEST_SCHEMA, PACKAGE_CONTEXT_BUILD_RESULT_SCHEMA,
+    PackageContextBuildContextV1, PackageContextBuildRequestV1, PackageContextBuildResultV1,
+    PACKAGE_CONTEXT_BUILD_MAX_BYTES, PACKAGE_CONTEXT_BUILD_REQUEST_SCHEMA,
+    PACKAGE_CONTEXT_BUILD_RESULT_SCHEMA,
 };
 
 use crate::package_authority_op::request_digest_with_limit;
@@ -54,6 +54,7 @@ fn build(request: &PackageContextBuildRequestV1) -> Result<PackageContextBuildCo
     use guard_command::package_context_build::{
         build_package_execution_context, BuildError, BuildInput,
     };
+    use guard_contracts::PackageContextBuildComponentV1;
 
     let metadata = metadata_from(request);
     let input = BuildInput {

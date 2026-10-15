@@ -21,7 +21,7 @@ fn controls() -> CompiledNativeCommandControls {
 }
 
 fn host() -> bool {
-    cfg!(target_os = "macos") || crate::restricted_pytest::linux_workspace_sandbox_available()
+    crate::pretool::workspace_contained::sandbox_available()
 }
 
 fn reason(harness: &str, home: &Path, cwd: &Path, command: &str) -> String {

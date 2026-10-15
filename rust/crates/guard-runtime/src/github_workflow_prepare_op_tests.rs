@@ -7,6 +7,7 @@ use super::*;
 use crate::store_vectors_support_tests::gunzip_json;
 use guard_command::command_model::CanonicalCommand;
 use guard_command::github_workflow_operations::GitHubWorkflowOperation;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/github_workflow_vectors.json.gz");
@@ -19,6 +20,7 @@ fn parse_plain(text: &str) -> Option<CanonicalCommand> {
     parse(text, None, None)
 }
 
+#[cfg(unix)]
 pub(super) fn temp_dir(label: &str) -> PathBuf {
     let root = std::fs::canonicalize(std::env::temp_dir())
         .unwrap()
@@ -218,11 +220,13 @@ fn persisted_verification_matches_the_retired_python() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+#[cfg(unix)]
 fn label_sha(label: &str) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(Sha256::digest(label.as_bytes()))
 }
 
+#[cfg(unix)]
 pub(super) fn vectors_context(executable_sha256: &str) -> GitHubWorkflowBindingContext {
     GitHubWorkflowBindingContext {
         repository_sha256: github_repository_sha256("example/repo").unwrap(),

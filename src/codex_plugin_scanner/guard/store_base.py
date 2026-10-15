@@ -77,9 +77,6 @@ from .store_approvals import (
     backfill_approval_queue_columns,
     resolvable_approval_request_ids,
 )
-from .store_approval_writes import (
-    add_approval_request as persist_approval_request,
-)
 from .store_approvals import (
     bulk_resolve_approval_requests as persist_bulk_resolution,
 )
@@ -120,7 +117,6 @@ from .store_connect import (
     connect_request_schema_statement,
     connect_state_schema_statement,
 )
-from .store_review_event_outbox_binding import bind_review_events_for_request
 from .store_evidence import (
     EvidenceRecord,
     ensure_evidence_schema,

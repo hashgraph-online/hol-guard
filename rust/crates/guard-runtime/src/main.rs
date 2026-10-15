@@ -262,6 +262,7 @@ mod guard_config_update_value;
 mod guard_store_advisory_cache;
 #[cfg(test)]
 mod guard_store_advisory_cache_vectors_tests;
+mod guard_store_approval_backfill;
 mod guard_store_approval_request;
 mod guard_store_approval_row;
 mod guard_store_approval_write;
@@ -379,6 +380,8 @@ mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
+// Only the unix Claude session-start bridge records a fallback.
+#[cfg(unix)]
 mod hook_bridge_fallback;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;

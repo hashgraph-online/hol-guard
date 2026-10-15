@@ -131,6 +131,30 @@ def test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_s
     assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
 
 
+def test_full_corpus_process_timing_runs_serially_without_losing_other_report_checks() -> None:
+    import yaml
+
+    module = "tests/test_guard_command_decision_diff.py"
+    timing_node = f"{module}::test_fresh_process_report_is_environment_independent_and_bounded"
+    ordinary_node = f"{module}::test_report_contains_only_privacy_safe_deterministic_evidence"
+    shards, _ = build_affinity_node_shards([f"{timing_node}[pacific]", ordinary_node], 1, {})
+    assert shards == [[ordinary_node]]
+    root = Path(__file__).resolve().parents[1]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
+    timing_step = next(step for step in jobs["scheduling-sensitive"]["steps"]
+                       if step.get("name") == "Run scheduling-sensitive tests untraced")
+    assert "if" not in timing_step
+    match = re.search(r"nodes=\((.*?)\n\s*\)", timing_step["run"], re.S)
+    assert match is not None
+    nodes = shlex.split(match.group(1))
+    assert nodes.count(timing_node) == 1
+    # Use the existing short slice without shifting the other timing workloads.
+    assert nodes.index(timing_node) % 4 == 1
+    assert nodes.count("tests/test_guard_sandbox.py") == 1
+    assert "-n" not in shlex.split(timing_step["run"])
+    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
+
+
 @pytest.mark.parametrize("condition", ["false", "github.event_name == 'schedule'"])
 def test_hung_continuation_routing_rejects_conditional_execution(monkeypatch, condition: str) -> None:
     original = expand_ci_job_actions

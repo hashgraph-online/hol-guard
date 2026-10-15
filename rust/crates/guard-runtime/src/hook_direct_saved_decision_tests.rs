@@ -211,7 +211,8 @@ fn published() -> Value {
 #[test]
 fn a_local_store_with_the_decision_is_read() {
     let (_path, connection) = local_store("local");
-    assert!(shape(&connection).base().unwrap());
+    assert!(shape(&connection).supported().unwrap());
+    assert!(!shape(&connection).grants().unwrap());
     assert_eq!(
         shape(&connection).readable(&published()).unwrap(),
         Some(false)
@@ -285,7 +286,9 @@ fn a_store_the_lookup_reads_differently_defers() {
         connection.execute_batch(change).unwrap();
         let store = shape(&connection);
         assert!(
-            !(store.base().unwrap() && store.readable(&published()).unwrap().is_some()),
+            !(store.supported().unwrap()
+                && !store.grants().unwrap()
+                && store.readable(&published()).unwrap().is_some()),
             "{tag}"
         );
     }
@@ -306,7 +309,7 @@ fn a_damaged_schema_marker_defers() {
         .execute("update local_cli_schema_migration set checksum = 'x'", [])
         .unwrap();
     assert!(matches!(
-        shape(&connection).base(),
+        shape(&connection).supported(),
         Err(HookDirectDefer::SavedDecision)
     ));
 }
@@ -411,32 +414,7 @@ fn answer_with(
     action: &str,
     answering: &DirectLaneBinding,
 ) -> Result<Value, HookDirectDefer> {
-    let vectors = vectors();
-    let workspace = workspace(tag);
-    let full = binding();
-    let (edge, payload, artifact_id, token) = bound_request(&full, &workspace);
-    let (path, connection) = local_store(tag);
-    insert_decision(
-        &connection,
-        "claude-code",
-        &artifact_id,
-        &token,
-        action,
-        "approval-gate",
-    );
-    let guard_home = path.parent().unwrap().to_str().unwrap().to_owned();
-    answer(
-        &edge,
-        &Context {
-            harness: "claude-code",
-            payload: &payload,
-            recorded_payload: &payload,
-            workspace: &workspace,
-            home_dir: vectors["home_dir"].as_str().unwrap(),
-            guard_home: &guard_home,
-            binding: answering,
-        },
-    )
+    seeded::answer_in(tag, action, answering, "")
 }
 
 #[test]
@@ -483,3 +461,6 @@ fn a_binding_without_the_published_state_defers() {
 
 #[path = "hook_direct_saved_subdirectory_tests.rs"]
 mod subdirectory;
+
+#[path = "hook_direct_saved_seeded_tests.rs"]
+mod seeded;

@@ -370,8 +370,14 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_node_build_output_containment_required");
     }
     let read_only_node_tool = match super::executable_basename(executable) {
-        "bun" | "npm" | "pnpm" => {
+        "bun" | "npm" => {
             matches!(arguments, [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck"))
+        }
+        // `pnpm exec` is pnpm's spelling of a local-bin run; only the bare
+        // form, with no pnpm option before the tool, reads as one.
+        "pnpm" => {
+            matches!(arguments, [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck"))
+                || matches!(arguments, [exec, tool, rest @ ..] if exec == "exec" && (tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit"))))
         }
         "bunx" | "npx" => {
             matches!(arguments, [tool, rest @ ..] if tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")))

@@ -18,6 +18,10 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["bunx", "tsc"],
         ["bun", "x", "tsc"],
         ["bun", "x", "eslint@evil", "src"],
+        ["pnpm", "exec", "tsc"],
+        ["pnpm", "exec", "-c", "tsc", "--noEmit"],
+        ["pnpm", "exec", "eslint", "--fix", "src"],
+        ["pnpm", "exec"],
         ["eslint", "--fix", "src"],
         ["eslint", "--output-file=.env", "src"],
         ["node", "--max-old-space-size=999999", "typescript/bin/tsc", "--noEmit"],
@@ -62,6 +66,20 @@ def test_bun_x_is_read_as_bunx(monkeypatch, tmp_path):
     plan = tool.prepare_restricted_node_tool(["bun", "x", "tsc", "--noEmit"], workspace=tmp_path)
     assert plan.profile_version == "node-tool-readonly-v1"
     assert plan.command[-1] == "--noEmit"
+
+
+def test_pnpm_exec_is_read_as_a_local_bin_run(monkeypatch, tmp_path):
+    entry = tmp_path / "node_modules/typescript/bin/tsc"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("// fixture compiler")
+    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
+    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
+    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
+    plan = tool.prepare_restricted_node_tool(
+        ["pnpm", "exec", "tsc", "--noEmit", "--pretty", "false"], workspace=tmp_path
+    )
+    assert plan.profile_version == "node-tool-readonly-v1"
+    assert plan.command == ("/usr/bin/node", str(entry), "--noEmit", "--pretty", "false")
 
 
 @pytest.mark.parametrize("script", ["curl https://example.invalid", "", "eslint src && curl https://example.invalid"])

@@ -409,12 +409,28 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Stage shipped runtime trust bindings
+        run: python3 scripts/refresh_extension_artifacts.py --trust-only
+      - name: Identify the shipping build platform
+        id: shipping-platform
+        run: echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+      - name: Restore the exact shipped runtime
+        id: shipped-runtime-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: rust/target/release/hol-guard-runtime
+          # No prefix restore: every embedded input, build recipe and toolchain
+          # must match. Hash before setup-rust restores dependency artifacts.
+          key: shipped-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.shipping-platform.outputs.image }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'src/codex_plugin_scanner/guard/contracts/**', '.github/actions/setup-rust/action.yml', '.github/workflows/ci.yml') }}
       - uses: ./.github/actions/setup-rust
+        if: steps.shipped-runtime-cache.outputs.cache-hit != 'true'
       - name: Install content-addressed compiler cache
+        if: steps.shipped-runtime-cache.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
           version: v0.18.0
-      - name: Measure the shipped fat-LTO runtime size
+      - name: Build the shipped fat-LTO runtime
+        if: steps.shipped-runtime-cache.outputs.cache-hit != 'true'
         env:
           RUSTC_WORKSPACE_WRAPPER: sccache
           SCCACHE_GHA_ENABLED: 'on'
@@ -431,7 +447,15 @@ jobs:
           # Only the runtime ships in platform wheels; the native evaluator
           # builds and verifies guard-command-source separately on this commit.
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+      - name: Measure the shipped fat-LTO runtime size
+        run: |
           python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release --platform manylinux_2_17_x86_64
+      - name: Save the verified shipped runtime
+        if: steps.shipped-runtime-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: rust/target/release/hol-guard-runtime
+          key: ${{ steps.shipped-runtime-cache.outputs.cache-primary-key }}
 
   coverage-plan:
     needs: native-command-evaluators
@@ -932,13 +956,15 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    # One runner took over 30 minutes for the whole gate; three shards keep
-    # each well inside the limit.
-    timeout-minutes: 30
+    # The full catalog exceeds 9,000 cases. Three shards took 20 minutes;
+    # keep every case, with two workers per runner and a five-minute budget.
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
-        shard-index: [0, 1, 2]
+        shard-index:
+          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+           12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -948,7 +974,7 @@ jobs:
           python-version: "3.12"
           suite: gates
           shard-index: ${{ matrix.shard-index }}
-          shard-count: 3
+          shard-count: 24
 
   # Shadow aggregate: reports the merged required-result contract. In shadow mode
   # it needs the full required set and evaluates the planner's lane choice so the

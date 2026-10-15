@@ -27,6 +27,7 @@ const CONSUME_METHOD: &str = "consume_native_review_approval";
 /// replaces the store holds it exclusively.
 const STORAGE_GATE_FILE_NAME: &str = "storage-access.lock";
 /// The store files the daemon keeps private after each store call.
+#[cfg(unix)]
 const STORE_FILE_SUFFIXES: [&str; 4] = ["", "-journal", "-shm", "-wal"];
 /// A hook waits this long for a busy store before the daemon takes over.
 const BUSY_TIMEOUT_MS: u64 = 250;

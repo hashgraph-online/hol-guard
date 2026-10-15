@@ -6,6 +6,7 @@ pub mod repository_scanner;
 pub mod secret_detection;
 pub mod staged_scanner;
 
+mod code_value;
 mod continuation;
 mod field_copy;
 mod masked_value;
@@ -268,7 +269,8 @@ fn is_sample(
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
-            || reference_value::is_reference(matched, rest_of_line))
+            || reference_value::is_reference(matched, rest_of_line)
+            || code_value::is_code_value(matched, rest_of_line))
     {
         return true;
     }

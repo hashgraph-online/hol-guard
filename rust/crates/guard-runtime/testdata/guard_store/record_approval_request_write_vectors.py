@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Record approval queue write vectors from the Python implementation.
 
-Run against a checkout whose `store_approval_writes.py` still holds the
-Python write, with a native runtime for the canonical surfaces and queue
+Run against a checkout from before the Rust write landed, whose
+`store_approval_writes.py` still holds the Python write, with a native runtime for the canonical surfaces and queue
 identity the write asks the resident for:
 
     cd <origin-main-worktree>
@@ -274,6 +274,15 @@ SCENARIOS: list[dict[str, object]] = [
         "name": "legacy_row_defers",
         "native_defers": True,
         "rows": [row("r-legacy", action_identity=None, queue_group_id=None)],
+        "request": request("r-new"),
+    },
+    {
+        "name": "legacy_nan_envelope_row_rejected",
+        "native_defers": True,
+        "rows": [
+            row("r-nan", action_identity=None, queue_group_id=None, action_envelope_json='{"command":"x","n":NaN}'),
+            row("r-later", action_identity=None, queue_group_id=None, dedupe_count=-3, last_seen_at=""),
+        ],
         "request": request("r-new"),
     },
     {

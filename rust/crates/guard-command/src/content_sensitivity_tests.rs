@@ -18,7 +18,7 @@ fn original_python_sensitivity_and_mediation_vectors_replay() {
             &vector["body"],
             Instant::now() + Duration::from_secs(2),
         );
-        match result {
+        match result.map(|actual| host_paths(query, actual)) {
             Ok(actual) if actual == vector["expected"] => {}
             other => failures.push(format!(
                 "vector {index} query {query}: {other:?}, expected {}",
@@ -27,6 +27,30 @@ fn original_python_sensitivity_and_mediation_vectors_replay() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The path vectors were recorded with POSIX paths. Windows resolves the
+/// same paths and joins them with its own separator, so a resolved `path` is
+/// compared in POSIX spelling there.
+fn host_paths(query: &str, mut value: Value) -> Value {
+    fn posix(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                for (key, item) in map.iter_mut() {
+                    match item {
+                        Value::String(path) if key == "path" => *path = path.replace('\\', "/"),
+                        _ => posix(item),
+                    }
+                }
+            }
+            Value::Array(items) => items.iter_mut().for_each(posix),
+            _ => {}
+        }
+    }
+    if cfg!(windows) && matches!(query, "path" | "path_batch") {
+        posix(&mut value);
+    }
+    value
 }
 
 #[test]
@@ -44,10 +68,13 @@ fn large_output_encoding_is_lossless_and_native_decoding_rejects_invalid_frames(
         assert_eq!(decoded["text"], expected);
         assert_eq!(decoded["suppress_samples"], true);
         assert_eq!(decoded["documentation_sample_context"], false);
+        // A debug build scans each multi-megabyte frame with every rule, which
+        // can exceed 30 seconds on a loaded runner. The test checks lossless
+        // decoding and the scan result, not the production budget.
         let outcome = super::evaluate(
             "content",
             &decoded,
-            Instant::now() + Duration::from_secs(30),
+            Instant::now() + Duration::from_secs(300),
         )
         .unwrap();
         assert_eq!(outcome["ok"], json!([]));
@@ -119,7 +146,7 @@ fn batched_paths_replay_original_python_outcomes_in_order() {
         )
         .unwrap();
         assert_eq!(
-            actual["ok"],
+            host_paths("path_batch", actual)["ok"],
             json!([vector["expected"]["ok"], vector["expected"]["ok"]])
         );
     }

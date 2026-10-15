@@ -82,3 +82,40 @@ pub(super) fn intent_only_runs(intent: &PackageIntent, tools: &[String]) -> bool
                 })
         })
 }
+
+/// Whether `command`, which a narrower read-only profile claimed, passes the
+/// workspace route's runner gate: every package runner starts an installed
+/// project tool, every package-manager step is local work, and nothing
+/// installs, executes a one-shot package or syncs a lockfile. `bunx vitest`
+/// reaches the workspace sandbox only when vitest is installed.
+pub(in crate::pretool) fn runners_admitted(
+    command: &str,
+    workspace: &Path,
+    home: Option<&Path>,
+) -> bool {
+    let Ok(model) = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    }) else {
+        return false;
+    };
+    let tools = installed_tools(&model, workspace);
+    if tools.is_none() && model.segments.iter().any(|s| runner_arguments(s).is_some()) {
+        return false;
+    }
+    super::package::local_package_work(&model, tools.is_some())
+        && crate::package_intent_parser::parse_package_intent(
+            command,
+            Some(workspace),
+            home,
+            None,
+            None,
+        )
+        .is_none_or(|intent| {
+            tools
+                .as_deref()
+                .is_some_and(|tools| intent_only_runs(&intent, tools))
+        })
+}

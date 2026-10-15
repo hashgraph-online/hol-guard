@@ -3,26 +3,34 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
+# Sample with the operating system's own ``ps`` rather than a PATH lookup.
+# Fixed root-owned locations cannot be shadowed by the caller's PATH, and they
+# keep this measurement independent of Guard: the RSS sampler also runs after
+# a benchmark session has closed its resident, when the resident-backed
+# command-path trust helper has no runtime to answer.
+_SYSTEM_PS_PATHS = (Path("/bin/ps"), Path("/usr/bin/ps"))
+
+
+def _system_ps_path() -> Path | None:
+    for candidate in _SYSTEM_PS_PATHS:
+        try:
+            status = candidate.stat()
+        except OSError:
+            continue
+        if candidate.is_file() and status.st_uid == 0 and not status.st_mode & 0o022:
+            return candidate
+    return None
 
 
 def process_tree_rss_bytes(process_ids: tuple[int, ...]) -> int | None:
     root_process_ids = {process_id for process_id in process_ids if process_id > 0}
     if not root_process_ids or os.name == "nt":
         return None
-    located_ps = shutil.which("ps")
-    if located_ps is None:
-        return None
-    ps_path = Path(located_ps)
-    if not ps_path.is_absolute() or not is_trusted_absolute_command_path(
-        ps_path,
-        cwd=Path.cwd(),
-        home_dir=Path.home(),
-    ):
+    ps_path = _system_ps_path()
+    if ps_path is None:
         return None
     try:
         result = subprocess.run(

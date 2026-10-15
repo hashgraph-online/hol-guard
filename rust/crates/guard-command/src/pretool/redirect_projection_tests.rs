@@ -218,9 +218,7 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
     .unwrap();
     let home = root.to_string_lossy().into_owned();
     let cwd = project.to_string_lossy().into_owned();
-    let contained = if cfg!(target_os = "macos")
-        || crate::restricted_pytest::linux_workspace_sandbox_available()
-    {
+    let contained = if crate::pretool::workspace_contained::sandbox_available() {
         "sandbox-required"
     } else {
         "review"

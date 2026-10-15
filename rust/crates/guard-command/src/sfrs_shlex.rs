@@ -247,10 +247,14 @@ mod tests {
     #[test]
     fn separates_punctuation_runs() {
         assert_eq!(split("a&&b;c|d"), ["a", "&&", "b", ";", "c", "|", "d"]);
-        assert_eq!(
-            split("echo 'a b' \"c d\" e\\ f"),
-            ["echo", "a b", "c d", "e f"]
-        );
+        // `is_escape` keeps backslash literal on Windows, where cmd and
+        // PowerShell use it as a path separator.
+        let escaped = split("echo 'a b' \"c d\" e\\ f");
+        if cfg!(windows) {
+            assert_eq!(escaped, ["echo", "a b", "c d", "e\\", "f"]);
+        } else {
+            assert_eq!(escaped, ["echo", "a b", "c d", "e f"]);
+        }
     }
 
     #[test]
@@ -262,14 +266,22 @@ mod tests {
     #[test]
     fn unterminated_quote_and_escape_fail() {
         assert!(split_punctuation("echo 'a").is_err());
-        assert!(split_punctuation("echo a\\").is_err());
+        // A trailing backslash escapes nothing on POSIX; on Windows it is a
+        // literal character (`is_escape`).
+        assert_eq!(split_punctuation("echo a\\").is_err(), !cfg!(windows));
     }
 
     #[test]
     fn matches_cpython_on_mixed_inputs() {
         assert_eq!(split("a;;b"), ["a", ";;", "b"]);
         assert_eq!(split("a&|b c"), ["a", "&|", "b", "c"]);
-        assert_eq!(split("x\"a\\\"b\"y"), ["xa\"by"]);
+        // CPython's POSIX escape inside double quotes; on Windows the
+        // backslash is literal (`is_escape`), so the second quote closes.
+        if cfg!(windows) {
+            assert!(split_punctuation("x\"a\\\"b\"y").is_err());
+        } else {
+            assert_eq!(split("x\"a\\\"b\"y"), ["xa\"by"]);
+        }
         assert_eq!(split("a>b&c"), ["a>b", "&", "c"]);
     }
 

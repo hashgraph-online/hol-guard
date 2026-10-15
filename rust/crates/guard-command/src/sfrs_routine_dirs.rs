@@ -136,8 +136,12 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("dir");
         let home = dir.join("home");
         std::fs::create_dir_all(&home).expect("home");
-        assert!(safe("mkdir -p out/build", &dir, &home));
-        assert!(safe("mkdir --parents ~/work", &dir, &home));
+        // The roots are `PurePosixPath`s (`PyPath`), so a Windows directory is
+        // never a proven root and every creation there keeps its review.
+        if cfg!(unix) {
+            assert!(safe("mkdir -p out/build", &dir, &home));
+            assert!(safe("mkdir --parents ~/work", &dir, &home));
+        }
         assert!(!safe("mkdir out", &dir, &home));
         assert!(!safe("mkdir -p ../out", &dir, &home));
         assert!(!safe("mkdir -p .ssh", &dir, &home));

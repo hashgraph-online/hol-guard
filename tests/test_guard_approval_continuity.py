@@ -330,10 +330,7 @@ class TestFallbackCliCommandRewrite:
 
         from codex_plugin_scanner.guard.models import GuardApprovalRequest
         from codex_plugin_scanner.guard.store import GuardStore
-        from codex_plugin_scanner.guard.store_approvals import (
-            add_approval_request,
-            get_approval_request,
-        )
+        from codex_plugin_scanner.guard.store_approvals import get_approval_request
 
         guard_home = tmp_path / "guard"
         store = GuardStore(guard_home)
@@ -358,7 +355,7 @@ class TestFallbackCliCommandRewrite:
 
         conn = _sqlite3.connect(str(store.path))
         conn.row_factory = _sqlite3.Row
-        row_id1 = add_approval_request(conn, initial, now)
+        row_id1 = store.add_approval_request(initial, now)
 
         updated = dataclasses.replace(
             initial,
@@ -367,7 +364,7 @@ class TestFallbackCliCommandRewrite:
             approval_url="http://127.0.0.1:6174/#/approve/req-new-id",
             fallback_cli_command="hol-guard approvals approve req-new-id",
         )
-        row_id2 = add_approval_request(conn, updated, now)
+        row_id2 = store.add_approval_request(updated, now)
         assert row_id2 == row_id1, "Must reuse existing pending row"
 
         row = get_approval_request(conn, row_id1)
