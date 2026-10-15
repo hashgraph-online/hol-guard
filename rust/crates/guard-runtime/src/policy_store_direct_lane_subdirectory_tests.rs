@@ -123,7 +123,8 @@ fn a_subdirectory_that_is_not_its_own_realpath_defers() {
     let outside = lane.root.join("repo/outside");
     symlink(lane.directory("elsewhere"), &outside).unwrap();
     assert_eq!(lane.hook(outside.to_str().unwrap()), UNKNOWN);
-    assert_eq!(lane.hook(&lane.directory("elsewhere")), UNKNOWN);
+    // The resolved target is file-less with no ancestor overlay.
+    assert_eq!(lane.hook(&lane.directory("elsewhere")), None);
     // Strings that name a subdirectory without being canonical defer.
     let dotted = format!("{}/./target", lane.root.join("repo").to_str().unwrap());
     assert_eq!(lane.hook(&dotted), UNKNOWN);
@@ -135,6 +136,9 @@ fn a_subdirectory_that_is_not_its_own_realpath_defers() {
 #[test]
 fn descent_is_by_path_component_not_string_prefix() {
     let lane = lane("prefix", &["repo"]);
+    // An overlay above both leaves only the settled descent to admit.
+    fs::write(lane.root.join(OVERLAYS[1]), b"mode = \"observe\"\n").unwrap();
+    assert_eq!(lane.hook(&lane.directory("repo/src")), None);
     assert_eq!(lane.hook(&lane.directory("repo2")), UNKNOWN);
     assert_eq!(lane.hook(&lane.directory("repo2/src")), UNKNOWN);
     assert_eq!(lane.hook(&lane.directory("rep")), UNKNOWN);
@@ -166,4 +170,45 @@ fn a_subdirectory_still_needs_the_ack_and_unchanged_inputs() {
     write_current_ack(&lane.fixture);
     fs::write(&lane.fixture.input, b"mode = \"observe\"\n").unwrap();
     assert_eq!(lane.hook(&nested), Some(DirectLaneDefer::InputChanged));
+}
+
+#[test]
+fn a_file_less_directory_without_an_ancestor_overlay_is_admitted() {
+    // Its config is the home config, which the ACKed snapshot already holds.
+    let lane = lane("unrelated", &["repo"]);
+    let deep = lane.directory("other/project/src");
+    assert_eq!(lane.hook(&deep), None);
+    assert_eq!(lane.hook(&lane.directory("other")), None);
+    // MCP relay admission keeps the exact bound set.
+    assert_eq!(lane.exact(&deep), UNKNOWN);
+}
+
+#[test]
+fn an_unsettled_ancestor_overlay_defers() {
+    // Once it settles, the snapshot merges that overlay strictest-first.
+    let lane = lane("ancestor", &["repo"]);
+    for (index, name) in OVERLAYS.iter().enumerate() {
+        let parent = lane.directory(&format!("file-{index}"));
+        fs::write(Path::new(&parent).join(name), b"mode = \"observe\"\n").unwrap();
+        assert_eq!(
+            lane.hook(&lane.directory(&format!("file-{index}/a/b"))),
+            UNKNOWN,
+            "{name}"
+        );
+        // A dangling link under the name is still present.
+        let linked = lane.directory(&format!("link-{index}"));
+        symlink(lane.root.join("absent"), Path::new(&linked).join(name)).unwrap();
+        assert_eq!(
+            lane.hook(&lane.directory(&format!("link-{index}/a"))),
+            UNKNOWN,
+            "{name}"
+        );
+    }
+    // A settled ancestor's overlay is already in the snapshot.
+    fs::write(
+        lane.root.join("repo").join(OVERLAYS[1]),
+        b"mode = \"observe\"\n",
+    )
+    .unwrap();
+    assert_eq!(lane.hook(&lane.directory("repo/src")), None);
 }
