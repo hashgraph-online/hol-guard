@@ -1,7 +1,7 @@
 //! Native Claude Code hook bridge: a port of `main` in
 //! `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
 //! hook. It forwards the hook to the authenticated loopback Guard daemon and
-//! recovers a dead daemon once, all inside the harness's hook deadline. Every
+//! recovers a dead daemon once, waiting for it to come back up, all inside the harness's hook deadline. Every
 //! failure ends in a hook response that denies or degrades the action; nothing
 //! here decides a verdict itself, and no Python hook command runs in its place.
 
@@ -16,12 +16,13 @@ use crate::claude_hook_bridge_render::{
     valid_hook_json_or_degraded,
 };
 use crate::claude_hook_bridge_transport::{
-    authenticated_claude_hook_response, json_failure, BridgeError,
+    authenticated_claude_hook_response, daemon_proves_identity, json_failure, BridgeError,
 };
 use crate::claude_hook_bridge_url::{
     assert_loopback_http_url, endpoint_query, state_names_loopback_port, state_path_for_query,
 };
 use crate::codex_hook_bridge_direct::{direct_answer, CLAUDE_CODE};
+use crate::hook_bridge_daemon_start::{await_daemon, Attempt, MINIMUM_REQUEST};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::hook_process_spawn::{isolated_hook_environment, run_isolated_hook_process};
 
@@ -220,6 +221,26 @@ impl Bridge<'_> {
             && window >= MINIMUM_RECOVERY
             && self.run_recovery(self.deadline, kind)
         {
+            // The recovery command only schedules the daemon start: wait for
+            // a daemon that proves its identity before sending the hook again.
+            // A probe never eats the time the hook itself needs.
+            let probe_end = self
+                .deadline
+                .checked_sub(MINIMUM_REQUEST)
+                .unwrap_or(self.deadline);
+            let started = await_daemon(self.deadline, || {
+                let timeout = capped(probe_end, DAEMON_IO_TIMEOUT);
+                match daemon_proves_identity(state_path, &self.data, timeout) {
+                    Err(error) if error.is_recoverable() => Attempt::NotUp,
+                    _ => Attempt::Settled(()),
+                }
+            });
+            if started.is_none() {
+                return degraded(
+                    &format!("{reason}; daemon recovery retry failed: the restarted daemon did not answer in time"),
+                    &self.data,
+                );
+            }
             let malformed = format!("{reason}; recovered daemon returned malformed hook JSON");
             match self.exchange(state_path, self.deadline, &malformed) {
                 Ok(body) => return body,
