@@ -215,7 +215,6 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
 
 
 _DEVICE_ROW_KEY = "local-device"
-_MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
 _POLICY_INTEGRITY_STATE_KEY = "policy_integrity"
@@ -1308,16 +1307,6 @@ def receipt_index_statements() -> list[str]:
             "on runtime_receipts(approval_request_id, policy_decision)"
         ),
     ]
-
-
-def _path_within_workspace(config_path: str, workspace: str) -> bool:
-    normalized_config = _normalized_workspace_path(config_path)
-    normalized_workspace = _normalized_workspace_path(workspace)
-    if not normalized_config or not normalized_workspace:
-        return False
-    if normalized_workspace == "/":
-        return normalized_config.startswith("/")
-    return normalized_config == normalized_workspace or normalized_config.startswith(f"{normalized_workspace}/")
 
 
 def _normalized_workspace_path(value: str) -> str:

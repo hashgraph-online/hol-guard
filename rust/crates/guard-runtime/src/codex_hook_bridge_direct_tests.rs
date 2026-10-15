@@ -1,6 +1,7 @@
 use super::{
-    answered_response, bounded_direct_request, direct_event, direct_request, grok_direct_answer,
-    grok_direct_request, harness_event, parse_hook_query, HookQuery, CLAUDE_CODE, CODEX, CURSOR,
+    answered_response, bounded_direct_request, bounded_event, direct_event, direct_request,
+    grok_direct_answer, grok_direct_request, harness_event, parse_hook_query, HookQuery,
+    CLAUDE_CODE, CODEX, CURSOR,
 };
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -386,5 +387,27 @@ fn claude_code_and_codex_ask_the_resident_about_their_permission_dialogs() {
     ] {
         assert!(!harness_event(&CLAUDE_CODE, event), "{event}");
         assert!(!harness_event(&CODEX, event), "{event}");
+    }
+}
+
+#[test]
+fn copilot_devin_and_zcode_ask_the_resident_about_their_permission_requests() {
+    for harness in ["copilot", "devin", "zcode"] {
+        for event in [
+            "PermissionRequest",
+            "permissionRequest",
+            "permissionRequestV2",
+        ] {
+            assert!(bounded_event(harness, event), "{harness} {event}");
+        }
+        assert!(bounded_event(harness, "PreToolUse"), "{harness}");
+        assert!(!bounded_event(harness, "Notification"), "{harness}");
+        assert!(
+            !bounded_event(harness, "copilotPermissionRequest"),
+            "{harness}"
+        );
+    }
+    for harness in ["kimi", "cline", "opencode", "grok"] {
+        assert!(!bounded_event(harness, "PermissionRequest"), "{harness}");
     }
 }

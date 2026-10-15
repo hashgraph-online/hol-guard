@@ -262,172 +262,21 @@ class StoreApprovalsMixin:
             approval_gate_grant=approval_gate_grant,
             now=resolved_at,
         )
-        if scope == "workspace":
-            if harness is None or workspace is None:
-                return []
-            return self._resolve_workspace_matching_approval_requests(
-                harness=harness,
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-        conditions, params = self._approval_scope_conditions(
-            harness=harness,
-            scope=scope,
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
+        return self._native_approval_read(
+            "resolve_matching_approval_requests",
+            {
+                "harness": harness,
+                "scope": scope,
+                "artifact_id": artifact_id,
+                "artifact_hash": artifact_hash,
+                "workspace": workspace,
+                "publisher": publisher,
+                "resolution_action": resolution_action,
+                "resolution_scope": resolution_scope,
+                "reason": reason,
+                "resolved_at": resolved_at,
+            },
         )
-        if conditions is None:
-            return []
-        where_clause = " and ".join(["status = 'pending'", *conditions])
-        with self._connect() as connection:
-            rows = connection.execute(
-                f"""
-                select request_id, policy_action, decision_v2_json, action_envelope_json
-                from approval_requests
-                where {where_clause}
-                order by last_seen_at desc, request_id desc
-                """,
-                params,
-            ).fetchall()
-            matching_ids = resolvable_approval_request_ids(connection, rows)
-            self._resolve_approval_request_ids(
-                connection,
-                matching_ids,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-        return matching_ids[:_MAX_RESOLVED_SCOPE_IDS]
-
-    @staticmethod
-    def _approval_scope_conditions(
-        *,
-        harness: str | None,
-        scope: str,
-        artifact_id: str | None,
-        workspace: str | None,
-        publisher: str | None,
-        artifact_hash: str | None = None,
-    ) -> tuple[list[str] | None, tuple[object, ...]]:
-        # Native pretool requests share one artifact id per tool
-        # ("harness:native-pretool:Bash"); the per-action discriminator is the
-        # artifact hash. A scope sweep that matches the artifact id alone would
-        # resolve every other pending call of that tool, so whenever the
-        # decision carries the action hash the sweep requires it too.
-        def action_conditions() -> list[str]:
-            conditions = ["artifact_id = ?"]
-            if artifact_hash is not None:
-                conditions.append("artifact_hash = ?")
-            return conditions
-
-        def action_params() -> tuple[object, ...]:
-            return (artifact_id, artifact_hash) if artifact_hash is not None else (artifact_id,)
-
-        if scope == "global":
-            if _runtime_scoped_exact_match_key(artifact_id) is not None:
-                return ["artifact_id = ?"], (artifact_id,)
-            if artifact_id is not None:
-                return action_conditions(), action_params()
-            return [], ()
-        if scope == "harness":
-            if harness is None:
-                return None, ()
-            if _runtime_scoped_exact_match_key(artifact_id) is not None:
-                return ["harness = ?", "artifact_id = ?"], (harness, artifact_id)
-            family_key = _artifact_family_key(artifact_id)
-            if family_key is None:
-                if artifact_id is None:
-                    return ["harness = ?"], (harness,)
-                return ["harness = ?", *action_conditions()], (harness, *action_params())
-            return ["harness = ?", "artifact_id like ?"], (harness, f"%:{_family_key_value(family_key)}:%")
-        if scope == "artifact":
-            if harness is None or artifact_id is None:
-                return None, ()
-            return ["harness = ?", *action_conditions()], (harness, *action_params())
-        if scope == "publisher":
-            if harness is None or publisher is None:
-                return None, ()
-            return ["harness = ?", "publisher = ?"], (harness, publisher)
-        if scope == "workspace":
-            return None, ()
-        return None, ()
-
-    def _resolve_workspace_matching_approval_requests(
-        self,
-        *,
-        harness: str,
-        artifact_id: str | None,
-        workspace: str,
-        resolution_action: str,
-        resolution_scope: str,
-        reason: str | None,
-        resolved_at: str,
-        artifact_hash: str | None = None,
-    ) -> list[str]:
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            rows = connection.execute(
-                """
-                select request_id, artifact_id, artifact_hash, config_path, policy_action,
-                       decision_v2_json, action_envelope_json
-                from approval_requests
-                where status = 'pending'
-                  and harness = ?
-                order by last_seen_at desc, request_id desc
-                """,
-                (harness,),
-            ).fetchall()
-            candidates = [
-                row
-                for row in rows
-                if _path_within_workspace(str(row["config_path"]), workspace)
-                and (artifact_id is None or row["artifact_id"] == artifact_id)
-                and (artifact_id is None or artifact_hash is None or row["artifact_hash"] == artifact_hash)
-            ]
-            matching_ids = resolvable_approval_request_ids(connection, candidates)
-            self._resolve_approval_request_ids(
-                connection,
-                matching_ids,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-        return matching_ids[:_MAX_RESOLVED_SCOPE_IDS]
-
-    @staticmethod
-    def _resolve_approval_request_ids(
-        connection: sqlite3.Connection,
-        request_ids: list[str],
-        *,
-        resolution_action: str,
-        resolution_scope: str,
-        reason: str | None,
-        resolved_at: str,
-    ) -> None:
-        for chunk in _chunks(request_ids, _SQLITE_ID_BATCH_SIZE):
-            placeholders = ", ".join("?" for _ in chunk)
-            connection.execute(
-                f"""
-                update approval_requests
-                set status = 'resolved',
-                    resolution_action = ?,
-                    resolution_scope = ?,
-                    reason = ?,
-                    resolved_at = ?
-                where request_id in ({placeholders})
-                  and status = 'pending'
-                """,
-                (resolution_action, resolution_scope, reason, resolved_at, *chunk),
-            )
 
     def bulk_resolve_approval_requests(
         self,

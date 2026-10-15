@@ -125,7 +125,7 @@ class StoreApprovalQueriesMixin:
             continuation = {"after": page.pop("after"), "taken": len(items)}
 
     def _native_approval_read(self, method: str, args: dict[str, object]) -> Any:
-        """One native queue read; a resident without an answer reads as scope unavailable."""
+        """One native queue call; a resident without an answer reads as scope unavailable."""
 
         try:
             # `Path.resolve` of a relative config path starts from this process's directory.
