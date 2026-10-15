@@ -90,36 +90,17 @@ class StoreApprovalsMixin:
         inbox pending after Accept. This path is artifact-scoped allow-only.
         """
 
-        if not request_id.strip():
-            return False
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            request = load_approval_request(connection, request_id)
-            if request is None:
-                return False
-            if str(request.get("status") or "") != "pending":
-                return False
-            if str(request.get("harness") or "") != expected_harness:
-                return False
-            request_artifact_id = str(request.get("artifact_id") or "")
-            if expected_artifact_id is not None and request_artifact_id != expected_artifact_id:
-                return False
-            request_artifact_hash = str(request.get("artifact_hash") or "")
-            if expected_artifact_hash is not None and request_artifact_hash != expected_artifact_hash:
-                return False
-            try:
-                require_resolvable_approval_request(request)
-            except ValueError:
-                return False
-            persist_approval_resolution(
-                connection,
-                request_id,
-                resolution_action="allow",
-                resolution_scope="artifact",
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-        return True
+        return self._native_approval_read(
+            "resolve_harness_native_approval_request",
+            {
+                "request_id": request_id,
+                "reason": reason,
+                "resolved_at": resolved_at,
+                "expected_harness": expected_harness,
+                "expected_artifact_id": expected_artifact_id,
+                "expected_artifact_hash": expected_artifact_hash,
+            },
+        )
 
     def resolve_approval_request(
         self,
@@ -138,19 +119,16 @@ class StoreApprovalsMixin:
             approval_gate_grant=approval_gate_grant,
             now=resolved_at,
         )
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            request = load_approval_request(connection, request_id)
-            if request is not None:
-                require_resolvable_approval_request(request)
-            persist_approval_resolution(
-                connection,
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
+        self._native_approval_read(
+            "resolve_approval_request",
+            {
+                "request_id": request_id,
+                "resolution_action": resolution_action,
+                "resolution_scope": resolution_scope,
+                "reason": reason,
+                "resolved_at": resolved_at,
+            },
+        )
 
     def resolve_one_request_only(
         self,
@@ -169,19 +147,16 @@ class StoreApprovalsMixin:
             approval_gate_grant=approval_gate_grant,
             now=resolved_at,
         )
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            request = load_approval_request(connection, request_id)
-            if request is not None:
-                require_resolvable_approval_request(request)
-            return persist_one_resolution(
-                connection,
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
+        return self._native_approval_read(
+            "resolve_one_request_only",
+            {
+                "request_id": request_id,
+                "resolution_action": resolution_action,
+                "resolution_scope": resolution_scope,
+                "reason": reason,
+                "resolved_at": resolved_at,
+            },
+        )
 
     def resolve_matching_duplicate_requests(
         self,
@@ -201,17 +176,17 @@ class StoreApprovalsMixin:
             approval_gate_grant=approval_gate_grant,
             now=resolved_at,
         )
-        with self._connect() as connection:
-            return persist_duplicate_resolutions(
-                connection,
-                queue_group_id=queue_group_id,
-                oauth_source=self._guard_source,
-                request_id=request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
+        return self._native_approval_read(
+            "resolve_matching_duplicate_requests",
+            {
+                "queue_group_id": queue_group_id,
+                "request_id": request_id,
+                "resolution_action": resolution_action,
+                "resolution_scope": resolution_scope,
+                "reason": reason,
+                "resolved_at": resolved_at,
+            },
+        )
 
     def resolve_request_with_queue_result(
         self,

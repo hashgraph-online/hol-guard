@@ -89,6 +89,15 @@ pub(crate) fn add_approval_request(
 }
 
 /// The write and outbox bind under the caller's OAuth source.
+/// `_normalize_source_name` for a source the caller already validated: the
+/// `oauth_source` a request from it carries.
+pub(crate) fn oauth_source(source: &str) -> String {
+    match py_strip(source).to_lowercase() {
+        normalized if normalized.is_empty() => "default".to_owned(),
+        normalized => normalized,
+    }
+}
+
 fn persist(
     connection: &Connection,
     source: &str,
@@ -96,10 +105,7 @@ fn persist(
     derived: &Derived,
     now: &str,
 ) -> StoreResult<String> {
-    let oauth_source = match py_strip(source).to_lowercase() {
-        normalized if normalized.is_empty() => "default".to_owned(),
-        normalized => normalized,
-    };
+    let oauth_source = oauth_source(source);
     let request_id = write(connection, request, derived, &oauth_source, now)?;
     bind_events_for_request(connection, &request_id, &oauth_source)?;
     Ok(request_id)

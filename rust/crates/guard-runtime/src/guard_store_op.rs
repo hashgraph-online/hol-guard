@@ -24,6 +24,10 @@ use crate::guard_store_advisory_cache as advisory_cache;
 use crate::guard_store_approval_backfill;
 use crate::guard_store_approval_page_reads as approval_pages;
 use crate::guard_store_approval_reads as approval_reads;
+use crate::guard_store_approval_resolve::{
+    resolve_approval_request, resolve_harness_native_approval_request,
+    resolve_matching_duplicate_requests,
+};
 use crate::guard_store_approval_sweep::resolve_matching_approval_requests;
 use crate::guard_store_approval_write::{add_approval_request, add_native_review_approval_request};
 use crate::guard_store_args::Args;
@@ -315,6 +319,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "resolve_matching_approval_requests"
+        | "resolve_approval_request"
+        | "resolve_one_request_only"
+        | "resolve_harness_native_approval_request"
+        | "resolve_matching_duplicate_requests"
         | "add_approval_request"
         | "add_native_review_approval_request"
         | "add_silent_native_review_approval_request"
@@ -556,6 +564,14 @@ fn dispatch(
         "count_approval_requests" => approval_pages::count_approval_requests(connection, args),
         "get_next_pending_request" => {
             approval_pages::get_next_pending_request(connection, guard_home, args)
+        }
+        "resolve_approval_request" => resolve_approval_request(connection, guard_home, args, false),
+        "resolve_one_request_only" => resolve_approval_request(connection, guard_home, args, true),
+        "resolve_harness_native_approval_request" => {
+            resolve_harness_native_approval_request(connection, guard_home, args)
+        }
+        "resolve_matching_duplicate_requests" => {
+            resolve_matching_duplicate_requests(connection, source, guard_home, args)
         }
         "resolve_matching_approval_requests" => {
             resolve_matching_approval_requests(connection, guard_home, args)

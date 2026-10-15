@@ -32,7 +32,6 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
-from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
 from .fork_safety import forget_in_child
@@ -73,7 +72,6 @@ from .store_approvals import (
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
-    resolvable_approval_request_ids,
 )
 from .store_approvals import (
     bulk_resolve_approval_requests as persist_bulk_resolution,
@@ -86,15 +84,6 @@ from .store_approvals import (
 )
 from .store_approvals import (
     list_approval_requests as load_approval_requests,
-)
-from .store_approvals import (
-    resolve_approval_request as persist_approval_resolution,
-)
-from .store_approvals import (
-    resolve_matching_duplicate_requests as persist_duplicate_resolutions,
-)
-from .store_approvals import (
-    resolve_one_request_only as persist_one_resolution,
 )
 from .store_approvals import (
     resolve_request_with_queue_result as persist_queue_resolution,

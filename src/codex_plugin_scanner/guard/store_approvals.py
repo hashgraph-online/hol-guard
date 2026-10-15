@@ -250,29 +250,6 @@ def _column_expr(existing: set[str], column_name: str, fallback_sql: str) -> str
     return f"{fallback_sql} as {column_name}"
 
 
-def resolve_approval_request(
-    connection: sqlite3.Connection,
-    request_id: str,
-    *,
-    resolution_action: str,
-    resolution_scope: str,
-    reason: str | None,
-    resolved_at: str,
-) -> None:
-    connection.execute(
-        """
-        update approval_requests
-        set status = 'resolved',
-            resolution_action = ?,
-            resolution_scope = ?,
-            reason = ?,
-            resolved_at = ?
-        where request_id = ?
-        """,
-        (resolution_action, resolution_scope, reason, resolved_at, request_id),
-    )
-
-
 def approval_index_statements() -> list[str]:
     return [
         "create index if not exists idx_approval_status_created on approval_requests(status, created_at desc)",

@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.store_approvals import (
     bulk_resolve_approval_requests,
     get_approval_request,
     list_approval_requests,
-    resolve_approval_request,
     resolve_request_with_queue_result,
 )
 from tests.coverage_ci import under_coverage_scale
@@ -311,6 +310,14 @@ class TestSearchFilter:
         assert results == []
 
 
+def _mark_resolved(conn: sqlite3.Connection, request_id: str) -> None:
+    conn.execute(
+        "update approval_requests set status = 'resolved', resolution_action = 'allow', "
+        "resolution_scope = 'session', resolved_at = '2026-01-02T00:00:00Z' where request_id = ?",
+        (request_id,),
+    )
+
+
 class TestStatusFilterList:
     def test_multiple_statuses_returned(self) -> None:
         conn = _make_conn()
@@ -318,14 +325,7 @@ class TestStatusFilterList:
         req2 = _make_request()
         _insert(conn, req1)
         _insert(conn, req2)
-        resolve_approval_request(
-            conn,
-            req1.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req1.request_id)
         rows = list_approval_requests(conn, status=None)
         statuses = {r["status"] for r in rows}
         assert "pending" in statuses
@@ -335,14 +335,7 @@ class TestStatusFilterList:
         conn = _make_conn()
         req = _make_request()
         _insert(conn, req)
-        resolve_approval_request(
-            conn,
-            req.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req.request_id)
         rows = list_approval_requests(conn, status="pending")
         assert rows == []
         rows = list_approval_requests(conn, status="resolved")
@@ -366,14 +359,7 @@ class TestCountFilter:
         req2 = _make_request()
         _insert(conn, req1)
         _insert(conn, req2)
-        resolve_approval_request(
-            conn,
-            req1.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req1.request_id)
         pending_count = native_store(conn).count_approval_requests(status="pending")
         resolved_count = native_store(conn).count_approval_requests(status="resolved")
         assert pending_count == 1

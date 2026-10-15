@@ -27,7 +27,7 @@ const RUNTIME_EXACT_FAMILIES: [&str; 5] = [
 ];
 /// `_MAX_RESOLVED_SCOPE_IDS`: ids the sweep reports; it resolves them all.
 const MAX_REPORTED_IDS: usize = 200;
-/// `_SQLITE_ID_BATCH_SIZE`.
+/// `_SQLITE_ID_BATCH_SIZE` and `_APPROVAL_RESOLUTION_BATCH_SIZE`.
 const ID_BATCH: usize = 500;
 /// The columns the resolvability projection reads.
 const PROJECTION_COLUMNS: &str =
@@ -41,12 +41,7 @@ pub(crate) fn resolve_matching_approval_requests(
     let harness = args.opt_str("harness")?;
     let artifact_id = args.opt_str("artifact_id")?;
     let artifact_hash = args.opt_str("artifact_hash")?;
-    let resolution = [
-        Value::from(args.str("resolution_action")?),
-        Value::from(args.str("resolution_scope")?),
-        Value::from(args.opt_str("reason")?),
-        Value::from(args.str("resolved_at")?),
-    ];
+    let resolution = resolution(args)?;
     let rows = match args.str("scope")? {
         "workspace" => {
             let (Some(harness), Some(workspace)) = (harness, args.opt_str("workspace")?) else {
@@ -101,20 +96,7 @@ pub(crate) fn resolve_matching_approval_requests(
         }
     };
     let ids = resolvable_ids(&rows, guard_home)?;
-    for chunk in ids.chunks(ID_BATCH) {
-        let mut params = resolution.to_vec();
-        params.extend(chunk.iter().map(|id| Value::from(id.as_str())));
-        exec(
-            connection,
-            &format!(
-                "update approval_requests set status = 'resolved', resolution_action = ?, \
-                 resolution_scope = ?, reason = ?, resolved_at = ? \
-                 where request_id in ({}) and status = 'pending'",
-                placeholders(chunk.len())
-            ),
-            &params,
-        )?;
-    }
+    resolve_ids(connection, &ids, &resolution)?;
     Ok(Value::from(
         ids.into_iter().take(MAX_REPORTED_IDS).collect::<Vec<_>>(),
     ))
@@ -194,10 +176,45 @@ fn runtime_exact(artifact_id: Option<&str>) -> bool {
     })
 }
 
+/// The `resolution_action`, `resolution_scope`, `reason` and `resolved_at`
+/// a resolution writes, read before any row is selected so a malformed call
+/// fails the same way whatever matches.
+pub(crate) fn resolution(args: &Args<'_>) -> StoreResult<[Value; 4]> {
+    Ok([
+        Value::from(args.str("resolution_action")?),
+        Value::from(args.str("resolution_scope")?),
+        Value::from(args.opt_str("reason")?),
+        Value::from(args.str("resolved_at")?),
+    ])
+}
+
+/// `_resolve_request_ids`: resolves the still-pending requests among `ids`.
+pub(crate) fn resolve_ids(
+    connection: &Connection,
+    ids: &[String],
+    resolution: &[Value; 4],
+) -> StoreResult<()> {
+    for chunk in ids.chunks(ID_BATCH) {
+        let mut params = resolution.to_vec();
+        params.extend(chunk.iter().map(|id| Value::from(id.as_str())));
+        exec(
+            connection,
+            &format!(
+                "update approval_requests set status = 'resolved', resolution_action = ?, \
+                 resolution_scope = ?, reason = ?, resolved_at = ? \
+                 where request_id in ({}) and status = 'pending'",
+                placeholders(chunk.len())
+            ),
+            &params,
+        )?;
+    }
+    Ok(())
+}
+
 /// `resolvable_approval_request_ids`: the rows, in order, whose projected
 /// surfaces accept a user resolution. A row the resident cannot project
 /// fails the sweep before anything is written.
-fn resolvable_ids(rows: &[Row], guard_home: &str) -> StoreResult<Vec<String>> {
+pub(crate) fn resolvable_ids(rows: &[Row], guard_home: &str) -> StoreResult<Vec<String>> {
     let mut ids = Vec::new();
     for row in rows {
         let projection = project(row, guard_home)?;
@@ -255,4 +272,4 @@ fn normalized_workspace_path(value: &str) -> String {
 
 #[cfg(all(test, unix))]
 #[path = "guard_store_approval_sweep_tests.rs"]
-mod tests;
+pub(crate) mod tests;

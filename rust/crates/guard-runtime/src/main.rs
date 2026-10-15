@@ -269,6 +269,7 @@ mod guard_store_approval_read_rows;
 mod guard_store_approval_read_scope;
 mod guard_store_approval_reads;
 mod guard_store_approval_request;
+mod guard_store_approval_resolve;
 mod guard_store_approval_row;
 mod guard_store_approval_sweep;
 mod guard_store_approval_write;

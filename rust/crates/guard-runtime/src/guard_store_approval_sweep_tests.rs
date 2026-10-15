@@ -16,7 +16,7 @@ use crate::guard_store_cmd_vectors_tests::temp_home;
 const VECTORS: &str =
     include_str!("../testdata/guard_store/approval_resolution_sweep_vectors.json");
 
-fn states(path: &std::path::Path) -> BTreeMap<String, Vec<Value>> {
+pub(crate) fn states(path: &std::path::Path) -> BTreeMap<String, Vec<Value>> {
     let connection = Connection::open(path).unwrap();
     let mut statement = connection
         .prepare(
