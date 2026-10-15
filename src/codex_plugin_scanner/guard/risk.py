@@ -63,17 +63,6 @@ _GUARD_BYPASS_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\.codex/config\.toml", "direct Guard-managed configuration mutation"),
     (r"guard[_-]?bypass", "explicit Guard bypass marker"),
 )
-_SECRET_PATH_LABELS: tuple[tuple[str, str], ...] = (
-    (".env", "local .env file"),
-    (".npmrc", "npm registry credentials"),
-    (".pypirc", "python package credentials"),
-    (".aws/credentials", "aws shared credentials"),
-    (".ssh/", "ssh material"),
-    (".gnupg/", "gpg material"),
-    (".docker/config.json", "docker credentials"),
-    (".kube/config", "kubeconfig"),
-    (".git-credentials", "git credential store"),
-)
 
 
 def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, ...]:
@@ -175,7 +164,8 @@ def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, .
             )
         )
 
-    for secret_class in sorted(classify_secret_paths(combined)):
+    secret_classes = classify_secret_paths(combined)
+    for secret_class in sorted(secret_classes):
         signals.append(
             GuardSignal(
                 signal_id=f"secret:path:{secret_class}",
@@ -189,7 +179,7 @@ def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, .
                 rule_version=_RULE_VERSION,
             )
         )
-    if classify_secret_paths(combined):
+    if secret_classes:
         signals.append(
             GuardSignal(
                 signal_id="secret:sensitive-local-files",

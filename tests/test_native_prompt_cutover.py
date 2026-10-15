@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,7 +13,9 @@ from codex_plugin_scanner.guard import native_execution, native_prompt
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -44,7 +47,9 @@ def test_real_resident_prompt_artifacts_and_reapproval(prompt_home, tmp_path):
     assert not native_prompt.should_force_reapproval([], None)
     context = HarnessContext(home_dir=tmp_path, guard_home=prompt_home, workspace_dir=tmp_path)
     detection = HarnessDetection(harness="codex", installed=True, command_available=True, config_paths=(), artifacts=())
-    artifacts = runner.prompt_requests_to_artifacts(detection=detection, context=context, requests=requests)
+    artifacts = guard_run_evaluation.prompt_requests_to_artifacts(
+        detection=detection, context=context, requests=requests
+    )
     assert len(artifacts) == 1
     assert artifacts[0].metadata["prompt_request_class"] == "secret_read"
     assert artifacts[0].artifact_id.endswith(requests[0].request_id[:24])
@@ -67,16 +72,16 @@ def test_real_resident_attachment_intent(prompt_home, text, state):
 def test_missing_or_malformed_authority_cannot_start_harness(monkeypatch, tmp_path, reply):
     monkeypatch.setattr(native_execution, "_resident_request", lambda **_: reply)
     monkeypatch.setattr(
-        runner,
+        wrapper_run,
         "detect_harness",
         lambda *_: HarnessDetection(
             harness="codex", installed=True, command_available=True, config_paths=(), artifacts=()
         ),
     )
-    monkeypatch.setattr(runner, "evaluate_detection", lambda *_args, **_kwargs: pytest.fail("evaluation reached"))
+    monkeypatch.setattr(wrapper_run, "evaluate_detection", lambda *_args, **_kwargs: pytest.fail("evaluation reached"))
     context = HarnessContext(home_dir=tmp_path, guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     with pytest.raises(native_prompt.NativePromptAnalysisError):
-        runner.guard_run(
+        wrapper_run.guard_run(
             "codex",
             context,
             GuardStore(context.guard_home),
@@ -87,17 +92,16 @@ def test_missing_or_malformed_authority_cannot_start_harness(monkeypatch, tmp_pa
 
 
 def test_native_prompt_failure_is_not_an_empty_detector_result(monkeypatch):
-    from codex_plugin_scanner.guard.runtime.detectors import DetectorRegistry
+    from codex_plugin_scanner.guard.native_runtime_detectors import NativeRuntimeDetectorError
+    from codex_plugin_scanner.guard.runtime import detectors
 
-    class Unavailable:
-        detector_id = "prompt.native"
-        categories = ("prompt",)
+    def unavailable(*_args, **_kwargs):
+        raise NativeRuntimeDetectorError("native_runtime_detector_run_unavailable")
 
-        def detect(self, *_):
-            raise native_prompt.NativePromptAnalysisError("native_prompt_analysis_unavailable")
-
-    with pytest.raises(native_prompt.NativePromptAnalysisError):
-        DetectorRegistry([Unavailable()]).run(SimpleNamespace(), SimpleNamespace())
+    monkeypatch.setattr(detectors, "native_runtime_detector_entries", unavailable)
+    context = SimpleNamespace(workspace=None, guard_home=None, config=SimpleNamespace(guard_home=None))
+    with pytest.raises(NativeRuntimeDetectorError):
+        detectors.DetectorRegistry([detectors.NativeRuntimeDetectors()]).run(SimpleNamespace(), context)
 
 
 def test_retired_python_prompt_implementations_are_absent():
@@ -113,10 +117,7 @@ def test_retired_python_prompt_implementations_are_absent():
     names = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
     names.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
     assert not retired & names
-    from codex_plugin_scanner.guard.runtime import prompt_injection
-
-    facade = ast.parse(Path(prompt_injection.__file__).read_text())
-    assert not any(isinstance(node, ast.FunctionDef) for node in facade.body)
+    assert importlib.util.find_spec("codex_plugin_scanner.guard.runtime.prompt_injection") is None
 
 
 @pytest.mark.parametrize(

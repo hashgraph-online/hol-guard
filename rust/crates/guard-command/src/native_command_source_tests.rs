@@ -272,7 +272,7 @@ const REMOTE_MCP: &[u8] = include_bytes!(concat!(
 
 #[test]
 fn canonical_mcp_inputs_preserve_native_fields_and_remain_opt_in() {
-    let baseline: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+    let baseline: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
     for bytes in [FILESYSTEM_MCP, REMOTE_MCP] {
         let lowered = mcp::lower(bytes).unwrap();
         let original = baseline["extensions"]

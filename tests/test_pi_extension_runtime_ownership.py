@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import pi_extension_runtime_ownership, pi_extension_source
+from codex_plugin_scanner.guard.hook_execution_environment import _DEFAULT_EQUIVALENT_PAGER
 
 
 def _source(tmp_path: Path) -> str:
@@ -23,8 +24,10 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     assert "guard_execution_environment" in source
     assert "home: typeof process.env.HOME" in source
     assert "['1', 'true', 'yes', 'on']" in source
-    assert "git_pager_disabled: process.env.GIT_PAGER" in source
-    assert "pager_disabled: process.env.PAGER" in source
+    pager_rule = "/^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$/"
+    assert f"{pager_rule}.test(process.env.GIT_PAGER)" in source
+    assert f"{pager_rule}.test(process.env.PAGER)" in source
+    assert pager_rule == f"/^{_DEFAULT_EQUIVALENT_PAGER.pattern}$/"
     assert "let payloadToSend = {" in source
     for constant in (
         "const GUARD_TIMEOUT_MS = 4250;",

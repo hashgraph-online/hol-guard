@@ -51,6 +51,9 @@ def listing_v2(extension_id: str, ids: list[str]) -> dict[str, Any]:
 
 
 class FakeGitHub:
+    repo = "hashgraph-online/hol-guard"
+    base_url = "https://api.github.com/repos/hashgraph-online/hol-guard"
+
     def __init__(self) -> None:
         self.default_branch = "main"
         self.merged = True
@@ -67,6 +70,9 @@ class FakeGitHub:
 
     def repo_metadata(self) -> dict[str, Any]:
         return {"default_branch": self.default_branch}
+
+    def _request(self, url: str) -> Any:
+        raise MODULE.ClaimProvenanceError("Fixture has no verified introducing history")
 
     def pull_request(self, number: int) -> dict[str, Any]:
         return {
@@ -86,6 +92,13 @@ class FakeGitHub:
         return self.files
 
     def file_json(self, path: str, ref: str, *, missing_ok: bool = False) -> dict[str, Any] | None:
+        if path.startswith("contracts/extensions/trust/") and (ref, path) not in self.file_payloads:
+            runtime_id = path.removeprefix("contracts/extensions/trust/").removesuffix(".v1.json")
+            return {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": runtime_id,
+                "trustClass": "external",
+            }
         value = self.file_payloads.get((ref, path))
         if value is None and not missing_ok:
             raise AssertionError(f"unexpected missing file: {path}@{ref}")
@@ -163,6 +176,74 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     assert "claiming alone does not publish" in body
     assert "trust score" not in body
     assert "installs" not in body
+
+
+def configure_new_command_source(client: FakeGitHub, extension_id: str) -> str:
+    """A command extension contributed as its canonical source only; the
+    descriptor under contributions/extensions/ is generated on main later."""
+    source_path = f"contributions/command-sources/{extension_id}.json"
+    client.files = [
+        {"status": "added", "filename": source_path},
+        {"status": "added", "filename": f"tests/fixtures/command-source-{extension_id[8:]}.v1.json"},
+    ]
+    source = {"schema": "guard.command-extension-source.v1", "extension": {"extension_id": extension_id}}
+    client.file_payloads[(MERGE_SHA, source_path)] = source
+    client.file_payloads[(client.default_branch, source_path)] = source
+    return source_path
+
+
+def test_source_only_command_contribution_gets_mapping_guidance() -> None:
+    client = FakeGitHub()
+    configure_new_command_source(client, "command.sourceonly")
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert MODULE.GUIDANCE_MARKER in body
+    assert "contributions/extension-listings/command.sourceonly.json" in body
+    assert MODULE.MARKER not in body
+
+
+def test_source_only_command_contribution_with_listing_gets_claim_notice() -> None:
+    client = FakeGitHub()
+    configure_new_command_source(client, "command.sourceonly")
+    listing_path = "contributions/extension-listings/command.sourceonly.json"
+    client.files.append({"status": "added", "filename": listing_path})
+    client.file_payloads[(MERGE_SHA, listing_path)] = listing("command.sourceonly", ["100"])
+    client.file_payloads[(client.default_branch, listing_path)] = listing("command.sourceonly", ["100"])
+    client.logins = {"100": "source-maintainer"}
+
+    assert MODULE.process(client, 42, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert MODULE.MARKER in body
+    assert "@source-maintainer" in body
+    assert "claim=command.sourceonly" in body
+
+
+def test_generated_descriptor_for_merged_source_does_not_repeat_guidance() -> None:
+    """The post-merge refresh adds the descriptor for a source already on main;
+    that maintainer PR is not a new contribution and gets no claim comment."""
+    client = FakeGitHub()
+    source_path = configure_new_command_source(client, "command.sourceonly")
+    descriptor_path = "contributions/extensions/command.sourceonly.json"
+    client.files = [{"status": "added", "filename": descriptor_path}]
+    client.file_payloads[(BEFORE_SHA, source_path)] = {"schema": "guard.command-extension-source.v1"}
+    client.file_payloads[(MERGE_SHA, descriptor_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, descriptor_path)] = {"schemaVersion": "v1"}
+
+    assert MODULE.process(client, 8, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_updated_existing_command_source_does_not_repeat_guidance() -> None:
+    client = FakeGitHub()
+    source_path = configure_new_command_source(client, "command.sourceonly")
+    client.files[0]["status"] = "modified"
+    client.file_payloads[(BEFORE_SHA, source_path)] = {"schema": "guard.command-extension-source.v1"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
 
 
 def test_pr_authorship_never_creates_claim_authority() -> None:
@@ -571,10 +652,12 @@ def test_changed_extension_ids_track_renames_and_ignore_removed_files() -> None:
                 "previous_filename": "contributions/extensions/command.old.json",
             },
             {"status": "removed", "filename": "contributions/extensions/command.gone.json"},
+            {"status": "added", "filename": "contributions/command-sources/command.source.json"},
+            {"status": "added", "filename": "tests/fixtures/command-source-source.v1.json"},
             {"status": "modified", "filename": "README.md"},
         ]
     )
-    assert contributions == {"command.one", "command.new"}
+    assert contributions == {"command.one", "command.new", "command.source"}
     assert listings == {"mcp.two"}
     assert renamed == {"command.new", "command.old"}
 
@@ -592,6 +675,8 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "dry_run:" in text
     assert "refresh_existing:" in text
     assert "contributions/extension-listings/**" in text
+    for path in ("contributions/extensions/**", "contributions/command-sources/**", "contributions/mcp-servers/**"):
+        assert path in text
     assert "pull-requests: write" in text
     assert "issues: write" not in text
     assert "persist-credentials: false" in text

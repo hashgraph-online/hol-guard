@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.runtime import restricted_git as git
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.parametrize(
     "command",
     [
@@ -39,6 +40,7 @@ def test_fresh_native_deny_prevents_execution(monkeypatch, tmp_path):
     assert not executed
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_linux_git_uses_the_filtered_readonly_profile(monkeypatch, tmp_path):
     (tmp_path / ".git").mkdir()
     executable = tmp_path / "git"
@@ -54,6 +56,7 @@ def test_linux_git_uses_the_filtered_readonly_profile(monkeypatch, tmp_path):
     assert plan.command[plan.command.index("-c") + 1] == "core.fsmonitor=false"
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin" or not shutil.which("sandbox-exec"), reason="macOS OS boundary")
 @pytest.mark.parametrize("linked", [False, True])
 def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd, linked):

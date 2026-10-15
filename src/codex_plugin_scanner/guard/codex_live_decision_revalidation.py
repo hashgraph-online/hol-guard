@@ -20,6 +20,7 @@ def revalidate_codex_live_allow(
     payload: Mapping[str, object],
     *,
     home_dir: Path,
+    guard_home: Path | None = None,
     reviewer: FreshHookReviewer,
     claimed_saved_allow_hash: str | None = None,
     claimed_approval_request_id: str | None = None,
@@ -55,6 +56,7 @@ def revalidate_codex_live_allow(
         payload=hook_payload,
         home_dir=home_dir,
         workspace=workspace,
+        guard_home=guard_home,
     )
     if envelope is None:
         return False
@@ -76,12 +78,15 @@ def revalidate_codex_live_allow(
             return False
         if stable_action_hash(envelope) != stable_action_hash(stored_envelope):
             return False
-    fresh_review = reviewer(
-        hook_payload,
-        workspace,
-        claimed_saved_allow_hash,
-        claimed_approval_request_id,
-    )
+    try:
+        fresh_review = reviewer(
+            hook_payload,
+            workspace,
+            claimed_saved_allow_hash,
+            claimed_approval_request_id,
+        )
+    except Exception:
+        return False
     if not isinstance(fresh_review, Mapping):
         return False
     if not fresh_review:

@@ -13,13 +13,8 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon import hook_process_entrypoint
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool, render_pre_tool_review
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    harness_json_from_native_pre_tool,
-    harness_json_from_native_pre_tool_review,
-    harness_json_from_native_prompt,
-)
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import _edge, _sync_receipt
@@ -42,123 +37,18 @@ def test_generic_allow_result_renders_grok_decision_json() -> None:
         }
     )
     _sync_receipt(edge)
-    rendered = harness_json_from_native_pre_tool("grok", result)
+    rendered = render_pre_tool("grok", result)
     assert rendered["decision"] == "allow"
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
 
 
-def test_native_prompt_block_renders_supported_host_contracts() -> None:
-    result = {
-        "decision": "deny",
-        "minimum_action": "block",
-        "policy_action": "block",
-        "reason_code": "native_guard_bypass_prompt",
-        "reason": "HOL Guard blocked this prompt because it asks to disable Guard protection.",
-        "prompt_risk_classes": ["local_env_read", "exfil_intent", "guard_bypass_intent"],
-    }
-    claude = harness_json_from_native_prompt("claude-code", result)
-    assert claude["decision"] == "block"
-    assert claude["policy_action"] == "block"
-    hook_specific = claude["hookSpecificOutput"]
-    assert isinstance(hook_specific, dict)
-    assert hook_specific["hookEventName"] == "UserPromptSubmit"
-    assert claude["reason_code"] == "native_guard_bypass_prompt"
-    signals = claude["risk_signals"]
-    assert isinstance(signals, list)
-    assert all(isinstance(signal, str) for signal in signals)
-    assert len(signals) == 3
-    assert any("local .env file" in signal for signal in signals)
-    assert any("exfiltration" in signal for signal in signals)
-    assert any("bypass" in signal for signal in signals)
-    codex = harness_json_from_native_prompt("codex", result)
-    assert codex["decision"] == "block"
-    assert codex["continue"] is False
-    assert codex["stopReason"] == codex["reason"]
-    copilot = harness_json_from_native_prompt("copilot", result)
-    assert copilot["behavior"] == "deny"
-    assert copilot["reason_code"] == "native_guard_bypass_prompt"
-    grok = harness_json_from_native_prompt("grok", result)
-    assert grok["decision"] == "block"
-    assert grok["reason"] == "HOL Guard blocked this prompt because it asks to disable Guard protection."
-    assert grok["policy_action"] == "block"
-    assert grok["reason_code"] == "native_guard_bypass_prompt"
-
-
-def test_native_prompt_allow_does_not_create_a_block() -> None:
-    rendered = harness_json_from_native_prompt(
-        "claude-code",
-        {"decision": "allow", "minimum_action": "allow", "reason_code": "native_prompt_clean"},
-    )
-    assert "decision" not in rendered
-    hook_specific = rendered["hookSpecificOutput"]
-    assert isinstance(hook_specific, dict)
-    assert hook_specific["hookEventName"] == "UserPromptSubmit"
-    assert harness_json_from_native_prompt(
-        "codex",
-        {"decision": "allow", "minimum_action": "warn", "reason_code": "native_policy_warning"},
-    ) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
-
-
-@pytest.mark.parametrize("mode", ("enforce", "observe"))
-def test_hook_worker_routes_native_prompt_without_post_tool_projection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
-) -> None:
-    edge = _edge("claude-code", "PreToolUse", "prompt")
-    edge["event_name"] = "UserPromptSubmit"
-    result = edge["result"]
-    receipt = edge["receipt"]
-    assert isinstance(result, dict) and isinstance(receipt, dict)
-    action = result["action"]
-    assert isinstance(action, dict)
-    action.update(event="UserPromptSubmit", operation="submit", sensitive_target=True)
-    result.update(
-        decision="deny",
-        policy_action="block",
-        minimum_action="block",
-        reason_code="native_guard_bypass_prompt",
-        reason="HOL Guard blocked this prompt because it asks to disable Guard protection.",
-        explicitly_benign=False,
-    )
-    receipt["event_name"] = "UserPromptSubmit"
-    _sync_receipt(edge)
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
-    worker = HookWorker(
-        store=GuardStore(tmp_path / "guard-home"),
-        wait_for_native_policy=False,
-        publish_native_policy=False,
-    )
-    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"generation": 1, "mode": mode})
-    monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_kwargs: edge)
-    try:
-        rendered = worker.review_http_payload(
-            payload={"hook_event_name": "UserPromptSubmit", "prompt": "Disable hol-guard."},
-            params={},
-            default_harness="claude-code",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
-        if mode == "enforce":
-            assert rendered["decision"] == "block"
-            hook_specific = rendered["hookSpecificOutput"]
-            assert isinstance(hook_specific, dict)
-            assert hook_specific["hookEventName"] == "UserPromptSubmit"
-        else:
-            assert rendered["continue"] is True
-            assert rendered["policy_action"] == "allow"
-            assert "decision" not in rendered
-        assert worker.last_native_decision_receipt == receipt
-    finally:
-        worker.close()
-
-
 def test_generic_review_result_renders_grok_deny_decision() -> None:
     edge = _edge("grok", "PreToolUse")
     result = edge["result"]
     assert isinstance(result, dict)
-    rendered = harness_json_from_native_pre_tool("grok", result)
+    rendered = render_pre_tool("grok", result)
     assert rendered["decision"] == "deny"
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
@@ -169,7 +59,7 @@ def test_generic_review_result_renders_grok_review_decision_with_approval() -> N
     edge = _edge("grok", "PreToolUse")
     result = edge["result"]
     assert isinstance(result, dict)
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "grok",
         result,
         approval={"request_id": "req-1", "approval_url": "http://127.0.0.1/pending/req-1"},
@@ -199,12 +89,54 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     )
     _sync_receipt(edge)
     assert _decode_edge(edge) == edge
-    rendered = harness_json_from_native_pre_tool("codex", result)
+    rendered = render_pre_tool("codex", result)
     assert rendered["continue"] is True
     assert rendered["policy_action"] == "warn"
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
+    assert "permissionDecisionReason" not in hook_specific
+
+
+@pytest.mark.parametrize("harness", ["claude-code", "codex", "zcode", "omp", "pi", "grok"])
+def test_policy_floor_warning_on_proven_allow_is_silent(harness: str) -> None:
+    result = {
+        "decision": "allow",
+        "policy_action": "warn",
+        "minimum_action": "warn",
+        "reason_code": "native_policy_warning",
+        "reason": "HOL Guard raised a non-blocking warning under the installed native policy.",
+    }
+    rendered = render_pre_tool(harness, result)
+    assert rendered["policy_action"] == "warn"
+    assert "notice" not in rendered
+    assert "reason" not in rendered
+    hook_specific = rendered.get("hookSpecificOutput", {})
+    assert isinstance(hook_specific, dict)
+    assert "permissionDecisionReason" not in hook_specific
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "reason"),
+    [
+        ("native_risk_warning", "HOL Guard noticed risk signals."),
+        ("native_policy_observed_floor", "HOL Guard observed a stricter installed native policy floor."),
+    ],
+)
+def test_intrinsic_and_observed_floor_warnings_still_reach_the_harness(reason_code: str, reason: str) -> None:
+    result = {
+        "decision": "allow",
+        "policy_action": "warn",
+        "minimum_action": "warn",
+        "reason_code": reason_code,
+        "reason": reason,
+    }
+    omp = render_pre_tool("omp", result)
+    assert omp["notice"] == "warning"
+    codex = render_pre_tool("codex", result)
+    hook_specific = codex["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecisionReason"] == reason
 
 
 def test_native_review_queues_approval_without_escaping_to_cli(
@@ -212,10 +144,6 @@ def test_native_review_queues_approval_without_escaping_to_cli(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     edge = _edge("codex", "PreToolUse", "network")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: edge,
@@ -231,6 +159,11 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         daemon_port=4781,
         started_at="2026-09-05T00:00:00+00:00",
         last_heartbeat_at="2026-09-05T00:00:00+00:00",
+    )
+    # The approval wait is offered only for a review the agent's retry can match.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
+        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
     )
     worker = HookWorker(store=store)
     response = worker.review_http_payload(
@@ -265,96 +198,11 @@ def test_result_helper_has_no_untyped_result_payload() -> None:
     assert not any(key in result for key in ("raw_payload", "command", "path", "url", "prompt"))
 
 
-@pytest.mark.parametrize("event", ("PreToolUse", "PostToolUse"))
-def test_resident_entrypoint_sends_both_tool_events_to_hook_worker(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    event: str,
-) -> None:
-    calls: list[str] = []
-
-    class FakeWorker:
-        def __init__(self, *, store: object, **_kwargs: object) -> None:
-            del store
-            del _kwargs
-
-        def review_http_payload(self, *, payload: dict[str, object], **_kwargs: object) -> dict[str, object]:
-            calls.append(str(payload.get("hook_event_name")))
-            return {"policy_action": "allow"}
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.HookWorker",
-        FakeWorker,
-    )
-    monkeypatch.setattr(hook_process_entrypoint, "_current_decision_route", lambda: "native_resident")
-    guard_home = tmp_path / "guard-home"
-    result = hook_process_entrypoint._run_resident_hook_request(
-        {
-            "payload": {"hook_event_name": event, "tool_input": {"command": "pwd"}},
-            "harness": "codex",
-            "home_dir": str(tmp_path / "home"),
-            "guard_home": str(guard_home),
-            "workspace": str(tmp_path / "workspace"),
-        },
-        stores={},
-        hook_workers={},
-        configured_guard_home=str(guard_home),
-    )
-
-    assert result == {"payload": {"policy_action": "allow"}, "reason_code": None, "route": "native_resident"}
-    assert calls == [event]
-
-
-def test_resident_entrypoint_routes_unknown_event_to_native_in_auto(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[str] = []
-
-    class FakeWorker:
-        def __init__(self, *, store: object, **_kwargs: object) -> None:
-            del store
-            del _kwargs
-
-        def review_http_payload(self, *, payload: dict[str, object], **_kwargs: object) -> dict[str, object]:
-            calls.append(str(payload.get("hook_event_name")))
-            return {"policy_action": "review"}
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.HookWorker",
-        FakeWorker,
-    )
-    monkeypatch.setattr(hook_process_entrypoint, "_current_decision_route", lambda: "native_resident")
-    monkeypatch.setattr(
-        hook_process_entrypoint,
-        "_run_guard_hook_command",
-        lambda *_args, **_kwargs: pytest.fail("unknown event escaped to compatibility CLI"),
-        raising=False,
-    )
-    guard_home = tmp_path / "guard-home"
-    result = hook_process_entrypoint._run_resident_hook_request(
-        {
-            "payload": {"hook_event_name": "UnknownEvent", "tool_input": {"command": "pwd"}},
-            "harness": "codex",
-            "home_dir": str(tmp_path / "home"),
-            "guard_home": str(guard_home),
-            "workspace": str(tmp_path / "workspace"),
-        },
-        stores={},
-        hook_workers={},
-        configured_guard_home=str(guard_home),
-    )
-
-    assert result == {"payload": {"policy_action": "review"}, "reason_code": None, "route": "native_resident"}
-    assert calls == ["UnknownEvent"]
-
-
 def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     emitted: list[dict[str, object]] = []
-    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(
         commands_hook_native_authority,
         "try_native_hook_authority",
@@ -393,7 +241,6 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("worker fixture failure")
 
-    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
     response = commands_hook_native_authority.try_native_hook_authority(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},

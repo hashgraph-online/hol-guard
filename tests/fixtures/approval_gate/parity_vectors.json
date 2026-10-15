@@ -1,0 +1,5718 @@
+{
+ "password": "correct-password",
+ "scenarios": [
+  {
+   "name": "unconfigured_home",
+   "steps": [
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": false,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "recent_totp_satisfied",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_settings_write",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": null
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": null
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_configuration_required",
+      "error_status": 423,
+      "message": "Configure the approval gate before changing extension controls.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_local_cli_trust",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_configuration_required",
+      "error_status": 423,
+      "message": "Configure the approval gate before changing CLI allow-list settings.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "disable_totp",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "revoke_cooldown",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": false,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "device_label": "d",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_write"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    }
+   ]
+  },
+  {
+   "name": "enable_validation",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "enabled": true
+      }
+     },
+     "expect": {
+      "code": "approval_gate_password_required",
+      "error_status": 403,
+      "message": "Approval gate password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "short",
+       "enabled": true,
+       "new_password": "short"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_weak_password",
+      "error_status": 403,
+      "message": "Approval gate password is too weak.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "different-password",
+       "enabled": true,
+       "new_password": "correct-password"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_password_mismatch",
+      "error_status": 403,
+      "message": "Approval gate password confirmation does not match.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "enabled": true,
+       "new_password": "correct-password"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_password_mismatch",
+      "error_status": 403,
+      "message": "Approval gate password confirmation does not match.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 123,
+       "enabled": true,
+       "new_password": "correct-password"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_invalid_cooldown",
+      "error_status": 403,
+      "message": "Approval cooldown must be 0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "validate_settings_update",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "enabled": true,
+       "new_password": "correct-password"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "validated": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": false,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": "900",
+       "enabled": true,
+       "fail_closed": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": "yes"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {}
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    }
+   ]
+  },
+  {
+   "name": "password_gate_basics",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "block",
+       "scope": "artifact"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "block",
+       "scope": "global"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_request_resolution",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_request_resolution",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "block",
+       "scope": "artifact"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_settings_write",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "action": "clear",
+       "scope": "local",
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:32+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:02+00:00",
+        "password_verified": true,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": "clear",
+       "scope": "local",
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "validated": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_write",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this purpose.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": "other",
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this action.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": "other",
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this scope.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": "other"
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this subject.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "other",
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this session.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:29.900000+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "validated": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:32+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_grant_expired",
+      "error_status": 403,
+      "message": "Approval proof expired. Enter your approval proof again.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:33+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:03+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "require_settings_write",
+      "now": "2026-04-11T00:00:03+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g2",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "settings_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "settings_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:34+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:04+00:00",
+        "password_verified": true,
+        "purpose": "settings_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g2",
+      "method": "require_settings_write",
+      "now": "2026-04-11T00:00:05+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g2",
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:05+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g3",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:36+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:06+00:00",
+        "password_verified": true,
+        "purpose": "policy_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g3",
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:07+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g4",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global",
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:36+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:06+00:00",
+        "password_verified": true,
+        "purpose": "policy_write",
+        "scope": "global",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g4",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:07+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": "non",
+       "subject": "sub"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this purpose.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g5",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:08+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": "non",
+       "subject": "sub"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:38+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:08+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "non",
+        "strict": false,
+        "subject": "sub",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g5",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:09+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": "non",
+       "subject": "sub"
+      },
+      "purpose": "approval_decision"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "validated": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g5",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:09+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "approval_decision",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "A fresh approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:10+00:00",
+      "params": {
+       "action": "block",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": null
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g6",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:10+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:40+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:10+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "global",
+        "session_nonce": "<random>",
+        "strict": true,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g6",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:11+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:40+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:10+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "global",
+        "session_nonce": "<random>",
+        "strict": true,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g5",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:11+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this scope.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g5",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:11+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:38+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:08+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "non",
+        "strict": false,
+        "subject": "sub",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g5",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:11+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": "non",
+       "subject": "other"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this subject.",
+      "status": "error"
+     }
+    }
+   ]
+  },
+  {
+   "name": "strict_all_decisions",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": true
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": true,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": "block",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": "block",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "block",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:31+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:01+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": true,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_settings_write",
+      "now": "2026-04-11T00:00:02+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g2",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "settings_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "settings_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:33+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:03+00:00",
+        "password_verified": true,
+        "purpose": "settings_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g2",
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:05+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": "block",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": null
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g2",
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "strict_all_decisions": true
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": true,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "cooldown_flow",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": "2026-04-11T00:15:00+00:00",
+        "expires_at": "2026-04-11T00:00:30+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:00+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:01+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": true,
+       "cooldown_expires_at": "2026-04-11T00:15:00+00:00",
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g2",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": "2026-04-11T00:15:00+00:00",
+        "expires_at": "2026-04-11T00:00:32+00:00",
+        "factor_set": [
+         "cooldown"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:02+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": true
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g2",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "approval_decision"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "validated": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g3",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:14:59+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": "2026-04-11T00:15:00+00:00",
+        "expires_at": "2026-04-11T00:15:29+00:00",
+        "factor_set": [
+         "cooldown"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:14:59+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": true
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:01+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:15:01+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g4",
+      "input": {
+       "password": "correct-password",
+       "use_cooldown": false
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:02+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:15:32+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:15:02+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:15:03+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g5",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:04+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": "2026-04-11T00:30:04+00:00",
+        "expires_at": "2026-04-11T00:15:34+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:15:04+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "revoke_cooldown",
+      "now": "2026-04-11T00:15:05+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:06+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:15:07+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:15:07+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 123,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:15:07+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_cooldown",
+      "error_status": 403,
+      "message": "Approval cooldown must be 0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 0,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:15:07+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_cooldown",
+      "error_status": 403,
+      "message": "Cooldown unlock requires 900 or 3600 seconds.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 3600,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:15:07+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": true,
+       "cooldown_expires_at": "2026-04-11T01:15:07+00:00",
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:15:08+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": true,
+       "cooldown_expires_at": "2026-04-11T01:15:07+00:00",
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g6",
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:09+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": "2026-04-11T01:15:07+00:00",
+        "expires_at": "2026-04-11T00:15:39+00:00",
+        "factor_set": [
+         "cooldown"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:15:09+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": true
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:15:10+00:00",
+      "params": {
+       "revoke_cooldown": true
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g7",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:15:11+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "settings_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "settings_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:15:41+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:15:11+00:00",
+        "password_verified": true,
+        "purpose": "settings_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g7",
+      "method": "update_settings",
+      "now": "2026-04-11T00:15:12+00:00",
+      "params": {
+       "cooldown_seconds": 3600,
+       "revoke_cooldown": true
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 3600,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:15:13+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 3600,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:15:14+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    }
+   ]
+  },
+  {
+   "name": "lockout",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:05+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:06+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": "2026-04-11T00:05:05+00:00",
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:07+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_locked",
+      "error_status": 423,
+      "message": "Approval gate is temporarily locked.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:00:07+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_locked",
+      "error_status": 423,
+      "message": "Approval gate is temporarily locked.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "device_label": "d",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:07+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_locked",
+      "error_status": 423,
+      "message": "Approval gate is temporarily locked.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:05:06+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:05:36+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:05:06+00:00",
+        "password_verified": true,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:05:07+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "extension_control_and_cli_trust",
+   "steps": [
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_configuration_required",
+      "error_status": 423,
+      "message": "Configure the approval gate before changing extension controls.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_local_cli_trust",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_configuration_required",
+      "error_status": 423,
+      "message": "Configure the approval gate before changing CLI allow-list settings.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "e1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "disable",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:32+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:02+00:00",
+        "password_verified": true,
+        "purpose": "extension_control_mutation",
+        "scope": "extension-control-authority",
+        "session_nonce": "n",
+        "strict": true,
+        "subject": "ext",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "e1",
+      "method": "consume_extension_control_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "other"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this subject.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "e1",
+      "method": "consume_extension_control_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "consumed": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "e1",
+      "method": "consume_extension_control_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "e2",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "disable",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:34+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:04+00:00",
+        "password_verified": true,
+        "purpose": "extension_control_mutation",
+        "scope": "extension-control-authority",
+        "session_nonce": "n",
+        "strict": true,
+        "subject": "ext",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "e2",
+      "method": "consume_extension_control_grant",
+      "now": "2026-04-11T00:00:40+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_grant_expired",
+      "error_status": 403,
+      "message": "Approval proof expired. Enter your approval proof again.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "c1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_local_cli_trust",
+      "now": "2026-04-11T00:00:05+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "trust",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:35+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:05+00:00",
+        "password_verified": true,
+        "purpose": "local_cli_trust_mutation",
+        "scope": "local-cli-allowlist",
+        "session_nonce": "n",
+        "strict": true,
+        "subject": "cli",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "e1",
+      "method": "consume_local_cli_trust_grant",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "c1",
+      "method": "consume_local_cli_trust_grant",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "consumed": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "c1",
+      "method": "consume_local_cli_trust_grant",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "c2",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_local_cli_trust",
+      "now": "2026-04-11T00:00:07+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "trust",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:37+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:07+00:00",
+        "password_verified": true,
+        "purpose": "local_cli_trust_mutation",
+        "scope": "local-cli-allowlist",
+        "session_nonce": "n",
+        "strict": true,
+        "subject": "cli",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "c2",
+      "method": "consume_local_cli_trust_grant",
+      "now": "2026-04-11T00:00:08+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "x",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof does not match this session.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "c2",
+      "method": "consume_local_cli_trust_grant",
+      "now": "2026-04-11T00:00:08+00:00",
+      "params": {
+       "action": "trust",
+       "session_nonce": "n",
+       "subject": "cli"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "consumed": true
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "rotation_revokes_grants",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:31+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:01+00:00",
+        "password_verified": true,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g2",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "settings_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "settings_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:31+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:01+00:00",
+        "password_verified": true,
+        "purpose": "settings_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "confirm_password": "another-password",
+       "new_password": "another-password"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g2",
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "confirm_password": "another-password",
+       "new_password": "another-password"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:03+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g3",
+      "input": {
+       "password": "another-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:04+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "settings_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "settings_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:00:34+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:04+00:00",
+        "password_verified": true,
+        "purpose": "settings_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g3",
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:05+00:00",
+      "params": {
+       "enabled": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": false,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:06+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": false,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g3",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:06+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "settings_write",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:07+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g3",
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:07+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "ok": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:08+00:00",
+      "params": {
+       "enabled": true
+      }
+     },
+     "expect": {
+      "code": "approval_gate_password_required",
+      "error_status": 403,
+      "message": "Approval gate password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:08+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "enabled": true,
+       "new_password": "correct-password"
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:09+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "corrupt_state_fails_closed",
+   "steps": [
+    {
+     "call": {
+      "file": {
+       "content": "{not json",
+       "write": "approval-gate.json"
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": true,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_write",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "global"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_extension_control",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "disable",
+       "session_nonce": "n",
+       "subject": "ext"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "file": {
+       "content": "[1,2]",
+       "write": "approval-gate.json"
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": true,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "file": {
+       "content": "{\"enabled\": true, \"cooldown_seconds\": 77}",
+       "write": "approval-gate.json"
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    }
+   ]
+  },
+  {
+   "name": "totp_lifecycle",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "device_label": "d",
+      "input": {
+       "password": "wrong-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:01+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "device_label": "d",
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:01+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:02+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_pending_required",
+      "error_status": 403,
+      "message": "No pending TOTP enrollment is available.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "device_label": "vector-device",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:03+00:00",
+      "secret_bind": "s1"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "expires_at": "2026-04-11T00:10:03+00:00",
+       "manual_key": "<random>",
+       "otpauth_uri": "<random>",
+       "pending": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:04+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": true,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:05+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "wrong-password",
+       "totp_code": "000000"
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:05+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_invalid_password",
+      "error_status": 403,
+      "message": "Approval password is invalid.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password",
+       "totp_code": "000000"
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:05+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password",
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:11:40+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:11:40+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_pending_required",
+      "error_status": 403,
+      "message": "No pending TOTP enrollment is available.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password",
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:00:06+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:06+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:07+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "device_label": "d",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:08+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_enabled",
+      "error_status": 403,
+      "message": "TOTP is already enabled.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:09+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password",
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:00:10+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:10+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:00:40+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:40+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:01:10+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:40+00:00",
+        "password_verified": false,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:00:41+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "validated": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:00:40+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:41+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:01:11+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:41+00:00",
+        "password_verified": false,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g2",
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:01:12+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:00:42+00:00",
+        "password_verified": false,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "require_fresh_totp": true
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "require_fresh_totp": true,
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:00:40+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:43+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "recent_totp_satisfied",
+      "now": "2026-04-11T00:00:43+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "satisfied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "recent_totp_satisfied",
+      "now": "2026-04-11T00:01:41+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:41+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:01:41+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g3",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:01:42+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:02:12+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:01:42+00:00",
+        "password_verified": false,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:01:42+00:00",
+         "offset": -1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g4",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:01:42+00:00",
+         "offset": 1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:02:12+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:01:42+00:00",
+        "password_verified": false,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:01:42+00:00",
+         "offset": 2,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:01:42+00:00",
+         "offset": -2,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:01:43+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:02:13+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:01:43+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g5",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:02:10+00:00",
+         "offset": 1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:02:10+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:02:40+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:02:10+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:02:11+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "Cooldown unlock is unavailable while TOTP is enabled.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:02:11+00:00",
+      "params": {
+       "cooldown_seconds": 900
+      }
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g6",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:03:10+00:00",
+         "offset": 1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:03:10+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "settings_write"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "settings_write",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:03:40+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:03:10+00:00",
+        "password_verified": false,
+        "purpose": "settings_write",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g6",
+      "method": "update_settings",
+      "now": "2026-04-11T00:03:11+00:00",
+      "params": {
+       "cooldown_seconds": 900
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g7",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:03:40+00:00",
+         "offset": 1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:03:40+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:04:10+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:03:40+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:03:41+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:04:11+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:03:41+00:00",
+        "password_verified": false,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:03:42+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:03:42+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:04:10+00:00",
+         "offset": 1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:04:10+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:04:11+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "grant": "g5",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:04:11+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "approval_decision"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g6",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:04:11+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "settings_write",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval proof is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:04:20+00:00",
+         "offset": 1,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:04:20+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 900,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "bind": "g8",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:04:21+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "allow",
+        "cooldown_expires_at": "2026-04-11T00:19:21+00:00",
+        "expires_at": "2026-04-11T00:04:51+00:00",
+        "factor_set": [
+         "password"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:04:21+00:00",
+        "password_verified": true,
+        "purpose": "approval_decision",
+        "scope": "artifact",
+        "session_nonce": "<random>",
+        "strict": false,
+        "subject": "approval_decision:transaction:<random>",
+        "totp_verified": false,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "totp_lockout_and_missing_secret",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "device_label": "vector-device",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:01+00:00",
+      "secret_bind": "s1"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "expires_at": "2026-04-11T00:10:01+00:00",
+       "manual_key": "<random>",
+       "otpauth_uri": "<random>",
+       "pending": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password",
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:00:01+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "confirm_totp_enrollment",
+      "now": "2026-04-11T00:00:01+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:40+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:41+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:42+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:43+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:44+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_invalid",
+      "error_status": 403,
+      "message": "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:01:45+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": "2026-04-11T00:06:44+00:00",
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:01:46+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:01:46+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_locked",
+      "error_status": 423,
+      "message": "Approval gate is temporarily locked.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "bind": "g1",
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:08:20+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:08:20+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "grant": {
+        "action": "policy_clear",
+        "cooldown_expires_at": null,
+        "expires_at": "2026-04-11T00:08:50+00:00",
+        "factor_set": [
+         "totp"
+        ],
+        "grant_id": "<random>",
+        "issued_at": "2026-04-11T00:08:20+00:00",
+        "password_verified": false,
+        "purpose": "policy_clear",
+        "scope": "local",
+        "session_nonce": "n-1",
+        "strict": true,
+        "subject": "s-1",
+        "totp_verified": true,
+        "used_cooldown": false
+       }
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "file": {
+       "delete": "totp-secrets"
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": {
+        "$totp": {
+         "at": "2026-04-11T00:09:20+00:00",
+         "offset": 0,
+         "secret": "s1"
+        }
+       }
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:09:20+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate TOTP secret is unavailable.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "grant": "g1",
+      "method": "validate_grant",
+      "now": "2026-04-11T00:08:21+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": null,
+       "subject": null
+      },
+      "purpose": "policy_clear",
+      "strict": true
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate TOTP secret is unavailable.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "000000"
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:09:22+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate TOTP secret is unavailable.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:09:23+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": true,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "recent_totp_satisfied",
+      "now": "2026-04-11T00:09:23+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "satisfied": false
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "totp_no_totp_enabled_no_code_paths",
+   "steps": [
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "correct-password",
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "new_password": "correct-password",
+       "strict_all_decisions": false
+      }
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "123456"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:01+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "file": {
+       "patch_state": {
+        "totp_enabled": true
+       }
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:02+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_totp_required",
+      "error_status": 403,
+      "message": "TOTP code is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "123456"
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:00:03+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate TOTP secret is unavailable.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "file": {
+       "patch_state": {
+        "totp_enabled": false
+       }
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "123456"
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:00:04+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:05+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": true,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    }
+   ]
+  },
+  {
+   "name": "verifier_and_misc",
+   "steps": [
+    {
+     "call": {
+      "method": "create_verifier",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "password": "short"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_weak_password",
+      "error_status": 403,
+      "message": "Approval gate password is too weak.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "file": {
+       "content": "{\"enabled\": true}",
+       "write": "approval-gate.json"
+      },
+      "method": "noop",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "applied": true
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_high_risk",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": null,
+       "scope": null,
+       "session_nonce": "n-1",
+       "subject": "s-1"
+      },
+      "purpose": "policy_clear"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "require_policy_clear",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "require_approval_decision",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "action": "allow",
+       "scope": "artifact",
+       "session_nonce": null,
+       "subject": null
+      }
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "method": "public_config",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "duration_seconds": 900,
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "unlock_cooldown",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "device_label": "d",
+      "input": {
+       "password": "correct-password"
+      },
+      "method": "begin_totp_enrollment",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "approval_gate_recovery_required",
+      "error_status": 423,
+      "message": "Approval gate is enabled but no verifier is configured.",
+      "status": "error"
+     }
+    },
+    {
+     "call": {
+      "input": {
+       "totp_code": "123456"
+      },
+      "method": "disable_totp",
+      "now": "2026-04-11T00:00:00+00:00"
+     },
+     "expect": {
+      "code": "ok",
+      "payload": {
+       "configured": false,
+       "cooldown_active": false,
+       "cooldown_expires_at": null,
+       "cooldown_seconds": 0,
+       "enabled": true,
+       "fail_closed": false,
+       "locked_until": null,
+       "strict_all_decisions": false,
+       "totp_enabled": false,
+       "totp_pending": false,
+       "totp_recent_satisfied": false
+      },
+      "status": "ok"
+     }
+    },
+    {
+     "call": {
+      "method": "update_settings",
+      "now": "2026-04-11T00:00:00+00:00",
+      "params": {
+       "confirm_password": "validpassword1",
+       "new_password": "validpassword1"
+      }
+     },
+     "expect": {
+      "code": "approval_gate_required",
+      "error_status": 403,
+      "message": "Approval password is required.",
+      "status": "error"
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-approval-gate-parity-vectors.v1"
+}

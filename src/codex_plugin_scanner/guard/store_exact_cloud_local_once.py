@@ -10,7 +10,6 @@ from typing import Protocol, cast
 from .store_approvals import get_approval_request as load_approval_request
 from .store_base import _canonical_utc_timestamp, _workspace_policy_key
 from .store_event_receipts import (
-    StoreEventReceiptsMixin,
     _local_once_approval_payload,
     _verify_local_once_approval,
 )
@@ -47,41 +46,6 @@ class StoreExactCloudLocalOnceMixin:
                 key_id=key_id,
                 authority_revision=_authority_revision(connection),
             )
-
-
-def claim_exact_cloud_local_once_approval_locked(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    expected_decision: Mapping[str, object],
-    now: str,
-    integrity_key: bytes,
-    integrity_key_id: str,
-) -> dict[str, object] | None:
-    request = load_approval_request(connection, request_id)
-    if not isinstance(request, Mapping):
-        return None
-    bindings = _request_bindings(request)
-    if bindings is None:
-        return None
-    row = _exact_row_locked(connection, bindings=bindings, now=now)
-    decision = _verified_decision(
-        row,
-        key=integrity_key,
-        key_id=integrity_key_id,
-        authority_revision=_authority_revision(connection),
-    )
-    if decision is None:
-        return None
-    return StoreEventReceiptsMixin._claim_local_once_approval_by_id_locked(
-        connection,
-        approval_id=str(decision["approval_id"]),
-        now=now,
-        expected_decision=expected_decision,
-        integrity_key=integrity_key,
-        integrity_key_id=integrity_key_id,
-        authority_kind=EXACT_CLOUD_AUTHORITY_KIND,
-    )
 
 
 def _request_bindings(request: Mapping[str, object]) -> tuple[object, ...] | None:
@@ -183,4 +147,4 @@ def _text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-__all__ = ["StoreExactCloudLocalOnceMixin", "claim_exact_cloud_local_once_approval_locked"]
+__all__ = ["StoreExactCloudLocalOnceMixin"]

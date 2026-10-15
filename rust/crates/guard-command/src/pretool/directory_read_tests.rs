@@ -282,6 +282,18 @@ fn omp_bounded_line_selectors_cover_files_and_directories() {
         format!("{}:1-5", source.display()),
         format!("{}:1-5", selected_directory.display()),
         "main.rs:1-5".to_owned(),
+        format!("{}:raw", source.display()),
+        "main.rs:raw".to_owned(),
+        "main.rs:7".to_owned(),
+        "main.rs:7-".to_owned(),
+        "main.rs:-60".to_owned(),
+        "main.rs:50+150".to_owned(),
+        "main.rs:5-16,960-973".to_owned(),
+        "main.rs:19,59".to_owned(),
+        format!("{}:1-", selected_directory.display()),
+        format!("{}:-5", selected_directory.display()),
+        format!("{}:1+5", selected_directory.display()),
+        format!("{}:1,5", selected_directory.display()),
         literal_colon_file.to_string_lossy().into_owned(),
     ] {
         let decision = read_directory("omp", &target, &home, &project);
@@ -313,6 +325,7 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
     std::fs::create_dir_all(&project).unwrap();
     std::fs::create_dir_all(&ssh).unwrap();
     std::fs::write(project.join(".env"), "selector-secret\n").unwrap();
+    std::fs::write(project.join("main.rs"), "fn main() {}\n").unwrap();
     std::fs::write(ssh.join("id_ed25519"), "private-key\n").unwrap();
     std::fs::write(&symlink_target, "outside\n").unwrap();
     #[cfg(unix)]
@@ -321,14 +334,22 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
     for target in [
         format!("{}:1-5", project.join(".env").display()),
         format!("{}:1-5", ssh.join("id_ed25519").display()),
-        "src:1-".to_owned(),
-        "src:-5".to_owned(),
-        "src:1+5".to_owned(),
-        "src:1,5".to_owned(),
-        format!("{}:1-", project.display()),
-        format!("{}:-5", project.display()),
-        format!("{}:1+5", project.display()),
-        format!("{}:1,5", project.display()),
+        format!("{}:-5", project.join(".env").display()),
+        format!("{}:3", ssh.join("id_ed25519").display()),
+        "main.rs:0".to_owned(),
+        "main.rs:5-3".to_owned(),
+        "main.rs:-0".to_owned(),
+        "main.rs:+5".to_owned(),
+        "main.rs:1-2-3".to_owned(),
+        "main.rs:1,,5".to_owned(),
+        "main.rs:1,x".to_owned(),
+        "main.rs:90s".to_owned(),
+        format!("{}:raw", project.join(".env").display()),
+        format!("{}:raw", ssh.join("id_ed25519").display()),
+        format!("{}:raw", project.display()),
+        "main.rs:raw:raw".to_owned(),
+        "main.rs:-5,1-2:raw".to_owned(),
+        "main.rs:img".to_owned(),
     ] {
         let decision = read_directory("omp", &target, &home, &project);
         assert_ne!(decision.minimum_action, "allow", "{target}");
@@ -337,10 +358,12 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
 
     #[cfg(unix)]
     {
-        let target = format!("{}:1-5", _symlink.display());
-        let decision = read_directory("omp", &target, &home, &project);
-        assert_ne!(decision.minimum_action, "allow", "{target}");
-        assert!(!decision.explicitly_benign, "{target}");
+        for selector in ["1-5", "raw"] {
+            let target = format!("{}:{selector}", _symlink.display());
+            let decision = read_directory("omp", &target, &home, &project);
+            assert_ne!(decision.minimum_action, "allow", "{target}");
+            assert!(!decision.explicitly_benign, "{target}");
+        }
     }
 
     let _ = std::fs::remove_dir_all(root);
@@ -399,6 +422,71 @@ fn omp_selectors_accept_verified_tmp_alias_but_reject_child_symlinks() {
     let decision = read_directory("omp", &symlink_target, &canonical_home, &canonical_project);
     assert_ne!(decision.minimum_action, "allow", "{symlink_target}");
     assert!(!decision.explicitly_benign, "{symlink_target}");
+
+    let _ = std::fs::remove_dir_all(root);
+}
+
+fn shell_action(
+    harness: &str,
+    command: &str,
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+) -> String {
+    super::super::evaluate_pre_tool_envelope_with_context(
+        harness,
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "bash", "tool_input": {"command": command}}),
+        None,
+        None,
+        home.to_str(),
+        cwd.to_str(),
+    )
+    .minimum_action
+}
+
+/// `..` resolves against the physical working directory, so a listing of a
+/// sibling checkout is the same read as its absolute spelling. The resolved
+/// target still clears every sensitive screen.
+#[test]
+fn relative_parent_listings_follow_their_resolved_target() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let workspace = home.join("projects/repo");
+    let sibling = home.join("projects/worktree-report");
+    for directory in [&workspace, &sibling, &home.join(".ssh")] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(sibling.join("README.md"), "synthetic\n").unwrap();
+    std::fs::write(home.join("projects/.env"), "SYNTHETIC=1\n").unwrap();
+    std::fs::write(home.join(".ssh/config"), "Host x\n").unwrap();
+
+    for harness in ["omp", "claude-code"] {
+        for command in [
+            "ls -la ../worktree-report/",
+            "ls -la ../worktree-report",
+            "ls ..",
+            "cat ../worktree-report/README.md",
+            // A missing child of a listable parent reveals no more than
+            // listing the parent does.
+            "ls ../missing",
+        ] {
+            let action = shell_action(harness, command, &home, &workspace);
+            assert_eq!(action, "allow", "{harness}: {command}");
+        }
+    }
+    for command in [
+        "ls ../../.ssh",
+        "ls -la ../../.ssh/",
+        "cat ../.env",
+        "cat ../../.ssh/config",
+        "cat ../worktree-report/../.env",
+        "ls ../../.ssh/missing",
+        "ls ../worktree-report/../missing",
+        "ls ~/projects/../.ssh",
+    ] {
+        let action = shell_action("omp", command, &home, &workspace);
+        assert_ne!(action, "allow", "{command}");
+    }
 
     let _ = std::fs::remove_dir_all(root);
 }

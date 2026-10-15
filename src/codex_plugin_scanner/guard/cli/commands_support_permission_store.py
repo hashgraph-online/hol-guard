@@ -16,7 +16,6 @@ if TYPE_CHECKING:
         _claude_pending_permission_state_key,
         _cursor_after_shell_observed,
         _cursor_conversation_id,
-        _cursor_pending_shell_is_fresh,
         _cursor_pending_shell_state_key,
         _cursor_shell_command_fingerprint,
         _cursor_shell_command_from_payload,
@@ -247,44 +246,6 @@ def _remove_cursor_pending_shell_permission(
     )
 
 
-def _persist_cursor_native_permission_policy(
-    *,
-    store: GuardStore,
-    artifact_id: str,
-    artifact_hash: str,
-    action: str,
-    reason: str,
-    now: str,
-    source: str = "cursor-native-approval",
-) -> bool:
-    try:
-        store.upsert_policy(
-            PolicyDecision(
-                harness="cursor",
-                scope="artifact",
-                action="allow" if action == "allow" else "block",
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                reason=reason,
-                source=source,
-            ),
-            now,
-        )
-        store.add_event(
-            "cursor/native_permission_saved",
-            {
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-                "action": action,
-                "reason": reason,
-            },
-            now,
-        )
-    except (ApprovalGateError, OSError, sqlite3.Error):
-        return False
-    return True
-
-
 def _resolve_cursor_pending_approval_requests(
     *,
     store: GuardStore,
@@ -324,6 +285,31 @@ def _resolve_cursor_pending_approval_requests(
             )
 
 
+_CURSOR_PENDING_MAX_AGE_SECONDS = 30 * 60
+
+
+def _cursor_pending_saved_at_is_fresh(
+    store: GuardStore,
+    pending: Mapping[str, object],
+    now: str,
+) -> bool:
+    """Whether the resident still treats ``pending`` as fresh at ``now``."""
+
+    from ..native_hook_authority_state import flag_field, hook_authority_state
+
+    saved_at = pending.get("saved_at")
+    if not isinstance(saved_at, str) or not saved_at.strip():
+        return False
+    reply = hook_authority_state(
+        store,
+        "state_is_fresh",
+        now=now,
+        saved_at=saved_at.strip(),
+        max_age_seconds=_CURSOR_PENDING_MAX_AGE_SECONDS,
+    )
+    return flag_field(reply, "fresh")
+
+
 def _persist_cursor_native_permission_after_shell(
     *,
     store: GuardStore,
@@ -349,9 +335,12 @@ def _persist_cursor_native_permission_after_shell(
     if pending is None:
         return False
     now = _now()
-    if not _cursor_after_shell_observed(prepared):
+    # The load checked freshness against its own earlier clock. Recheck against
+    # this clock so a pending row that expires while that load is in flight
+    # cannot become an allowance.
+    if not _cursor_pending_saved_at_is_fresh(store, pending, now):
         return False
-    if not _cursor_pending_shell_is_fresh(pending, now=now):
+    if not _cursor_after_shell_observed(prepared):
         return False
     if not cursor_after_observer_trusted(
         guard_home=guard_home,
@@ -372,6 +361,7 @@ def _persist_cursor_native_permission_after_shell(
             payload=prepared,
             home_dir=home_dir,
             workspace=workspace,
+            guard_home=guard_home,
         )
         runtime_artifact = _hook_runtime_artifact(
             harness=harness,
@@ -628,7 +618,6 @@ __all__ = [
     "_persist_claude_native_permission_for_runtime_artifact",
     "_persist_claude_native_permission_policy",
     "_persist_cursor_native_permission_after_shell",
-    "_persist_cursor_native_permission_policy",
     "_record_cursor_pending_shell_permission",
     "_remove_cursor_pending_shell_permission",
     "_resolve_cursor_pending_approval_requests",

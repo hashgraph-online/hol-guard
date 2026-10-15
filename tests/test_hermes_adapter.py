@@ -10,11 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hermes import (
-    HermesHarnessAdapter,
-    _extract_env_mentions,
-    _looks_like_secret,
-)
+from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
@@ -1107,63 +1103,6 @@ class TestMCPSecuritySignals:
         mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.artifact_id == "hermes:mcp:json:srv"
         assert mcp.metadata["source"] == "json"
-
-
-# ------------------------------------------------------------------
-# Env mention extraction
-# ------------------------------------------------------------------
-
-
-class TestEnvMentionExtraction:
-    """Detection of environment variable references in skill content."""
-
-    def test_dollar_brace_pattern(self):
-        mentions = _extract_env_mentions("Use ${API_KEY} and ${SECRET_TOKEN}")
-        assert "API_KEY" in mentions
-        assert "SECRET_TOKEN" in mentions
-
-    def test_os_environ_bracket_pattern(self):
-        mentions = _extract_env_mentions("os.environ['OPENAI_API_KEY']")
-        assert "OPENAI_API_KEY" in mentions
-
-    def test_os_environ_get_pattern(self):
-        mentions = _extract_env_mentions("os.environ.get('AWS_SECRET_KEY')")
-        assert "AWS_SECRET_KEY" in mentions
-
-    def test_os_getenv_pattern(self):
-        mentions = _extract_env_mentions("os.getenv('DATABASE_URL')")
-        assert "DATABASE_URL" in mentions
-
-    def test_process_env_pattern(self):
-        mentions = _extract_env_mentions("process.env.DATABASE_URL")
-        assert "DATABASE_URL" in mentions
-
-
-# ------------------------------------------------------------------
-# Secret value detection
-# ------------------------------------------------------------------
-
-
-class TestSecretValueDetection:
-    """Heuristic detection of secret-like values in env/header configs."""
-
-    def test_github_pat_detected(self):
-        assert _looks_like_secret("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh")
-
-    def test_openai_key_detected(self):
-        assert _looks_like_secret("sk-proj-abc123longstring12345")
-
-    def test_bearer_token_detected(self):
-        assert _looks_like_secret("Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature12345")
-
-    def test_long_base64_detected(self):
-        assert _looks_like_secret("YXdzX2FjY2Vzc19rZXk=")
-
-    def test_short_value_not_secret(self):
-        assert not _looks_like_secret("hello")
-
-    def test_plain_text_not_secret(self):
-        assert not _looks_like_secret("just a regular config value")
 
 
 # ------------------------------------------------------------------

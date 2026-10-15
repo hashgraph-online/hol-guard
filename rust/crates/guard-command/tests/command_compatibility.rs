@@ -119,6 +119,27 @@ fn github_reads_have_permission_attribution_without_fabricated_rules() {
 }
 
 #[test]
+fn github_reads_keep_their_permission_after_a_stderr_merge() {
+    for command in [
+        "gh api repos/o/r/actions/jobs/1/logs 2>&1 | grep -A 6 \"Diff in\" | head -40",
+        "gh pr view 123 2>&1",
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert_eq!(observed.permission_matches.len(), 1, "{command}");
+        assert_eq!(
+            observed.permission_matches[0].permission_id,
+            "command.github.permission.read-remote"
+        );
+        assert!(!observed.permission_matches[0].uncertainty, "{command}");
+    }
+    // A quoted `2>&1` is an operand, not a redirect.
+    let quoted = compatibility_observations(&model("gh api repos/o/r '2>&1'"), None).unwrap();
+    assert_eq!(quoted.rule_matches[0].rule_id, "command.github.unknown");
+    assert!(quoted.rule_matches[0].uncertainty);
+}
+
+#[test]
 fn git_disabled_permission_attribution_is_not_lost_on_native_safe_commands() {
     for subcommand in ["status", "diff", "log", "show", "ls-files"] {
         let observed =
@@ -161,10 +182,30 @@ fn budget_and_parser_failures_cannot_become_empty_success() {
     uncertain.confidence = "uncertain".to_owned();
     assert!(compatibility_observations(&uncertain, None).is_err());
     let mut overridden = exact;
-    overridden.segments[0]
-        .environment_names
-        .push("GIT_CONFIG_GLOBAL".to_owned());
+    overridden.segments[0].path_overridden = true;
     assert!(compatibility_observations(&overridden, None).is_err());
+}
+
+#[test]
+fn assignment_prefixes_are_attributed_as_uncertainty_not_evaluation_failure() {
+    for command in ["X=1 ls", "TODO_FILE=/tmp/todo.json ./todo.py list"] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert!(observed.permission_matches.is_empty(), "{command}");
+    }
+    let push =
+        compatibility_observations(&model("GIT_DIR=/tmp/x git push origin main"), None).unwrap();
+    assert!(!push.rule_matches.is_empty());
+    assert!(push.rule_matches.iter().all(|item| item.uncertainty));
+    let view =
+        compatibility_observations(&model("GH_HOST=example.com gh pr view 12"), None).unwrap();
+    assert!(!view.permission_matches.is_empty());
+    assert!(view.permission_matches.iter().all(|item| item.uncertainty));
+    // Only the steered segment loses certainty.
+    let mixed = compatibility_observations(&model("X=1 ls && git push"), None).unwrap();
+    assert_eq!(mixed.rule_matches.len(), 1);
+    assert!(!mixed.rule_matches[0].uncertainty);
+    assert!(compatibility_observations(&model("PATH=/tmp git status"), None).is_err());
 }
 
 #[test]
@@ -194,14 +235,48 @@ fn github_api_query_suffix_preserves_merge_authorization() {
 }
 
 #[test]
-fn graphql_remains_owned_unsupported_instead_of_permissionless_allow() {
-    let observed = compatibility_observations(
+fn graphql_queries_are_remote_reads_and_mutations_are_owned_rules() {
+    let query = compatibility_observations(
         &model("gh api graphql -f 'query=query{viewer{login}}'"),
         None,
     )
     .unwrap();
-    assert_eq!(observed.rule_matches.len(), 1);
-    assert_eq!(observed.rule_matches[0].rule_id, "command.github.unknown");
-    assert!(observed.rule_matches[0].uncertainty);
-    assert!(observed.permission_matches.is_empty());
+    assert!(query.rule_matches.is_empty());
+    assert_eq!(query.permission_matches.len(), 1);
+    assert_eq!(
+        query.permission_matches[0].permission_id,
+        "command.github.permission.read-remote"
+    );
+    let mutation = compatibility_observations(
+        &model("gh api graphql -f 'query=mutation{addStar(input:{starrableId:\"X\"}){clientMutationId}}'"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(mutation.rule_matches.len(), 1);
+    assert_eq!(mutation.rule_matches[0].rule_id, "command.github.mutation");
+    assert!(!mutation.rule_matches[0].uncertainty);
+    assert!(mutation.permission_matches.is_empty());
+    let unread_input =
+        compatibility_observations(&model("gh api graphql --input -"), None).unwrap();
+    assert_eq!(
+        unread_input.rule_matches[0].rule_id,
+        "command.github.unknown"
+    );
+    assert!(unread_input.rule_matches[0].uncertainty);
+}
+
+#[test]
+fn printing_a_credential_variable_reads_the_secret() {
+    let reads_secret = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|item| item.rule_id == "command.shell-mutations.process-environment-secret-read")
+    };
+    // The redirect projection hands this layer the command without `> file`.
+    assert!(reads_secret("echo \"$GITHUB_TOKEN\""));
+    assert!(reads_secret("printf '%s' \"${NPM_TOKEN}\""));
+    assert!(!reads_secret("echo \"$PATH\""));
+    assert!(!reads_secret("echo hello"));
 }

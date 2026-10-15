@@ -5,12 +5,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+from ..path_resolution_cache import cached_realpath
+
 
 def trusted_temporary_root_for_path(candidate: Path) -> Path | None:
     if not _is_lexically_temporary_path(candidate):
         return None
     # codeql[py/path-injection] Candidate is absolute, traversal-free, and temp-contained.
-    resolved_candidate = candidate.resolve(strict=True)
+    resolved_candidate = Path(cached_realpath(os.fspath(candidate), strict=True))
     roots = [Path(tempfile.gettempdir())]
     if os.name == "posix":
         roots.extend((Path("/tmp"), Path("/var/tmp")))
@@ -18,7 +20,7 @@ def trusted_temporary_root_for_path(candidate: Path) -> Path | None:
         roots.extend((Path("/private/tmp"), Path("/private/var/tmp")))
     for root in roots:
         try:
-            resolved_root = root.resolve(strict=True)
+            resolved_root = Path(cached_realpath(os.fspath(root), strict=True))
         except OSError:
             continue
         if resolved_candidate.is_relative_to(resolved_root):

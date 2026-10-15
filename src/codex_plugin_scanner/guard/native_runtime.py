@@ -6,6 +6,7 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 
 from __future__ import annotations
 
+import functools
 import importlib.metadata
 import json
 import math
@@ -23,6 +24,18 @@ from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_response_decoder import response_from_payload as _response_from_payload
 from .native_route_receipt import record_native_hook_result
+from .native_runtime_process_cache import (
+    forget_process_status,
+    process_snapshot,
+    process_status,
+    remember_process_status,
+)
+from .native_runtime_request_scope import (
+    _resolved_candidate_path,
+    remember_scoped_status,
+    scoped_candidates,
+    scoped_status,
+)
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
     native_record_integrity_failure,
@@ -46,6 +59,7 @@ from .native_runtime_values import (
     decode_runtime_manifest,
     native_output_sha256,  # noqa: F401
     parity_signature,  # noqa: F401
+    warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
 from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
@@ -63,20 +77,32 @@ _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
 
 def native_mode() -> NativeMode:
+    warn_legacy_hook_fast_path_once(os.environ.get("HOL_GUARD_HOOK_FAST_PATH"))
     return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
+
+
+@functools.lru_cache(maxsize=1)
+def _installed_package_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
 def _bundled_runtime_candidate() -> Path:
     executable = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
-    package_root = Path(__file__).resolve().parents[1]
-    return package_root / "_native" / executable
+    return _installed_package_root() / "_native" / executable
 
 
 def _runtime_candidates() -> tuple[Path, ...]:
+    return scoped_candidates(
+        (native_mode(), os.environ.get(_NATIVE_BINARY_ENV)),
+        _discover_runtime_candidates,
+    )
+
+
+def _discover_runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
     candidates: list[Path] = []
     override = os.environ.get(_NATIVE_BINARY_ENV)
-    if override and mode in {"shadow", "force"}:
+    if override and mode == "force":
         candidate = Path(override).expanduser()
         if candidate.is_absolute():
             candidates.append(candidate)
@@ -86,7 +112,7 @@ def _runtime_candidates() -> tuple[Path, ...]:
     # Developer compatibility: a separately installed runtime distribution is
     # validation-only. Automatic production selection must use the runtime
     # bundled inside the version-matched hol-guard wheel and its manifest.
-    if mode in {"shadow", "force"}:
+    if mode == "force":
         try:
             distribution = importlib.metadata.distribution("hol-guard-runtime")
         except importlib.metadata.PackageNotFoundError:
@@ -214,6 +240,10 @@ def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
         "HOME",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        # Dedicated opt-in for the resident's supply-chain test seams; kept
+        # separate from diagnostics so diagnostics alone never enable them.
+        "HOL_GUARD_RESIDENT_TEST_SEAMS",
         "LANG",
         "PATHEXT",
         "SYSTEMROOT",
@@ -239,6 +269,7 @@ def _run_native_process(
     *,
     input_text: str,
     timeout_seconds: float,
+    output_limit: int = _MAX_RESPONSE_BYTES,
 ) -> str | None:
     result = run_isolated_hook_process(
         (str(path), *args),
@@ -246,7 +277,7 @@ def _run_native_process(
         cwd=path.parent,
         environment=_isolated_environment(),
         timeout_seconds=timeout_seconds,
-        output_limit=_MAX_RESPONSE_BYTES,
+        output_limit=output_limit,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None
@@ -261,6 +292,7 @@ _capabilities_probe_lock = threading.Lock()
 _capabilities_cache: dict[tuple[str, int, int, str], NativeRuntimeCapabilities] = {}
 _capabilities_retry_after: dict[tuple[str, int, int, str], float] = {}
 _CAPABILITIES_PROBE_TIMEOUT_SECONDS = 5.0
+_CAPABILITIES_FIRST_PROBE_TIMEOUT_SECONDS = 20.0
 _CAPABILITIES_RETRY_BACKOFF_SECONDS = 0.25
 _CAPABILITIES_CACHE_MAX = 16
 
@@ -271,6 +303,7 @@ def _clear_capabilities_probe_state() -> None:
     with _capabilities_probe_lock:
         _capabilities_cache.clear()
         _capabilities_retry_after.clear()
+    forget_process_status()
 
 
 def _capabilities_for_identity(
@@ -291,6 +324,11 @@ def _capabilities_for_identity(
     if retry_after is not None and now < retry_after:
         return None
     timeout_seconds = _CAPABILITIES_PROBE_TIMEOUT_SECONDS
+    if retry_after is None:
+        # The first execution of a freshly installed runtime pays one-time costs (for example a Windows
+        # antivirus scan) that exceed the warm budget. Give that first probe room instead of failing every
+        # native check behind it; the caller's deadline, when it has one, still caps it just below.
+        timeout_seconds = _CAPABILITIES_FIRST_PROBE_TIMEOUT_SECONDS
     if deadline_monotonic is not None:
         remaining = deadline_monotonic - now
         if remaining <= 0:
@@ -321,16 +359,66 @@ def _capabilities_for_identity(
     return capabilities
 
 
+def _scoped_manifest_still_valid(status: NativeRuntimeStatus) -> bool:
+    """True while a bundled status's manifest still decodes identically.
+
+    ``stat()`` metadata cannot see a manifest-only rewrite, so the bounded
+    manifest JSON (<= 16 KiB) is re-read on a hit rather than trusted blindly.
+    """
+
+    manifest = status.manifest
+    identity = status.identity
+    if manifest is None:
+        return True
+    if identity is None:
+        return False
+    current, error = _manifest_for_bundled_identity(identity)
+    return error is None and current == manifest
+
+
+def _status_request_key(candidates: tuple[Path, ...]) -> tuple[str, tuple[str, ...]]:
+    return native_mode(), tuple(str(candidate) for candidate in candidates)
+
+
 def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+    candidates = _runtime_candidates()
+    key = _status_request_key(candidates)
+    if (cached := scoped_status(key)) is not None:
+        identity = cached.identity
+        if (
+            identity is not None
+            and any(_resolved_candidate_path(candidate) == identity.path for candidate in candidates)
+            and _scoped_manifest_still_valid(cached)
+        ):
+            return cached
+    expired = deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+    if not expired and (process := process_status(key, candidates)) is not None:
+        remember_scoped_status(key, process)
+        return process
+    before = process_snapshot(candidates)
+    status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
+    remember_scoped_status(key, status)
+    remember_process_status(key, status, before)
+    return status
+
+
+def native_runtime_probe_missed() -> bool:
+    """True when a runtime binary is installed but its capability probe has not succeeded yet.
+
+    A miss leaves a status with no identity, so this is what tells a transient cold-host probe failure
+    (worth waiting out) from a host with no runtime at all (not worth waiting for).
+    """
+
+    return any(_validate_binary(candidate) is not None for candidate in _runtime_candidates())
+
+
+def _compute_runtime_status(
+    candidates: tuple[Path, ...],
+    *,
+    deadline_monotonic: float | None = None,
+) -> NativeRuntimeStatus:
     mode = native_mode()
-    if mode == "off":
-        return NativeRuntimeStatus(
-            mode=mode,
-            available=False,
-            compatible=False,
-            reason="native_disabled",
-        )
-    for candidate in _runtime_candidates():
+    for candidate in candidates:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             break
         _restore_bundled_runtime_execute_bit(candidate)
@@ -390,7 +478,7 @@ def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeR
                 )
         expected_version = _python_package_version()
         version_compatible = expected_version is None or capabilities.runtime_version == expected_version
-        compatible = version_compatible or mode in {"shadow", "force"}
+        compatible = version_compatible or mode == "force"
         return NativeRuntimeStatus(
             mode=mode,
             available=True,
@@ -415,11 +503,6 @@ def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
     deadline = requested if requested is not None and math.isfinite(requested) else now + 0.75
     budget_ms = max(1, min(9_000, int((deadline - now) * 1_000)))
     return deadline, budget_ms
-
-
-def _deadline_budget_ms(request: HookReviewRequest) -> int:
-    """Return a bounded budget for compatibility with existing callers."""
-    return _capture_native_deadline(request)[1]
 
 
 def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:

@@ -13,6 +13,9 @@ use guard_contracts::{
 use crate::native_command_program::{digest_value, packaged_command_program, NativeCommandProgram};
 use crate::CanonicalCommandV1;
 
+#[path = "native_command_controls_risk.rs"]
+mod risk;
+
 #[derive(Debug)]
 pub struct CompiledNativeCommandControls {
     program: Arc<NativeCommandProgram>,
@@ -200,9 +203,11 @@ impl CompiledNativeCommandControls {
             packages,
             deadline,
             crate::pretool::PathContext::default(),
+            None,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_with_tool_and_context(
         &self,
         command: Option<&CanonicalCommandV1>,
@@ -211,22 +216,21 @@ impl CompiledNativeCommandControls {
         packages: &[String],
         deadline: Option<Instant>,
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> PreToolResultV1 {
         let observed = match command {
-            Some(command) => self.program.observe_with_context(
-                command,
-                &self.active_extensions,
-                deadline,
-                context,
-            ),
-            None => Ok(NativeCommandObservationBatchV1::default()),
+            Some(command) => self.observe_command(command, deadline, context, environment),
+            None => Ok((NativeCommandObservationBatchV1::default(), None)),
         };
-        let mut batch = match observed {
-            Ok(batch) => batch,
-            Err(_) => NativeCommandObservationBatchV1 {
-                evaluation_error: Some("native_command_evaluation_failed".to_owned()),
-                ..Default::default()
-            },
+        let (mut batch, unmodeled) = match observed {
+            Ok(observed) => observed,
+            Err(_) => (
+                NativeCommandObservationBatchV1 {
+                    evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                    ..Default::default()
+                },
+                None,
+            ),
         };
         let delegated_floor = if batch.evaluation_error.is_none() {
             match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
@@ -258,30 +262,25 @@ impl CompiledNativeCommandControls {
         };
         // An uncertain observation may belong to any of its candidate owners,
         // so it takes the strongest of their floors and never less than review.
-        let mut uncertain_floor: Option<&'static str> = None;
+        // An unmodeled command already carries the floor of its possible owners.
+        let mut uncertain_floor: Option<&'static str> = unmodeled;
+        // Uncertainty about a Git rule the user explicitly allowed reviews only
+        // when that Allow does not cover the whole command, or the command runs
+        // in a repository Guard could not inspect (below).
+        let mut enabled_uncertainty = false;
         for observation in &batch.observations {
             if !observation.uncertainty_reasons.is_empty() {
-                let candidate = match self.rule_indices.get(&observation.rule_id) {
-                    Some(index) => {
-                        let rule = &self.program.rules[*index];
-                        if self
-                            .explicitly_enabled_permissions
-                            .contains(&rule.permission_id)
-                        {
-                            "review"
-                        } else {
-                            rule_floor(rule, self.program.extensions[rule.extension_index].required)
-                        }
+                let candidate = self.uncertain_candidate(&observation.rule_id);
+                enabled_uncertainty |= candidate.is_none();
+                if let Some(candidate) = candidate {
+                    let candidate = if rank(candidate) < rank("review") {
+                        "review"
+                    } else {
+                        candidate
+                    };
+                    if uncertain_floor.is_none_or(|current| rank(candidate) > rank(current)) {
+                        uncertain_floor = Some(candidate);
                     }
-                    None => "block",
-                };
-                let candidate = if rank(candidate) < rank("review") {
-                    "review"
-                } else {
-                    candidate
-                };
-                if uncertain_floor.is_none_or(|current| rank(candidate) > rank(current)) {
-                    uncertain_floor = Some(candidate);
                 }
             }
             if self.blocked_extensions.contains(&observation.extension_id) {
@@ -326,6 +325,10 @@ impl CompiledNativeCommandControls {
                 reason = "native_command_permission_disabled";
             }
         }
+        if floor::proof_owner_disabled(&self.blocked_extensions, command, context) {
+            floor = "block";
+            reason = "native_command_extension_disabled";
+        }
         if let Some(candidate) = uncertain_floor {
             if rank(candidate) > rank(floor) {
                 floor = candidate;
@@ -366,25 +369,14 @@ impl CompiledNativeCommandControls {
                     .count()
                 + usize::from(batch.evaluation_error.is_some()),
         };
-        if result.reason_code == "native_command_review_required"
-            && result.minimum_action == "review"
-            && result.action.bounded
-            && !result.action.sensitive_target
-            && floor == "allow"
-            && binding.uncertainty_count == 0
-            && command.is_some_and(|model| {
-                self.explicit_permissions_cover_command(model, &batch, context)
-            })
-        {
-            // Authenticated consent to every classified command segment can
-            // settle the generic unknown-command floor, never an intrinsic risk.
-            result.minimum_action = "allow".into();
-            result.policy_action = "allow".into();
-            result.decision = "allow".into();
-            result.explicitly_benign = true;
-            result.reason_code = "native_command_explicit_permission_allow".into();
-            result.reason =
-                "This command is allowed by its authenticated extension permissions.".into();
+        let explicit_allow = floor == "allow"
+            && self.explicit_allow(&result, &batch, command, context, enabled_uncertainty);
+        if enabled_uncertainty && !explicit_allow && rank(floor) < rank("review") {
+            floor = "review";
+            reason = "native_command_extension_uncertain";
+        }
+        if explicit_allow && result.minimum_action != "allow" {
+            precedence::settle_with_explicit_allow(&mut result);
         }
         let evaluation_error = batch.evaluation_error.clone();
         result.command_extensions = Some(NativeCommandObservationsV1 {
@@ -399,6 +391,12 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
+        let global_lockdown = self
+            .binding
+            .layers
+            .iter()
+            .any(|layer| layer.global_lockdown);
+        add_authority_repair_hint(&mut result, &self.binding.health, global_lockdown);
         result
     }
 
@@ -440,6 +438,9 @@ impl CompiledNativeCommandControls {
             }
             covered.extend(observation.effective_segment_indexes.iter().copied());
         }
+        // GitHub permission-only owners run last so they never hide an
+        // ungranted rule.
+        covered.extend(self.github_granted_segments(&batch.permission_observations));
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
@@ -453,7 +454,11 @@ pub(crate) use delegated::normalized_tool;
 
 #[path = "native_command_controls_floor.rs"]
 mod floor;
-use floor::{rank, rule_floor, strengthen};
+#[path = "native_command_controls_precedence.rs"]
+mod precedence;
+#[path = "native_command_unmodeled.rs"]
+mod unmodeled;
+use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]
@@ -464,9 +469,21 @@ mod review_regressions;
 mod uncertainty_regressions;
 
 #[cfg(test)]
+#[path = "native_command_precedence_tests.rs"]
+mod precedence_regressions;
+
+#[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]
 mod compound_regressions;
 
 #[cfg(test)]
 #[path = "native_command_script_controls_tests.rs"]
 mod script_regressions;
+
+#[cfg(test)]
+#[path = "native_command_powershell_tests.rs"]
+mod powershell_regressions;
+
+#[cfg(test)]
+#[path = "native_command_read_permission_tests.rs"]
+mod read_permission_regressions;

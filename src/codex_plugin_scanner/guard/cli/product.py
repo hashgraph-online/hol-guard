@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -13,6 +14,7 @@ from ..consumer import detect_all
 from ..consumer.service import diff_artifact
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..models import GuardArtifact, HarnessDetection
+from ..native_consumer_artifact_project import NativeConsumerProjectError
 from ..redaction import redact_local_path
 from ..store import GuardStore
 from ..synced_policy import synced_policy_bundle_validation
@@ -109,11 +111,13 @@ def _build_guard_product_payload(
     managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
     runtime_state = store.get_runtime_state()
     approval_center_url = load_guard_daemon_endpoint_url(context.guard_home)
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import protection_status_fields
 
     payload: dict[str, object] = {
         "generated_at": _now(),
         **protection_status_fields(posture=config.protection_posture, mode=config.mode),
+        **harness_posture_summary(config),
         "guard_home": _redacted_path(context.guard_home, context.home_dir),
         "workspace": _redacted_path(context.workspace_dir, context.home_dir),
         "sync_configured": store.get_cloud_sync_profile() is not None,
@@ -236,11 +240,23 @@ def _managed_install_warning_count(*, managed: bool, manifest: dict[str, object]
 
 def _count_review_artifacts(store: GuardStore, artifacts: tuple[GuardArtifact, ...], harness: str) -> int:
     previous_snapshots = store.list_snapshots(harness)
-    return sum(
-        1
-        for artifact in artifacts
-        if bool(diff_artifact(previous_snapshots.get(artifact.artifact_id), artifact)["changed"])
-    )
+    guard_home = getattr(store, "guard_home", None)
+    return sum(1 for artifact in artifacts if _artifact_needs_review(previous_snapshots, artifact, guard_home))
+
+
+def _artifact_needs_review(
+    previous_snapshots: Mapping[str, dict[str, object]],
+    artifact: GuardArtifact,
+    guard_home: Path | None,
+) -> bool:
+    try:
+        return bool(
+            diff_artifact(previous_snapshots.get(artifact.artifact_id), artifact, guard_home=guard_home)["changed"]
+        )
+    except NativeConsumerProjectError:
+        # Status stays readable when the resident cannot answer; an artifact
+        # whose diff is unknown is reported as needing review, never as clean.
+        return True
 
 
 def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:

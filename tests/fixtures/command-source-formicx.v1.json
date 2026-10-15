@@ -1,0 +1,1261 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "formicx agent registration command",
+            "formicx agent process start command",
+            "formicx agent process stop command",
+            "formicx agent process restart command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Formicx mutation lifecycle commands (register, start, stop, restart) while leaving read-only queries (list, status, resources) automatic. exec and xargs launches are already blocked outright by Guard.",
+          "ecosystem_ids": [
+            "formicx"
+          ],
+          "executables": [
+            "formicx",
+            "python",
+            "python3",
+            "py"
+          ],
+          "extension_id": "command.formicx",
+          "homepage": "https://github.com/Abbilaash/Formicx",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "formicx agent command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "formicx agent registration command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `formicx agent register`, which registers an agent manifest and entrypoint with the formicxd daemon.",
+              "example_command": "formicx agent register ./agents/hello-agent",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "formicx agent registration",
+              "permission_id": "command.formicx.permission.agent-register",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Validate the agent manifest first using `formicx agent validate <path>`.",
+                "Review entrypoint script contents before registering."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "formicx agent process start command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `formicx agent start`, which launches a background OS subprocess for an agent.",
+              "example_command": "formicx agent start hello-agent",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "formicx agent process start",
+              "permission_id": "command.formicx.permission.agent-start",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect agent details using `formicx agent status <agent>` before starting."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "formicx agent process stop command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `formicx agent stop`, which terminates a running agent OS subprocess.",
+              "example_command": "formicx agent stop hello-agent",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "formicx agent process stop",
+              "permission_id": "command.formicx.permission.agent-stop",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Check active agent status using `formicx agent status <agent>` before stopping."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "formicx agent process restart command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `formicx agent restart`, which stops and restarts an agent process.",
+              "example_command": "formicx agent restart hello-agent",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "formicx agent process restart",
+              "permission_id": "command.formicx.permission.agent-restart",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Check active agent status using `formicx agent status <agent>` before restarting."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.formicx",
+            "url": "https://github.com/Abbilaash/Formicx"
+          },
+          "reference_urls": [
+            "https://github.com/Abbilaash/Formicx"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "formicx agent registration command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `formicx agent register`, which registers an agent manifest and entrypoint with the formicxd daemon.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "formicx"
+                      ],
+                      "subcommands": [
+                        "agent",
+                        "register"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "-W",
+                        "-X"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "formicx",
+                        "agent",
+                        "register"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.formicx.permission.agent-register",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.formicx.agent-register",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "formicx"
+                              ],
+                              "subcommands": [
+                                "agent",
+                                "register"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "-W",
+                                "-X"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "formicx",
+                                "agent",
+                                "register"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "formicx",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "formicx agent command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Validate the agent manifest first using `formicx agent validate <path>`.",
+                "Review entrypoint script contents before registering."
+              ],
+              "severity": "medium",
+              "title": "formicx agent registration"
+            },
+            {
+              "action_classes": [
+                "formicx agent process start command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `formicx agent start`, which launches a background OS subprocess for an agent.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "formicx"
+                      ],
+                      "subcommands": [
+                        "agent",
+                        "start"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "-W",
+                        "-X"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "formicx",
+                        "agent",
+                        "start"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.formicx.permission.agent-start",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.formicx.agent-start",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "formicx"
+                              ],
+                              "subcommands": [
+                                "agent",
+                                "start"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "-W",
+                                "-X"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "formicx",
+                                "agent",
+                                "start"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "formicx",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "formicx agent command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect agent details using `formicx agent status <agent>` before starting."
+              ],
+              "severity": "medium",
+              "title": "formicx agent process start"
+            },
+            {
+              "action_classes": [
+                "formicx agent process stop command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `formicx agent stop`, which terminates a running agent OS subprocess.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "formicx"
+                      ],
+                      "subcommands": [
+                        "agent",
+                        "stop"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "-W",
+                        "-X"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "formicx",
+                        "agent",
+                        "stop"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.formicx.permission.agent-stop",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.formicx.agent-stop",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "formicx"
+                              ],
+                              "subcommands": [
+                                "agent",
+                                "stop"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "-W",
+                                "-X"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "formicx",
+                                "agent",
+                                "stop"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "formicx",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "formicx agent command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Check active agent status using `formicx agent status <agent>` before stopping."
+              ],
+              "severity": "medium",
+              "title": "formicx agent process stop"
+            },
+            {
+              "action_classes": [
+                "formicx agent process restart command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `formicx agent restart`, which stops and restarts an agent process.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "formicx"
+                      ],
+                      "subcommands": [
+                        "agent",
+                        "restart"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "py",
+                        "python",
+                        "python3"
+                      ],
+                      "options_with_values": [
+                        "-W",
+                        "-X"
+                      ],
+                      "required_flags_anywhere": [
+                        "-m"
+                      ],
+                      "subcommands": [
+                        "formicx",
+                        "agent",
+                        "restart"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.formicx.permission.agent-restart",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.formicx.agent-restart",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "executables": [
+                                "formicx"
+                              ],
+                              "subcommands": [
+                                "agent",
+                                "restart"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          },
+                          {
+                            "config": {
+                              "executables": [
+                                "py",
+                                "python",
+                                "python3"
+                              ],
+                              "options_with_values": [
+                                "-W",
+                                "-X"
+                              ],
+                              "required_flags_anywhere": [
+                                "-m"
+                              ],
+                              "subcommands": [
+                                "formicx",
+                                "agent",
+                                "restart"
+                              ]
+                            },
+                            "op": "leading-subcommand.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {
+                          "executables": [
+                            "formicx",
+                            "py",
+                            "python",
+                            "python3"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  },
+                  "title": "formicx agent command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Check active agent status using `formicx agent status <agent>` before restarting."
+              ],
+              "severity": "medium",
+              "title": "formicx agent process restart"
+            }
+          ],
+          "safer_alternatives": [
+            "Validate agents using `formicx agent validate <path>` before registering.",
+            "Check agent status using `formicx agent status <agent>`."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "formicx agent register ./agents/hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "register",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent register ./agents/hello-agent/agent.yaml",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "register-yaml",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent start hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "start",
+      "rule_id": "command.formicx.agent-start"
+    },
+    {
+      "command": "formicx agent stop hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stop",
+      "rule_id": "command.formicx.agent-stop"
+    },
+    {
+      "command": "formicx agent restart hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "restart",
+      "rule_id": "command.formicx.agent-restart"
+    },
+    {
+      "command": "python -m formicx agent register ./agents/hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "py-register",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "python -u -m formicx agent register ./agents/hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pyu-register",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "python3 -W ignore -m formicx agent start hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pyw-start",
+      "rule_id": "command.formicx.agent-start"
+    },
+    {
+      "command": "python3 -u -W default -m formicx agent start hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pyuw-start",
+      "rule_id": "command.formicx.agent-start"
+    },
+    {
+      "command": "py -m formicx agent stop hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "py-stop",
+      "rule_id": "command.formicx.agent-stop"
+    },
+    {
+      "command": "formicx --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-bare",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-agent",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent register --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-register",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent start --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-start",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent stop --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-stop",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent restart --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help-restart",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "python -m formicx agent start --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "py-help",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "list",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent status hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "status",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent resources",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resources",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx daemon health",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "daemon",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx daemon status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "daemon-status",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx node info",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "node",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx policy list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "policy",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "agent-bare",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bare",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "python -m formicx agent list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "py-list",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "python -m json.tool",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "py-other-module",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "python formicx.py agent register x",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "py-script-path",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "formicx agent register",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "register-noarg",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "exec formicx agent restart hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "exec -a custom_proc formicx agent restart hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec-a",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "exec -a proc python -u -m formicx agent restart hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec-py",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "xargs formicx agent start hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "xargs -n 1 python -m formicx agent stop hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-py",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "xargs -n 1 -P 4 python3 -u -m formicx agent stop hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-py2",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "xargs -I {} -d \\n formicx agent restart hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-i",
+      "rule_id": "command.formicx.agent-register"
+    },
+    {
+      "command": "echo formicx agent start hello-agent",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.formicx"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "echo",
+      "rule_id": "command.formicx.agent-register"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

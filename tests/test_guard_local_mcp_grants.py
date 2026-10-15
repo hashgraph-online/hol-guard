@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_mcp_grant, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -21,6 +21,9 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_extension_driver import matching_local_mcp_grant
 
 
 def _clean_npx() -> str | None:
@@ -151,45 +154,11 @@ def test_explicit_empty_public_hash_cannot_use_private_catalog_authority(tmp_pat
     assert matching_local_mcp_grant(store=store, artifact=empty_public_artifact, current_action="allow") == "review"
 
 
-def test_mcp_grant_reads_one_snapshot_during_permission_change(tmp_path: Path, monkeypatch) -> None:
-    import sqlite3
-
-    from codex_plugin_scanner.guard import store_local_mcp
-
-    identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read_file": "allow"})
-    cli_id = f"local-cli.mcp-{identity.identity_hash[:8]}"
-    with sqlite3.connect(store.path) as connection:
-        connection.execute("pragma journal_mode=WAL")
-    original = store_local_mcp._read_command_catalog
-    changed = False
-
-    def read_commands_then_change_permissions(connection, selected_cli_id):
-        nonlocal changed
-        result = original(connection, selected_cli_id)
-        if not changed:
-            changed = True
-            store.upsert_local_cli_command_states(cli_id, {"read_file": "block"})
-        return result
-
-    monkeypatch.setattr(store_local_mcp, "_read_command_catalog", read_commands_then_change_permissions)
-    before = store.read_local_mcp_grant(identity.identity_hash)
-    after = store.read_local_mcp_grant(identity.identity_hash)
-    assert before is not None and after is not None
-    assert before["command_states"]["read_file"] == "allow"
-    assert after["command_states"]["read_file"] == "block"
-
-
 def test_mcp_targeted_grant_reads_only_called_tool_and_other(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
     _enroll(store, identity, states={"read_file": "allow", "write_file": "block", "other": "block"})
 
-    grant = store.read_local_mcp_grant(identity.identity_hash, tool_name="read_file")
-    assert grant is not None
-    assert {command.command_id for command in grant["commands"]} == {"read_file", "other"}
-    assert grant["command_states"] == {"read_file": "allow", "other": "block"}
     assert (
         matching_local_mcp_grant(store=store, artifact=_artifact(identity, "read_file"), current_action="review")
         == "allowed"
@@ -198,56 +167,6 @@ def test_mcp_targeted_grant_reads_only_called_tool_and_other(tmp_path: Path) -> 
         matching_local_mcp_grant(store=store, artifact=_artifact(identity, "new_file"), current_action="allow")
         == "blocked"
     )
-    empty_name_grant = store.read_local_mcp_grant(identity.identity_hash, tool_name="")
-    assert empty_name_grant is not None
-    assert {command.command_id for command in empty_name_grant["commands"]} == {"other"}
-    assert empty_name_grant["command_states"] == {"other": "block"}
-
-
-def test_configured_connection_does_not_inherit_another_connections_denial(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-
-    store = GuardStore(tmp_path / "guard-home")
-    server_hash = "c" * 64
-    other = UnlistedCliIdentity("local-cli.mcp-other", "other", "executable", server_hash, "other")
-    store.record_local_cli_observation(
-        other,
-        seen_at=utc_now(),
-        surface="mcp",
-        server_identity_hash=server_hash,
-        server_command="npx",
-        server_args_hash="d" * 64,
-    )
-    store.upsert_local_cli_grant(
-        identity=other,
-        state="blocked",
-        expected_revision=store.read_local_cli_revision(),
-        updated_at=utc_now(),
-    )
-    configured = UnlistedCliIdentity("local-cli.mcp-configured", "configured", "executable", "a" * 64, "configured")
-    store.record_local_cli_observation(
-        configured,
-        seen_at=utc_now(),
-        surface="mcp",
-        server_identity_hash=server_hash,
-        server_command="npx",
-        server_args_hash="d" * 64,
-    )
-
-    assert store.read_local_mcp_grant(server_hash, connection_identity_hash="b" * 64) is None
-
-
-def test_empty_command_filter_never_loads_every_permission(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.store_local_cli import _read_command_catalog, _read_command_states
-
-    identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read_file": "allow", "other": "block"})
-    with store._connect() as connection:
-        cli_id = f"local-cli.mcp-{identity.identity_hash[:8]}"
-        assert _read_command_catalog(connection, cli_id, ()) == []
-        assert _read_command_states(connection, cli_id, ()) == {}
-        assert len(_read_command_catalog(connection, cli_id)) == 3
 
 
 def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) -> None:
@@ -283,10 +202,6 @@ def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) ->
         updated_at=utc_now(),
         command_states={tool.command_id: "block"},
     )
-    grant = store.read_local_mcp_grant(tool.server_identity.identity_hash, tool_name=tool.qualified_name)
-    assert grant is not None
-    assert {command.command_id for command in grant["commands"]} == {tool.command_id}
-    assert grant["command_states"] == {tool.command_id: "block"}
     artifact = _artifact(tool.server_identity, tool.qualified_name)
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "blocked"
 
@@ -458,18 +373,13 @@ def test_env_drift_cannot_inherit_same_launch_grant(tmp_path: Path) -> None:
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
 
 
-def test_unbound_env_hash_cannot_satisfy_package_launcher_binding(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unbound_env_hash_cannot_satisfy_package_launcher_binding(tmp_path: Path) -> None:
     npx = _clean_npx()
     if npx is None:
         pytest.skip("npx is not on PATH")
-    import codex_plugin_scanner.guard.store_local_mcp as store_local_mcp
-
     sentinel = "guard-context-unbound:configured-environment"
-    # Simulate detection and lookup both running without the native digest
-    # authority: the recorded hash and the recomputed hash share the sentinel.
-    monkeypatch.setattr(store_local_mcp, "build_configured_environment_hash", lambda *_a, **_k: sentinel)
+    # A runtime whose environment hash fell back to the unbound sentinel must
+    # not match a package-launcher grant in the native grant lookup.
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
     _enroll(store, identity, states={"read_file": "allow"})
@@ -669,18 +579,6 @@ def test_explicit_package_version_change_does_not_inherit_grant(tmp_path: Path) 
         server_identity=runtime,
     )
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
-
-
-def test_shim_only_path_does_not_resolve_package_launcher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.runtime.mcp_protection import resolved_package_launcher_executable
-
-    shim_bin = tmp_path / ".hol-guard" / "package-shims" / "bin"
-    shim_bin.mkdir(parents=True)
-    impostor = shim_bin / "npx"
-    impostor.write_text("#!/bin/sh\nexit 0\n")
-    impostor.chmod(0o755)
-    monkeypatch.setenv("PATH", str(shim_bin))
-    assert resolved_package_launcher_executable("npx") is None
 
 
 def test_different_package_does_not_inherit_npx_grant(tmp_path: Path) -> None:

@@ -5,13 +5,18 @@ from .opencode_process_template import OPENCODE_PROCESS_TEMPLATE
 _PLUGIN_TEMPLATE = (
     """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
 import { spawn as nodeSpawn } from "node:child_process";
-import { lstatSync, realpathSync } from "node:fs";
+import { accessSync, constants as fsConstants, lstatSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join as joinPath, resolve as resolvePath } from "node:path";
 
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
 const GUARD_FROZEN = __GUARD_FROZEN__;
+const GUARD_NATIVE_BRIDGE: {
+  runtimePath: string;
+  bootstrap: string;
+  config: Record<string, unknown>;
+} | null = __GUARD_NATIVE_BRIDGE__;
 const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
 const GUARD_HOOK_ENV = __GUARD_HOOK_ENV__;
 const GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__;
@@ -49,6 +54,33 @@ export function resolveGuardPythonTarget(): string {
   } catch {
     throw new Error(GUARD_RUNTIME_MISSING);
   }
+}
+
+// The native runtime answers a hook from the Guard daemon and runs the Python
+// bridge for everything else. A missing or non-executable runtime keeps the
+// Python launcher.
+export function resolveGuardNativeRuntime(): string | null {
+  if (GUARD_NATIVE_BRIDGE === null || process.platform === "win32") {
+    return null;
+  }
+  try {
+    const resolved = realpathSync(GUARD_NATIVE_BRIDGE.runtimePath);
+    if (!lstatSync(resolved).isFile()) {
+      return null;
+    }
+    accessSync(resolved, fsConstants.X_OK);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+function nativeHookArgs(pythonTarget: string, guardArgv: string[]): string[] {
+  if (GUARD_NATIVE_BRIDGE === null) {
+    throw new Error("HOL Guard native hook bridge is not installed");
+  }
+  const config = { ...GUARD_NATIVE_BRIDGE.config, python_executable: pythonTarget, cli_args: guardArgv };
+  return ["bounded-hook-bridge", pythonTarget, "-I", "-c", GUARD_NATIVE_BRIDGE.bootstrap, JSON.stringify(config)];
 }
 
 export function verifyGuardPythonIdentity(): void {
@@ -133,6 +165,7 @@ function effectiveWorkingDirectory(directory: string, workdir: unknown): string 
   ];
   return spawnGuardProcess({
     args: GUARD_FROZEN ? guardArgv : ["-I", "-S", "-s", "-c", GUARD_HOOK_LAUNCHER],
+    nativeArgs: GUARD_FROZEN ? undefined : (pythonTarget: string) => nativeHookArgs(pythonTarget, guardArgv),
     cwd: GUARD_HOME,
     deadlineMs,
     env: hookProcessEnv(guardArgv),

@@ -1,0 +1,585 @@
+{
+  "revision": "e4ddb0636c4b457d5d831527af78ced271e42487",
+  "sources": {
+    "src/codex_plugin_scanner/guard/runtime/restricted_node_test.py": "1188bd505740a12b2507284217f00481bdad5d87df6badae296aa7646f6da3b3",
+    "src/codex_plugin_scanner/guard/runtime/restricted_inline_eval.py": "e60e676089f899e2e28e6c2f1b229793c5d6d7e850dae43d740a270142340bdd",
+    "src/codex_plugin_scanner/guard/runtime/restricted_vitest.py": "0b050b78552224c0131875e6e4b52b4293c44c4dda800b6b99a838e15fc1998a"
+  },
+  "cases": [
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "math.test.mjs"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "math.test.mjs"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--experimental-strip-types",
+          "src/math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "--experimental-strip-types",
+          "src/math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--no-warnings",
+          "--experimental-transform-types",
+          "tests/api.spec.ts",
+          "--verbose"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "--no-warnings",
+          "--experimental-transform-types",
+          "tests/api.spec.ts",
+          "--verbose"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--disable-warning=ExperimentalWarning",
+          "test_calc.js"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "--disable-warning=ExperimentalWarning",
+          "test_calc.js"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "nodejs",
+          "tests.js"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "nodejs",
+          "tests.js"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "build.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "build.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "math.test.py"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "math.test.py"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "../math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "../math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "/tmp/math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "/tmp/math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--import",
+          "evil.mjs",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "--import",
+          "evil.mjs",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--experimental-strip-types"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "--experimental-strip-types"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "./node_modules/tsx/dist/cli.mjs",
+          "src/math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "node",
+          "./node_modules/tsx/dist/cli.mjs",
+          "src/math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "src/math.test.ts",
+          []
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "tsx",
+          "math.test.ts",
+          "--flag"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "tsx",
+          "math.test.ts",
+          "--flag"
+        ]
+      },
+      "expected": {
+        "value": [
+          "math.test.ts",
+          [
+            "--flag"
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "npx",
+          "tsx",
+          "tests/api.spec.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "npx",
+          "tsx",
+          "tests/api.spec.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "tests/api.spec.ts",
+          []
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "npx",
+          "--no-install",
+          "tsx",
+          "test_math.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "npx",
+          "--no-install",
+          "tsx",
+          "test_math.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "test_math.ts",
+          []
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "./node_modules/.bin/tsx",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "./node_modules/.bin/tsx",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": [
+          "math.test.ts",
+          []
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "tsx"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "tsx"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "tsx",
+          "scripts/deploy.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "tsx",
+          "scripts/deploy.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "tsx",
+          "watch",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "tsx",
+          "watch",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "tsx",
+          "../math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "tsx",
+          "../math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "npx",
+          "tsx@latest",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "npx",
+          "tsx@latest",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "npx",
+          "--yes",
+          "tsx",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "tsx_test_invocation",
+      "input": {
+        "command": [
+          "npx",
+          "--yes",
+          "tsx",
+          "math.test.ts"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    }
+  ]
+}

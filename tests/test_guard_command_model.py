@@ -13,14 +13,16 @@ from codex_plugin_scanner.guard.runtime.command_rules import (
 
 
 def test_windows_parse_keeps_backslash_path_separators(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
     from codex_plugin_scanner.guard.runtime import command_tokens
 
-    monkeypatch.setattr(command_tokens.os, "name", "nt")
-    parsed = parse_shell_command(r"cmd /c echo C:\Work\file.txt")
+    monkeypatch.setattr(command_tokens, "os", SimpleNamespace(name="nt"))
+    tokens, exact = command_tokens.shell_tokens(r"cmd /c echo C:\Work\file.txt")
 
-    assert parsed.confidence == "exact"
-    assert parsed.segments[0].executable == "cmd"
-    assert parsed.segments[0].arguments[-1] == r"C:\Work\file.txt"
+    assert exact
+    assert tokens[0] == "cmd"
+    assert tokens[-1] == r"C:\Work\file.txt"
     quoted = command_tokens.shell_tokens('echo "a\\"b" "a\\q" \'x y\'')
     assert quoted == (("echo", 'a"b', r"a\q", "x y"), True)
     assert command_tokens.shell_tokens("echo\ta\r\nb") == (("echo", "a", "b"), True)

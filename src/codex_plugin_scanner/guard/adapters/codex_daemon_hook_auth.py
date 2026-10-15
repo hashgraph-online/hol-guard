@@ -87,13 +87,23 @@ def _sign_discovery_payload(discovery_key: str, payload: dict[str, object]) -> s
 
 def _authenticated_state(state_path: str | Path) -> tuple[dict[str, object], str]:
     path = Path(state_path)
-    discovery_key = _private_file_text(path.parent / "daemon-discovery-key", label="daemon discovery key")
+    try:
+        discovery_key = _private_file_text(path.parent / "daemon-discovery-key", label="daemon discovery key")
+    except ValueError:
+        # A home whose daemon has never started has neither file yet; that is a
+        # daemon that is not up, not state that failed authentication.
+        if not os.path.lexists(path):
+            raise ValueError("daemon state is unavailable") from None
+        raise
     try:
         payload = json.loads(_private_file_text(path, label="daemon state"))
     except json.JSONDecodeError as error:
         raise ValueError("daemon state is malformed") from error
     if not isinstance(payload, dict):
         raise ValueError("daemon state must be a JSON object")
+    if not payload:
+        # A stopped or restarting daemon leaves this exact tombstone behind.
+        raise ValueError("daemon state records a stopped daemon")
     signature = payload.get("state_signature")
     unsigned = {key: value for key, value in payload.items() if key != "state_signature"}
     try:

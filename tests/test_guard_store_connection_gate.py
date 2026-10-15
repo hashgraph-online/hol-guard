@@ -285,7 +285,7 @@ def test_storage_gate_and_sqlite_lock_consume_one_operation_budget(tmp_path: Pat
                 gate_held.set()
                 if not caller_started.wait(timeout=2):
                     raise TimeoutError("storage gate holder was not released")
-                time.sleep(0.25)
+                time.sleep(0.6)
         except BaseException as error:
             holder_errors.append(error)
 
@@ -299,14 +299,17 @@ def test_storage_gate_and_sqlite_lock_consume_one_operation_budget(tmp_path: Pat
         caller_started.set()
         with (
             pytest.raises(sqlite3.OperationalError, match="locked"),
-            sqlite_connect_timeout_override(0.4),
+            sqlite_connect_timeout_override(0.8),
             store._connect() as connection,
         ):
             connection.execute(
                 "insert into guard_events (event_name, payload_json, occurred_at) values ('deadline', '{}', 'now')"
             )
         elapsed = time.monotonic() - started
-        assert elapsed < 0.52, f"gate and SQLite each restarted the wait budget: {elapsed:.3f}s"
+        # One shared budget ends near 0.8s; restarting it after the 0.6s gate
+        # wait would take at least 1.4s. The midpoint leaves room for SQLite's
+        # busy-handler sleep granularity and loaded CI runners.
+        assert elapsed < 1.1, f"gate and SQLite each restarted the wait budget: {elapsed:.3f}s"
     finally:
         caller_started.set()
         writer.rollback()

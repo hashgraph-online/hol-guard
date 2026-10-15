@@ -11,9 +11,9 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
+use crate::command_model::CanonicalCommand;
 use crate::github_capability_contract::GitHubCommandCapability;
 use crate::github_command_capabilities::classify_github_cli;
-use crate::CanonicalCommandV1;
 
 /// `GitHubWorkflowOperationKind` — the ten authorization-eligible operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -121,18 +121,17 @@ impl GitHubWorkflowOperation {
 }
 
 /// `parse_github_workflow_operation` (:78) — exact single-segment commands only.
+/// `repository` is the workspace repository for GraphQL forms and an optional
+/// expected repository for the `--repo` CLI forms.
 pub fn parse_github_workflow_operation(
-    command: &CanonicalCommandV1,
+    command: &CanonicalCommand,
     repository: Option<&str>,
     expected_executable: &str,
 ) -> Option<GitHubWorkflowOperation> {
-    // `CanonicalCommandV1`/`CanonicalCommand` drop `redirects` and
-    // `embedded_commands` (the wire omits them; `security_identity` covers
-    // their span). A command that produced any redirect/embedded segment cannot
-    // collapse to exactly one `exact` segment anyway, so the remaining gate is
-    // `confidence=="exact" && segments.len()==1`.
     if command.confidence != "exact"
         || command.segments.len() != 1
+        || !command.redirects.is_empty()
+        || !command.embedded_commands.is_empty()
         || !command.wrapper_chain.is_empty()
         || command.normalized_text.trim_end().ends_with('&')
     {
@@ -146,7 +145,7 @@ pub fn parse_github_workflow_operation(
     {
         return None;
     }
-    let normalized_repository = normalized_repository(repository?);
+    let normalized_repository = repository.and_then(normalized_repository);
     let operation = graphql_operation(&segment.arguments, normalized_repository.as_deref())
         .or_else(|| cli_operation(&segment.arguments, normalized_repository.as_deref()))?;
     let (kind, resource_type, resource_id, repo) = operation;
@@ -156,22 +155,9 @@ pub fn parse_github_workflow_operation(
     {
         return None;
     }
-    let digest = compute_operation_digest(
-        &command.security_identity,
-        kind,
-        &repo,
-        &resource_id,
-        &resource_type,
-    );
-    GitHubWorkflowOperation::try_new(
-        kind,
-        resource_type,
-        resource_id,
-        repo,
-        command.security_identity.clone(),
-        digest,
-    )
-    .ok()
+    let identity = command.security_identity();
+    let digest = compute_operation_digest(&identity, kind, &repo, &resource_id, &resource_type);
+    GitHubWorkflowOperation::try_new(kind, resource_type, resource_id, repo, identity, digest).ok()
 }
 
 // ─── internals (ports of module-private helpers) ─────────────────────────────
@@ -235,7 +221,21 @@ fn graphql_thread_input_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\binput\s*:\s*\{\s*threadId\s*:\s*\$threadId\s*\}").unwrap())
 }
 
-#[allow(clippy::invalid_regex)]
+/// Python `re.search(r"\$(?!threadId\b)", query)`: any `$` that is not the
+/// start of a whole-word `threadId`.
+fn has_foreign_variable(query: &str) -> bool {
+    query.match_indices('$').any(|(index, _)| {
+        let rest = &query[index + 1..];
+        match rest.strip_prefix("threadId") {
+            Some(after) => after
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_'),
+            None => true,
+        }
+    })
+}
+
 fn graphql_operation(
     arguments: &[String],
     repository: Option<&str>,
@@ -259,7 +259,7 @@ fn graphql_operation(
         || !thread_def
         || graphql_thread_input_re().find_iter(query).count() != 1
         || query.matches("$threadId").count() != 2
-        || Regex::new(r"\$(?!threadId\b)").unwrap().is_match(query)
+        || has_foreign_variable(query)
         || ["$(`", "${", "`", "\"", "#"]
             .iter()
             .any(|m| query.contains(m))

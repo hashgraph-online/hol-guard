@@ -20,10 +20,11 @@ def waiting_worker(
     publisher = NativePolicySnapshotPublisher(store=GuardStore(tmp_path))
     publisher.register_workspace(tmp_path)
     monkeypatch.setattr(publisher, "start", lambda: None)
-    monkeypatch.setattr(worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     publisher._snapshot = {"generation": 1, "policy_digest": "old", "runtime_identity": "runtime", "mode": "enforce"}
+    # The prior ACK compiled this workspace; only the resident changed.
+    publisher._pending_workspace_paths.clear()
     publisher._record_error("native_policy_snapshot_resident_changed")
     assert publisher.current_snapshot_binding() is None
     return worker, publisher
@@ -66,7 +67,13 @@ def test_resident_change_waits_for_new_ack_instead_of_returning_an_unready_polic
 
 
 @pytest.mark.parametrize(
-    "error", ["native_command_control_mutation_in_progress", "native_business_source_mutation_in_progress"]
+    "error",
+    [
+        "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
+        "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
+    ],
 )
 def test_control_mutation_contention_waits_for_committed_policy_ack(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: str
@@ -103,7 +110,9 @@ def test_control_mutation_contention_waits_for_committed_policy_ack(
     [
         "native_policy_snapshot_resident_changed",
         "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
         "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
     ],
 )
 @pytest.mark.parametrize("deadline", [None, 100.25, 99.0])

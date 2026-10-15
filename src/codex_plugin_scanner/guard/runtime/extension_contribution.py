@@ -99,23 +99,6 @@ def contribution_ids(root: Path | None = None) -> frozenset[str]:
     return frozenset(ids)
 
 
-def contribution_catalog_overlay(extension_id: str) -> dict[str, object] | None:
-    payload = _contribution_index().get(extension_id)
-    if payload is None:
-        return None
-    publisher = payload.get("publisher")
-    icon = payload.get("icon")
-    if not isinstance(publisher, dict) or not isinstance(icon, dict):
-        return None
-    return {"publisher": dict(publisher), "icon": dict(icon)}
-
-
-def reset_contribution_cache() -> None:
-    _contribution_index.cache_clear()
-    _validator.cache_clear()
-    _trust_classes.cache_clear()
-
-
 def _validated_payload(payload: object, filename: str) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"{filename} must contain an object")
@@ -152,16 +135,6 @@ def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
     for item in sorted(names, key=lambda entry: entry.name):
         payloads.append(_validated_payload(json.loads(item.read_text(encoding="utf-8")), item.name))
     return tuple(payloads)
-
-
-@lru_cache(maxsize=1)
-def _contribution_index() -> dict[str, dict[str, object]]:
-    index: dict[str, dict[str, object]] = {}
-    for payload in load_contribution_payloads():
-        extension_id = payload.get("id")
-        if isinstance(extension_id, str):
-            index[extension_id] = payload
-    return index
 
 
 @lru_cache(maxsize=1)
@@ -205,7 +178,9 @@ def _trust_classes() -> dict[str, str]:
         elif _frozen_runtime():
             raise FileNotFoundError("frozen Guard is missing packaged extension trust map") from None
         else:
-            raw = (Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json").read_bytes()
+            raise FileNotFoundError(
+                "Guard requires authored trust bindings or a packaged extension trust map"
+            ) from None
     payload = json.loads(raw.decode("utf-8"))
     classes = payload.get("classes") if isinstance(payload, dict) else None
     if not isinstance(classes, dict):

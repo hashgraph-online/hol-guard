@@ -1,5 +1,24 @@
 use super::*;
 
+/// Locally-decided block draft carrying the package's own reasons, mirroring
+/// `_EvaluationDraft(..., reasons=tuple(_dict_items(package.get("reasons"))))`.
+fn local_block_draft(
+    package: Map<String, Value>,
+    external_archive_source_hashes: Vec<String>,
+) -> EvaluationDraft {
+    EvaluationDraft {
+        decision: "block".to_string(),
+        enforcement: "free_local".to_string(),
+        entitlement_state: "free".to_string(),
+        cache_status: "miss".to_string(),
+        reasons: dict_items(package.get("reasons")),
+        packages: vec![package],
+        policy_version: "local:none".to_string(),
+        external_archive_source_hashes,
+        ..Default::default()
+    }
+}
+
 #[allow(dead_code, clippy::too_many_arguments)]
 pub(super) fn evaluate_non_registry_sources(
     deps: &SupplyChainEvalDeps<'_>,
@@ -32,22 +51,20 @@ pub(super) fn evaluate_non_registry_sources(
                 "External archive request exceeded Guard's per-command target limit.",
                 "high",
             );
-            let draft = EvaluationDraft {
-                decision: "block".to_string(),
-                enforcement: "free_local".to_string(),
-                entitlement_state: "free".to_string(),
-                cache_status: "miss".to_string(),
-                packages: vec![limit_package],
-                reasons: Vec::new(),
-                matched_rule_id: None,
-                exception_id: None,
-                refresh_required: false,
-                record_monitor_evidence: false,
-                bundle_version: None,
-                policy_version: "local:none".to_string(),
-                external_archive_source_hashes: external_archive_source_hashes.clone(),
-                ..Default::default()
-            };
+            let draft = local_block_draft(limit_package, external_archive_source_hashes.clone());
+            let result = finalize_evaluation(deps, &draft, package_intent_hash, None);
+            persist_evidence(deps, store, artifact, &result, now_value);
+            return Some(result);
+        }
+        if external_archive_targets.len() != targets.len() {
+            let mixed_package = heuristic_package_result(
+                external_archive_targets[0],
+                "block",
+                "external_archive_mixed_request_unsupported",
+                "External archives must be installed in a separate command so Guard can preserve registry advisory evaluation and bind the inspected blob to execution.",
+                "high",
+            );
+            let draft = local_block_draft(mixed_package, external_archive_source_hashes.clone());
             let result = finalize_evaluation(deps, &draft, package_intent_hash, None);
             persist_evidence(deps, store, artifact, &result, now_value);
             return Some(result);
@@ -60,7 +77,8 @@ pub(super) fn evaluate_non_registry_sources(
             workspace_dir,
             external_archive_network_authorized,
             retain_external_archive_blob,
-            None,
+            external_archive_network_authorized
+                .then(|| monotonic_seconds() + EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS),
         )
         .unwrap_or_else(|| EvaluationDraft {
             decision: "block".to_string(),
@@ -122,24 +140,10 @@ pub(super) fn evaluate_non_registry_sources(
                 source_review_targets[0],
                 "block",
                 "npm_source_mixed_request_unsupported",
-                "npm source dependencies must be installed in a dedicated request so Guard can verify the package source.",
+                "npm source dependencies must be installed separately so Guard can preserve registry advisory evaluation and source approval identity.",
                 "high",
             );
-            let draft = EvaluationDraft {
-                decision: "block".to_string(),
-                enforcement: "free_local".to_string(),
-                entitlement_state: "free".to_string(),
-                cache_status: "miss".to_string(),
-                packages: vec![mixed_source_package],
-                reasons: Vec::new(),
-                matched_rule_id: None,
-                exception_id: None,
-                refresh_required: false,
-                record_monitor_evidence: false,
-                bundle_version: None,
-                policy_version: "local:none".to_string(),
-                ..Default::default()
-            };
+            let draft = local_block_draft(mixed_source_package, Vec::new());
             let result = finalize_evaluation(deps, &draft, package_intent_hash, None);
             persist_evidence(deps, store, artifact, &result, now_value);
             return Some(result);

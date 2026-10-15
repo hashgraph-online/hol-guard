@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.runtime.containment_health import (
 from codex_plugin_scanner.guard.runtime.effect_contract import EFFECT_CONTRACT_SCHEMA_VERSION
 from codex_plugin_scanner.guard.runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 
 T0 = "2026-07-25T00:00:00+00:00"
 T1 = "2026-07-25T00:00:01+00:00"
@@ -148,7 +149,7 @@ def stub_supported_repair(
             "get_command_activity_persistence_health",
             lambda self: SimpleNamespace(active_error_count=0),
         )
-    monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+    patch_daemon_global(monkeypatch, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
     monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
 
 

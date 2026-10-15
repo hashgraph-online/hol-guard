@@ -80,18 +80,18 @@ def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
         assert not any(_matches(evidence, pattern) for pattern in patterns), evidence
 
 
-def test_regen_keeps_main_scope_and_reviewed_publication() -> None:
-    """Retain main-only publication through a normally reviewed pull request."""
+def test_regen_keeps_main_scope_and_verified_snapshot_publication() -> None:
+    """Publish verified main snapshots without creating generated-file PRs."""
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     assert _triggers(workflow)["push"]["branches"] == ["main"]
     assert "workflow_dispatch" in _triggers(workflow)
     assert "pull_request" not in _triggers(workflow)
     assert workflow["concurrency"]["cancel-in-progress"] is False
     steps = workflow["jobs"]["regen"]["steps"]
-    publish = next((step for step in steps if step.get("name") == "Regenerate and publish refreshed artifacts"), None)
-    assert publish is not None, "Missing reviewed artifact publication step"
-    assert "gh pr create" in publish["run"]
-    assert 'gh pr merge --repo "${GH_REPO}" --auto --squash' in publish["run"]
+    publish = next((step for step in steps if step.get("name") == "Publish immutable public snapshot"), None)
+    assert publish is not None, "Missing verified snapshot publication step"
+    assert "scripts/publish_extension_snapshot.py" in publish["run"]
+    assert "gh pr create" not in publish["run"]
     assert "--admin" not in publish["run"]
     assert "continue-on-error" not in publish
 

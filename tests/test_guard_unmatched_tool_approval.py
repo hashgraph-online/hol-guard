@@ -6,49 +6,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    is_explicitly_benign_tool_action_request,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "date",
-        "date -u '+%Y-%m-%dT%H:%M:00Z'",
-        "date --utc +%s",
-    ),
-)
-def test_bounded_date_queries_are_benign(tmp_path: Path, command: str) -> None:
-    assert is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "date -s tomorrow",
-        "date --set=tomorrow",
-        "date +%s +%N",
-        "date -f timestamps.txt",
-    ),
-)
-def test_date_mutations_and_file_reads_still_require_review(tmp_path: Path, command: str) -> None:
-    assert not is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
 
 
 @pytest.mark.usefixtures("native_hook_force")

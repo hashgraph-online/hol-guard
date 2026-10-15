@@ -1,0 +1,247 @@
+"""Consumer artifact projection answered by the native runtime.
+
+The consumer evaluation reads the store and the harness. The resident decides
+what that evidence means: the capability snapshot and its delta, the artifact
+diff, the history and provenance context, the receipt summaries, the incident
+copy and the per-artifact result rows. There is no Python evaluator:
+``native_consumer_project`` raises ``NativeConsumerProjectError`` for anything
+but a bound, strictly decoded ``ok`` answer, so a missing resident fails the
+evaluation closed.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+from pathlib import Path
+from uuid import uuid4
+
+from .native_consumer_artifact_compose import record_binding_health
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
+from .native_execution import _resident_request
+from .native_hook_artifact_compose import _field_valid
+
+CONSUMER_ARTIFACT_PROJECT_FEATURE = "consumer-artifact-project-v1"
+_REQUEST_SCHEMA = "guard-consumer-artifact-project-request.v1"
+_RESULT_SCHEMA = "guard-consumer-artifact-project-result.v1"
+_RESIDENT_CODE = re.compile(r"^native_consumer_artifact_project_[a-z_]{1,64}$")
+_UNAVAILABLE = "native_consumer_artifact_project_unavailable"
+_TIMEOUT_SECONDS = 5.0
+# Result rows carry the decision projection and scoring evidence, which can
+# exceed the shared 256 KiB default.
+_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+# Every field is sent explicitly (nulls included) so the digest bound here
+# equals the resident's digest of its decoded request.
+_FIELDS: dict[str, frozenset[str]] = {
+    "artifact_evidence": frozenset(
+        {
+            "artifact",
+            "current_payload",
+            "payload_keys",
+            "current_hash",
+            "previous_snapshot",
+            "previous_capabilities",
+            "history",
+        }
+    ),
+    "artifact_result": frozenset(
+        {
+            "harness",
+            "artifact",
+            "evidence",
+            "projection",
+            "verdict",
+            "scanner_action",
+            "runtime",
+            "signals",
+            "risk_signals",
+            "risk_summary",
+            "approval_context_hash",
+            "effective_workspace",
+            "policy_action",
+        }
+    ),
+    "removed_result": frozenset(
+        {
+            "harness",
+            "artifact_id",
+            "previous",
+            "previous_hash",
+            "projection",
+            "runtime",
+            "signals",
+            "risk_signals",
+            "has_runtime_authority",
+            "dashboard_detail",
+            "approval_context_hash",
+            "effective_workspace",
+            "policy_action",
+        }
+    ),
+    "incident_context": frozenset(
+        {
+            "harness",
+            "artifact",
+            "artifact_id",
+            "artifact_name",
+            "artifact_type",
+            "source_scope",
+            "config_path",
+            "changed_fields",
+            "policy_action",
+            "launch_target",
+            "risk_summary",
+        }
+    ),
+}
+
+# The exact answer shape of each query kind. Spec letters: a action,
+# A action or null, b bool, s string, S string or null, d dict, D dict or
+# null, l list. A detected artifact's result row is checked for the fields
+# every consumer reads.
+_ANSWERS: dict[str, dict[str, str]] = {
+    "artifact_evidence": {
+        "changed": "b",
+        "first_seen": "b",
+        "diff_summary": "S",
+        "changed_fields": "l",
+        "previous_hash": "S",
+        "current_hash": "s",
+        "capabilities_summary": "s",
+        "changed_capabilities": "l",
+        "provenance_summary": "s",
+        "scoring": "d",
+        "capability_snapshot": "d",
+        "capability_delta": "l",
+        "history_context": "d",
+        "provenance": "d",
+    },
+    "removed_result": {"receipt": "d", "result": "d"},
+    "incident_context": {
+        "artifact_label": "s",
+        "source_label": "s",
+        "trigger_summary": "s",
+        "why_now": "s",
+        "launch_summary": "s",
+        "risk_headline": "s",
+    },
+}
+# The receipt strings ``evaluate_detection`` reads when an artifact is removed.
+_REMOVED_RECEIPT: dict[str, str] = {
+    "artifact_name": "s",
+    "capabilities_summary": "s",
+    "provenance_summary": "s",
+    "source_scope": "S",
+}
+_RESULT_FIELDS: dict[str, str] = {
+    "artifact_id": "s",
+    "policy_action": "a",
+    "changed": "b",
+    "changed_fields": "l",
+    "approval_context_hash": "s",
+    "scoring_recommendation": "d",
+    "risk_signals": "l",
+    "signals": "l",
+    "capability_snapshot": "d",
+    "capability_delta": "l",
+    "provenance": "d",
+    "history_context": "d",
+    "authoritative_decision": "d",
+    "why_now": "s",
+}
+
+
+def _answer_valid(kind: str, payload: dict[str, object]) -> bool:
+    if kind == "artifact_result":
+        # A fail-closed row (no native decision) carries its evaluation error in
+        # place of an authoritative decision; every other row must carry one.
+        fail_closed = (
+            "authoritative_decision" not in payload
+            and payload.get("policy_action") == "block"
+            and isinstance(payload.get("evaluation_error"), dict)
+        )
+        return all(
+            name in payload and _field_valid(spec, payload[name])
+            for name, spec in _RESULT_FIELDS.items()
+            if not (fail_closed and name == "authoritative_decision")
+        )
+    shape = _ANSWERS[kind]
+    valid = set(payload) == set(shape) and all(_field_valid(spec, payload[name]) for name, spec in shape.items())
+    if kind != "removed_result":
+        return valid
+    result, receipt = payload.get("result"), payload.get("receipt")
+    return (
+        valid
+        and isinstance(result, dict)
+        and result.get("removed") is True
+        and isinstance(receipt, dict)
+        and all(name in receipt and _field_valid(spec, receipt[name]) for name, spec in _REMOVED_RECEIPT.items())
+    )
+
+
+class NativeConsumerProjectError(RuntimeError):
+    """No authoritative projection answer; ``code`` says why, for diagnostics."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def native_consumer_project(kind: str, fields: Mapping[str, object], *, guard_home: Path | None) -> dict[str, object]:
+    """Return the resident's answer to one projection query, or raise."""
+
+    expected = _FIELDS.get(kind)
+    if expected is None or set(fields) != expected:
+        raise NativeConsumerProjectError("native_consumer_artifact_project_request_invalid")
+    try:
+        home = _resolve_digest_home(guard_home)
+    except (OSError, RuntimeError, ValueError):
+        raise NativeConsumerProjectError("native_consumer_artifact_project_home_unbound") from None
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": f"consumer-artifact-project-{uuid4().hex}",
+        "query": {"kind": kind, **fields},
+    }
+    try:
+        digest = "sha256:" + _canonical_request_sha256(request)
+    except (TypeError, ValueError):
+        raise NativeConsumerProjectError("native_consumer_artifact_project_request_invalid") from None
+    if not ensure_resident_prerequisite(home):
+        raise NativeConsumerProjectError(_UNAVAILABLE)
+    response = _resident_request(
+        operation="consumer_artifact_project",
+        request=request,
+        guard_home=home,
+        timeout_seconds=_TIMEOUT_SECONDS,
+        required_feature=CONSUMER_ARTIFACT_PROJECT_FEATURE,
+        response_schema=_RESULT_SCHEMA,
+        max_request_bytes=_MAX_REQUEST_BYTES,
+        record_success=False,
+    )
+    if response is None:
+        raise NativeConsumerProjectError(_UNAVAILABLE)
+    # Resident health is recorded only once the reply is bound to this request
+    # and decodes, so malformed answers keep counting toward the circuit.
+    bound = (
+        response.get("schema") == _RESULT_SCHEMA
+        and response.get("request_id") == request["request_id"]
+        and response.get("request_sha256") == digest
+    )
+    status, code, payload = response.get("status"), response.get("code"), response.get("payload")
+    usable = status == "ok" and code == "ok" and isinstance(payload, dict) and _answer_valid(kind, payload)
+    _record_health(home, healthy=bound and (usable or status == "error"))
+    if not bound:
+        raise NativeConsumerProjectError(_UNAVAILABLE)
+    if status == "error":
+        reason = code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
+        raise NativeConsumerProjectError(reason)
+    if not usable or not isinstance(payload, dict):
+        raise NativeConsumerProjectError("native_consumer_artifact_project_payload_invalid")
+    return payload
+
+
+def _record_health(home: Path, *, healthy: bool) -> None:
+    record_binding_health(home, healthy=healthy, reason="native_consumer_artifact_project_binding")
+
+
+__all__ = ["CONSUMER_ARTIFACT_PROJECT_FEATURE", "NativeConsumerProjectError", "native_consumer_project"]

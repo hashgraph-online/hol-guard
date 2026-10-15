@@ -1,10 +1,10 @@
 //! Port of `package_execution_context.py` (:1-316) — the pure
 //! evidence/identity surface only.
 //!
-//! `build_package_execution_context` (:101-200) is NOT ported: it reads
-//! manifests, configuration files, and VCS state off the filesystem via
-//! `package_execution_context_inputs` / `package_execution_context_configuration`
-//! — that leg lands with the secure-FS-backed context builder (RTM-026 chain).
+//! The build leg (the former `build_package_execution_context`, which read
+//! manifests, configuration files, and VCS state) lives in
+//! `package_context_build` and runs behind the resident `package_context_build`
+//! op; this module owns the pure side of the identity.
 //! What is here: the frozen dataclasses, `to_evidence`, the strict
 //! `from_evidence` validator (byte-parity component digests), scanner-evidence
 //! unwrapping, and `changed_package_execution_context_components`.

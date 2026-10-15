@@ -39,13 +39,13 @@ fn evaluate(request: ContextDigestRequestV1) -> ContextDigestResultV1 {
 }
 
 #[test]
-fn persisted_mcp_approval_digest_survives_byte_and_resident_numeric_decoding() {
-    let raw = br#"{"schema":"guard-context-digest-request.v1","request_id":"numeric-approval","kind":"mcp_tool_approval_digest","request":{"content":{"artifact_id":"codex:mcp:filesystem:read_file","config_path":".mcp.json","arguments":{"path":"/opt/neutral/data/\u65e5\u672c\u8a9e.txt","limits":[1.0,-0.0,1e-7,1208925819614629174706177],"nested":{"empty":{},"missing":null}}},"transport":"stdio","server_fingerprint":{"resolved_executable":"/opt/bin/server","tool_catalog_fingerprint":"catalog"},"server_identity":{"identity_hash":"server"},"tool_identity":{"schema_hash":"schema"},"authority_hash":{"revision":1},"provider_hash":false,"workspace":null}}"#;
+fn numeric_material_digest_survives_byte_and_resident_decoding() {
+    let raw = br#"{"schema":"guard-context-digest-request.v1","request_id":"numeric-material","kind":"canonical_sha256","material":{"path":"/opt/neutral/data/\u65e5\u672c\u8a9e.txt","limits":[1.0,-0.0,1e-7,1208925819614629174706177],"nested":{"empty":{},"missing":null}},"prefix":null}"#;
     let direct: ContextDigestResultV1 =
         serde_json::from_slice(&evaluate_context_digest_bytes(raw).unwrap()).unwrap();
     assert_eq!(
         direct.digest.as_deref(),
-        Some("42166ca3ebc09245c93f0b33ce989a75df475c38817fded4168ab4ec5699b0e4")
+        Some("45a81b629ceaf4ac265f6b340e5bb09c9f2f55bf3c6748c9cf9236470e84ff1c")
     );
     let request: Value = serde_json::from_slice(raw).unwrap();
     let envelope =
@@ -209,39 +209,34 @@ fn mcp_arguments_projection_cases_match_python() {
         } else {
             Some(arguments)
         };
-        let result = evaluate(request_for(ContextDigestKindV1::McpArgumentsProjection {
-            tool_name: case["tool_name"].as_str().unwrap().to_owned(),
-            arguments,
-        }));
-        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        let projection =
+            mcp_arguments_projection(case["tool_name"].as_str().unwrap(), arguments.as_ref())
+                .unwrap_or_else(|code| panic!("case {}: {code}", case["id"]));
         assert_eq!(
-            result.digest.as_deref(),
-            case["digest"].as_str(),
-            "case {}",
-            case["id"]
-        );
-        assert_eq!(
-            result.mcp_launch_target.as_deref(),
+            Some(projection.launch_target.as_str()),
             case["launch_target"].as_str(),
             "case {}",
             case["id"]
         );
-        assert_eq!(
-            result.mcp_serialized_arguments.as_deref(),
-            case["serialized_arguments"].as_str(),
+        // The launch target embeds both the serialized safe arguments and the
+        // raw-arguments digest.
+        let serialized = case["serialized_arguments"].as_str().unwrap();
+        let digest = case["digest"].as_str().unwrap();
+        assert!(
+            projection.launch_target.contains(serialized),
             "case {}",
             case["id"]
         );
-        let expected_safe = if case["safe_arguments"].is_null() {
-            // Wire `null` parses as `None`; Python `_safe_mcp_arguments(None)`
-            // also yields `None`.
-            None
-        } else {
-            Some(&case["safe_arguments"])
-        };
+        assert!(
+            projection
+                .launch_target
+                .ends_with(&format!("[arguments-sha256:{digest}]")),
+            "case {}",
+            case["id"]
+        );
+        // `_safe_mcp_arguments(None)` yields `None`, projected as `null`.
         assert_eq!(
-            result.mcp_safe_arguments.as_ref(),
-            expected_safe,
+            projection.safe, case["safe_arguments"],
             "case {}",
             case["id"]
         );
@@ -304,35 +299,6 @@ fn validation_cases_match_python_reasons() {
             case["id"]
         );
     }
-}
-
-#[test]
-fn validate_context_kind_builds_and_compares() {
-    let corpus = corpus();
-    let case = &corpus["component_cases"].as_array().unwrap()[0];
-    let components = components_of(
-        &case["components"],
-        case["extension_control_digest"].as_str().unwrap(),
-    );
-    let saved = case["token"].clone();
-    let unchanged = evaluate(request_for(ContextDigestKindV1::ValidateApprovalContext {
-        saved_token: saved.clone(),
-        components: components.clone(),
-    }));
-    assert_eq!(unchanged.status, "ok");
-    assert_eq!(unchanged.validation_reason, None);
-
-    let mut drifted = components;
-    drifted.content = Value::String("different-content".to_owned());
-    let changed = evaluate(request_for(ContextDigestKindV1::ValidateApprovalContext {
-        saved_token: saved,
-        components: drifted,
-    }));
-    assert_eq!(changed.status, "ok");
-    assert_eq!(
-        changed.validation_reason.as_deref(),
-        Some("approval_reuse_content_changed")
-    );
 }
 
 #[test]

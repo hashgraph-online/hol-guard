@@ -23,7 +23,6 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact, GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_receipt_rollups import backfill_receipt_rollups
 from tests.coverage_ci import under_coverage_scale
 
 
@@ -460,7 +459,7 @@ class TestReceiptAnalytics:
         assert incremental["reviewed"] == 0
 
         with store._connect() as connection:
-            backfill_receipt_rollups(connection)
+            connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
 
         backfilled = store.receipt_analytics(top_limit=5)
         assert backfilled["allowed"] == 1
@@ -502,6 +501,20 @@ class TestReceiptAnalytics:
         assert changed["allowed"] == 0
         assert changed["blocked"] == 1
         assert changed["reviewed"] == 0
+
+    def test_store_upgrade_counts_receipts_before_any_analytics_read(self, tmp_path: Path) -> None:
+        guard_home = tmp_path / "guard"
+        store = GuardStore(guard_home)
+        store.add_receipt(_make_receipt(receipt_id="r-existing", policy_decision="allow"))
+        with store._connect() as connection:
+            connection.execute("delete from schema_migrations where version = 16")
+
+        upgraded = GuardStore(guard_home)
+        upgraded.add_receipt(_make_receipt(receipt_id="r-after-upgrade", policy_decision="block"))
+
+        assert upgraded.count_receipts() == 2
+        analytics = upgraded.receipt_analytics(top_limit=5)
+        assert (analytics["total"], analytics["allowed"], analytics["blocked"]) == (2, 1, 1)
 
     def test_receipt_analytics_aggregates_across_all_rows(self, tmp_path: Path) -> None:
         from datetime import datetime, timedelta, timezone

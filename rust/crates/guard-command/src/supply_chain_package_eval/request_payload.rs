@@ -34,7 +34,7 @@ pub(super) fn workspace_fingerprint(
     );
     payload.insert(
         "lockfile_parser_version".to_string(),
-        Value::String(crate::local_supply_chain::LOCKFILE_PARSER_VERSION.to_string()),
+        Value::String(super::LOCKFILE_PARSER_VERSION.to_string()),
     );
     payload.insert(
         "bundle_policy_hash".to_string(),
@@ -103,23 +103,29 @@ pub(super) fn build_request_payload(
                 "namespace".to_string(),
                 target.get("namespace").cloned().unwrap_or(Value::Null),
             );
-            let source_url_value = target
-                .get("source_redacted")
-                .or_else(|| target.get("source_url"));
-            if target.get("source_url").is_some() {
+            let truthy = |key: &str| -> Option<String> {
+                match target.get(key) {
+                    Some(Value::String(text)) if !text.is_empty() => Some(text.clone()),
+                    Some(Value::Null) | Some(Value::String(_)) | None => None,
+                    Some(Value::Bool(false)) => None,
+                    Some(other) => Some(other.to_string()),
+                }
+            };
+            if truthy("source_url").is_some() {
+                let source = truthy("source_redacted").or_else(|| truthy("source_url"));
                 pkg.insert(
                     "sourceUrl".to_string(),
-                    source_url_value.cloned().unwrap_or(Value::Null),
+                    source.map_or(Value::Null, Value::String),
                 );
             }
-            if let Some(v) = target.get("source_identity") {
-                pkg.insert("sourceIdentity".to_string(), v.clone());
-            }
-            if let Some(v) = target.get("version") {
-                pkg.insert("version".to_string(), v.clone());
-            }
-            if let Some(v) = target.get("range") {
-                pkg.insert("range".to_string(), v.clone());
+            for (key, field) in [
+                ("source_identity", "sourceIdentity"),
+                ("version", "version"),
+                ("range", "range"),
+            ] {
+                if let Some(value) = truthy(key) {
+                    pkg.insert(field.to_string(), Value::String(value));
+                }
             }
             Value::Object(pkg)
         })

@@ -1,5 +1,21 @@
 use super::*;
 
+/// Keys whose string value may carry JSON-encoded tool arguments.
+pub(crate) const EMBEDDED_ARGUMENT_KEYS: [&str; 12] = [
+    "toolArgs",
+    "tool_args",
+    "toolArgsJson",
+    "tool_input",
+    "toolInput",
+    "toolArguments",
+    "tool_arguments",
+    "arguments",
+    "args",
+    "input",
+    "parameters",
+    "params",
+];
+
 pub(crate) fn extract_generic_signals(
     payload: &Value,
 ) -> Result<GenericSignals, GenericExtractionError> {
@@ -15,20 +31,7 @@ pub(crate) fn extract_generic_signals(
     // their nested fields join the same bounded signal surface.
     let mut embedded = Vec::new();
     for record in &maps {
-        for key in [
-            "toolArgs",
-            "tool_args",
-            "toolArgsJson",
-            "tool_input",
-            "toolInput",
-            "toolArguments",
-            "tool_arguments",
-            "arguments",
-            "args",
-            "input",
-            "parameters",
-            "params",
-        ] {
+        for key in EMBEDDED_ARGUMENT_KEYS {
             if let Some(Value::String(text)) = record.get(key) {
                 let trimmed = text.trim();
                 if !(trimmed.starts_with('{') || trimmed.starts_with('['))
@@ -136,6 +139,7 @@ pub(crate) fn extract_generic_signals(
         package_values,
         path_values,
         url_values,
+        request_body_or_method: request_body_or_method(&maps),
         prompt_present: !prompt_values.is_empty(),
         env_reference,
         benign_prompt,
@@ -148,5 +152,22 @@ pub(crate) fn extract_generic_signals(
         sensitive_target,
         independent_sensitive_target: guard_bypass_intent || independent_sensitive_target,
         event_hint,
+    })
+}
+
+/// A tool that exposes a request body, headers or a non-GET method is not a
+/// plain read of public content.
+fn request_body_or_method(maps: &[&serde_json::Map<String, Value>]) -> bool {
+    maps.iter().any(|record| {
+        record
+            .iter()
+            .any(|(key, value)| match key.to_ascii_lowercase().as_str() {
+                "method" | "http_method" | "httpmethod" => value
+                    .as_str()
+                    .is_none_or(|method| !method.trim().eq_ignore_ascii_case("get")),
+                "body" | "data" | "json" | "form" | "headers" | "header" | "cookies"
+                | "request_body" | "requestbody" => !value.is_null(),
+                _ => false,
+            })
     })
 }

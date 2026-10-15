@@ -14,13 +14,14 @@ event transport — no new outbox table or auth path.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from .memory_pattern_fingerprint import (
-    build_memory_pattern_fingerprint,
-)
+from .native_memory_pattern import NativeMemoryPatternError, memory_pattern_verdict
+
+_LOGGER = logging.getLogger(__name__)
 
 MEMORY_DECISION_EVENT_CONTRACT_VERSION = "guard.memory-decision.v1"
 
@@ -105,7 +106,7 @@ def resolve_command_display(
         return envelope_display
     for candidate in (launch_target, artifact_name, artifact_id, review_command):
         value = _string_or_none(candidate)
-        if value is not None and not _is_approval_wrapper(value) and not _is_generic_fragment(value):
+        if value is not None and not is_approval_wrapper(value) and not _is_generic_fragment(value):
             return value
     if redaction_state == "enabled":
         return "Command redacted"
@@ -169,17 +170,22 @@ def build_memory_decision_event(
     # <id>") which would produce an over-broad, useless command fingerprint.
     # Fall back to artifact identity only.
     fingerprint_command = raw_command if redaction_state != "withheld" else None
-    pattern = build_memory_pattern_fingerprint(
-        command=fingerprint_command,
-        artifact_type=artifact_type,
-        artifact_id=artifact_id,
-        artifact_name=artifact_name,
-        harness=harness,
-    )
-
     decision_action = _normalize_decision_action(action)
     if decision_action is None:
         return None
+    try:
+        pattern = memory_pattern_verdict(
+            command=fingerprint_command,
+            artifact_type=artifact_type,
+            artifact_id=artifact_id,
+            artifact_name=artifact_name,
+            harness=harness,
+        ).pattern
+    except NativeMemoryPatternError as error:
+        # The Cloud event is evidence, not authority: without the resident it
+        # carries no fingerprint rather than one rebuilt in Python.
+        _LOGGER.warning("memory decision event %s has no fingerprint: %s", request_id, error)
+        pattern = None
 
     return GuardMemoryDecisionEventV1(
         event_id=_event_id(request_id, decision_action, resolved_at),
@@ -306,7 +312,7 @@ def _first_string_from_sequence(value: object) -> str | None:
     return None
 
 
-def _is_approval_wrapper(value: str) -> bool:
+def is_approval_wrapper(value: str) -> bool:
     return value.strip().startswith("hol-guard approvals approve ")
 
 

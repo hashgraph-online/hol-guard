@@ -17,6 +17,7 @@ from ..business_policy_document_import import (
     plan_document_for_import,
     read_business_document_for_store,
 )
+from ..native_policy_document import NativePolicyDocumentError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_authority import PolicyAuthorityError
 from ..policy_document import policy_document_digest
@@ -444,6 +445,7 @@ def _run_guard_policy_document_command(
         PolicyDocumentError,
         PolicyFileTrustError,
         NativePolicySnapshotError,
+        NativePolicyDocumentError,
     ) as error:
         code = getattr(error, "code", error.__class__.__name__)
         _write_payload(

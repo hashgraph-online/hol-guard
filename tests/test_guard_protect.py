@@ -15,7 +15,6 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
-from codex_plugin_scanner.guard.advisory_model import ProtectTargetIdentity, advisory_matches_target
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.redaction import redact_text
 from codex_plugin_scanner.guard.store import GuardStore
@@ -488,7 +487,7 @@ class TestGuardProtect:
         assert mcp_output["targets"][0]["artifact_id"] == "install:gemini:mcp:remote-risk"
 
     def test_guard_protect_keeps_gemini_stdio_mcp_targets_local(self) -> None:
-        request = protect.parse_protect_command(
+        request, verdict = protect._native_protect(
             [
                 "gemini",
                 "mcp",
@@ -497,11 +496,64 @@ class TestGuardProtect:
                 "https://example.invalid/not-a-remote-endpoint",
                 "--transport",
                 "stdio",
-            ]
+            ],
+            guard_home=None,
+            store=None,
         )
 
         assert request.targets[0].source_url is None
-        assert "registers a remote server endpoint" not in protect._request_risk_signals(request)
+        assert "registers a remote server endpoint" not in verdict.risk_signals
+
+    def test_native_protect_sends_absolute_store_paths(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: dict[str, Path | None] = {}
+
+        def capture(command, *, guard_home, store_path):
+            seen["guard_home"] = guard_home
+            seen["store_path"] = store_path
+            return (
+                {
+                    "command": list(command),
+                    "install_kind": "package_install",
+                    "executor": "npm",
+                    "package_manager": "npm",
+                    "harness": None,
+                    "targets": [
+                        {
+                            "artifact_id": "install:npm:lodash",
+                            "artifact_name": "lodash",
+                            "artifact_type": "npm_package",
+                            "ecosystem": "npm",
+                            "package_name": "lodash",
+                            "package_url": None,
+                            "raw_spec": "lodash",
+                            "version": None,
+                            "source_url": None,
+                            "harness": None,
+                        }
+                    ],
+                },
+                {"action": "allow", "reason": "ok", "risk_signals": [], "matched_advisories": []},
+            )
+
+        monkeypatch.setattr(protect, "native_protect_request", capture)
+        store = type("Store", (), {})()
+        store.guard_home = "relative-guard-home"
+        store.path = "relative-guard-home/guard.db"
+
+        request, verdict = protect._native_protect(
+            ["npm", "install", "lodash"],
+            guard_home=None,
+            store=store,
+        )
+
+        expected_home = Path("relative-guard-home").expanduser().resolve(strict=False)
+        expected_store = Path("relative-guard-home/guard.db").expanduser().resolve(strict=False)
+        assert seen["guard_home"] == expected_home
+        assert seen["store_path"] == expected_store
+        assert expected_home.is_absolute()
+        assert expected_store.is_absolute()
+        assert request.targets[0].package_name == "lodash"
+        assert verdict.action == "allow"
 
     def test_guard_protect_excludes_npm_prefix_destination_from_targets(self, tmp_path: Path) -> None:
         install_dir = tmp_path / "agent" / "npm"
@@ -1037,105 +1089,6 @@ class TestGuardProtect:
         assert output["verdict"]["action"] == "review"
         assert output["matched_advisories"][0]["id"] == "adv-endpoint-url-review"
 
-    def test_guard_protect_does_not_match_blank_source_url_advisory(self) -> None:
-        advisory = {
-            "id": "adv-blank-source",
-            "ecosystem": "npm",
-            "source_url": "   ",
-            "action": "review",
-        }
-        target = ProtectTargetIdentity(
-            artifact_id="install:npm:package:safe",
-            artifact_name="safe",
-            ecosystem="npm",
-            package_name="safe",
-            package_url="pkg:npm/safe",
-            source_url=None,
-        )
-
-        assert advisory_matches_target(advisory, target) is False
-
-    def test_guard_protect_does_not_match_blank_package_advisory(self) -> None:
-        advisory = {
-            "id": "adv-blank-package",
-            "ecosystem": "*",
-            "package": "   ",
-            "action": "review",
-        }
-        target = ProtectTargetIdentity(
-            artifact_id="install:claude-code:mcp:remote-risk",
-            artifact_name="remote-risk",
-            ecosystem="claude-code",
-            package_name=None,
-            package_url=None,
-            source_url="https://evil.example/mcp",
-        )
-
-        assert advisory_matches_target(advisory, target) is False
-
-    def test_guard_protect_does_not_match_blank_publisher_advisory(self) -> None:
-        advisory = {
-            "id": "adv-blank-publisher",
-            "ecosystem": "*",
-            "publisher": "   ",
-            "action": "review",
-        }
-        target = ProtectTargetIdentity(
-            artifact_id="install:claude-code:mcp:remote-risk",
-            artifact_name="remote-risk",
-            ecosystem="claude-code",
-            package_name=None,
-            package_url=None,
-            source_url="https://evil.example/mcp",
-        )
-
-        assert advisory_matches_target(advisory, target) is False
-
-    def test_guard_protect_matches_endpoint_indicators_on_url_boundaries(self) -> None:
-        advisory = {
-            "id": "adv-endpoint-boundary",
-            "ecosystem": "claude-code",
-            "endpoint_indicators": ["evil.example/mcp"],
-            "action": "review",
-        }
-        exact_target = ProtectTargetIdentity(
-            artifact_id="install:claude-code:mcp:exact",
-            artifact_name="exact",
-            ecosystem="claude-code",
-            package_name=None,
-            package_url=None,
-            source_url="https://evil.example/mcp",
-        )
-        child_target = ProtectTargetIdentity(
-            artifact_id="install:claude-code:mcp:child",
-            artifact_name="child",
-            ecosystem="claude-code",
-            package_name=None,
-            package_url=None,
-            source_url="https://evil.example/mcp/subpath",
-        )
-        sibling_target = ProtectTargetIdentity(
-            artifact_id="install:claude-code:mcp:sibling",
-            artifact_name="sibling",
-            ecosystem="claude-code",
-            package_name=None,
-            package_url=None,
-            source_url="https://evil.example/mcp-backup",
-        )
-        prefix_target = ProtectTargetIdentity(
-            artifact_id="install:claude-code:mcp:prefix",
-            artifact_name="prefix",
-            ecosystem="claude-code",
-            package_name=None,
-            package_url=None,
-            source_url="https://safe-evil.example/mcp",
-        )
-
-        assert advisory_matches_target(advisory, exact_target) is True
-        assert advisory_matches_target(advisory, child_target) is True
-        assert advisory_matches_target(advisory, sibling_target) is False
-        assert advisory_matches_target(advisory, prefix_target) is False
-
     def test_guard_protect_redacts_indented_secret_and_connection_env_lines(self) -> None:
         output = redact_text("  API_TOKEN=super-secret-token\n\tDATABASE_URL=postgres://user:pass@db.internal/app\n")
 
@@ -1301,7 +1254,7 @@ class TestGuardProtect:
         approval link so a human can review the request and the retry can pass.
         """
         import codex_plugin_scanner.guard.cli.commands as commands_module
-        import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+        from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
         from tests.test_guard_package_shims import WORKSPACE_ID
 
         home_dir = tmp_path / "home"
@@ -1310,14 +1263,9 @@ class TestGuardProtect:
         store = GuardStore(home_dir)
         _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
 
-        def raise_trusted_session_error(*_args: object, **_kwargs: object) -> dict[str, object]:
-            raise RuntimeError("cloud token refresh failed")
-
-        monkeypatch.setattr(
-            evaluator_module,
-            "_resolve_guard_sync_auth_context",
-            raise_trusted_session_error,
-        )
+        # The resident resolves the Cloud session itself; this override surfaces a
+        # trusted-session (token refresh) failure there rather than in Python.
+        guard_runner_module._test_sync_auth_context_override = {"error": "trusted_session_failure"}
         monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda *args, **kwargs: None)
         monkeypatch.setattr(commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 

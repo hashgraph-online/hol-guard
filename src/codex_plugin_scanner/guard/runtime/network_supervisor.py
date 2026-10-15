@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
 from codex_plugin_scanner.guard.runtime.provider_recovery import (
     RecoveryPhase,
     RecoveryState,
-    next_recovery_state,
 )
 
 
@@ -37,22 +36,6 @@ class NetworkSupervisor:
     def __init__(self) -> None:
         self._advertisement: BackendAdvertisement | None = None
         self._recovery: RecoveryState = RecoveryState(RecoveryPhase.UNAVAILABLE, 0, 0.0)
-
-    def record_probe(
-        self,
-        advertisement: BackendAdvertisement | None,
-        *,
-        now_epoch_ms: int,
-        error_digest: str | None = None,
-    ) -> NetworkSupervisorHealth:
-        succeeded = advertisement is not None and now_epoch_ms < advertisement.healthy_until_epoch_ms
-        self._recovery = next_recovery_state(
-            self._recovery,
-            succeeded=succeeded,
-            error_digest=None if succeeded else error_digest,
-        )
-        self._advertisement = advertisement if succeeded else None
-        return self.health(now_epoch_ms=now_epoch_ms)
 
     def health(self, *, now_epoch_ms: int) -> NetworkSupervisorHealth:
         advertisement = self._advertisement

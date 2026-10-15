@@ -106,6 +106,46 @@ def test_exact_approved_source_database_and_retained_marker_agree(tmp_path: Path
     assert owner.read_installed_business_source(store, _key(store)) == newer.source
 
 
+def test_installation_survives_slow_native_process_start(tmp_path: Path, native_mcp_probe, monkeypatch):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import native_business_source_bridge as bridge
+    from codex_plugin_scanner.guard import native_runtime
+
+    store = GuardStore(tmp_path / "slow-start-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document(0)
+    grant = _grant(store, candidate)
+    skew = [0.0]
+    run_native_process = native_runtime._run_native_process
+
+    def slow_start(*args, **kwargs):
+        skew[0] += 1.5
+        return run_native_process(*args, **kwargs)
+
+    monkeypatch.setattr(bridge, "time", SimpleNamespace(monotonic=lambda: time.monotonic() + skew[0]))
+    monkeypatch.setattr(native_runtime, "_run_native_process", slow_start)
+    installed = _install(store, candidate, grant)
+    assert skew[0] > bridge.OPERATION_BUDGET_SECONDS
+    monkeypatch.setattr(bridge, "time", time)
+    monkeypatch.setattr(native_runtime, "_run_native_process", run_native_process)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_installation_deadline_never_outlives_its_approval(tmp_path: Path):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.approval_gate_state import iso_from_epoch
+
+    grant = SimpleNamespace(expires_at=iso_from_epoch(time.time() + 10))
+    deadline = owner._mutation_deadline(None, grant)
+    assert deadline <= time.monotonic() + 10
+    expired = SimpleNamespace(expires_at=iso_from_epoch(time.time() - 1))
+    assert owner._mutation_deadline(None, expired) > time.monotonic() + 10
+
+
 def test_sql_rollback_leaves_closed_marker_and_no_source_admission(tmp_path: Path, native_mcp_probe):
     store = GuardStore(tmp_path / "rollback-home")
     native_mcp_probe(store.guard_home)
@@ -179,3 +219,67 @@ def test_expired_approval_cannot_open_committed_marker_after_sql_commit(tmp_path
         store, candidate, approval_gate_grant=_grant(store, candidate, initialize=False)
     )
     assert owner.read_installed_business_source(store, _key(store)) == recovered
+
+
+def test_unchanged_installation_reuses_verification_without_native_calls(tmp_path: Path, native_mcp_probe, monkeypatch):
+    store = GuardStore(tmp_path / "memo-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    calls: list[str] = []
+    verify_record = owner.verify_business_source_record
+    verify_anchor = owner.verify_business_source_anchor
+
+    def counted_record(*args, **kwargs):
+        calls.append("record")
+        return verify_record(*args, **kwargs)
+
+    def counted_anchor(*args, **kwargs):
+        calls.append("anchor")
+        return verify_anchor(*args, **kwargs)
+
+    monkeypatch.setattr(owner, "verify_business_source_record", counted_record)
+    monkeypatch.setattr(owner, "verify_business_source_anchor", counted_anchor)
+    with owner._VERIFIED_LOCK:
+        owner._VERIFIED.pop(str(store.guard_home), None)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    assert calls == ["anchor", "record"]
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    assert calls == ["anchor", "record"]
+
+
+def test_changed_installation_bytes_or_key_are_verified_again(tmp_path: Path, native_mcp_probe):
+    store = GuardStore(tmp_path / "memo-tamper-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    with pytest.raises(NativePolicySnapshotError):
+        owner.read_installed_business_source(store, bytes(32))
+    record_path = store.guard_home / "native-runtime" / owner.SOURCE_FILE_NAME
+    original = record_path.read_bytes()
+    record_path.write_bytes(original.replace(b'"mutation_revision":1', b'"mutation_revision":7', 1))
+    assert record_path.read_bytes() != original
+    with pytest.raises(NativePolicySnapshotError):
+        owner.read_installed_business_source(store, _key(store))
+    record_path.write_bytes(original)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_memo_hit_still_refuses_runtime_without_current_fence(tmp_path: Path, native_mcp_probe, monkeypatch):
+    from types import SimpleNamespace
+
+    store = GuardStore(tmp_path / "memo-fence-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    monkeypatch.setattr(
+        owner,
+        "_consumer",
+        lambda *args, **kwargs: SimpleNamespace(
+            capabilities=SimpleNamespace(features=("native-business-source-current-fence-v1",))
+        ),
+    )
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_current_fence_unavailable"):
+        owner.read_installed_business_source(store, _key(store))

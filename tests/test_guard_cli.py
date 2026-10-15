@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -876,7 +878,9 @@ class TestGuardCli:
         error_output = capsys.readouterr().err
 
         assert "Did you mean `update`?" in error_output
-        assert "hook" not in error_output
+        # The hidden `hook` and `daemon` entry points stay out of the listing;
+        # the public `hooks` command is allowed.
+        assert re.search(r"\bhook\b", error_output) is None
         assert "daemon" not in error_output
 
     def test_bare_hol_guard_shows_help_without_side_effects(self, tmp_path, monkeypatch, capsys):
@@ -1836,19 +1840,17 @@ args = ["workspace-skill.js"]
             custom_config_dir / "plugins" / "shared.mjs"
         )
 
-    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.geteuid() == 0,
+        reason="file modes do not block reads here",
+    )
+    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(workspace_dir / "opencode.json", {})
-        _write_text(workspace_dir / ".opencode" / "plugins" / "broken.mjs", "export default {};\n")
-        original_read_bytes = Path.read_bytes
-
-        def _patched_read_bytes(path: Path) -> bytes:
-            if path.name == "broken.mjs":
-                raise OSError("Permission denied")
-            return original_read_bytes(path)
-
-        monkeypatch.setattr(Path, "read_bytes", _patched_read_bytes)
+        broken = workspace_dir / ".opencode" / "plugins" / "broken.mjs"
+        _write_text(broken, "export default {};\n")
+        broken.chmod(0o000)
 
         rc = main(
             [
@@ -4780,6 +4782,10 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert "managed_install" not in output
         assert any("Could not repair Codex protection during update" in note for note in output["notes"])
+        assert any(
+            "Could not repair Codex protection during update" in failure
+            for failure in output["protection_repair_failures"]
+        )
 
     @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_reports_codex_repair_write_failures(self, tmp_path, monkeypatch, capsys):
@@ -5069,7 +5075,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
         monkeypatch.setattr(
             GuardStore,
-            "get_latest_guard_connect_state",
+            "get_effective_guard_connect_state",
             lambda self, *, now: {
                 "status": "retry_required",
                 "milestone": "first_sync_failed",
@@ -9615,22 +9621,6 @@ url = http://127.0.0.1:8787/guard-canary
             "bundleHash": cached_bundle["bundleHash"],
             "bundleVersion": "policy-2026-04-09.1",
         }
-
-    def test_synced_policy_payload_fails_closed_for_unauthenticated_cached_bundle(self, tmp_path):
-        store = GuardStore(tmp_path / "home")
-        _seed_guard_cloud(store)
-        fallback_policy = {"mode": "observe", "defaultAction": "warn"}
-        store.set_sync_payload("policy", fallback_policy, "2026-04-09T00:00:00Z")
-        digest_bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
-        digest_bundle["verifier"] = {
-            "algorithm": "sha256",
-            "keyId": "legacy-digest-only",
-            "signature": None,
-        }
-        digest_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(digest_bundle)
-        store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-09T00:10:00Z")
-
-        assert guard_commands_module._synced_policy_payload(store) is None
 
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

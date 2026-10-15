@@ -5,10 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    harness_json_from_native_pre_tool,
-    observe_lifecycle_fail_safe_response,
-)
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
 from tests.pi_extension_response_callback_support import (
     _run_generated_callback_payload,
     _run_generated_source_ref_fixture,
@@ -21,11 +18,11 @@ from tests.pi_extension_response_source_support import _generated_source
 
 
 def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
-    allow = harness_json_from_native_pre_tool(
+    allow = render_pre_tool(
         "omp",
         {"decision": "allow", "minimum_action": "allow", "reason_code": "fixture_allow"},
     )
-    deny = harness_json_from_native_pre_tool(
+    deny = render_pre_tool(
         "omp",
         {
             "decision": "deny",
@@ -34,19 +31,9 @@ def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
             "reason_code": "fixture_block",
         },
     )
-    lifecycle = observe_lifecycle_fail_safe_response(
-        "omp",
-        event_name="UserPromptSubmit",
-        reason_code="fixture_lifecycle",
-    )
 
     assert allow["decision"] == "allow"
     assert deny["decision"] == "deny"
-    assert lifecycle == {
-        "decision": "allow",
-        "policy_action": "allow",
-        "reason_code": "fixture_lifecycle",
-    }
 
 
 def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(tmp_path: Path) -> None:
@@ -255,6 +242,25 @@ def test_generated_omp_directory_result_stays_inline_not_source_ref(tmp_path: Pa
     assert legacy_file_handler["preserved"] is True
     assert legacy_file_handler["payload"]["guard_source_ref"]["kind"] == "source_file"
     assert legacy_file_handler["payload"]["guard_source_ref"]["path"] == str(tmp_path / "legacy.py")
+
+
+def test_generated_omp_json_query_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": '{"ok": true}'}]
+
+    for path in (f"{tmp_path / 'queries.json'}?q=.queries", "data.NDJSON?q=.a&raw=true"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
+    for path in (tmp_path / "queries.json", f"{tmp_path / 'notes.md'}?q=.a"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is not None
+
+
+def test_generated_omp_read_list_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": "1#AB:export const a = 1;"}]
+
+    for path in (f"{tmp_path / 'a.ts'}; {tmp_path / 'b.ts'}", "src/a.ts:1-5;src/b.ts"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
+    assert _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts")["sourceRef"] is not None
 
 
 def test_generated_omp_selector_review_uses_host_resolved_source_path(tmp_path: Path) -> None:

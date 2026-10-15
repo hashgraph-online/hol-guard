@@ -8,7 +8,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .codex_hook_compatibility import bridge_argv_sha256
+from .codex_hook_bridge_runtime import decode_bridge_config_argument
+from .codex_hook_compatibility import bridge_argv_sha256, python_bridge_argv
 from .codex_hook_file_integrity import (
     active_hook_validation_deadline,
     canonical_path,
@@ -186,7 +187,7 @@ def _selected_launch_generation(manifest: dict[str, object], *, config_json: str
         events = candidate.get("events")
         if not isinstance(events, list) or not events:
             raise ValueError("managed Codex hook event identity is invalid")
-        exact = all(_mapping(event, label="event").get("argv") == expected for event in events)
+        exact = all(_event_bridge_argv(event) == expected for event in events)
         if exact and (candidate is manifest or bridge_argv_sha256(expected) in allowed):
             if candidate.get("installation_id") != manifest.get("installation_id") or candidate.get(
                 "context"
@@ -292,12 +293,12 @@ def verify_captured_launch_generation(
     events = manifest.get("events")
     if not isinstance(events, list) or not events:
         raise ValueError("managed Codex hook captured events are invalid")
-    argv = _string_list(_mapping(events[0], label="event").get("argv"), label="bridge argv")
+    argv = _string_list(_event_bridge_argv(events[0]), label="bridge argv")
     if len(argv) not in (3, 4):
         raise ValueError("managed Codex hook captured argv is invalid")
     config_json = argv[-1]
     try:
-        config = json.loads(config_json)
+        config = json.loads(decode_bridge_config_argument(config_json))
     except (ValueError, RecursionError) as exc:
         raise ValueError("managed Codex hook captured config is invalid") from exc
     config = _mapping(config, label="bridge config")
@@ -427,8 +428,8 @@ def _verify_registered_bridge_argv(
     config_json: str,
 ) -> None:
     try:
-        config_payload = json.loads(config_json)
-    except json.JSONDecodeError as exc:
+        config_payload = json.loads(decode_bridge_config_argument(config_json))
+    except ValueError as exc:
         raise ValueError("managed Codex hook bridge config is malformed") from exc
     if not isinstance(config_payload, dict):
         raise ValueError("managed Codex hook bridge config is malformed")
@@ -440,7 +441,7 @@ def _verify_registered_bridge_argv(
     events = manifest.get("events")
     if not isinstance(events, list) or not events:
         raise ValueError("managed Codex hook event identity is invalid")
-    if all(_mapping(event, label="event").get("argv") == expected_argv for event in events):
+    if all(_event_bridge_argv(event) == expected_argv for event in events):
         return
     compatible_hashes = manifest.get("compatible_bridge_argv_sha256")
     if not isinstance(compatible_hashes, list) or bridge_argv_sha256(expected_argv) not in compatible_hashes:
@@ -452,6 +453,12 @@ def _verify_registered_bridge_argv(
         binding = _mapping(event, label="event")
         if not isinstance(binding.get("argv"), list):
             raise ValueError("managed Codex hook event identity is invalid")
+
+
+def _event_bridge_argv(event: object) -> object:
+    """An event's Python bridge argv, past any native launcher prefix."""
+    argv = _mapping(event, label="event").get("argv")
+    return python_bridge_argv(argv) if isinstance(argv, list) else argv
 
 
 def _mapping(value: object, *, label: str) -> dict[str, object]:

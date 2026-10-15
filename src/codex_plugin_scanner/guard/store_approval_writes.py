@@ -5,19 +5,27 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from .continuation_snapshot import (
     canonical_continuation_correlation_id,
     non_resumable_continuation_snapshot,
     validated_continuation_snapshot,
 )
-from .decision_boundaries import CanonicalApprovalSurfaces, canonical_approval_surfaces
-from .models import GuardApprovalRequest
-from .store_approvals import (
-    _begin_immediate,
-    _normalized_identity_key,
-    approval_queue_identity_for_request,
+from .decision_boundaries import (
+    CanonicalApprovalSurfaces,
+    canonical_approval_surfaces,
+    canonical_approval_surfaces_batch,
 )
+from .models import GuardApprovalRequest
+from .native_approval_queue_identity import (
+    ApprovalQueueIdentityUnavailableError,
+    QueueIdentity,
+    connection_guard_home,
+    native_approval_queue_identities,
+    queue_identity_item,
+)
+from .store_approvals import _begin_immediate, backfill_queue_identities_once
 
 
 def add_approval_request(
@@ -26,13 +34,23 @@ def add_approval_request(
     now: str,
     *,
     oauth_source: str = "default",
+    guard_home: Path | None = None,
 ) -> str:
+    home = guard_home or connection_guard_home(connection)
     canonical_decision = canonical_approval_surfaces(
         request.policy_action,
         request.decision_v2_json,
         request.action_envelope_json,
         reject_contradiction=True,
+        guard_home=home,
     )
+    # Identify the request natively before taking the write lock: the identity
+    # is pure request material, and the resident round trip must not run inside
+    # the transaction. Every lookup and write below still happens under it.
+    if home is None:
+        raise ApprovalQueueIdentityUnavailableError
+    identity = _queue_identity(request, home)
+    backfill_queue_identities_once(connection, home)
     _begin_immediate(connection)
     # Callers may own a larger transaction and catch a failed insert. Keep
     # expired predecessors and their replacement in one atomic unit anyway.
@@ -44,6 +62,8 @@ def add_approval_request(
             now,
             oauth_source=oauth_source,
             canonical_decision=canonical_decision,
+            identity=identity,
+            guard_home=home,
         )
     except BaseException:
         connection.execute("rollback to savepoint approval_request_write")
@@ -60,10 +80,11 @@ def _add_approval_request_in_transaction(
     *,
     oauth_source: str,
     canonical_decision: CanonicalApprovalSurfaces,
+    identity: QueueIdentity,
+    guard_home: Path,
 ) -> str:
     normalized_oauth_source = oauth_source.strip().lower() or "default"
-    identity_key = _normalized_identity_key(request.launch_target)
-    action_identity, queue_group_id = approval_queue_identity_for_request(request)
+    identity_key, action_identity, queue_group_id = identity
     _expire_inconsistent_group_requests(
         connection,
         request_id=request.request_id,
@@ -71,6 +92,7 @@ def _add_approval_request_in_transaction(
         oauth_source=normalized_oauth_source,
         queue_group_id=queue_group_id,
         now=now,
+        guard_home=guard_home,
     )
     request_id = _existing_request_id(
         connection,
@@ -79,7 +101,7 @@ def _add_approval_request_in_transaction(
         identity_key=identity_key,
         queue_group_id=queue_group_id,
     )
-    if request_id is not None and not _consistent_pending_request(connection, request_id):
+    if request_id is not None and not _consistent_pending_requests(connection, [request_id], guard_home=guard_home):
         if request_id == request.request_id:
             raise ValueError("fresh_review_request_id_required")
         # Only a new, canonically validated host attempt can replace this row.
@@ -117,6 +139,24 @@ def _add_approval_request_in_transaction(
     return request.request_id
 
 
+def _queue_identity(request: GuardApprovalRequest, home: Path) -> QueueIdentity:
+    return native_approval_queue_identities(
+        [
+            queue_identity_item(
+                launch_target=request.launch_target,
+                harness=request.harness,
+                workspace=request.workspace,
+                artifact_id=request.artifact_id,
+                envelope=request.action_envelope_json,
+                browser_intent=request.browser_intent,
+                action_identity=request.action_identity,
+                queue_group_id=request.queue_group_id,
+            )
+        ],
+        guard_home=home,
+    )[0]
+
+
 def _expire_inconsistent_group_requests(
     connection: sqlite3.Connection,
     *,
@@ -125,6 +165,7 @@ def _expire_inconsistent_group_requests(
     oauth_source: str,
     queue_group_id: str,
     now: str,
+    guard_home: Path,
 ) -> None:
     """Retire invalid older cards even when a newer valid card wins deduplication."""
 
@@ -134,11 +175,10 @@ def _expire_inconsistent_group_requests(
            order by last_seen_at desc, request_id desc""",
         (queue_group_id, harness, oauth_source),
     ).fetchall()
-    valid_ids: list[str] = []
-    invalid_ids: list[str] = []
-    for row in rows:
-        existing_id = str(row["request_id"])
-        (valid_ids if _consistent_pending_request(connection, existing_id) else invalid_ids).append(existing_id)
+    group_ids = [str(row["request_id"]) for row in rows]
+    consistent = _consistent_pending_requests(connection, group_ids, guard_home=guard_home)
+    valid_ids = [existing_id for existing_id in group_ids if existing_id in consistent]
+    invalid_ids = [existing_id for existing_id in group_ids if existing_id not in consistent]
     if request_id in invalid_ids:
         raise ValueError("fresh_review_request_id_required")
     replacement_id = valid_ids[0] if valid_ids else request_id
@@ -151,23 +191,52 @@ def _expire_inconsistent_group_requests(
         )
 
 
-def _consistent_pending_request(connection: sqlite3.Connection, request_id: str) -> bool:
-    row = connection.execute(
-        "select policy_action, decision_v2_json, action_envelope_json from approval_requests where request_id = ?",
-        (request_id,),
-    ).fetchone()
-    if row is None:
-        return False
-    try:
-        canonical = canonical_approval_surfaces(
-            row[0],
-            json.loads(row[1]) if row[1] is not None else None,
-            json.loads(row[2]) if row[2] is not None else None,
-            reject_contradiction=False,
+_REQUEST_ID_CHUNK = 500
+
+
+def _consistent_pending_requests(
+    connection: sqlite3.Connection, request_ids: Sequence[str], *, guard_home: Path
+) -> set[str]:
+    """Return the IDs whose stored decision projects without a contract error.
+
+    The caller holds the write lock, so every row is checked in one batched
+    resident round trip rather than one request per row.
+    """
+    if not request_ids:
+        return set()
+    rows: list[sqlite3.Row] = []
+    # Chunk the lookup so a large queue group stays under SQLite's host-parameter cap.
+    for start in range(0, len(request_ids), _REQUEST_ID_CHUNK):
+        chunk = tuple(request_ids[start : start + _REQUEST_ID_CHUNK])
+        placeholders = ", ".join("?" for _ in chunk)
+        rows.extend(
+            connection.execute(
+                "select request_id, policy_action, decision_v2_json, action_envelope_json from approval_requests"
+                f" where request_id in ({placeholders})",
+                chunk,
+            ).fetchall()
         )
-        return canonical.contract_error is None
-    except (TypeError, ValueError):
-        return False
+    candidates: list[tuple[str, tuple[object, object, object]]] = []
+    for row in rows:
+        try:
+            decision = json.loads(row[2]) if row[2] is not None else None
+            envelope = json.loads(row[3]) if row[3] is not None else None
+        except (TypeError, ValueError):
+            continue
+        candidates.append((str(row[0]), (row[1], decision, envelope)))
+    if not candidates:
+        return set()
+    try:
+        projections = canonical_approval_surfaces_batch(
+            [inputs for _request_id, inputs in candidates], guard_home=guard_home
+        )
+    except ValueError:
+        return set()
+    return {
+        request_id
+        for (request_id, _inputs), projection in zip(candidates, projections, strict=True)
+        if projection.contract_error is None
+    }
 
 
 def _existing_request_id(
@@ -243,7 +312,7 @@ def _update_request(
                fallback_cli_command = ?, scanner_evidence_json = ?,
                watch_only_observation = case when watch_only_observation = 1 and ? = 1 then 1 else 0 end,
                browser_intent_json = ?, review_command = ?, approval_url = ?, raw_command_text = ?, guard_version = ?,
-               continuation_snapshot_json = ?,
+               continuation_snapshot_json = ?, extension_allow_hint_json = ?,
                first_seen_guard_version = coalesce(first_seen_guard_version, ?), last_seen_guard_version = ?
            where request_id = ? and oauth_source = ?""",
         _update_values(
@@ -309,6 +378,7 @@ def _update_values(
         request.raw_command_text,
         request.guard_version,
         continuation_snapshot,
+        _optional_json(request.extension_allow_hint, sort_keys=True),
         request.first_seen_guard_version or request.guard_version,
         request.last_seen_guard_version or request.guard_version,
         request_id,
@@ -336,9 +406,10 @@ def _insert_request(
              launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
              scanner_evidence_json, browser_intent_json, review_command, approval_url, status, resolution_action,
              resolution_scope, reason, created_at, resolved_at, raw_command_text, guard_version,
-             first_seen_guard_version, last_seen_guard_version, watch_only_observation, continuation_snapshot_json)
+             first_seen_guard_version, last_seen_guard_version, watch_only_observation, continuation_snapshot_json,
+             extension_allow_hint_json)
            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         _insert_values(
             request,
             canonical,
@@ -410,6 +481,7 @@ def _insert_values(
         request.last_seen_guard_version or request.guard_version,
         int(_scanner_evidence_is_watch_only(request.scanner_evidence)),
         _continuation_snapshot_json(request),
+        _optional_json(request.extension_allow_hint, sort_keys=True),
     )
 
 

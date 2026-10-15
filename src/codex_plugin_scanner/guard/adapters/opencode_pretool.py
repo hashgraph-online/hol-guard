@@ -8,7 +8,9 @@ from pathlib import Path
 
 from ..codex_hook_windows_job import windows_system_executable_path
 from .base import HarnessContext
-from .guard_cli_attestation import resolve_attested_guard_cli
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
+from .bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+from .guard_cli_attestation import GuardCliAttestation, resolve_attested_guard_cli
 from .hook_python import (
     HookPythonExecutableIdentity,
     HookPythonFileMetadata,
@@ -19,6 +21,7 @@ from .opencode_v2_entrypoint import OPENCODE_V2_ENTRYPOINT
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
 _INTERCEPT_TOOLS = ("bash", "ctx_shell", "shell", "sh", "zsh", "terminal", "oc_bash")
 _HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
+_HOOK_TIMEOUT_SECONDS = 25
 _INHERIT_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -65,7 +68,7 @@ def _pretool_hook_launcher_code(
         "guard_home=argv[guard_index+1];"
         "package_root=Path(codex_plugin_scanner.__file__).resolve().parent.parent;"
         "config={'python_executable':sys.executable,'package_root':str(package_root),"
-        "'guard_home':guard_home,'cli_args':argv,'harness':'opencode','timeout_seconds':25};"
+        f"'guard_home':guard_home,'cli_args':argv,'harness':'opencode','timeout_seconds':{_HOOK_TIMEOUT_SECONDS}}};"
         "raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))"
     )
 
@@ -110,6 +113,28 @@ def _python_identity_payload(identity: HookPythonExecutableIdentity) -> dict[str
     }
 
 
+def _native_bridge_payload(context: HarnessContext, guard_cli: GuardCliAttestation) -> dict[str, object] | None:
+    """The native bounded bridge the plugin starts first, or None to keep the Python launcher.
+
+    The plugin fills in the interpreter and the per-workspace CLI argv when it
+    runs a hook. The native runtime answers from the daemon and runs the Python
+    bridge for everything else, so the verdict still comes from Guard's CLI.
+    """
+    if guard_cli.python is None:
+        return None
+    argv = bounded_cli_hook_command(
+        python_executable=str(guard_cli.python.executable),
+        package_root=Path(__file__).resolve().parents[3],
+        guard_home=context.guard_home,
+        cli_args=[],
+        harness="opencode",
+        timeout_seconds=_HOOK_TIMEOUT_SECONDS,
+    )
+    if len(argv) != 7 or argv[1] != NATIVE_BOUNDED_HOOK_COMMAND:
+        return None
+    return {"runtimePath": argv[0], "bootstrap": argv[5], "config": json.loads(argv[6])}
+
+
 def pretool_plugin_source(context: HarnessContext) -> str:
     guard_cli = resolve_attested_guard_cli(context)
     identity = guard_cli.frozen_identity or (guard_cli.python.identity if guard_cli.python is not None else None)
@@ -125,6 +150,7 @@ def pretool_plugin_source(context: HarnessContext) -> str:
         template.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
         .replace("__GUARD_PYTHON__", json.dumps(_python_identity_payload(identity)))
         .replace("__GUARD_FROZEN__", json.dumps(guard_cli.frozen))
+        .replace("__GUARD_NATIVE_BRIDGE__", json.dumps(_native_bridge_payload(context, guard_cli)))
         .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(import_roots=import_roots)))
         .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env()))
         .replace("__GUARD_INHERIT_ENV_KEYS__", json.dumps(list(_INHERIT_ENV_KEYS)))

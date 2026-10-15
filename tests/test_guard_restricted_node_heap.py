@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
-from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_test as node_test
 from codex_plugin_scanner.guard.runtime import restricted_vitest as vitest
@@ -16,13 +17,22 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
 
 @pytest.mark.parametrize("kind", ["eval", "test", "vitest"])
 @pytest.mark.parametrize("blocked", [False, True])
+@pytest.mark.skipif(os.name != "posix", reason="contained preparation requires Unix")
+@pytest.mark.usefixtures("native_context_digest")
 def test_heap_option_reaches_prepared_sink_only_after_native_authorization(tmp_path, monkeypatch, kind, blocked):
     (tmp_path / "package.json").write_text("{}")
     node = tmp_path / "node"
     node.write_bytes(b"\x7fELF" + b"fixture-not-executed")
     node.chmod(0o700)
     monkeypatch.setenv("PATH", str(tmp_path))
-    monkeypatch.setattr(node_test, "_select_backend", lambda **kwargs: ("macos-seatbelt", Path("/sandbox-exec")))
+    native_call = transport._call
+
+    def prepare_backend(action, **kwargs):
+        if action["body"]["operation"].startswith("prepare"):
+            action["body"]["input"].update(platform="darwin", backend_executable="/usr/bin/true")
+        return native_call(action, **kwargs)
+
+    monkeypatch.setattr(transport, "_call", prepare_backend)
     entry = tmp_path / "node_modules/vitest/vitest.mjs"
     entry.parent.mkdir(parents=True)
     entry.write_text("// validated entrypoint fixture\n")

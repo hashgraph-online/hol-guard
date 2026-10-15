@@ -25,13 +25,13 @@ Windows, use Git Bash and append `.exe` to the native executable path.
 
 `guard-command-source` reads a bounded build envelope from standard input. `validate` checks sources and native admission, `compile` emits deterministic generated projections, and `check DIGEST` rejects a program whose content identity differs. `schema` and `descriptor-schema` emit the checked-in editor contracts. Errors are JSON with a stable code; exit status 2 denotes invalid input. Sources cannot import files, execute callbacks, choose trust status, or supply candidate indexes.
 
-Installed builder calls resolve `guard-command-source` from the native wheel and verify `source-compiler-manifest.json` before sending the request. The manifest binds package version, source SHA, implementation digest, base-program digest, target, and compiler hash; the base-program digest must match the packaged native command program identity. For an editable checkout, the [Builder setup](extension-builder/README.md#compile-source-with-rust) selects an explicitly built compiler through `HOL_GUARD_NATIVE_SOURCE_COMPILER`. Installed code does not fall back to Cargo or a source checkout.
+Installed builder calls resolve the packaged `hol-guard-runtime` executable, which hosts the source-compiler operations, and verify `source-compiler-manifest.json` before sending the request. The manifest binds package version, source SHA, implementation digest, base-program digest, target, the runtime executable name, and its hash; the base-program digest must match the packaged native command program identity. For an editable checkout, the [Builder setup](extension-builder/README.md#compile-source-with-rust) selects an explicitly built compiler through `HOL_GUARD_NATIVE_SOURCE_COMPILER`. Installed code does not fall back to Cargo or a source checkout.
 
 The example source is `rust/crates/guard-command/tests/fixtures/command-source-example.v1.json`. Assemble a development envelope with the separately reviewed trust map:
 
 ```sh
-rust/target/release/guard-command-source export-trust > contracts/extensions/trust-class-map.v1.json
-jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
+jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
 rust/target/release/guard-command-source validate < source-build.json
 rust/target/release/guard-command-source compile < source-build.json > source-compiled.json

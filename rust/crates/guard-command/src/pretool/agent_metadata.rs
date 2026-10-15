@@ -2,7 +2,10 @@ use serde_json::Value;
 
 /// Only host task-list data is admitted here, never commands or external tools.
 pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> bool {
-    if !matches!(tool_name, Some("TodoWrite" | "TaskOutput")) {
+    if !matches!(
+        tool_name,
+        Some("TodoWrite" | "TaskOutput" | "TaskStop" | "Skill" | "AskUserQuestion")
+    ) {
         return false;
     }
     let Some(root) = payload.as_object() else {
@@ -53,20 +56,33 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
     }) {
         return false;
     }
+    if tool_name == Some("Skill") {
+        return input
+            .keys()
+            .all(|key| matches!(key.as_str(), "skill" | "args"))
+            && input
+                .get("skill")
+                .and_then(Value::as_str)
+                .is_some_and(|name| {
+                    !name.is_empty()
+                        && name.len() <= 64
+                        && name.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'-')
+                        })
+                })
+            && input.get("args").is_none_or(Value::is_string);
+    }
+    if tool_name == Some("AskUserQuestion") {
+        return bounded_user_question(input);
+    }
+    if tool_name == Some("TaskStop") {
+        return input.keys().all(|key| key == "task_id") && bounded_task_id(input.get("task_id"));
+    }
     if tool_name == Some("TaskOutput") {
         return input
             .keys()
             .all(|key| matches!(key.as_str(), "task_id" | "block" | "timeout"))
-            && input
-                .get("task_id")
-                .and_then(Value::as_str)
-                .is_some_and(|id| {
-                    !id.is_empty()
-                        && id.len() <= 128
-                        && id
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-                })
+            && bounded_task_id(input.get("task_id"))
             && input.get("block").is_none_or(Value::is_boolean)
             && input
                 .get("timeout")
@@ -102,4 +118,140 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
                     }
                 })
         })
+}
+
+/// Claude's `AskUserQuestion` only shows the user a few choices and returns
+/// their answer. Every field is display text; no key names a command, path,
+/// URL or package, so the input has nothing to run, read or send.
+fn bounded_user_question(input: &serde_json::Map<String, Value>) -> bool {
+    if !input.keys().all(|key| {
+        matches!(
+            key.as_str(),
+            "questions" | "answers" | "annotations" | "metadata"
+        )
+    }) {
+        return false;
+    }
+    let Some(questions) = input.get("questions").and_then(Value::as_array) else {
+        return false;
+    };
+    let questions_bounded = (1..=4).contains(&questions.len())
+        && questions.iter().all(|question| {
+            let Some(question) = question.as_object() else {
+                return false;
+            };
+            question.keys().all(|key| {
+                matches!(
+                    key.as_str(),
+                    "question" | "header" | "options" | "multiSelect"
+                )
+            }) && bounded_text(question.get("question"), 2048)
+                && question
+                    .get("header")
+                    .is_none_or(|header| bounded_text(Some(header), 64))
+                && question.get("multiSelect").is_none_or(Value::is_boolean)
+                && question
+                    .get("options")
+                    .and_then(Value::as_array)
+                    .is_some_and(|options| {
+                        (1..=8).contains(&options.len()) && options.iter().all(bounded_option)
+                    })
+        });
+    questions_bounded
+        && input
+            .get("answers")
+            .is_none_or(|answers| bounded_text_map(answers, |value| short_text(value, 4096)))
+        && input.get("annotations").is_none_or(|annotations| {
+            bounded_text_map(annotations, |value| {
+                value.as_object().is_some_and(|note| {
+                    note.iter().all(|(key, text)| {
+                        matches!(key.as_str(), "notes" | "preview") && short_text(text, 16384)
+                    })
+                })
+            })
+        })
+        && input.get("metadata").is_none_or(|metadata| {
+            metadata.as_object().is_some_and(|metadata| {
+                metadata
+                    .iter()
+                    .all(|(key, text)| key == "source" && bounded_text(Some(text), 64))
+            })
+        })
+}
+
+/// An answered question that names HOL Guard carries approval meaning. The
+/// genuine pending Guard prompt is consumed before native review, so one that
+/// reaches the output proof is unmatched or spoofed and must stay reviewed.
+pub(super) fn names_guard_prompt(payload: &Value) -> bool {
+    ["tool_input", "tool_response"].iter().any(|key| {
+        payload
+            .get(*key)
+            .and_then(|value| value.get("questions"))
+            .and_then(Value::as_array)
+            .is_some_and(|questions| {
+                questions.iter().any(|question| {
+                    ["header", "question"].iter().any(|field| {
+                        question
+                            .get(*field)
+                            .and_then(Value::as_str)
+                            .is_some_and(|text| {
+                                text.chars()
+                                    .filter(char::is_ascii_alphanumeric)
+                                    .map(|ch| ch.to_ascii_lowercase())
+                                    .collect::<String>()
+                                    .contains("holguard")
+                            })
+                    })
+                })
+            })
+    })
+}
+
+fn bounded_option(option: &Value) -> bool {
+    if option.is_string() {
+        return bounded_text(Some(option), 2048);
+    }
+    let Some(option) = option.as_object() else {
+        return false;
+    };
+    option
+        .keys()
+        .all(|key| matches!(key.as_str(), "label" | "description" | "preview"))
+        && bounded_text(option.get("label"), 2048)
+        && option
+            .get("description")
+            .is_none_or(|text| short_text(text, 2048))
+        && option
+            .get("preview")
+            .is_none_or(|text| short_text(text, 16384))
+}
+
+fn bounded_text_map(value: &Value, item: impl Fn(&Value) -> bool) -> bool {
+    value.as_object().is_some_and(|map| {
+        map.len() <= 16
+            && map
+                .iter()
+                .all(|(key, value)| !key.is_empty() && key.len() <= 2048 && item(value))
+    })
+}
+
+fn bounded_text(value: Option<&Value>, max: usize) -> bool {
+    value
+        .and_then(Value::as_str)
+        .is_some_and(|text| !text.is_empty() && text.len() <= max)
+}
+
+/// Display text that may be empty, such as a blank free-text answer.
+fn short_text(value: &Value, max: usize) -> bool {
+    value.as_str().is_some_and(|text| text.len() <= max)
+}
+
+fn bounded_task_id(value: Option<&Value>) -> bool {
+    value.and_then(Value::as_str).is_some_and(|id| {
+        !id.is_empty()
+            && id.len() <= 128
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    })
 }

@@ -137,23 +137,6 @@ def sqlite_store_probe_detail(
     )
 
 
-def sqlite_store_is_proven_unusable(
-    *,
-    path: Path,
-    guard_home: Path,
-    error: BaseException,
-    fatal_error: bool,
-) -> bool:
-    """Revalidate the current path before permitting destructive recovery."""
-
-    return sqlite_store_probe_detail(
-        path=path,
-        guard_home=guard_home,
-        error=error,
-        fatal_error=fatal_error,
-    ).proven_unusable
-
-
 def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, str, float]:
     """Order quarantine events by the timestamp encoded in their id.
 

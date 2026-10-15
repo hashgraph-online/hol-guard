@@ -49,7 +49,12 @@ def public_operations(extension: CommandSafetyExtension) -> list[dict[str, objec
     rows: list[dict[str, object]] = []
     for rule in extension.rules[:_MAX_OPERATIONS]:
         permission = _permission_for_rule(extension, rule)
-        example = permission.example_command if permission is not None else None
+        # A permission-wide example is not bound to an individual operation
+        # when the permission groups several rules (for example, add/remove).
+        # Keep that example on the permission, rather than mislabeling a row.
+        example = (
+            permission.example_command if permission is not None and permission.rule_ids == (rule.rule_id,) else None
+        )
         example = _bounded(example, _MAX_COMMAND) if example else None
         safe_variants: list[str] = []
         for variant in rule.safe_variants:

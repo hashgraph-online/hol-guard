@@ -1,0 +1,4476 @@
+{
+ "cases": [
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dirs": [],
+   "files": [],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_empty",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/CLAUDE.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+      "instructionRole": "claude_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+       "hashBasis": "content",
+       "versionLabel": "CLAUDE.md"
+      }
+     },
+     "name": "CLAUDE.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:design_md:DESIGN.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/DESIGN.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "DESIGN.md"
+      }
+     },
+     "name": "DESIGN.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:product_md:PRODUCT.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/PRODUCT.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "product_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "PRODUCT.md"
+      }
+     },
+     "name": "PRODUCT.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:roadmap_md:ROADMAP.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/ROADMAP.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "roadmap_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "ROADMAP.md"
+      }
+     },
+     "name": "ROADMAP.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:security_md:SECURITY.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/SECURITY.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "security_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "SECURITY.md"
+      }
+     },
+     "name": "SECURITY.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:policy_md:POLICY.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/POLICY.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "policy_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "POLICY.md"
+      }
+     },
+     "name": "POLICY.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:policy_md:POLICIES.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/POLICIES.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "policy_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "POLICIES.md"
+      }
+     },
+     "name": "POLICIES.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:standards_md:STANDARDS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/STANDARDS.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+      "instructionRole": "standards_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:434728a410a78f56fc1b5899c3593436e61ab0c731e9072d95e96db290205e53",
+       "hashBasis": "content",
+       "versionLabel": "STANDARDS.md"
+      }
+     },
+     "name": "STANDARDS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:product_md:.agents:context:PRODUCT.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/context/PRODUCT.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:e8450277ce96edb64bd3532cfdfb944108b171c6df1c057091a1f65494cb7896",
+      "instructionRole": "product_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:e8450277ce96edb64bd3532cfdfb944108b171c6df1c057091a1f65494cb7896",
+       "hashBasis": "content",
+       "versionLabel": "PRODUCT.md (.agents/context)"
+      }
+     },
+     "name": "PRODUCT.md (.agents/context)",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:standards_md:.agents:context:STANDARDS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/context/STANDARDS.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:6305ad9178069f855d87c78bd7e9ce1fc08c4a742505f09068fdaf66c8308ff1",
+      "instructionRole": "standards_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:6305ad9178069f855d87c78bd7e9ce1fc08c4a742505f09068fdaf66c8308ff1",
+       "hashBasis": "content",
+       "versionLabel": "STANDARDS.md (.agents/context)"
+      }
+     },
+     "name": "STANDARDS.md (.agents/context)",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:roadmap_md:docs:ROADMAP.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/ROADMAP.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:ceb626d38b0bfb83bb2a8d1f50dfb643d401e6beaf7c6a472c35d823c0c4df8d",
+      "instructionRole": "roadmap_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:ceb626d38b0bfb83bb2a8d1f50dfb643d401e6beaf7c6a472c35d823c0c4df8d",
+       "hashBasis": "content",
+       "versionLabel": "ROADMAP.md (docs)"
+      }
+     },
+     "name": "ROADMAP.md (docs)",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:security_md:docs:SECURITY.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/SECURITY.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:c9b50c902cb24485be7a807f216129697b88a97c283cb0706e33dd9992ad35b2",
+      "instructionRole": "security_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:c9b50c902cb24485be7a807f216129697b88a97c283cb0706e33dd9992ad35b2",
+       "hashBasis": "content",
+       "versionLabel": "SECURITY.md (docs)"
+      }
+     },
+     "name": "SECURITY.md (docs)",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "claude\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/DESIGN.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/PRODUCT.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/ROADMAP.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/SECURITY.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/POLICY.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/POLICIES.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/STANDARDS.md",
+     "text": "content\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/ROADMAP.md",
+     "text": "docs roadmap\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/SECURITY.md",
+     "text": "docs security\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/context/PRODUCT.md",
+     "text": "context product\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/context/STANDARDS.md",
+     "text": "context standards\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_standards_claude_code",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "gemini",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "gemini:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "gemini:project:instruction:claude_md:CLAUDE.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/CLAUDE.md",
+     "harness": "gemini",
+     "metadata": {
+      "content_hash": "sha256:98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+      "instructionRole": "claude_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+       "hashBasis": "content",
+       "versionLabel": "CLAUDE.md"
+      }
+     },
+     "name": "CLAUDE.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "claude\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_standards_other_harness_has_no_legacy_claude_id",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:B.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/B.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:c0cde77fa8fef97d476c10aad3d2d54fcc2f336140d073651c2dcccf1e379fd6",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:c0cde77fa8fef97d476c10aad3d2d54fcc2f336140d073651c2dcccf1e379fd6",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/B.md"
+      }
+     },
+     "name": "docs/design/B.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:a.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/a.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/a.md"
+      }
+     },
+     "name": "docs/design/a.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:b2.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/b2.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:65f653bec9d0d1be6a363cb500e002c0165efdc82ed058f38b786f05dd19d87f",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:65f653bec9d0d1be6a363cb500e002c0165efdc82ed058f38b786f05dd19d87f",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/b2.md"
+      }
+     },
+     "name": "docs/design/b2.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:sub:b.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/sub/b.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:0263829989b6fd954f72baaf2fc64bc2e2f01d692d4de72986ea808f6e99813f",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0263829989b6fd954f72baaf2fc64bc2e2f01d692d4de72986ea808f6e99813f",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/sub/b.md"
+      }
+     },
+     "name": "docs/design/sub/b.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:sub:deeper:z.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/sub/deeper/z.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:c865f6c5ab8d1b0bcd383a5e1e3879d22681c96bf462c269b7581d523fbe70ab",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:c865f6c5ab8d1b0bcd383a5e1e3879d22681c96bf462c269b7581d523fbe70ab",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/sub/deeper/z.md"
+      }
+     },
+     "name": "docs/design/sub/deeper/z.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:upper.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/upper.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:e83189db38554920ea572093f9ad32facf682f28ccecdac085c1511735a2b492",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:e83189db38554920ea572093f9ad32facf682f28ccecdac085c1511735a2b492",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/upper.md"
+      }
+     },
+     "name": "docs/design/upper.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:product_md:docs:product:pr.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/product/pr.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:68e297410d37954f8b35e667ab1587062b12eca8daaf34f2d7b739f72d4384c7",
+      "instructionRole": "product_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:68e297410d37954f8b35e667ab1587062b12eca8daaf34f2d7b739f72d4384c7",
+       "hashBasis": "content",
+       "versionLabel": "docs/product/pr.md"
+      }
+     },
+     "name": "docs/product/pr.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:standards_md:docs:standards:x.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/standards/x.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac",
+      "instructionRole": "standards_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac",
+       "hashBasis": "content",
+       "versionLabel": "docs/standards/x.md"
+      }
+     },
+     "name": "docs/standards/x.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:policy_md:docs:policy:p.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/policy/p.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:fd6641673e7f3bf6e80e4bc5401fcb2821a1e117206c8e1c65cef23a58dc37ff",
+      "instructionRole": "policy_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:fd6641673e7f3bf6e80e4bc5401fcb2821a1e117206c8e1c65cef23a58dc37ff",
+       "hashBasis": "content",
+       "versionLabel": "docs/policy/p.md"
+      }
+     },
+     "name": "docs/policy/p.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:policy_md:docs:policies:q.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/policies/q.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:4adc33bd9fe74303c344be46e5916d65182fb218e248fe80452ab3f025b06c64",
+      "instructionRole": "policy_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:4adc33bd9fe74303c344be46e5916d65182fb218e248fe80452ab3f025b06c64",
+       "hashBasis": "content",
+       "versionLabel": "docs/policies/q.md"
+      }
+     },
+     "name": "docs/policies/q.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:security_md:docs:security:s.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/security/s.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:cbc80bb5c0c0f8944bf73b3a429505ac5cde16644978bc9a1e74c5755f8ca556",
+      "instructionRole": "security_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:cbc80bb5c0c0f8944bf73b3a429505ac5cde16644978bc9a1e74c5755f8ca556",
+       "hashBasis": "content",
+       "versionLabel": "docs/security/s.md"
+      }
+     },
+     "name": "docs/security/s.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:roadmap_md:docs:roadmap:r.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/roadmap/r.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8e54b0ca18020275e4aef1ca0eb5e197e066c065c1864817652a8a39c55402cd",
+      "instructionRole": "roadmap_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:8e54b0ca18020275e4aef1ca0eb5e197e066c065c1864817652a8a39c55402cd",
+       "hashBasis": "content",
+       "versionLabel": "docs/roadmap/r.md"
+      }
+     },
+     "name": "docs/roadmap/r.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:.agents:context:docs:design:c.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/context/docs/design/c.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8bdde0622de5eb0f9c2199cd65cf10f194fbd859cea4a6b03a99a7354ae49ac9",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:8bdde0622de5eb0f9c2199cd65cf10f194fbd859cea4a6b03a99a7354ae49ac9",
+       "hashBasis": "content",
+       "versionLabel": ".agents/context/docs/design/c.md"
+      }
+     },
+     "name": ".agents/context/docs/design/c.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:docs:design:nested.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/docs/design/nested.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:49847b9054109e3b965f9430d10b19507c317e44345d488158594afe42e32762",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:49847b9054109e3b965f9430d10b19507c317e44345d488158594afe42e32762",
+       "hashBasis": "content",
+       "versionLabel": "docs/docs/design/nested.md"
+      }
+     },
+     "name": "docs/docs/design/nested.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/docs/design/a.md",
+     "text": "a\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/design/sub/b.md",
+     "text": "b\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/design/sub/deeper/z.md",
+     "text": "z\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/design/skip.txt",
+     "text": "not markdown\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/standards/x.md",
+     "text": "x\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/policy/p.md",
+     "text": "p\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/policies/q.md",
+     "text": "q\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/security/s.md",
+     "text": "s\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/roadmap/r.md",
+     "text": "r\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/product/pr.md",
+     "text": "pr\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/Design/upper.md",
+     "text": "upper\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/context/docs/design/c.md",
+     "text": "context docs\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/docs/design/nested.md",
+     "text": "nested docs\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/design/B.md",
+     "text": "B\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/design/b2.md",
+     "text": "b2\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_doc_directories",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:docs:design:real.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/design/real.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:9e1fe97c167ed2ce9731346671caf23ed428ba645102b3d0c1cdde09980528e5",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:9e1fe97c167ed2ce9731346671caf23ed428ba645102b3d0c1cdde09980528e5",
+       "hashBasis": "content",
+       "versionLabel": "docs/design/real.md"
+      }
+     },
+     "name": "docs/design/real.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:product_md:docs:product:p.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/product/p.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:16bc56ffcea8ddefe2be04509e1b6ba7a6d6bc21b7f4cabb68ab310adcca1534",
+      "instructionRole": "product_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:16bc56ffcea8ddefe2be04509e1b6ba7a6d6bc21b7f4cabb68ab310adcca1534",
+       "hashBasis": "content",
+       "versionLabel": "docs/product/p.md"
+      }
+     },
+     "name": "docs/product/p.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/docs/design/real.md",
+     "text": "real\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/product/p.md",
+     "text": "product\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "outside/secret.md",
+     "text": "outside\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_doc_directory_symlinks_are_skipped",
+   "symlinks": [
+    {
+     "path": "work/docs/design/link.md",
+     "target": "../../AGENTS.md"
+    },
+    {
+     "path": "work/docs/design/linkdir",
+     "target": "../product"
+    },
+    {
+     "path": "work/docs/design/escape.md",
+     "target": "<ROOT>/outside/secret.md"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/AGENTS.md",
+     "text": "outside\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/real/CLAUDE.md",
+     "text": "inside\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_symlink_instruction_files_are_skipped",
+   "symlinks": [
+    {
+     "path": "work/AGENTS.md",
+     "target": "<ROOT>/outside/AGENTS.md"
+    },
+    {
+     "path": "work/CLAUDE.md",
+     "target": "real/CLAUDE.md"
+    },
+    {
+     "path": "work/docs",
+     "target": "<ROOT>/outside"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "cursor",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "cursor:project:instruction:cursor_rules:Gamma",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.cursor/rules/Gamma.mdc",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "sha256:ae9a6306a205417afddd14316cc1d0d5e04a98f1be10865dce643925ee070ce2",
+      "instructionRole": "cursor_rules",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:ae9a6306a205417afddd14316cc1d0d5e04a98f1be10865dce643925ee070ce2",
+       "hashBasis": "content",
+       "versionLabel": "Gamma"
+      }
+     },
+     "name": "Gamma",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:instruction:cursor_rules:alpha",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.cursor/rules/alpha.mdc",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "sha256:b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060",
+      "instructionRole": "cursor_rules",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060",
+       "hashBasis": "content",
+       "versionLabel": "alpha"
+      }
+     },
+     "name": "alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "cursor:project:instruction:cursor_rules:beta",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.cursor/rules/beta.md",
+     "harness": "cursor",
+     "metadata": {
+      "content_hash": "sha256:f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad",
+      "instructionRole": "cursor_rules",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad",
+       "hashBasis": "content",
+       "versionLabel": "beta"
+      }
+     },
+     "name": "beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.cursor/rules/alpha.mdc",
+     "text": "alpha\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/rules/beta.md",
+     "text": "beta\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/rules/Gamma.mdc",
+     "text": "gamma\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/rules/sub/delta.mdc",
+     "text": "delta\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.cursor/rules/notes.txt",
+     "text": "ignored\n"
+    },
+    {
+     "mode": 420,
+     "path": "outside/escape.mdc",
+     "text": "escape\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_cursor_rules",
+   "symlinks": [
+    {
+     "path": "work/.cursor/rules/escape.mdc",
+     "target": "<ROOT>/outside/escape.mdc"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "cursor",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/rules/a.mdc",
+     "text": "a\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_cursor_rules_symlinked_directory_escapes",
+   "symlinks": [
+    {
+     "path": "work/.cursor/rules",
+     "target": "<ROOT>/outside/rules"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:nested/deep",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/nested/deep/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:6302ac7fbfe950f6d58622ce2febfacde0ca5cdae02f601a9c79c1e9f6a7ad0b",
+      "directory_hash": "sha256:8acf4f1ec59ccdb8ec2e2dfc7485438bcfa4e91fac0532821eb2b0ef085ad402",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:8acf4f1ec59ccdb8ec2e2dfc7485438bcfa4e91fac0532821eb2b0ef085ad402",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 52
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:8acf4f1ec59ccdb8ec2e2dfc7485438bcfa4e91fac0532821eb2b0ef085ad402",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "nested/deep"
+      }
+     },
+     "name": "nested/deep",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:review",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/review/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:749fdeab8b620d400f7263ad61eda1e6bbf1690be925b52f219148f6aeb37bcc",
+      "directory_hash": "sha256:4d42a84c7fba33795c77629b22121bae18651d902b4137af7f5992f28324a225",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:4d42a84c7fba33795c77629b22121bae18651d902b4137af7f5992f28324a225",
+       "entryCount": 3,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 59
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:4d42a84c7fba33795c77629b22121bae18651d902b4137af7f5992f28324a225",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "review"
+      }
+     },
+     "name": "review",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:zeta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/zeta/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:6312444120e60ff582ec1b0760ef0911a152766761defa343397f5ac70066f13",
+      "directory_hash": "sha256:fa09ac8281a351cb039635130133584835a5d441da5cde6f260b32f7c29c4b7c",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:fa09ac8281a351cb039635130133584835a5d441da5cde6f260b32f7c29c4b7c",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 44
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:fa09ac8281a351cb039635130133584835a5d441da5cde6f260b32f7c29c4b7c",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "zeta"
+      }
+     },
+     "name": "zeta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/review/SKILL.md",
+     "text": "---\nname: review\n---\nreview instructions.\n"
+    },
+    {
+     "mode": 493,
+     "path": "work/.agents/skills/review/scripts/run.sh",
+     "text": "#!/bin/sh\nexit 0\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/nested/deep/SKILL.md",
+     "text": "---\nname: nested/deep\n---\nnested/deep instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/zeta/SKILL.md",
+     "text": "---\nname: zeta\n---\nzeta instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/zeta/notes.md",
+     "text": "notes\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_codex",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:.",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:b67abd9a73c507c643951f542ce4c060d1391e33c68b32f6802c7dbf0145a802",
+      "directory_hash": "sha256:7511ab270a3199020aa525ddac2e32d1c0b6957c0da3abba098775be45d3fbdd",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:7511ab270a3199020aa525ddac2e32d1c0b6957c0da3abba098775be45d3fbdd",
+       "entryCount": 3,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 96
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:7511ab270a3199020aa525ddac2e32d1c0b6957c0da3abba098775be45d3fbdd",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "."
+      }
+     },
+     "name": ".",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/SKILL.md",
+     "text": "---\nname: root-skill\n---\nroot-skill instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/shadowed/SKILL.md",
+     "text": "---\nname: shadowed\n---\nshadowed instructions.\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skill_directly_at_the_root_is_named_dot",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:skill:.agents/skills:one",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/one/SKILL.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:597201a0164edf7516a4d5fa6492fbdcd5f3f6da7687af21c16110ed8fcbb75a",
+      "directory_hash": "sha256:8308703c41de711b523061ed6402032a41c5354600e7ef1c34fb6450ba047a69",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:8308703c41de711b523061ed6402032a41c5354600e7ef1c34fb6450ba047a69",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 36
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:8308703c41de711b523061ed6402032a41c5354600e7ef1c34fb6450ba047a69",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "one"
+      }
+     },
+     "name": "one",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/one/SKILL.md",
+     "text": "---\nname: one\n---\none instructions.\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_claude_code_with_instructions",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "hermes",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "hermes:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "hermes",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/one/SKILL.md",
+     "text": "---\nname: one\n---\none instructions.\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_excluded_for_hermes",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "copilot",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/one/SKILL.md",
+     "text": "---\nname: one\n---\none instructions.\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_excluded_for_copilot",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "zcode",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "zcode:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "zcode",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/one/SKILL.md",
+     "text": "---\nname: one\n---\none instructions.\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_excluded_for_zcode",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:outward",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/outward/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:0f462c2abc1c36030369378e3c40552175ed56e794cbca759e26839b59e81c46",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "entryCount": 2,
+       "incompleteStateHash": "sha256:2b046480f449c94ef2d00723f5d33eb08574b0c5971435b0c3ce406661519b17",
+       "reason": "symlink_escape",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 44
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:2b046480f449c94ef2d00723f5d33eb08574b0c5971435b0c3ce406661519b17",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "outward"
+      }
+     },
+     "name": "outward",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:sealed",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/sealed/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:19784c084888b90b2f238e59a31cbfb89c4c09bf7baec8fbdf957c729949af80",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "entryCount": 2,
+       "incompleteStateHash": "sha256:346f9b834e04efc50748937eca59dcca8c2a86e440de9180b05e1ddb40b2411b",
+       "reason": "unreadable_entry",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 42
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:346f9b834e04efc50748937eca59dcca8c2a86e440de9180b05e1ddb40b2411b",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "sealed"
+      }
+     },
+     "name": "sealed",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/sealed/SKILL.md",
+     "text": "---\nname: sealed\n---\nsealed instructions.\n"
+    },
+    {
+     "mode": 0,
+     "path": "work/.agents/skills/sealed/secret.txt",
+     "text": "hidden\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/outward/SKILL.md",
+     "text": "---\nname: outward\n---\noutward instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "outside/target.txt",
+     "text": "outside\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_incomplete_identity",
+   "symlinks": [
+    {
+     "path": "work/.agents/skills/outward/escape.txt",
+     "target": "<ROOT>/outside/target.txt"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill-discovery:.agents/skills:103adacc9ee3f731",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/linked",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "reason": "symlink_directory_unsupported",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": ".guard-discovery/103adacc9ee3f731"
+      }
+     },
+     "name": "Incomplete skill discovery",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/skills/linked/SKILL.md",
+     "text": "---\nname: linked\n---\nlinked instructions.\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_skills_symlinked_skill_directory_is_not_followed",
+   "symlinks": [
+    {
+     "path": "work/.agents/skills/linked",
+     "target": "<ROOT>/outside/skills/linked"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace:<MID>",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "e05d16689a9fde5df9caab4bd2eb47db72852207e5c025487cc45e787b3be015",
+      "marketplace_root": true,
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "e05d16689a9fde5df9caab4bd2eb47db72852207e5c025487cc45e787b3be015",
+       "hashBasis": "content",
+       "versionLabel": "marketplace.json"
+      }
+     },
+     "name": "marketplace.json",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:alpha",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/plugins/alpha/plugin.json",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "ebd21e0c2084fecabf16abcd33c34e9fd07b3c0de0573482d3bc483167a56360",
+      "enabled": true,
+      "marketplace_index": 0,
+      "source_path": "./plugins/alpha",
+      "source_ref": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "ebd21e0c2084fecabf16abcd33c34e9fd07b3c0de0573482d3bc483167a56360",
+       "hashBasis": "content",
+       "versionLabel": "alpha"
+      }
+     },
+     "name": "alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:beta",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/plugins/beta/.codex-plugin/plugin.json",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "4a041cc9d5dbe18eacddb00b344ced029c435f8b374eb125f2b45b9c83a2be8f",
+      "enabled": false,
+      "marketplace_index": 1,
+      "source_path": "./plugins/beta",
+      "source_ref": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "4a041cc9d5dbe18eacddb00b344ced029c435f8b374eb125f2b45b9c83a2be8f",
+       "hashBasis": "content",
+       "versionLabel": "beta"
+      }
+     },
+     "name": "beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:plugin_2",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 2,
+      "source_path": null,
+      "source_ref": "github:example/gamma"
+     },
+     "name": "plugin_2",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:plugin_3",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 3,
+      "source_path": "./plugins/missing",
+      "source_ref": null
+     },
+     "name": "plugin_3",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:escape",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 5,
+      "source_path": "./../outside",
+      "source_ref": "local"
+     },
+     "name": "escape",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:absolute",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 6,
+      "source_path": "/etc",
+      "source_ref": "local"
+     },
+     "name": "absolute",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:no-source",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 7,
+      "source_path": null,
+      "source_ref": null
+     },
+     "name": "no-source",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:emptyref",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 8,
+      "source_path": null,
+      "source_ref": null
+     },
+     "name": "emptyref",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:dirmanifest",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 9,
+      "source_path": "./plugins/dir",
+      "source_ref": "local"
+     },
+     "name": "dirmanifest",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:enabled-null",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 10,
+      "source_path": null,
+      "source_ref": "x"
+     },
+     "name": "enabled-null",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/plugins/marketplace.json",
+     "text": "{\n  \"plugins\": [\n    {\n      \"name\": \"alpha\",\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"./plugins/alpha\"\n      }\n    },\n    {\n      \"name\": \"beta\",\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"./plugins/beta\"\n      },\n      \"enabled\": false\n    },\n    {\n      \"source\": \"github:example/gamma\"\n    },\n    {\n      \"name\": \"  \",\n      \"source\": {\n        \"path\": \"./plugins/missing\"\n      }\n    },\n    \"not-a-dict\",\n    {\n      \"name\": \"escape\",\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"./../outside\"\n      }\n    },\n    {\n      \"name\": \"absolute\",\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"/etc\"\n      }\n    },\n    {\n      \"name\": \"no-source\"\n    },\n    {\n      \"name\": \"emptyref\",\n      \"source\": {\n        \"source\": \"\",\n        \"path\": \"\"\n      }\n    },\n    {\n      \"name\": \"dirmanifest\",\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"./plugins/dir\"\n      }\n    },\n    {\n      \"name\": \"enabled-null\",\n      \"enabled\": null,\n      \"source\": \"x\"\n    }\n  ]\n}"
+    },
+    {
+     "mode": 420,
+     "path": "work/plugins/alpha/plugin.json",
+     "text": "{\"name\": \"alpha\"}\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/plugins/beta/.codex-plugin/plugin.json",
+     "text": "{\"name\": \"beta\"}\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/plugins/dir/plugin.json/inner.txt",
+     "text": "plugin.json is a directory\n"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [
+    "work/.agents/plugins/marketplace.json"
+   ],
+   "name": "workspace_marketplace_plugins",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace:<MID>",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "499f997caa5a413adb2031141d845bc493d293af87e436d4f8fb9594130d6f46",
+      "marketplace_root": true,
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "499f997caa5a413adb2031141d845bc493d293af87e436d4f8fb9594130d6f46",
+       "hashBasis": "content",
+       "versionLabel": "marketplace.json"
+      }
+     },
+     "name": "marketplace.json",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:legacy",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 0,
+      "source_path": null,
+      "source_ref": "x"
+     },
+     "name": "legacy",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/marketplace.json",
+     "text": "{\"plugins\": [{\"name\": \"legacy\", \"source\": \"x\"}]}"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [
+    "work/marketplace.json"
+   ],
+   "name": "workspace_marketplace_legacy_root_file",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace:<MID>",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "dfc83098dc856f56c34dce607f1ed59f814cd1e6a44eb5f099272e935454643e",
+      "marketplace_root": true,
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "dfc83098dc856f56c34dce607f1ed59f814cd1e6a44eb5f099272e935454643e",
+       "hashBasis": "content",
+       "versionLabel": "marketplace.json"
+      }
+     },
+     "name": "marketplace.json",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace-plugin:<MID>:preferred",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "enabled": true,
+      "marketplace_index": 0,
+      "source_path": null,
+      "source_ref": "x"
+     },
+     "name": "preferred",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/plugins/marketplace.json",
+     "text": "{\"plugins\": [{\"name\": \"preferred\", \"source\": \"x\"}]}"
+    },
+    {
+     "mode": 420,
+     "path": "work/marketplace.json",
+     "text": "{\"plugins\": [{\"name\": \"legacy\", \"source\": \"x\"}]}"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [
+    "work/.agents/plugins/marketplace.json"
+   ],
+   "name": "workspace_marketplace_preferred_beats_legacy",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/plugins/marketplace.json",
+     "text": "{\"plugins\": 3}"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_marketplace_plugins_not_a_list",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/plugins/marketplace.json",
+     "text": "{not json"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_marketplace_invalid_json_is_refused",
+   "refused": true,
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/plugins/marketplace.json",
+     "text": "[]"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_marketplace_not_an_object_is_refused",
+   "refused": true,
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/marketplace.json",
+     "text": "{\"plugins\": []}"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [],
+   "name": "workspace_marketplace_symlink_escape_is_refused",
+   "refused": true,
+   "symlinks": [
+    {
+     "path": "work/.agents/plugins/marketplace.json",
+     "target": "<ROOT>/outside/marketplace.json"
+    }
+   ]
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:marketplace:<MID>",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/plugins/marketplace.json",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "e18b61096c71742bbc364689cb42b67e64d9b9c725980d3d8f794f178e39ff02",
+      "marketplace_root": true,
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "e18b61096c71742bbc364689cb42b67e64d9b9c725980d3d8f794f178e39ff02",
+       "hashBasis": "content",
+       "versionLabel": "marketplace.json"
+      }
+     },
+     "name": "marketplace.json",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/plugins/marketplace.json",
+     "text": "{\"plugins\": []}"
+    }
+   ],
+   "kind": "workspace_artifacts",
+   "marketplace_files": [
+    "work/.agents/plugins/marketplace.json"
+   ],
+   "name": "workspace_marketplace_empty_plugins_has_root_artifact",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:mcp:server",
+      "artifact_type": "mcp_server",
+      "config_path": "<ROOT>/work/.mcp.json",
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:server",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:server",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [],
+   "files": [],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_no_extra_returns_detection_unchanged",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:mcp:server",
+      "artifact_type": "mcp_server",
+      "config_path": "<ROOT>/work/.mcp.json",
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:server",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:security_md:docs:SECURITY.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/docs/SECURITY.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:10d37450670ca641e979e44010dc307041b45e8dc4334ddde61a65c9d849232b",
+      "instructionRole": "security_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:10d37450670ca641e979e44010dc307041b45e8dc4334ddde61a65c9d849232b",
+       "hashBasis": "content",
+       "versionLabel": "SECURITY.md (docs)"
+      }
+     },
+     "name": "SECURITY.md (docs)",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [
+    "<ROOT>/work/.mcp.json",
+    "<ROOT>/work/AGENTS.md",
+    "<ROOT>/work/docs/SECURITY.md"
+   ],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:server",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [
+    "<ROOT>/work/.mcp.json"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/docs/SECURITY.md",
+     "text": "sec\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_appends_new_artifacts",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "codex:project:instruction:agents_md:AGENTS.md",
+      "artifact_type": "instruction",
+      "config_path": "<ROOT>/work/AGENTS.md",
+      "harness": "codex"
+     }
+    ],
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "codex",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:design_md:DESIGN.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/DESIGN.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:f52c370da768f628b325d8a96769ec35fe643067cc35fb3cb1c4998380dc4f70",
+      "instructionRole": "design_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:f52c370da768f628b325d8a96769ec35fe643067cc35fb3cb1c4998380dc4f70",
+       "hashBasis": "content",
+       "versionLabel": "DESIGN.md"
+      }
+     },
+     "name": "DESIGN.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [
+    "<ROOT>/work/AGENTS.md",
+    "<ROOT>/other",
+    "<ROOT>/work/DESIGN.md"
+   ],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "codex",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [
+    "<ROOT>/work/AGENTS.md",
+    "<ROOT>/other"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/DESIGN.md",
+     "text": "design\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_skips_duplicate_artifact_id",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:instruction:claude-md",
+      "artifact_type": "instruction",
+      "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/CLAUDE.md",
+     "harness": "claude-code",
+     "metadata": {
+      "content_hash": "sha256:98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+      "instructionRole": "claude_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:98038b25280788a45a2f06c209513024c99adee81c6416b691b4b5872db7e027",
+       "hashBasis": "content",
+       "versionLabel": "CLAUDE.md"
+      }
+     },
+     "name": "CLAUDE.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [
+    "<ROOT>/work/.claude/rules/claude-md.md",
+    "<ROOT>/work/CLAUDE.md"
+   ],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [
+    "<ROOT>/work/.claude/rules/claude-md.md"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "claude\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/claude-md.md",
+     "text": "rules\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_claude_md_replaces_legacy_rules_collision",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:instruction:claude-md",
+      "artifact_type": "mcp_server",
+      "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "claude\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/claude-md.md",
+     "text": "rules\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_claude_md_does_not_replace_mcp_server",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:instruction:claude-md",
+      "artifact_type": "instruction",
+      "config_path": "<ROOT>/work/elsewhere/claude-md.md",
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/elsewhere/claude-md.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/elsewhere/claude-md.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "claude\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_claude_md_does_not_replace_instruction_outside_rules",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:instruction:claude-md",
+      "artifact_type": "instruction",
+      "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+      "harness": "codex"
+     }
+    ],
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+     "harness": "codex",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:claude-md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/claude-md.md",
+     "harness": "codex",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "claude\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_claude_md_does_not_replace_other_harness_instruction",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:instruction:agents_md:AGENTS.md",
+      "artifact_type": "instruction",
+      "config_path": "<ROOT>/work/.claude/rules/a.md",
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "claude-code",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/a.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/rules/a.md",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/rules/a.md",
+     "text": "rules\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_non_claude_md_collision_never_replaces",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "existing": [
+     {
+      "artifact_id": "claude-code:project:mcp:server",
+      "artifact_type": "mcp_server",
+      "config_path": null,
+      "harness": "claude-code"
+     }
+    ],
+    "harness": "codex",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:server",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:instruction:agents_md:AGENTS.md",
+     "artifact_type": "instruction",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+      "instructionRole": "agents_md",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:38700dfad5711976e2f7aeab31013f04aed8c83118a1ef892f6d23bdfe944602",
+       "hashBasis": "content",
+       "versionLabel": "AGENTS.md"
+      }
+     },
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "config_paths": [
+    "<ROOT>/work/AGENTS.md"
+   ],
+   "dirs": [],
+   "existing_artifacts": [
+    {
+     "args": [],
+     "artifact_id": "claude-code:project:mcp:server",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "",
+     "harness": "claude-code",
+     "metadata": {},
+     "name": "existing",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "existing_config_paths": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "agents\n"
+    }
+   ],
+   "kind": "merge_plan",
+   "marketplace_files": [],
+   "name": "merge_existing_without_config_path",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:lint",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/lint/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8ab06f4e6d80e02bc703f6fe79cb6464ec865aa0752a3f3b26caa314bfcb64db",
+      "directory_hash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "lint"
+      }
+     },
+     "name": "lint",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.agents/skills:shared",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/shared/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:74119751705ca06e9c8a90142dfc1ed8e8d7843c0cf244366537ad27dfff5852",
+      "directory_hash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "shared"
+      }
+     },
+     "name": "shared",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/lint/SKILL.md",
+     "text": "---\nname: lint\n---\nlint instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/shared/SKILL.md",
+     "text": "---\nname: shared\n---\nshared instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_global_only_without_workspace",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:proj",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/proj/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:667db81eaeb29c7b9771fd10e89f95cfc9192dab6f5c1aa09cbbee0c771e2191",
+      "directory_hash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "proj"
+      }
+     },
+     "name": "proj",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:lint",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/lint/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8ab06f4e6d80e02bc703f6fe79cb6464ec865aa0752a3f3b26caa314bfcb64db",
+      "directory_hash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "lint"
+      }
+     },
+     "name": "lint",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.agents/skills:proj",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/proj/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:667db81eaeb29c7b9771fd10e89f95cfc9192dab6f5c1aa09cbbee0c771e2191",
+      "directory_hash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "proj"
+      }
+     },
+     "name": "proj",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.agents/skills:shared",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/shared/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:74119751705ca06e9c8a90142dfc1ed8e8d7843c0cf244366537ad27dfff5852",
+      "directory_hash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "shared"
+      }
+     },
+     "name": "shared",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/proj/SKILL.md",
+     "text": "---\nname: proj\n---\nproj instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/lint/SKILL.md",
+     "text": "---\nname: lint\n---\nlint instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/shared/SKILL.md",
+     "text": "---\nname: shared\n---\nshared instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/proj/SKILL.md",
+     "text": "---\nname: proj\n---\nproj instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_project_and_global_without_rules",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:proj",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/proj/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:667db81eaeb29c7b9771fd10e89f95cfc9192dab6f5c1aa09cbbee0c771e2191",
+      "directory_hash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+      "enabled": false,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:caf269ef885cf008d31f81f3c7be808c56da18c2fdcda0881ba7147bb5faee96",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "proj"
+      }
+     },
+     "name": "proj",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:spaced",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/spaced/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:656d7f9f88db093cad10292595bd00a73b9dc3ff14d8e5a1b428b62179b56ec6",
+      "directory_hash": "sha256:9cba36d5d1908c80cbf24a2bc6159de43a453925c00bae0a3b26d03535ba809c",
+      "enabled": false,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:9cba36d5d1908c80cbf24a2bc6159de43a453925c00bae0a3b26d03535ba809c",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:9cba36d5d1908c80cbf24a2bc6159de43a453925c00bae0a3b26d03535ba809c",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "spaced"
+      }
+     },
+     "name": "spaced",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:project:skill:.agents/skills:string-false",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/string-false/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:35e26f0d074966f68c123c2b4532433709fd9071266e42ebf8b02b0246535964",
+      "directory_hash": "sha256:bf29cde420423b1fd7c8e66ca7a4f04232cb209dcb4905b0e084dc0455c445a6",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:bf29cde420423b1fd7c8e66ca7a4f04232cb209dcb4905b0e084dc0455c445a6",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 54
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:bf29cde420423b1fd7c8e66ca7a4f04232cb209dcb4905b0e084dc0455c445a6",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "string-false"
+      }
+     },
+     "name": "string-false",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:home-skill",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/home-skill/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:91101eee9297ad71794e3b46d2d6fb866f3d698783ae6c953484d85d6c51bc00",
+      "directory_hash": "sha256:0ce39d84d1d66209c221d3ae323e8e6828d5edfe4460ee8b5f16e98854d83671",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0ce39d84d1d66209c221d3ae323e8e6828d5edfe4460ee8b5f16e98854d83671",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 50
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0ce39d84d1d66209c221d3ae323e8e6828d5edfe4460ee8b5f16e98854d83671",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "home-skill"
+      }
+     },
+     "name": "home-skill",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:lint",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/lint/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8ab06f4e6d80e02bc703f6fe79cb6464ec865aa0752a3f3b26caa314bfcb64db",
+      "directory_hash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "lint"
+      }
+     },
+     "name": "lint",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.agents/skills:shared",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/shared/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:74119751705ca06e9c8a90142dfc1ed8e8d7843c0cf244366537ad27dfff5852",
+      "directory_hash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "skill_root": ".agents/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:ab088b1c2a0313a2009200510ad4bd43721257b05574d93d0861b59671db2537",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "shared"
+      }
+     },
+     "name": "shared",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
+     "text": "[[skills.config]]\npath = \"home-skill\"\nenabled = false\n\n[[skills.config]]\nname = \"LINT\"\nenabled = false\n\n[[skills.config]]\nname = \"ignored-no-enabled\"\n\n[[skills.config]]\nenabled = false\n\n[[skills.config]]\nname = \"string-false\"\nenabled = \"false\"\n\n[[skills.config]]\npath = \"~/tilde-skill\"\nenabled = false\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.codex/config.toml",
+     "text": "[[skills.config]]\nname = \"proj\"\nenabled = false\n\n[[skills.config]]\nname = \"lint\"\nenabled = true\n\n[[skills.config]]\npath = \"  .agents/skills/spaced  \"\nenabled = false\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/proj/SKILL.md",
+     "text": "---\nname: proj\n---\nproj instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/spaced/SKILL.md",
+     "text": "---\nname: spaced\n---\nspaced instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/string-false/SKILL.md",
+     "text": "---\nname: string-false\n---\nstring-false instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/lint/SKILL.md",
+     "text": "---\nname: lint\n---\nlint instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/home-skill/SKILL.md",
+     "text": "---\nname: home-skill\n---\nhome-skill instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/shared/SKILL.md",
+     "text": "---\nname: shared\n---\nshared instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "uhome/tilde-skill/SKILL.md",
+     "text": "---\nname: tilde-skill\n---\ntilde-skill instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_rules_from_home_and_workspace",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:by-file",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/by-file/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:48aa9dc71355d61ec0cc9b1e7d70eeb267198df84a70585683efe5d877347ab8",
+      "directory_hash": "sha256:7c5f35d96970d64f9b44cbe122d8e167eb3bc76c7c24df8e6421c013b77c697e",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:7c5f35d96970d64f9b44cbe122d8e167eb3bc76c7c24df8e6421c013b77c697e",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 44
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:7c5f35d96970d64f9b44cbe122d8e167eb3bc76c7c24df8e6421c013b77c697e",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "by-file"
+      }
+     },
+     "name": "by-file",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:exact",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/exact/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:c836cbe24a6ba0647625fbe05c92901b672329e60b747649699fef0fd83b7817",
+      "directory_hash": "sha256:b6310d5b2fb960edb3702bdf6ea31157adcaba7f327d43758d53e7ce26d8948c",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:b6310d5b2fb960edb3702bdf6ea31157adcaba7f327d43758d53e7ce26d8948c",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 40
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:b6310d5b2fb960edb3702bdf6ea31157adcaba7f327d43758d53e7ce26d8948c",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "exact"
+      }
+     },
+     "name": "exact",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:suffix",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/suffix/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:e730c0948b8875d35145836ad5e87f5ff46f2183db107504b82be31e9591a354",
+      "directory_hash": "sha256:c06eb9daf8059311f92ff9e83dbed7f0891b51b9d6e1c7b04298de65af1c8a00",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:c06eb9daf8059311f92ff9e83dbed7f0891b51b9d6e1c7b04298de65af1c8a00",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:c06eb9daf8059311f92ff9e83dbed7f0891b51b9d6e1c7b04298de65af1c8a00",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "suffix"
+      }
+     },
+     "name": "suffix",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:untouched",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/untouched/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:7854149cecd4711d0525abaef9f8988ace29a879d09377f08ec8a32623a9ea5c",
+      "directory_hash": "sha256:ce16ad630001424ad7838eb6f27ec54cc7bd3f11b17b6a13224612779d2f1965",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:ce16ad630001424ad7838eb6f27ec54cc7bd3f11b17b6a13224612779d2f1965",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 48
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:ce16ad630001424ad7838eb6f27ec54cc7bd3f11b17b6a13224612779d2f1965",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "untouched"
+      }
+     },
+     "name": "untouched",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
+     "text": "[[skills.config]]\npath = \"<ROOT>/home/.codex/skills/exact\"\nenabled = false\n\n[[skills.config]]\npath = \"skills/suffix\"\nenabled = false\n\n[[skills.config]]\npath = \"<ROOT>/home/.codex/skills/by-file/SKILL.md\"\nenabled = false\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/exact/SKILL.md",
+     "text": "---\nname: exact\n---\nexact instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/suffix/SKILL.md",
+     "text": "---\nname: suffix\n---\nsuffix instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/by-file/SKILL.md",
+     "text": "---\nname: by-file\n---\nby-file instructions.\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/untouched/SKILL.md",
+     "text": "---\nname: untouched\n---\nuntouched instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_path_rules_match_directory_and_suffix",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:lint",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/lint/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8ab06f4e6d80e02bc703f6fe79cb6464ec865aa0752a3f3b26caa314bfcb64db",
+      "directory_hash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "lint"
+      }
+     },
+     "name": "lint",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
+     "text": "[[skills.config\nbroken"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/lint/SKILL.md",
+     "text": "---\nname: lint\n---\nlint instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_invalid_toml_means_no_rules",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:lint",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/lint/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8ab06f4e6d80e02bc703f6fe79cb6464ec865aa0752a3f3b26caa314bfcb64db",
+      "directory_hash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "lint"
+      }
+     },
+     "name": "lint",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
+     "text": "[other]\nvalue = 1\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/lint/SKILL.md",
+     "text": "---\nname: lint\n---\nlint instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_rules_without_skills_table",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:sealed",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/sealed/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:19784c084888b90b2f238e59a31cbfb89c4c09bf7baec8fbdf957c729949af80",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "entryCount": 2,
+       "incompleteStateHash": "sha256:346f9b834e04efc50748937eca59dcca8c2a86e440de9180b05e1ddb40b2411b",
+       "reason": "unreadable_entry",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 42
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:346f9b834e04efc50748937eca59dcca8c2a86e440de9180b05e1ddb40b2411b",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "sealed"
+      }
+     },
+     "name": "sealed",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
+     "text": "[[skills.config]]\nname = \"Incomplete skill discovery\"\nenabled = false\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/sealed/SKILL.md",
+     "text": "---\nname: sealed\n---\nsealed instructions.\n"
+    },
+    {
+     "mode": 0,
+     "path": "home/.codex/skills/sealed/secret.txt",
+     "text": "hidden\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_incomplete_identity_is_inventory_artifact",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "harness": "codex",
+    "home_dir": "<ROOT>/home",
+    "user_home": "<ROOT>/uhome",
+    "workspace_dir": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "codex:global:skill:.codex/skills:lint",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.codex/skills/lint/SKILL.md",
+     "harness": "codex",
+     "metadata": {
+      "content_hash": "sha256:8ab06f4e6d80e02bc703f6fe79cb6464ec865aa0752a3f3b26caa314bfcb64db",
+      "directory_hash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+      "enabled": true,
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 38
+      },
+      "skill_root": ".codex/skills",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:486945a8b32d77619a1bf4370c64fe7661db80ee7234853e53d885baaa971b29",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "lint"
+      }
+     },
+     "name": "lint",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
+     "text": "[[skills.config]]\nname = \"lint\"\nenabled = false\n\n[[skills.config]]\nname = \"lint\"\nenabled = true\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.codex/skills/lint/SKILL.md",
+     "text": "---\nname: lint\n---\nlint instructions.\n"
+    }
+   ],
+   "kind": "codex_skills",
+   "marketplace_files": [],
+   "name": "codex_skills_later_rule_overrides_earlier",
+   "symlinks": []
+  },
+  {
+   "args": {
+    "args": [
+     "-y",
+     "server"
+    ],
+    "command": "npx",
+    "env": null,
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": "stdio",
+    "url": null
+   },
+   "expected": {
+    "content_hash": "155578939031f34a4779e065e4d8915a4064f3ab729811414e591c7a3925c8f4",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "155578939031f34a4779e065e4d8915a4064f3ab729811414e591c7a3925c8f4",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_minimal"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": null,
+    "env": null,
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "docs",
+    "transport": "http",
+    "url": "https://example.invalid/mcp"
+   },
+   "expected": {
+    "content_hash": "dc1853ffdc0829550c46ff2028cdf772bae39da4a6b3581413af72fff739fa53",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "dc1853ffdc0829550c46ff2028cdf772bae39da4a6b3581413af72fff739fa53",
+     "hashBasis": "content",
+     "versionLabel": "docs"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_labelled"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": null,
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "5",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+     "hashBasis": "content",
+     "versionLabel": "5"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_label_non_string"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": null,
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "None",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+     "hashBasis": "content",
+     "versionLabel": "None"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_label_none"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": null,
+    "env_keys": [
+     " B ",
+     "A",
+     "A",
+     "",
+     "   ",
+     "C"
+    ],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "e10b08b057a01d38b0f70c5f0e82fded075459bd289d8727d80de2f4f466fb19",
+    "env_keys": [
+     "A",
+     "B",
+     "C"
+    ],
+    "env_values_hash": "1c8c0b0d2790282f85d50f6a64ec765eb311c9c429b381165fbccee0b7546b93",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "e10b08b057a01d38b0f70c5f0e82fded075459bd289d8727d80de2f4f466fb19",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_env_keys_are_stripped_deduped_sorted"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [
+     [
+      "B",
+      "2"
+     ],
+     [
+      "A",
+      "1"
+     ],
+     [
+      " C ",
+      "3"
+     ],
+     [
+      "",
+      "empty"
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "2871a4e6748261e205602d53f21cd3aa6538af53faf472e2f5863b47200c21d8",
+    "env_keys": [
+     "A",
+     "B",
+     "C"
+    ],
+    "env_values_hash": "c2d8e952eb0a8714f12c0c4102dbb5b38f1328cfab8b0bb6e1236181ccb004d3",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "2871a4e6748261e205602d53f21cd3aa6538af53faf472e2f5863b47200c21d8",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_env_values_derive_keys_and_hash"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [
+     [
+      "A",
+      "first"
+     ],
+     [
+      " A",
+      "second"
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "f184748de84797e2b5c3927f95a9e236d402899e723ff776bda6d68f3171d718",
+    "env_keys": [
+     "A"
+    ],
+    "env_values_hash": "f3ff66f9f3f5a248b991fd154c15efe1030a3e8c1389cf2972e8d4d33e59f0a7",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "f184748de84797e2b5c3927f95a9e236d402899e723ff776bda6d68f3171d718",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_env_duplicate_stripped_key_last_wins"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [
+     [
+      "TOKEN",
+      "value"
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "from-metadata",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "6fedc5eeea005ed3ca39430387f868254a4d790732b670075101720a6136ba0b",
+    "env_keys": [
+     "TOKEN"
+    ],
+    "env_values_hash": "6798aaabef003e4d7514d3d2efb6eeb6638df356d38f5c526dec9b78fad1cbbf",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "6fedc5eeea005ed3ca39430387f868254a4d790732b670075101720a6136ba0b",
+     "hashBasis": "content",
+     "versionLabel": "from-metadata"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_metadata_env_used_when_configured_is_absent"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [
+     [
+      "TOKEN",
+      "configured"
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "63da95dc4fa35d62b3bd007a724d285ec01c1133cb40b2a0f933cda50262a493",
+    "env_keys": [
+     "TOKEN"
+    ],
+    "env_values_hash": "64b640880976c73765cfd6405312b5451288344b879ebdf205af71a7391b27ac",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "63da95dc4fa35d62b3bd007a724d285ec01c1133cb40b2a0f933cda50262a493",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_configured_env_overrides_metadata_env"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [
+     [
+      "A",
+      "1"
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": "  sha256:abc  ",
+    "header_values_hash": "\theader-hash\n",
+    "headers": [
+     [
+      "H",
+      "v"
+     ]
+    ],
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "1b92cb8fadf3d49da8a3f5100a4b8ebb3a6b26ac3b4cb9e8f1118a2c4a10a6e7",
+    "env_keys": [
+     "A"
+    ],
+    "env_values_hash": "sha256:abc",
+    "header_values_hash": "header-hash",
+    "headers_keys": [
+     "H"
+    ],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "1b92cb8fadf3d49da8a3f5100a4b8ebb3a6b26ac3b4cb9e8f1118a2c4a10a6e7",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_prefilled_hashes_are_stripped_and_kept"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [
+     [
+      "A",
+      "1"
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": "   ",
+    "header_values_hash": null,
+    "headers": [
+     [
+      "H",
+      "v"
+     ]
+    ],
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "b9aebabb96798b94d891c6cce5c09c01df6dfd1e33aa2dcc445fe39b6a4a8028",
+    "env_keys": [
+     "A"
+    ],
+    "env_values_hash": "8f5f54b38f4e7ad89155376d75bc0946fd8f3d446ebcd79734e9017ca167acf5",
+    "header_values_hash": "f4c11afdce6481cd0fc011a689771f59ac139f5f377e11c1680de1892ecce3cc",
+    "headers_keys": [
+     "H"
+    ],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "b9aebabb96798b94d891c6cce5c09c01df6dfd1e33aa2dcc445fe39b6a4a8028",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_blank_and_non_string_hashes_are_recomputed"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": null,
+    "env": null,
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": [
+     [
+      "Authorization",
+      "Bearer placeholder"
+     ],
+     [
+      "X-A",
+      "1"
+     ]
+    ],
+    "headers_keys": [
+     "X-B",
+     " X-A ",
+     "X-A"
+    ],
+    "label": "mcp",
+    "transport": "sse",
+    "url": "https://example.invalid/mcp"
+   },
+   "expected": {
+    "content_hash": "1b84baa91d09ea305cbd5f198bb398556a0736a7df0dc61e731e36a4f286ca0b",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "274572afe06b0c5aacb9f1a7187415542212f5791832d9841a6b16d309f0e6e3",
+    "headers_keys": [
+     "X-A",
+     "X-B"
+    ],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "1b84baa91d09ea305cbd5f198bb398556a0736a7df0dc61e731e36a4f286ca0b",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_headers_keys_and_values"
+  },
+  {
+   "args": {
+    "args": [
+     "--flag",
+     "",
+     "ü"
+    ],
+    "command": "câ",
+    "env": [
+     [
+      "É",
+      "ü"
+     ],
+     [
+      "E",
+      ""
+     ]
+    ],
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "ünï",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "fd3f533cf5397bcc273ed73fd6035d90f83f59804d371122691c7b425e262f85",
+    "env_keys": [
+     "E",
+     "É"
+    ],
+    "env_values_hash": "eb4ef50949765554845741984e64af72b5de36cb5e68f1f82407caa2b56759e8",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "fd3f533cf5397bcc273ed73fd6035d90f83f59804d371122691c7b425e262f85",
+     "hashBasis": "content",
+     "versionLabel": "ünï"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_unicode_and_empty_values"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": [],
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_explicit_empty_env_mapping"
+  },
+  {
+   "args": {
+    "args": [],
+    "command": "x",
+    "env": null,
+    "env_keys": [],
+    "env_values_hash": null,
+    "header_values_hash": null,
+    "headers": null,
+    "headers_keys": [],
+    "label": "mcp",
+    "transport": null,
+    "url": null
+   },
+   "expected": {
+    "content_hash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+    "env_keys": [],
+    "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+    "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+    "headers_keys": [],
+    "versionInfo": {
+     "changedFields": [],
+     "contentHash": "0b4b356cfa5b2c8676bb5bd63431566cacd73498c1e3961b472b98c85fe35921",
+     "hashBasis": "content",
+     "versionLabel": "mcp"
+    }
+   },
+   "kind": "mcp_metadata",
+   "name": "mcp_non_mapping_env_is_empty"
+  }
+ ],
+ "schema": "guard-aibom-vectors.v1"
+}

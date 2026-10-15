@@ -50,19 +50,76 @@ def test_package_shim_status_exposes_phase11_alias_fields(tmp_path: Path) -> Non
     assert status["lastInterceptProofAt"] == status["last_intercept_proof_at"] == status["last_test_at"]
 
 
-def test_package_shim_audit_refuses_manifest_outside_guard_home(
+@pytest.mark.parametrize("code", ["native_shim_admin_unavailable", "native_overloaded"])
+def test_unavailable_resident_reports_unrecorded_audit_proof(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    code: str,
 ) -> None:
-    context = _harness_context(tmp_path)
-    outside_manifest = tmp_path / "outside" / "manifest.json"
+    from codex_plugin_scanner.guard.native_shim_admin import NativeShimAdminError
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeShimAdminError(code)
+
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.package_shim_status._package_shim_manifest_path",
-        lambda _context: outside_manifest,
+        "codex_plugin_scanner.guard.native_shim_admin.native_shim_admin",
+        unavailable,
     )
+    recorded = record_package_shim_audit_result(
+        _harness_context(tmp_path),
+        audited_at="2026-06-10T01:00:00+00:00",
+    )
+
+    assert recorded == {"audit_proof_recorded": False, "audit_proof_error": code}
+
+
+def test_refused_audit_write_still_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_shim_admin import NativeShimAdminError
+
+    def refused(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeShimAdminError("rejected", "package shim manifest escapes the Guard home")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.package_shim_status._record_audit", refused)
+
+    with pytest.raises(ValueError, match="escapes the Guard home"):
+        record_package_shim_audit_result(
+            _harness_context(tmp_path),
+            audited_at="2026-06-10T01:00:00+00:00",
+        )
+
+
+@pytest.mark.parametrize("original", ["", " \n\t ", '{"enabled": true, "score": NaN'])
+def test_unusable_package_shim_manifest_is_left_unstamped(tmp_path: Path, original: str) -> None:
+    """A blank or truncated manifest is not replaced and is not a recorded proof."""
+
+    context = _harness_context(tmp_path)
+    manifest_dir = context.guard_home / "package-shims"
+    manifest_dir.mkdir(parents=True)
+    manifest = manifest_dir / "manifest.json"
+    manifest.write_text(original, encoding="utf-8")
+
+    recorded = record_package_shim_audit_result(
+        context,
+        audited_at="2026-06-10T01:00:00+00:00",
+    )
+
+    assert manifest.read_text(encoding="utf-8") == original
+    assert recorded == {
+        "audit_proof_recorded": False,
+        "audit_proof_error": "native_shim_admin_failed",
+    }
+
+
+def test_package_shim_audit_refuses_manifest_outside_guard_home(tmp_path: Path) -> None:
+    context = _harness_context(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    context.guard_home.mkdir(parents=True, exist_ok=True)
+    (context.guard_home / "package-shims").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ValueError, match="escapes the Guard home"):
         record_package_shim_audit_result(context, audited_at="2026-06-10T01:00:00+00:00")
+    assert list(outside.iterdir()) == []
 
 
 def test_package_shim_status_lists_tested_managers_after_probe(

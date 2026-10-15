@@ -2,26 +2,32 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_mcp_tool_policy
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
     evaluate_tool_call,
-    tool_call_risk_categories,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
-    build_mcp_tool_identity,
-    mcp_server_identity_metadata,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
+
+
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+    tool_name = str(artifact.metadata.get("tool_name"))
+    return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
+
 
 pytestmark = pytest.mark.usefixtures("_native_mcp_identity_authority")
 
@@ -125,10 +131,9 @@ def test_mcp_server_identity_binds_configured_env_values_without_exposing_them()
     assert first == reordered
     assert first.env_values_hash != changed.env_values_hash
     assert first.identity_hash != changed.identity_hash
-    serialized = str(mcp_server_identity_metadata(first))
+    serialized = str(asdict(first))
     assert secret_v1 not in serialized
     assert secret_v2 not in serialized
-    assert mcp_server_identity_metadata(first)["env_values_hash"] == first.env_values_hash
 
 
 def test_managed_stdio_servers_emit_server_identity() -> None:
@@ -366,26 +371,37 @@ def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
-    "projection",
+    "reply",
     [
-        None,
-        {"action": "future-action", "source": "policy", "summary_code": "risk", "risk_categories": []},
-        {"action": "allow", "source": "future-source", "summary_code": "no_risk", "risk_categories": []},
-        {
-            "action": "allow",
-            "source": "policy",
-            "summary_code": "risk",
-            "risk_categories": ["secret_access", "secret_access"],
-        },
+        "unavailable",
+        "unbound_digest",
+        {"status": "ok", "code": "ok", "payload": {"action": "future-action"}},
+        {"status": "ok", "code": "ok", "payload": None},
+        {"status": "need", "code": "need", "payload": {"kind": "future_effect"}},
+        {"status": "error", "code": "native_mcp_tool_policy_decide_observation_invalid", "payload": None},
     ],
 )
 def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
     tmp_path,
     monkeypatch,
-    projection,
+    reply,
 ) -> None:
-    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard import native_mcp_tool_policy
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 
+    def fake_resident(*, request, **_kwargs):
+        if reply == "unavailable":
+            return None
+        digest = "sha256:" + ("0" * 64 if reply == "unbound_digest" else _canonical_request_sha256(request))
+        body = {"status": "ok", "code": "ok", "payload": None} if reply == "unbound_digest" else reply
+        return {
+            "schema": "guard-mcp-tool-policy-decide-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": digest,
+            **body,
+        }
+
+    monkeypatch.setattr(native_mcp_tool_policy, "_resident_request", fake_resident)
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -394,14 +410,6 @@ def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
         config_path=".mcp.json",
         transport="stdio",
     )
-    native_digest = native_context.native_context_digest
-
-    def reject_policy(operation, *args, **kwargs):
-        if operation == "mcp_tool_policy":
-            return None if projection is None else {"status": "ok", "mcp_tool_policy": projection}
-        return native_digest(operation, *args, **kwargs)
-
-    monkeypatch.setattr(native_context, "native_context_digest", reject_policy)
     with pytest.raises(ValueError, match="native_mcp_tool_policy_unavailable"):
         evaluate_tool_call(
             store=GuardStore(tmp_path / "guard-home"),
@@ -451,6 +459,7 @@ def test_evaluate_tool_call_unknown_stored_action_requires_review(
         transport="stdio",
     )
     store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         store,
         "resolve_policy_decision_lookup_with_memory_pattern",
@@ -1273,7 +1282,7 @@ def test_native_identity_failure_cannot_bind_mcp_approval(
             )
 
 
-def test_mcp_tool_schema_flags_file_command_and_url_arguments() -> None:
+def test_mcp_tool_schema_flags_file_command_and_url_arguments(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1291,7 +1300,7 @@ def test_mcp_tool_schema_flags_file_command_and_url_arguments() -> None:
         },
     )
 
-    assert tool_call_risk_categories(artifact, {}) == (
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == (
         "filesystem_access",
         "command_execution",
         "outbound_network",
@@ -1299,7 +1308,7 @@ def test_mcp_tool_schema_flags_file_command_and_url_arguments() -> None:
     )
 
 
-def test_mcp_tool_schema_follows_local_refs_for_risk_categories() -> None:
+def test_mcp_tool_schema_follows_local_refs_for_risk_categories(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1321,10 +1330,10 @@ def test_mcp_tool_schema_follows_local_refs_for_risk_categories() -> None:
         },
     )
 
-    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
 
 
-def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories() -> None:
+def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1347,10 +1356,10 @@ def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories() -> None
         },
     )
 
-    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
 
 
-def test_mcp_tool_schema_ignores_unreferenced_schema_definitions() -> None:
+def test_mcp_tool_schema_ignores_unreferenced_schema_definitions(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1372,10 +1381,10 @@ def test_mcp_tool_schema_ignores_unreferenced_schema_definitions() -> None:
         },
     )
 
-    assert tool_call_risk_categories(artifact, {}) == ()
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ()
 
 
-def test_mcp_tool_schema_traverses_conditional_and_dependent_branches() -> None:
+def test_mcp_tool_schema_traverses_conditional_and_dependent_branches(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1398,11 +1407,11 @@ def test_mcp_tool_schema_traverses_conditional_and_dependent_branches() -> None:
         },
     )
 
-    categories = set(tool_call_risk_categories(artifact, {}))
+    categories = set(_projected_call(native_context_digest, artifact, {}).risk_categories)
     assert {"command_execution", "outbound_network", "tool_schema_mismatch"}.issubset(categories)
 
 
-def test_mcp_tool_schema_ignores_not_branch_when_inferring_risk() -> None:
+def test_mcp_tool_schema_ignores_not_branch_when_inferring_projected_call(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1420,10 +1429,10 @@ def test_mcp_tool_schema_ignores_not_branch_when_inferring_risk() -> None:
         },
     )
 
-    assert tool_call_risk_categories(artifact, {}) == ()
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ()
 
 
-def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys() -> None:
+def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1433,17 +1442,18 @@ def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys() -> None:
         transport="stdio",
     )
 
-    assert tool_call_risk_categories(
+    assert _projected_call(
+        native_context_digest,
         artifact,
         {
             "source": "src/app.ts",
             "cmd": "npm test",
             "callback": "https://example.test/hook",
         },
-    ) == ("filesystem_access", "command_execution", "outbound_network")
+    ).risk_categories == ("filesystem_access", "command_execution", "outbound_network")
 
 
-def test_mcp_tool_descriptions_emit_capability_risk_categories() -> None:
+def test_mcp_tool_descriptions_emit_capability_risk_categories(native_context_digest: Path) -> None:
     read_files = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1472,12 +1482,12 @@ def test_mcp_tool_descriptions_emit_capability_risk_categories() -> None:
         tool_description="Execute shell scripts or run command lines.",
     )
 
-    assert tool_call_risk_categories(read_files, {}) == ("filesystem_access",)
-    assert tool_call_risk_categories(mutates_files, {}) == ("destructive_mutation",)
-    assert tool_call_risk_categories(executes_commands, {}) == ("command_execution",)
+    assert _projected_call(native_context_digest, read_files, {}).risk_categories == ("filesystem_access",)
+    assert _projected_call(native_context_digest, mutates_files, {}).risk_categories == ("destructive_mutation",)
+    assert _projected_call(native_context_digest, executes_commands, {}).risk_categories == ("command_execution",)
 
 
-def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema() -> None:
+def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1488,7 +1498,7 @@ def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema() 
         tool_schema={"type": "object", "properties": {"script": {"type": "string"}}},
     )
 
-    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
 
 
 @pytest.mark.parametrize(
@@ -1499,7 +1509,7 @@ def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema() 
         ("missing", ()),
     ],
 )
-def test_tool_risk_resolves_only_existing_array_reference(index, expected) -> None:
+def test_tool_risk_resolves_only_existing_array_reference(index, expected, native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -1512,4 +1522,4 @@ def test_tool_risk_resolves_only_existing_array_reference(index, expected) -> No
             "$ref": f"#/$defs/ops/{index}",
         },
     )
-    assert tool_call_risk_categories(artifact, {}) == expected
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == expected

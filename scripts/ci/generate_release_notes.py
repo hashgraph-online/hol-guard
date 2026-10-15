@@ -162,12 +162,15 @@ def parse_version_tag(tag: str) -> tuple | None:
 
 
 def channel_tags(tags: Iterable[str], channel: str) -> list[str]:
-    pattern = STABLE_TAG_PATTERN if channel == "stable" else ALPHA_TAG_PATTERN
-    return [tag for tag in tags if pattern.match(tag)]
+    if channel == "stable":
+        return [tag for tag in tags if STABLE_TAG_PATTERN.match(tag)]
+    # Alphas cut from main describe changes since whichever release came last,
+    # so an earlier stable release is as valid a predecessor as an older alpha.
+    return [tag for tag in tags if ALPHA_TAG_PATTERN.match(tag) or STABLE_TAG_PATTERN.match(tag)]
 
 
 def select_previous_tag(tags: Iterable[str], current_version: str, channel: str) -> str | None:
-    """Pick the closest same-channel tag strictly below ``current_version``."""
+    """Pick the closest tag strictly below ``current_version`` that the channel may follow."""
     current = version_sort_key(current_version)
     if current is None:
         return None
@@ -529,6 +532,16 @@ def render_notes(
         lines.append("")
         lines.append("```bash")
         lines.append(f'uv tool install "./hol_guard-{version}-py3-none-any.whl[cisco]"')
+        lines.append("```")
+    elif channel == "alpha":
+        lines.append(
+            "Install the native alpha with `hol-guard update --alpha`, or with the platform wheel "
+            f"attached to [this prerelease](https://github.com/{repo}/releases/tag/{tag}). "
+            "The PyPI upload is the pure wheel only and does not include the native runtime."
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append("hol-guard update --alpha")
         lines.append("```")
     else:
         lines.append("Install this release:")

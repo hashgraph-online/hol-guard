@@ -10,7 +10,6 @@ from codex_plugin_scanner.guard.runtime.github_capability_contract import (
     GitHubCommandCapability,
     github_assessment,
 )
-from codex_plugin_scanner.guard.runtime.github_capability_interaction import github_capability_action_class
 from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_github_shell_capabilities,
@@ -22,6 +21,7 @@ _EXPECTED_FLOORS = {
     "read_local": "allow",
     "read_remote": "allow",
     "propose_remote": "allow",
+    "create_private_remote": "allow",
     "routine_merge_remote": "allow",
     "routine_workflow_remote": "require-reapproval",
     "routine_review_thread_remote": "allow",
@@ -114,24 +114,6 @@ def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapabil
     assessment = github_assessment(capability, "test.reason", "test detail")
 
     assert assessment.action_floor == expected
-
-
-@pytest.mark.parametrize(
-    "capability",
-    ("read_local", "read_remote", "propose_remote", "routine_review_thread_remote"),
-)
-def test_prompt_free_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
-    assessment = github_assessment(capability, "test.read", "test read")
-
-    with pytest.raises(ValueError, match="read-only"):
-        _ = github_capability_action_class(assessment)
-
-
-def test_admin_merge_action_class_is_preserved_with_branch_deletion() -> None:
-    assessment = classify_github_cli(("pr", "merge", "123", "--admin", "--delete-branch"))
-
-    assert assessment.capabilities == ("admin_merge_remote", "delete_remote")
-    assert github_capability_action_class(assessment) == "GitHub administrator pull-request merge command"
 
 
 @pytest.mark.parametrize(

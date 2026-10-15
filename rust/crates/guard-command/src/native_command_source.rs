@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn every_baseline_node_tree_lowers_to_its_original_content_identity() {
-        let program: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+        let program: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
         fn inline(id: &str, nodes: &Value) -> Value {
             let node = &nodes[id];
             let mut result = serde_json::json!({"op":node["op"], "config":node["config"]});

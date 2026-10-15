@@ -13,6 +13,10 @@ type ReviewScopeControlsProps = {
   taskCapabilityCopy: string | null;
   exactActionPersistenceEligible: boolean;
   rememberExactAction: boolean;
+  /** One-time approvals of this request never let the agent's next call through. */
+  oneTimeRetryBlocked?: boolean;
+  /** Minutes a one-time approval stays usable for a retry. */
+  retryWindowMinutes?: number;
   allowScope: DecisionScope;
   blockScope: DecisionScope;
   onAllowScopeChange: (scope: DecisionScope) => void;
@@ -43,6 +47,8 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
         <ExactActionPersistenceChoice
           checked={props.rememberExactAction}
           onChange={props.onRememberExactActionChange}
+          oneTimeRetryBlocked={props.oneTimeRetryBlocked === true}
+          retryWindowMinutes={props.retryWindowMinutes ?? 15}
         />
       )}
       {props.broaderScopeOptions.length > 0 && (
@@ -115,7 +121,12 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
   );
 }
 
-function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (checked: boolean) => void }) {
+function ExactActionPersistenceChoice(props: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  oneTimeRetryBlocked: boolean;
+  retryWindowMinutes: number;
+}) {
   const handleOnce = useCallback(() => props.onChange(false), [props.onChange]);
   const handleAlways = useCallback(() => props.onChange(true), [props.onChange]);
 
@@ -133,7 +144,11 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
             className="sr-only"
           />
           <span className="block text-sm font-semibold text-brand-dark">This time</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">Retry within 15 minutes.</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {props.oneTimeRetryBlocked
+              ? "Records your decision; the agent stays blocked."
+              : `Retry within ${props.retryWindowMinutes} minutes.`}
+          </span>
         </label>
         <label className={exactActionChoiceClassName(props.checked)}>
           <input

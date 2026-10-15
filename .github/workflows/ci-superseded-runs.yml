@@ -2,8 +2,11 @@ name: Retire superseded PR checks
 
 on:
   workflow_run:
-    workflows: [CI, Native wheel CI]
-    types: [requested, in_progress]
+    workflows: [CI]
+    # `requested` covers every new run. `in_progress` fired several times per
+    # CI run, and each pass spends repository API quota shared with every other
+    # workflow's GITHUB_TOKEN; the extra passes exhausted it.
+    types: [requested]
 
 permissions: {}
 
@@ -33,7 +36,7 @@ jobs:
           from urllib.parse import urlencode
           from urllib.request import Request, urlopen
 
-          WORKFLOWS = {".github/workflows/ci.yml", ".github/workflows/native-wheel-ci.yml"}
+          WORKFLOWS = {".github/workflows/ci.yml"}
           ACTIVE = {"queued", "in_progress", "pending", "waiting", "requested"}
           MAX_PAGES = 5
           MAX_CANCELLATIONS = 10

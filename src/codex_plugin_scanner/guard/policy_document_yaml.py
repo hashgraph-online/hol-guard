@@ -2,34 +2,22 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
-import math
 import re
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 from importlib import resources
+from itertools import islice
 from pathlib import Path
 from typing import TypeAlias, cast
 
 import yaml
 from jsonschema import Draft202012Validator
 from yaml.nodes import MappingNode, Node, SequenceNode
-from yaml.tokens import (
-    AliasToken,
-    AnchorToken,
-    BlockEndToken,
-    BlockMappingStartToken,
-    BlockSequenceStartToken,
-    FlowMappingEndToken,
-    FlowMappingStartToken,
-    FlowSequenceEndToken,
-    FlowSequenceStartToken,
-    ScalarToken,
-    TagToken,
-)
 
+from .native_policy_document import NativePolicyDocumentError, bounds_claim, policy_query
 from .policy_document import GuardPolicyDocument
 from .policy_document_business_bounds import oversized_business_selector_path
 from .runtime.command_expression import (
@@ -58,22 +46,6 @@ _AMBIGUOUS_STRING = re.compile(
     re.IGNORECASE,
 )
 _TIMESTAMP_LIKE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[Tt ]|$)")
-_SENSITIVE_KEY_NAMES = frozenset(
-    {
-        "apikey",
-        "authorization",
-        "authheader",
-        "credential",
-        "credentials",
-        "password",
-        "privatekey",
-        "rawcredential",
-        "secretvalue",
-        "token",
-        "accesstoken",
-        "refreshtoken",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,89 +188,56 @@ def _policy_document_validator() -> Draft202012Validator:
 
 
 def _scan_restricted_tokens(text: str) -> None:
-    depth = 0
-    token_count = 0
-    collection_starts = (
-        BlockMappingStartToken,
-        BlockSequenceStartToken,
-        FlowMappingStartToken,
-        FlowSequenceStartToken,
-    )
-    collection_ends = (BlockEndToken, FlowMappingEndToken, FlowSequenceEndToken)
+    tokens: list[list[object]] = []
     try:
-        for token in yaml.scan(text, Loader=_PolicyLoader):
-            token_count += 1
-            if token_count > MAX_POLICY_TOKENS:
-                raise PolicyDocumentError(
-                    (
-                        PolicyDiagnostic(
-                            "limit_tokens",
-                            line=token.start_mark.line + 1,
-                            column=token.start_mark.column + 1,
-                        ),
-                    )
-                )
-            if isinstance(token, collection_starts):
-                depth += 1
-                if depth > MAX_POLICY_DEPTH + 1:
-                    raise PolicyDocumentError(
-                        (
-                            PolicyDiagnostic(
-                                "limit_depth",
-                                line=token.start_mark.line + 1,
-                                column=token.start_mark.column + 1,
-                            ),
-                        )
-                    )
-            elif isinstance(token, collection_ends):
-                depth = max(0, depth - 1)
-            elif isinstance(token, ScalarToken):
-                if len(token.value) > MAX_STRING_LENGTH:
-                    raise PolicyDocumentError(
-                        (
-                            PolicyDiagnostic(
-                                "limit_string",
-                                line=token.start_mark.line + 1,
-                                column=token.start_mark.column + 1,
-                            ),
-                        )
-                    )
-                if token.style is None and _JSON_INT.fullmatch(token.value) and len(token.value.removeprefix("-")) > 16:
-                    raise PolicyDocumentError(
-                        (
-                            PolicyDiagnostic(
-                                "limit_integer",
-                                line=token.start_mark.line + 1,
-                                column=token.start_mark.column + 1,
-                            ),
-                        )
-                    )
-            if isinstance(token, AliasToken):
-                code = "yaml_alias"
-            elif isinstance(token, AnchorToken):
-                code = "yaml_anchor"
-            elif isinstance(token, TagToken):
-                code = "yaml_tag"
-            else:
-                continue
-            raise PolicyDocumentError(
-                (PolicyDiagnostic(code, line=token.start_mark.line + 1, column=token.start_mark.column + 1),)
+        for token in islice(yaml.scan(text, Loader=_PolicyLoader), MAX_POLICY_TOKENS + 1):
+            value = getattr(token, "value", None)
+            tokens.append(
+                [
+                    type(token).__name__,
+                    token.start_mark.line + 1,
+                    token.start_mark.column + 1,
+                    bounds_claim(value) if isinstance(value, str) else None,
+                    getattr(token, "style", None),
+                ]
             )
-    except PolicyDocumentError:
-        raise
-    except (RecursionError, ValueError) as error:
-        raise PolicyDocumentError((PolicyDiagnostic("yaml_resource_limit"),)) from error
+    except (RecursionError, ValueError):
+        tokens.append(["scanner_resource", None, None, None, None])
     except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
-        raise PolicyDocumentError(
-            (
-                PolicyDiagnostic(
-                    "yaml_syntax",
-                    line=mark.line + 1 if mark is not None else None,
-                    column=mark.column + 1 if mark is not None else None,
-                ),
+        tokens.append(
+            [
+                "scanner_syntax",
+                mark.line + 1 if mark is not None else None,
+                mark.column + 1 if mark is not None else None,
+                None,
+                None,
+            ]
+        )
+    result = policy_query("validate_yaml_tokens", {"tokens": tokens})
+    if result is not None:
+        if (
+            not isinstance(result, dict)
+            or set(result) != {"code", "line", "column"}
+            or result["code"]
+            not in (
+                "limit_tokens",
+                "limit_depth",
+                "limit_string",
+                "limit_integer",
+                "yaml_alias",
+                "yaml_anchor",
+                "yaml_tag",
+                "yaml_syntax",
+                "yaml_resource_limit",
             )
-        ) from error
+            or any(
+                value is not None and (type(value) is not int or value < 1)
+                for value in (result["line"], result["column"])
+            )
+        ):
+            raise NativePolicyDocumentError("native_policy_document_tokens_malformed")
+        raise PolicyDocumentError((PolicyDiagnostic(result["code"], line=result["line"], column=result["column"]),))
 
 
 def _load_yaml(text: str) -> object:
@@ -325,45 +264,8 @@ def _load_yaml(text: str) -> object:
     return documents[0]
 
 
-def _contains_surrogate(value: str) -> bool:
-    return any(0xD800 <= ord(character) <= 0xDFFF for character in value)
-
-
-def _validate_bounds(value: object, path: JsonPath = (), depth: int = 0) -> None:
-    if depth > MAX_POLICY_DEPTH:
-        raise PolicyDocumentError((PolicyDiagnostic("limit_depth", path),))
-    if isinstance(value, str):
-        if _contains_surrogate(value):
-            raise PolicyDocumentError((PolicyDiagnostic("invalid_unicode", path),))
-        if len(value) > MAX_STRING_LENGTH:
-            raise PolicyDocumentError((PolicyDiagnostic("limit_string", path),))
-        return
-    if isinstance(value, float):
-        code = "non_finite_number" if not math.isfinite(value) else "unsupported_float"
-        raise PolicyDocumentError((PolicyDiagnostic(code, path),))
-    if isinstance(value, list):
-        limit = MAX_POLICY_RULES if path == ("spec", "rules") else MAX_COLLECTION_ITEMS
-        if len(value) > limit:
-            raise PolicyDocumentError((PolicyDiagnostic("limit_collection", path),))
-        for index, item in enumerate(value):
-            _validate_bounds(item, (*path, index), depth + 1)
-        return
-    if isinstance(value, dict):
-        if len(value) > MAX_COLLECTION_ITEMS:
-            raise PolicyDocumentError((PolicyDiagnostic("limit_collection", path),))
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise PolicyDocumentError((PolicyDiagnostic("mapping_key_type", path),))
-            if _contains_surrogate(key):
-                raise PolicyDocumentError((PolicyDiagnostic("invalid_unicode", (*path, key)),))
-            if len(key) > 128:
-                raise PolicyDocumentError((PolicyDiagnostic("limit_key", (*path, key)),))
-            normalized_key = re.sub(r"[^a-z0-9]", "", key.lower())
-            if normalized_key in _SENSITIVE_KEY_NAMES and not any(
-                isinstance(part, str) and part.startswith("x-") for part in path
-            ):
-                raise PolicyDocumentError((PolicyDiagnostic("forbidden_sensitive_field", (*path, key)),))
-            _validate_bounds(item, (*path, key), depth + 1)
+def _validate_bounds(value: object) -> None:
+    _validate_native_metadata(value, "validate_bounds")
 
 
 def _node_for_path(node: Node | None, path: JsonPath) -> Node | None:
@@ -411,49 +313,44 @@ def _schema_diagnostics(text: str, value: object) -> tuple[PolicyDiagnostic, ...
     return tuple(diagnostics)
 
 
-def _validate_rule_ids(value: dict[str, object]) -> None:
-    spec = value.get("spec")
-    if not isinstance(spec, dict):
-        return
-    rules = spec.get("rules")
-    if not isinstance(rules, list):
-        return
-    seen: set[str] = set()
-    for index, rule in enumerate(rules):
-        if not isinstance(rule, dict):
-            continue
-        rule_id = rule.get("id")
-        if not isinstance(rule_id, str):
-            continue
-        if rule_id in seen:
-            raise PolicyDocumentError((PolicyDiagnostic("duplicate_rule_id", ("spec", "rules", index, "id")),))
-        seen.add(rule_id)
-
-
-def _validate_timestamps(value: dict[str, object]) -> None:
-    spec = value.get("spec")
-    if not isinstance(spec, dict):
-        return
-    rules = spec.get("rules")
-    if not isinstance(rules, list):
-        return
-    timestamp_paths: list[tuple[JsonPath, object]] = []
-    for index, rule in enumerate(rules):
-        if not isinstance(rule, dict):
-            continue
-        lifetime = rule.get("lifetime")
-        provenance = rule.get("provenance")
-        if isinstance(lifetime, dict) and lifetime.get("expiresAt") is not None:
-            timestamp_paths.append((("spec", "rules", index, "lifetime", "expiresAt"), lifetime.get("expiresAt")))
-        if isinstance(provenance, dict):
-            timestamp_paths.append((("spec", "rules", index, "provenance", "createdAt"), provenance.get("createdAt")))
-    for path, timestamp in timestamp_paths:
-        if not isinstance(timestamp, str):
-            continue
+def _validate_native_metadata(value: object, query: str) -> None:
+    result = policy_query(query, {"claim": bounds_claim(value)} if query == "validate_bounds" else {"value": value})
+    if query == "validate_bounds" and isinstance(result, dict):
         try:
-            datetime.fromisoformat(timestamp.removesuffix("Z") + "+00:00")
-        except ValueError as error:
-            raise PolicyDocumentError((PolicyDiagnostic("invalid_timestamp", path),)) from error
+            result = {
+                "code": result["code"],
+                "path": [
+                    base64.b64decode(part[1], validate=True).decode("utf-32-le", "surrogatepass")
+                    if isinstance(part, list) and len(part) == 2 and part[0] == "text"
+                    else part
+                    for part in result["path_claims"]
+                ],
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise NativePolicyDocumentError("native_policy_document_metadata_malformed") from exc
+    if result is not None:
+        if (
+            not isinstance(result, dict)
+            or set(result) != {"code", "path"}
+            or result["code"]
+            not in (
+                "duplicate_rule_id",
+                "invalid_timestamp",
+                "limit_depth",
+                "invalid_unicode",
+                "limit_string",
+                "non_finite_number",
+                "unsupported_float",
+                "limit_collection",
+                "mapping_key_type",
+                "limit_key",
+                "forbidden_sensitive_field",
+            )
+            or not isinstance(result["path"], list)
+            or not all(type(part) in (str, int) for part in result["path"])
+        ):
+            raise NativePolicyDocumentError("native_policy_document_metadata_malformed")
+        raise PolicyDocumentError((PolicyDiagnostic(result["code"], cast(JsonPath, tuple(result["path"]))),))
 
 
 def _validate_command_expressions(value: dict[str, object]) -> None:
@@ -499,8 +396,8 @@ def parse_policy_document_yaml(source: str | bytes) -> GuardPolicyDocument:
         raise PolicyDocumentError((PolicyDiagnostic("schema_type"),))
     if path := oversized_business_selector_path(value):
         raise PolicyDocumentError((PolicyDiagnostic("business_selector_limit_bytes", path),))
-    _validate_rule_ids(value)
-    _validate_timestamps(value)
+    _validate_native_metadata(value, "validate_ids")
+    _validate_native_metadata(value, "validate_timestamps")
     _validate_command_expressions(value)
     return GuardPolicyDocument.from_mapping(value)
 
