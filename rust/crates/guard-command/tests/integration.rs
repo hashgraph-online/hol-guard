@@ -37,6 +37,7 @@ pub mod portable_command_source_fixtures;
 pub mod pretool_agent_metadata;
 pub mod pretool_brew_reads;
 pub mod pretool_bun_eval;
+pub mod pretool_cd_canonical_workspace;
 pub mod pretool_chain_temporary_files;
 pub mod pretool_contained_script_tests;
 pub mod pretool_contained_tests;

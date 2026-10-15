@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shlex
 import subprocess
 from collections.abc import Mapping
@@ -76,8 +75,5 @@ def test_widened_ancestry_loop_remains_sensitive(
 
     result = inspect_command(command, cwd=home, home_dir=home)
     assert _classification(result)["explicitly_benign"] is False
-    if os.name == "nt" and status == "review":
-        # Windows keeps the unrolled loop unmodeled; the review floor still holds.
-        status = "no_match"
     assert result["status"] == status
     assert result["minimum_action"] == minimum_action

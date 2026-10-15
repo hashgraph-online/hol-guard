@@ -171,3 +171,52 @@ fn the_sink_plans_package_directory_calls_whole_from_the_root() {
         );
     }
 }
+
+/// The narrower sink refuses a relative `cd` inside the workspace, so the
+/// edge neither peels it nor keeps the narrower profile for its redirect:
+/// the workspace sandbox runs the text whole.
+#[cfg(unix)]
+#[test]
+fn relative_in_workspace_cd_keeps_the_workspace_sandbox() {
+    use crate::pretool::PathContext;
+    // Below the build tree, as the temporary directory is a protected root
+    // on macOS unless the workspace itself is proved private.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/narrower-sink-fixtures")
+        .join(format!("relative-cd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("project/web")).unwrap();
+    let root = root.canonicalize().unwrap();
+    let home = root.to_str().unwrap();
+    let ws = root.join("project");
+    let cwd = ws.to_str().unwrap();
+    let context = PathContext {
+        home_dir: Some(home),
+        cwd: Some(cwd),
+        cdpath_unset: true,
+        ..PathContext::default()
+    };
+    let core = |raw: &str| {
+        let model = crate::parse_command(&crate::CommandModelRequestV1 {
+            command: raw.to_owned(),
+            dialect: "posix".into(),
+            transport: "shell_string".into(),
+            extraction_provenance: "pre-tool-generic".into(),
+        })
+        .unwrap();
+        crate::pretool::contained_wrapper::contained_core(&model, context).is_some()
+    };
+    for raw in [
+        "cd web && npm run build 2>&1 | tail -15",
+        "cd ./web && npm run build 2>&1 | tail -15",
+        "cd web && ./node_modules/.bin/vite build | tail -15",
+    ] {
+        assert!(!core(raw), "{raw}");
+        assert!(!super::narrower_sink_runs(raw, context), "{raw}");
+    }
+    let absolute = format!("cd {cwd}/web && npm run build 2>&1 | tail -15");
+    for raw in [absolute.as_str(), "npm run build 2>&1 | tail -15"] {
+        assert!(core(raw), "{raw}");
+        assert!(super::narrower_sink_runs(raw, context), "{raw}");
+    }
+}

@@ -20,6 +20,7 @@ from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
 from .agent_configuration import write_agent_configuration
+from .case_helpers import generate_observed_extension
 from .catalog import catalog_digest
 from .cleanup import cleanup_case_resources
 from .contained_judge import (
@@ -220,7 +221,7 @@ def run_contained_profile(
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
+            generate_observed_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
             extension_sha256 = digest_file(extension)
             wrapper_command = _guard_wrapper_command(extension)
             wrapper_sha256 = digest_file(Path(wrapper_command))

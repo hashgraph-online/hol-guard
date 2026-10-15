@@ -455,11 +455,18 @@ fn custom_rules_still_answer_a_command_that_launches_no_local_cli() {
     // `pwd` launches no local CLI, so no custom rule can block it.
     assert_eq!(run(&rules, allowed_payload(&rules))["outcome"], "answer");
     // The edge reviews a launch it cannot prove benign, so the daemon
-    // renders that verdict whether or not a rule names the CLI.
-    assert_eq!(
-        deferred(&run(&rules, package_script_payload(&rules))),
-        "direct_hook_not_allow"
-    );
+    // renders that verdict whether or not a rule names the CLI. On macOS the
+    // edge raises that review to contained execution, which Codex cannot
+    // run, so the lane answers the deny the daemon passes through.
+    let launched = run(&rules, package_script_payload(&rules));
+    if cfg!(target_os = "macos") {
+        assert_eq!(launched["outcome"], "answer", "{launched}");
+        let result = &launched["edge"]["result"];
+        assert_eq!(result["minimum_action"], "sandbox-required", "{launched}");
+        assert_eq!(result["decision"], "deny", "{launched}");
+    } else {
+        assert_eq!(deferred(&launched), "direct_hook_not_allow");
+    }
 }
 
 #[test]

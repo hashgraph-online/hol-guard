@@ -27,6 +27,7 @@ from .case_helpers import (
     _scenario_prompt,
     _scenario_tools,
     _watch_binding,
+    generate_observed_extension,
     read_case_logs,
     ready_watch_binding,
 )
@@ -201,7 +202,7 @@ def run_case(
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(
+            generate_observed_extension(
                 extension, guard_home=fixture.root / "guard-home", home=fixture.home, settings_path=settings
             )
             case["guard_extension_sha256"] = digest_file(extension)
