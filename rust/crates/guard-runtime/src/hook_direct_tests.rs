@@ -372,6 +372,8 @@ fn request_shapes_the_daemon_must_handle_defer() {
     );
     let mut elsewhere = allowed_payload(&lane);
     elsewhere["cwd"] = json!(lane.fixture.root.to_str().unwrap());
+    // An overlay keeps the unbound directory waiting for its own publish.
+    fs::write(lane.fixture.root.join(".hol-guard.toml"), b"").unwrap();
     assert_eq!(
         deferred(&run(&lane, elsewhere)),
         DirectLaneDefer::WorkspaceUnknown.code()

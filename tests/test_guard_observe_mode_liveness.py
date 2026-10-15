@@ -73,6 +73,9 @@ def test_observe_mode_denies_failed_local_review_with_a_fixed_response(
     (guard_home / "config.toml").write_text('mode = "observe"\n', encoding="utf-8")
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
+    # The failure is injected into the daemon's review, so keep Oh My Pi
+    # hooks off the resident's direct lane, which answers them itself.
+    monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
         daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
         "_review_native_edge_with_snapshot",
@@ -110,6 +113,9 @@ def test_prompt_mode_still_blocks_failed_local_review(
     workspace.mkdir(parents=True)
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
+    # The failure is injected into the daemon's review, so keep Oh My Pi
+    # hooks off the resident's direct lane, which answers them itself.
+    monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
         daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
         "_review_native_edge_with_snapshot",
@@ -148,6 +154,9 @@ def test_prompt_mode_denies_unverified_inspection_when_review_cannot_complete(
     workspace.mkdir(parents=True)
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
+    # The failure is injected into the daemon's review, so keep Oh My Pi
+    # hooks off the resident's direct lane, which answers them itself.
+    monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
         daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
         "_review_native_edge_with_snapshot",

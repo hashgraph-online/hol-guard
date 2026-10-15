@@ -12,6 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
+use std::sync::atomic::Ordering;
 
 pub(crate) struct Fixture {
     pub(crate) root: std::path::PathBuf,
@@ -199,6 +200,116 @@ fn withdrawn_or_stale_ack_defers() {
         fixture.store.admit_direct_lane("/work/repo").err(),
         Some(DirectLaneDefer::AckMissing)
     );
+}
+
+/// Write the current ACK beside the live one, then move it into place, as
+/// the publisher does.
+fn replace_with_current_ack(root: &Path, policy_digest: &str) {
+    replace_with_current_ack_until(root, policy_digest, now_ms().unwrap() + 30_000);
+}
+
+fn replace_with_current_ack_until(root: &Path, policy_digest: &str, lease_expires_at_ms: u64) {
+    let staging = root.join("staging");
+    write_ack(&staging, 1, policy_digest, lease_expires_at_ms, 0o600);
+    fs::rename(
+        staging
+            .join(DIRECT_LANE_ACK_DIRECTORY)
+            .join(DIRECT_LANE_ACK_FILE_NAME),
+        root.join(DIRECT_LANE_ACK_DIRECTORY)
+            .join(DIRECT_LANE_ACK_FILE_NAME),
+    )
+    .unwrap();
+}
+
+#[test]
+fn an_ack_behind_the_bound_snapshot_is_awaited_briefly() {
+    let fixture = fixture("ack-settle");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    let digest = fixture.snapshot.policy_digest.clone();
+    let lease = now_ms().unwrap() + 30_000;
+    write_ack(&fixture.root, 0, &digest, lease, 0o600);
+    let root = fixture.root.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        replace_with_current_ack(&root, &digest);
+    });
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
+    writer.join().unwrap();
+    assert_eq!(
+        fixture
+            .store
+            .direct_lane_ack_wait_claimed
+            .load(Ordering::Acquire),
+        1
+    );
+}
+
+#[test]
+fn an_ack_that_expires_during_the_wait_is_expired() {
+    let fixture = fixture("ack-settle-expired");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    let digest = fixture.snapshot.policy_digest.clone();
+    write_ack(&fixture.root, 0, &digest, now_ms().unwrap() + 30_000, 0o600);
+    let root = fixture.root.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        // Already past by the time the waiting hook reads it.
+        replace_with_current_ack_until(&root, &digest, now_ms().unwrap());
+    });
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckExpired)
+    );
+    writer.join().unwrap();
+}
+
+#[test]
+fn an_older_ack_the_publisher_stopped_renewing_is_not_awaited() {
+    let fixture = fixture("ack-dead");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    let digest = fixture.snapshot.policy_digest.clone();
+    write_ack(&fixture.root, 0, &digest, now_ms().unwrap() - 1, 0o600);
+    let started = std::time::Instant::now();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMismatch)
+    );
+    assert!(started.elapsed() < std::time::Duration::from_millis(100));
+    assert_eq!(
+        fixture
+            .store
+            .direct_lane_ack_wait_claimed
+            .load(Ordering::Acquire),
+        0
+    );
+}
+
+#[test]
+fn an_ack_that_never_catches_up_delays_only_one_hook() {
+    let fixture = fixture("ack-stuck");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    let digest = fixture.snapshot.policy_digest.clone();
+    write_ack(&fixture.root, 0, &digest, now_ms().unwrap() + 30_000, 0o600);
+    let started = std::time::Instant::now();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMismatch)
+    );
+    assert!(started.elapsed() >= std::time::Duration::from_millis(100));
+    assert_eq!(
+        fixture
+            .store
+            .direct_lane_ack_wait_claimed
+            .load(Ordering::Acquire),
+        1
+    );
+    // The wait is claimed for this generation, so later hooks defer at once.
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMismatch)
+    );
+    replace_with_current_ack(&fixture.root, &digest);
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
 }
 
 #[test]

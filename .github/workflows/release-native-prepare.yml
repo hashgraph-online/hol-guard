@@ -25,6 +25,13 @@ on:
         default: false
 permissions:
   contents: read
+# Main pushes only warm the trusted compiler caches; they upload nothing that a
+# release consumes. A newer main push therefore replaces a superseded warm run.
+# Publish calls compile their own exact-SHA binaries in a per-run group, so a
+# push can never cancel a release compilation.
+concurrency:
+  group: ${{ github.event_name == 'push' && format('release-native-prepare-{0}', github.ref) || format('release-native-prepare-call-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 jobs:
   compile:
     name: Compile release (${{ matrix.target }})

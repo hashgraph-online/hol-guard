@@ -315,6 +315,9 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     assert 'context="hol-guard / published $VERSION"' in receipt["run"]
     warm = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")
     assert "pull_request" not in warm[True]
+    assert "github.event_name == 'push'" in warm["concurrency"]["group"]
+    assert "github.run_id" in warm["concurrency"]["group"]
+    assert warm["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'push' }}"
     cache = next(step for step in warm["jobs"]["compile"]["steps"] if "rust-cache@" in step.get("uses", ""))
     assert "github.event_name == 'push'" in cache["with"]["save-if"]
     assert "refs/heads/main" in cache["with"]["save-if"]
