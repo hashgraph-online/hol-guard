@@ -23,6 +23,8 @@ _PREVIEW_SUPPRESSED_RULE_IDS = {
     for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
     if extension.extension_id == "command.kubernetes-operations"
     for rule in extension.rules
+    # Allow-floor identification rules name a read; they never review it.
+    if "Kubernetes read-only command" not in rule.action_classes
 } | {
     "command.container-runtime.container-removal",
     "command.container-runtime.container-stop",

@@ -1,9 +1,14 @@
 //! Normalize transparent shell wrappers before Guard evaluates a command
-//! (`runtime/shell_command_wrappers.py`, 426 lines — verbatim).
+//! Source-faithful wrapper projection and native path observations.
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[path = "shell_interpreter_options.rs"]
+mod interpreter_options;
+pub(crate) use interpreter_options::legacy_shell_interpreter_command_payload;
+pub use interpreter_options::shell_interpreter_command_payload;
+#[path = "shell_command_wrappers_paths.rs"]
+mod paths;
+pub use paths::is_trusted_absolute_command_path;
 
 use crate::command_launcher_floors::shlex_quote;
 use crate::env_wrapper::parse_env_wrapper;
@@ -16,7 +21,6 @@ const SHELL_STRING_WRAPPERS: &[&str] = &["ash", "bash", "dash", "fish", "sh", "z
 const NICE_OPTION_FLAGS_WITH_VALUES: &[&str] = &["-n", "--adjustment"];
 const STDBUF_VALUE_FLAGS: &[&str] = &["-i", "-o", "-e"];
 const TIME_OPTION_FLAGS_WITH_VALUES: &[&str] = &["-f", "-o", "--format", "--output"];
-const TRUSTED_INSTALL_DIRS: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShellCommandNormalization {
@@ -31,8 +35,8 @@ pub fn normalize_transparent_shell_command(
     cwd: Option<&Path>,
     home_dir: Option<&Path>,
 ) -> ShellCommandNormalization {
-    let stripped = command_text.trim();
-    if stripped.is_empty() || stripped.len() > SHELL_COMMAND_NORMALIZE_MAX_BYTES {
+    let stripped = command_text.trim_matches(crate::command_option_parsing::python_is_whitespace);
+    if stripped.is_empty() || stripped.chars().count() > SHELL_COMMAND_NORMALIZE_MAX_BYTES {
         return ShellCommandNormalization {
             raw_command: stripped.to_owned(),
             normalized_command: stripped.to_owned(),
@@ -256,25 +260,11 @@ fn unwrap_lean_ctx(parts: &[String]) -> Option<(String, Vec<String>)> {
 
 /// `_unwrap_shell_string_wrapper` (:206-220).
 fn unwrap_shell_string_wrapper(parts: &[String]) -> Option<(String, Vec<String>)> {
-    let mut index = 1usize;
-    while index < parts.len() {
-        let token = &parts[index];
-        if token == "--" {
-            break;
-        }
-        if token.starts_with('-') && !token.starts_with("--") && token[1..].contains('c') {
-            if index + 1 >= parts.len() {
-                return None;
-            }
-            return Some((parts[index + 1].clone(), parts[index + 2..].to_vec()));
-        }
-        if token.starts_with('-') {
-            index += 1;
-            continue;
-        }
-        return None;
-    }
-    None
+    let payload = shell_interpreter_command_payload(parts, 0)?;
+    Some((
+        payload.script_text,
+        parts[payload.tokens_consumed + 1..].to_vec(),
+    ))
 }
 
 /// `_strip_env_wrapper` (:223-229).
@@ -442,119 +432,6 @@ fn command_name(
         .unwrap_or_default()
 }
 
-/// `is_trusted_absolute_command_path` (:337-349).
-pub fn is_trusted_absolute_command_path(
-    command_path: &Path,
-    cwd: Option<&Path>,
-    home_dir: Option<&Path>,
-) -> bool {
-    if path_is_under(command_path, cwd) || !stable_non_writable_path(command_path) {
-        return false;
-    }
-    if root_owned_path_chain(command_path) {
-        return true;
-    }
-    path_is_under_trusted_install_dir(command_path, home_dir)
-}
-
-/// `_stable_non_writable_path` (:352-362).
-fn stable_non_writable_path(path: &Path) -> bool {
-    for candidate in path.ancestors() {
-        if candidate.is_symlink() {
-            if !trusted_symlink_component(candidate) {
-                return false;
-            }
-            continue;
-        }
-        if !path_is_non_writable(candidate) {
-            return false;
-        }
-        if candidate == candidate.parent().unwrap_or(candidate) {
-            break;
-        }
-    }
-    true
-}
-
-/// `_root_owned_path_chain` (:365-366).
-fn root_owned_path_chain(path: &Path) -> bool {
-    path.ancestors().all(path_is_root_owned)
-}
-
-/// `_path_is_under_trusted_install_dir` (:369-371).
-fn path_is_under_trusted_install_dir(path: &Path, _home_dir: Option<&Path>) -> bool {
-    TRUSTED_INSTALL_DIRS
-        .iter()
-        .any(|d| path_is_under(path, Some(Path::new(d))))
-}
-
-/// `_path_is_under` (:374-381).
-fn path_is_under(path: &Path, base: Option<&Path>) -> bool {
-    let Some(base) = base else {
-        return false;
-    };
-    let resolved = resolve(path);
-    let base_resolved = resolve(base);
-    resolved.starts_with(&base_resolved)
-}
-
-/// `Path.resolve(strict=False)` — canonicalize what exists; fall back to the
-/// lexically normalized absolute path for missing tails.
-fn resolve(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-/// `_path_is_root_owned` (:384-385). Missing path → not root-owned.
-/// POSIX-only concept; Windows ACLs have no st_uid — treat as not root-owned
-/// so downstream checks fall to the non-writable leg (fail-closed parity with
-/// the Python early-exit on non-POSIX).
-fn path_is_root_owned(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        std::fs::metadata(path)
-            .map(|m| m.uid() == 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        false
-    }
-}
-
-/// `_trusted_symlink_component` (:388-397).
-fn trusted_symlink_component(path: &Path) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(path) else {
-        return false;
-    };
-    #[cfg(unix)]
-    if meta.uid() != 0 {
-        return false;
-    }
-    #[cfg(not(unix))]
-    let _ = &meta;
-    let Ok(resolved) = std::fs::canonicalize(path) else {
-        return false;
-    };
-    path_is_root_owned(&resolved) && path_is_non_writable(&resolved)
-}
-
-/// `_path_is_non_writable` (:400-401).
-fn path_is_non_writable(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        std::fs::metadata(path)
-            .map(|m| m.mode() & 0o022 == 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        std::fs::metadata(path)
-            .map(|m| m.permissions().readonly())
-            .unwrap_or(false)
-    }
-}
-
 /// `_env_assignments_override_path` (:404-405).
 fn env_assignments_override_path(env_assignments: &[String]) -> bool {
     env_assignments
@@ -570,7 +447,7 @@ fn join_command_fragments(fragments: &[&str]) -> String {
         .map(|f| f.to_string())
         .collect::<Vec<_>>()
         .join(" ")
-        .trim()
+        .trim_matches(crate::command_option_parsing::python_is_whitespace)
         .to_owned()
 }
 
@@ -586,5 +463,8 @@ fn join_shell_tokens(tokens: &[String]) -> String {
             }
         })
         .collect();
-    rendered.join(" ").trim().to_owned()
+    rendered
+        .join(" ")
+        .trim_matches(crate::command_option_parsing::python_is_whitespace)
+        .to_owned()
 }

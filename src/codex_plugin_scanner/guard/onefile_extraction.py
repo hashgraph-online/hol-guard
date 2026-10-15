@@ -4,8 +4,10 @@ Onefile launches extract to ``<tempdir>/_MEIxxxxxx``; the bootloader parent
 removes that directory on normal exit, but a hard-killed launch leaks it. Each
 launch stamps an owner marker recording its pid and bootloader parent pid so the
 resident daemon can prove a leaked directory is dead before reclaiming it.
-Unmarked directories are never deleted — they are only counted so operators can
-see the legacy leak volume.
+Unmarked directories are deleted only when the caller injects an open-files
+scanner and the dir is provably a Guard extraction (see ``onefile_unmarked``)
+that no live process uses; otherwise they are only counted so operators can see
+the legacy leak volume.
 
 This module is imported on the frozen CLI fast path before heavy Guard imports,
 so it must stay stdlib-only.
@@ -20,11 +22,19 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from .onefile_open_paths import OpenPathScanner
+from .onefile_unmarked import (
+    PARTIAL,
+    UNMARKED_MIN_AGE,
+    classify_unmarked_extraction,
+)
 
 _EXTRACTION_DIR_NAME = re.compile(r"^_MEI[0-9A-Za-z]{4,}$")
 
@@ -32,13 +42,10 @@ OWNER_MARKER_NAME = ".hol-guard-extraction-owner.json"
 _OWNER_MARKER_SCHEMA = "guard.onefile-extraction-owner.v1"
 _OWNER_MARKER_MAX_BYTES = 4096
 
-# A data file shipped only by the hol-guard PyInstaller bundle; its presence in
-# an unmarked extraction dir identifies the dir as a legacy Guard leak that this
-# version refuses to delete because ownership cannot be proven.
-_LEGACY_BUNDLE_SENTINEL = ("codex_plugin_scanner", "guard", "daemon", "static", "index.html")
-
 _MAX_RECORDED_ERRORS = 8
 _UNMARKED_BYTES_SAMPLE_LIMIT = 10
+DEFAULT_MAX_UNMARKED_RECLAIMS = 250
+DEFAULT_UNMARKED_TIME_BUDGET = timedelta(minutes=2)
 
 
 def is_onefile_extraction_dir(path: Path, temp_root: Path) -> bool:
@@ -131,6 +138,13 @@ class ExtractionReclaimResult:
     killed_launches: int = 0
     unmarked_count: int = 0
     unmarked_bytes_estimate: int = 0
+    unmarked_reclaimed_count: int = 0
+    unmarked_reclaimed_bytes: int = 0
+    partial_reclaimed_count: int = 0
+    # "disabled" (no scanner injected), "not_needed", "ok", or "unavailable"
+    # (scan failed, so every unmarked dir was skipped).
+    unmarked_scan: str = "disabled"
+    unmarked_budget_exhausted: bool = False
     errors: list[str] = field(default_factory=list)
 
 
@@ -169,8 +183,9 @@ def _remember_error(result: ExtractionReclaimResult, detail: str) -> None:
         result.errors.append(detail)
 
 
-def _is_guard_bundle(extraction_dir: Path) -> bool:
-    return extraction_dir.joinpath(*_LEGACY_BUNDLE_SENTINEL).is_file()
+def _owned_by_current_user(metadata: os.stat_result) -> bool:
+    getuid = getattr(os, "getuid", None)
+    return getuid is not None and metadata.st_uid == getuid()
 
 
 def reclaim_orphaned_extraction_dirs(
@@ -181,13 +196,25 @@ def reclaim_orphaned_extraction_dirs(
     min_age: timedelta = timedelta(minutes=10),
     pid_alive: Callable[[int], bool] = _pid_alive,
     should_stop: Callable[[], bool] = lambda: False,
+    open_path_scanner: OpenPathScanner | None = None,
+    unmarked_min_age: timedelta = UNMARKED_MIN_AGE,
+    max_unmarked_reclaims: int = DEFAULT_MAX_UNMARKED_RECLAIMS,
+    unmarked_time_budget: timedelta | None = DEFAULT_UNMARKED_TIME_BUDGET,
+    monotonic: Callable[[], float] = time.monotonic,
+    dry_run: bool = False,
 ) -> ExtractionReclaimResult:
-    """Reclaim ``_MEI*`` dirs whose marked owner launch is provably dead.
+    """Reclaim ``_MEI*`` dirs that are provably dead.
 
-    A directory is deleted only when it carries a valid owner marker and both
-    the recorded pid and bootloader parent pid are dead. Unmarked directories
-    that contain the Guard bundle sentinel are counted as legacy leaks and left
-    in place.
+    Marked dirs are deleted when both the recorded pid and bootloader parent pid
+    are dead. Unmarked dirs are deleted only when ``open_path_scanner`` is
+    injected and every condition holds: the dir is a Guard bundle or partial
+    Guard extraction (``classify_unmarked_extraction``), owned by this user, not
+    the current extraction, older than ``unmarked_min_age``, and absent from the
+    single system-wide open-files scan. If the scan fails every unmarked dir is
+    skipped. Work per call is bounded by ``max_unmarked_reclaims`` and
+    ``unmarked_time_budget``; remaining dirs are only counted. With ``dry_run``
+    every proof still runs and the counters report what would be deleted, but
+    nothing is removed.
     """
 
     result = ExtractionReclaimResult()
@@ -210,6 +237,10 @@ def reclaim_orphaned_extraction_dirs(
     now_seconds = now.timestamp()
     unmarked_sampled_count = 0
     unmarked_sampled_bytes = 0
+    in_use: frozenset[str] | None = None
+    scan_attempted = False
+    started = monotonic()
+    budget_seconds = unmarked_time_budget.total_seconds() if unmarked_time_budget is not None else None
     for child in children:
         if should_stop():
             return result
@@ -229,7 +260,8 @@ def reclaim_orphaned_extraction_dirs(
             continue
         if current is not None and resolved_child == current:
             continue
-        if now_seconds - child_stat.st_mtime < min_age.total_seconds():
+        age_seconds = now_seconds - child_stat.st_mtime
+        if age_seconds < min_age.total_seconds():
             continue
         owner = _read_owner_marker(child / OWNER_MARKER_NAME)
         if owner is not None:
@@ -241,7 +273,8 @@ def reclaim_orphaned_extraction_dirs(
                 continue
             size = _dir_bytes(child)
             try:
-                shutil.rmtree(child)
+                if not dry_run:
+                    shutil.rmtree(child)
             except OSError as error:
                 _remember_error(result, f"rmtree:{type(error).__name__}")
                 continue
@@ -249,13 +282,71 @@ def reclaim_orphaned_extraction_dirs(
             result.reclaimed_bytes += size
             result.killed_launches += 1
             continue
-        if _is_guard_bundle(child):
-            result.unmarked_count += 1
-            # Walking every legacy dir on the hourly sweep is too expensive on
-            # hosts with hundreds of leaks; sample a bounded set and estimate.
-            if unmarked_sampled_count < _UNMARKED_BYTES_SAMPLE_LIMIT:
-                unmarked_sampled_count += 1
-                unmarked_sampled_bytes += _dir_bytes(child)
+        kind = classify_unmarked_extraction(child)
+        if kind is None:
+            continue
+        reclaimable = (
+            open_path_scanner is not None
+            and age_seconds >= unmarked_min_age.total_seconds()
+            and _owned_by_current_user(child_stat)
+        )
+        if reclaimable and not scan_attempted:
+            scan_attempted = True
+            in_use = open_path_scanner(resolved_root) if open_path_scanner is not None else None
+            result.unmarked_scan = "ok" if in_use is not None else "unavailable"
+            if in_use is None:
+                _remember_error(result, "open_path_scan_unavailable")
+        if reclaimable and in_use is not None:
+            exhausted = result.unmarked_reclaimed_count >= max_unmarked_reclaims or (
+                budget_seconds is not None and monotonic() - started >= budget_seconds
+            )
+            if exhausted:
+                result.unmarked_budget_exhausted = True
+            elif child.name not in in_use and _reclaim_unmarked_dir(child, child_stat, kind, result, dry_run):
+                continue
+        result.unmarked_count += 1
+        # Walking every legacy dir on the hourly sweep is too expensive on
+        # hosts with hundreds of leaks; sample a bounded set and estimate.
+        if unmarked_sampled_count < _UNMARKED_BYTES_SAMPLE_LIMIT:
+            unmarked_sampled_count += 1
+            unmarked_sampled_bytes += _dir_bytes(child)
+    if open_path_scanner is not None and not scan_attempted:
+        result.unmarked_scan = "not_needed"
     if unmarked_sampled_count:
         result.unmarked_bytes_estimate = round(unmarked_sampled_bytes / unmarked_sampled_count * result.unmarked_count)
     return result
+
+
+def _reclaim_unmarked_dir(
+    child: Path,
+    child_stat: os.stat_result,
+    kind: str,
+    result: ExtractionReclaimResult,
+    dry_run: bool = False,
+) -> bool:
+    """Delete one proven-dead unmarked dir; return True when it was removed."""
+
+    try:
+        recheck = child.lstat()
+    except OSError:
+        return False
+    # A launch that touched the dir since we listed it is alive, not leaked.
+    if recheck.st_mtime != child_stat.st_mtime or recheck.st_ino != child_stat.st_ino:
+        return False
+    # Any marker file, even a corrupt one, means a launch claimed this dir.
+    if os.path.lexists(child / OWNER_MARKER_NAME):
+        return False
+    size = _dir_bytes(child)
+    try:
+        if not dry_run:
+            shutil.rmtree(child)
+    except OSError as error:
+        _remember_error(result, f"rmtree:{type(error).__name__}")
+        return False
+    result.reclaimed_count += 1
+    result.reclaimed_bytes += size
+    result.unmarked_reclaimed_count += 1
+    result.unmarked_reclaimed_bytes += size
+    if kind == PARTIAL:
+        result.partial_reclaimed_count += 1
+    return True

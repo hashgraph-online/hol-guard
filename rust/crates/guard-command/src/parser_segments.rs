@@ -138,6 +138,16 @@ pub(super) fn split_execution_segments(
     if quote != Quote::None || escaped {
         return Err("malformed_shell_quoting");
     }
+    // `ls;` is `ls`: one `;` or newline may end the command. A dangling `&&`,
+    // `||` or `|` still continues it, and `ls; ;` still fails.
+    let terminated = segment_start > 0
+        && matches!(chars[segment_start - 1], ';' | '\n')
+        && chars[segment_start..]
+            .iter()
+            .all(|value| value.is_whitespace());
+    if terminated && !segments.is_empty() {
+        return Ok(segments);
+    }
     push_segment(
         &chars,
         segment_start,
@@ -302,6 +312,20 @@ pub(crate) fn shell_tokens(
     command: &str,
     preserve_backslash: bool,
 ) -> Result<Vec<String>, &'static str> {
+    shell_tokens_mode(command, preserve_backslash, true)
+}
+
+pub(crate) fn shell_tokens_preserving_redirects(
+    command: &str,
+) -> Result<Vec<String>, &'static str> {
+    shell_tokens_mode(command, false, false)
+}
+
+fn shell_tokens_mode(
+    command: &str,
+    preserve_backslash: bool,
+    exclude_stderr_redirect: bool,
+) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut token = String::new();
     let mut token_started = false;
@@ -341,7 +365,8 @@ pub(crate) fn shell_tokens(
                 }
             }
             Quote::None => match current {
-                '2' if !token_started
+                '2' if exclude_stderr_redirect
+                    && !token_started
                     && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
                 {
                     // A shell redirection is not an argv operand. Preserve it

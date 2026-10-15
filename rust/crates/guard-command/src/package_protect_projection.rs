@@ -296,7 +296,7 @@ pub fn apply_package_protect_projection(
 /// Composes `{artifact_id, artifact_name, executor, harness, install_kind,
 /// action, risk_signals}` against the borrowed authority. `executor` is
 /// `str(command[0])` when `command` is non-empty else `"guard-cli"`.
-fn install_time_event_payload(
+pub fn install_time_event_payload(
     authority: &PackageProtectAuthority<'_>,
     command: &[String],
     action: GuardAction,

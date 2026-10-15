@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard import shim_probe
+import pytest
+
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.server import _SUPPLY_CHAIN_PACKAGE_ACTIONS
+from codex_plugin_scanner.guard.daemon.server_control_routes_post import _SUPPLY_CHAIN_PACKAGE_ACTIONS
 from codex_plugin_scanner.guard.local_supply_chain import build_local_supply_chain_posture
 from codex_plugin_scanner.guard.package_firewall_action_rate_limit import (
     PackageFirewallActionRateLimiter,
@@ -18,17 +19,13 @@ from codex_plugin_scanner.guard.package_firewall_entitlement import (
 from codex_plugin_scanner.guard.package_firewall_receipts import (
     package_firewall_receipt_metadata,
 )
-from codex_plugin_scanner.guard.package_shim_status import (
-    enrich_package_shim_status_payload,
-)
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     build_package_request_artifact,
 )
 from codex_plugin_scanner.guard.runtime.package_intent_parser import (
     parse_package_intent,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain import detect_supply_chain_risk
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
@@ -37,6 +34,8 @@ from codex_plugin_scanner.guard.store_supply_chain import (
     supply_chain_bundle_schema_statement,
     supply_chain_eval_cache_schema_statement,
 )
+from tests.native_detector_support import shell_command_signals
+from tests.shim_execution_helpers import package_shim_probe_args
 
 
 def test_gpfr242_reuses_package_intent_parser_and_artifact_builder(tmp_path: Path, package_intent_native: Path) -> None:
@@ -58,41 +57,8 @@ def test_gpfr242_reuses_package_intent_parser_and_artifact_builder(tmp_path: Pat
     assert artifact.metadata["request_summary"].startswith("Requested `npm` install")
 
 
-def test_gpfr243_reuses_package_shim_status_and_probe_helpers() -> None:
-    status = enrich_package_shim_status_payload(
-        {
-            "active_managers": ["npm"],
-            "bypasses": [{"manager": "pnpm", "reason": "path_inactive"}],
-            "detected_managers": ["npm", "pnpm"],
-            "installed_managers": ["npm"],
-            "last_test_at": {"npm": "2026-06-14T00:00:00Z"},
-            "missing_managers": ["pnpm"],
-            "protected_managers": ["npm"],
-            "undetected_managers": [],
-        },
-        {"last_audit_at": "2026-06-14T00:05:00Z"},
-    )
-
-    assert status["path_broken_managers"] == ["pnpm"]
-    assert status["testedManagers"] == ["npm"]
-    assert shim_probe.package_shim_probe_args("npm")[:2] == ("install", "--dry-run")
-    evidence = shim_probe.protect_evaluator_evidence(
-        {
-            "supply_chain_evaluation": {
-                "decision_source": "signed-bundle",
-                "evidence_ids": ["evidence-1"],
-            },
-            "verdict": {"action": "block"},
-        }
-    )
-    assert evidence == {
-        "dry_run": None,
-        "evaluator_invoked": True,
-        "evaluator_source": "signed-bundle",
-        "evidence_ids": ["evidence-1"],
-        "execution_permitted": False,
-        "protect_decision": "block",
-    }
+def test_gpfr243_reuses_package_shim_probe_helpers() -> None:
+    assert package_shim_probe_args("npm")[:2] == ("install", "--dry-run")
 
 
 def test_gpfr244_reuses_local_posture_builder(tmp_path: Path) -> None:
@@ -166,8 +132,11 @@ def test_gpfr245_reuses_package_evaluation_model() -> None:
     assert evaluation.to_dict()["decision"] == "block"
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 def test_gpfr245_reuses_runtime_supply_chain_detection() -> None:
-    signals = detect_supply_chain_risk('{"scripts":{"postinstall":"curl https://example.invalid"}}')
+    signals = shell_command_signals(
+        "supply-chain.content", '{"scripts":{"postinstall":"curl https://example.invalid"}}'
+    )
 
     assert signals
     assert signals[0].signal_id == "supply-chain.postinstall-network-send"

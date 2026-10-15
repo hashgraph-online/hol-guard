@@ -13,7 +13,12 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
-from ..path_support import path_entry_exists, read_text_file_within_root, resolves_within_root
+from ..path_support import (
+    LICENSE_FILENAMES,
+    path_entry_exists,
+    read_text_file_within_root,
+    resolves_within_root,
+)
 from .security_failures import ScanInputUnreadableError, unreadable_scan_input_failure
 from .security_secret_patterns import (
     DOCUMENTATION_EXTS,
@@ -598,8 +603,13 @@ def check_security_md(plugin_dir: Path) -> CheckResult:
 
 
 def check_license(plugin_dir: Path) -> CheckResult:
-    lp = plugin_dir / "LICENSE"
-    if not lp.exists():
+    lp: Path | None = None
+    for filename in LICENSE_FILENAMES:
+        candidate = plugin_dir / filename
+        if path_entry_exists(candidate):
+            lp = candidate
+            break
+    if lp is None:
         return CheckResult(
             name="LICENSE found",
             passed=False,
@@ -613,7 +623,7 @@ def check_license(plugin_dir: Path) -> CheckResult:
                     category="security",
                     title="LICENSE file is missing",
                     description="Plugins should ship a LICENSE file so consumers can review usage rights.",
-                    remediation="Add a LICENSE file that matches the manifest license metadata.",
+                    remediation="Add a LICENSE or LICENSE.md file that matches the manifest license metadata.",
                     file_path="LICENSE",
                 ),
             ),

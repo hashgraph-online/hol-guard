@@ -55,6 +55,24 @@ const CHANGED_BOOL_KEYS: &[&str] = &[
     "contentChanged",
 ];
 const CHANGED_CAPABILITY_KEYS: &[&str] = &["changed_capabilities", "changedCapabilities"];
+/// Subtrees the model or the tool authored. A `changed` flag or hash pair in
+/// tool arguments or output is data, not Guard's artifact-change evidence.
+const MODEL_AUTHORED_KEYS: &[&str] = &[
+    "tool_input",
+    "toolInput",
+    "tool_response",
+    "toolResponse",
+    "tool_output",
+    "toolOutput",
+    "arguments",
+    "args",
+    "params",
+    "parameters",
+    "input",
+    "content",
+    "output",
+    "result",
+];
 
 #[derive(Debug, Default)]
 pub(super) struct PolicyFacts {
@@ -98,6 +116,34 @@ pub(super) fn collect_fact_maps<'a>(
     Ok(())
 }
 
+/// The maps outside model-authored subtrees. The payload already passed
+/// `collect_fact_maps`, so this subset walk stays within the same bounds.
+fn guard_authored_maps<'a>(
+    value: &'a Value,
+    depth: usize,
+    output: &mut Vec<&'a Map<String, Value>>,
+) {
+    if depth > MAX_FACT_DEPTH {
+        return;
+    }
+    match value {
+        Value::Object(record) => {
+            output.push(record);
+            for (key, child) in record {
+                if !MODEL_AUTHORED_KEYS.contains(&key.as_str()) {
+                    guard_authored_maps(child, depth.saturating_add(1), output);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                guard_authored_maps(child, depth.saturating_add(1), output);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
 pub(super) fn bounded_selector_value(value: &str) -> Result<String, String> {
     let value = value.trim();
     if value.is_empty()
@@ -139,6 +185,16 @@ pub(super) fn optional_identity(
         }
     }
     Ok(selected)
+}
+
+fn identity_metadata_supplied(maps: &[&Map<String, Value>], keys: &[&str]) -> bool {
+    maps.iter().any(|record| {
+        keys.iter().any(|key| {
+            record
+                .get(*key)
+                .is_some_and(|value| !value.is_null() && !value.is_string())
+        })
+    })
 }
 
 pub(super) fn path_values_sensitive(maps: &[&Map<String, Value>]) -> Result<bool, String> {
@@ -424,6 +480,10 @@ pub(super) fn payload_facts(
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
     let publisher = optional_identity(&maps, PUBLISHER_KEYS)?;
     let artifact = optional_identity(&maps, ARTIFACT_KEYS)?;
+    // An object is not a selector, but it is still publisher metadata. A
+    // proven constant eval may skip the floor only when no identity was sent.
+    let unusable_identity = identity_metadata_supplied(&maps, PUBLISHER_KEYS)
+        || identity_metadata_supplied(&maps, ARTIFACT_KEYS);
     let budget_input = codex_command_budget_input(payload, harness, action_type);
     // Only an exact root-level, syntactically bounded process start identity
     // is timing metadata. Nested copies, extra keys, credentials and command
@@ -433,16 +493,20 @@ pub(super) fn payload_facts(
         || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");
+    // A harness code tool proven to run only a constant has no effect a
+    // publisher could make worse; a declared publisher still counts.
     let publisher_relevant = publisher.is_some()
         || artifact.is_some()
-        || matches!(
-            action_type,
-            PreToolActionTypeV1::Package | PreToolActionTypeV1::McpTool
-        );
+        || unusable_identity
+        || action_type == PreToolActionTypeV1::Package
+        || (action_type == PreToolActionTypeV1::McpTool
+            && reason_code != "native_pure_constant_eval");
+    let mut change_maps = Vec::new();
+    guard_authored_maps(payload, 0, &mut change_maps);
     Ok(PolicyFacts {
         publisher,
         artifact,
-        changed_hash: payload_changed_hash(&maps)?,
+        changed_hash: payload_changed_hash(&change_maps)?,
         sensitive_target,
         publisher_relevant,
     })

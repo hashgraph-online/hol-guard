@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
     HOOK_SCRIPT_NAME,
-    _hook_script_mode_is_executable,
     _strip_managed_hook_entries,
     cursor_hook_response_from_guard,
     cursor_hook_should_block,
@@ -45,15 +44,6 @@ def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifac
         config_path=str(workspace_dir / ".cursor" / "mcp.json"),
         command=command,
     )
-
-
-def test_cursor_hook_executable_mode_is_platform_portable(monkeypatch) -> None:
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "nt")
-    assert _hook_script_mode_is_executable(0o600) is True
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "posix")
-    assert _hook_script_mode_is_executable(0o600) is False
-    assert _hook_script_mode_is_executable(0o700) is True
 
 
 def _record_cursor_pending_for_test(
@@ -706,12 +696,9 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
     assert not marker.exists()
 
 
-def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
+def test_cursor_hook_script_follows_a_live_daemon_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-
-    # The daemon fast path asserts the off-mode denial surface; pin the mode so
-    # a native-regression ambient env does not force a live native review.
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard"
@@ -749,10 +736,8 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     finally:
         daemon.stop()
 
-    assert proc.returncode == 2
-    response = json.loads(proc.stdout)
-    assert response["permission"] == "deny"
-    assert "explicitly disabled" in response["user_message"]
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {"permission": "allow"}
 
 
 @pytest.mark.parametrize(
@@ -1271,6 +1256,75 @@ def test_cursor_after_shell_requires_observer_fields(tmp_path: Path) -> None:
     assert saved is False
 
 
+def test_cursor_after_shell_refuses_pending_state_that_expires_during_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timedelta
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.cli import commands_support_permission_store as permission_store
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-expiry-boundary"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    generation_id = "gen-cursor-expiry-boundary"
+    _record_cursor_pending_for_test(
+        store=store,
+        guard_home=home_dir,
+        guard_commands_module=guard_commands_module,
+        conversation_id=conversation_id,
+        command=command,
+        workspace_dir=workspace_dir,
+        generation_id=generation_id,
+    )
+    pending = guard_commands_module._load_cursor_pending_shell_permission(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+    )
+    assert pending is not None
+    saved_at = datetime.fromisoformat(str(pending["saved_at"]))
+    clocks = iter(
+        (
+            (saved_at + timedelta(seconds=29 * 60)).isoformat(),
+            (saved_at + timedelta(seconds=31 * 60)).isoformat(),
+        )
+    )
+    monkeypatch.setattr(permission_store, "_now", lambda: next(clocks))
+    payload = prepare_cursor_hook_payload(
+        {
+            "conversation_id": conversation_id,
+            "generation_id": generation_id,
+            "hook_event_name": "afterShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+            "duration": 15,
+        }
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=payload,
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_shell_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=command,
+            workspace_dir=workspace_dir,
+            approval_binding=generation_id,
+        ),
+    )
+    assert saved is False
+    assert guard_commands_module._load_cursor_native_shell_allowance(store, payload) is None
+
+
 def test_cursor_hook_should_block() -> None:
     assert cursor_hook_should_block(policy_action="block") is True
     assert cursor_hook_should_block(policy_action="allow") is False
@@ -1681,82 +1735,6 @@ def test_forged_after_shell_without_attestation_is_rejected(tmp_path: Path) -> N
         ),
     )
     assert len(store.list_policy_decisions("cursor")) == 0
-
-
-def test_cursor_session_allow_without_generation_id_uses_binding_file(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import read_cursor_shell_binding_file
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-no-generation-id"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=None,
-    )
-    approval_binding = read_cursor_shell_binding_file(
-        home_dir,
-        conversation_id=conversation_id,
-        command=command,
-    )
-    assert approval_binding is not None
-    assert approval_binding.startswith("hol-guard:")
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 8,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=approval_binding,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-
-
-def test_cursor_after_shell_proof_message_uses_null_separator() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_after_shell_proof_message
-
-    message = cursor_after_shell_proof_message(
-        conversation_id="conv-test",
-        command="echo hello",
-        approval_binding="hol-guard:test-binding",
-    )
-    assert message == (b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution")
 
 
 def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:

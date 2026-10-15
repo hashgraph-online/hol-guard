@@ -21,6 +21,13 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import READ_ONLY
         ["python3", "-c", "print(1)", "extra"],
         ["python3", "-I", "-m", "arbitrary"],
         ["python3", "-S", "file.py"],
+        ["python3", "deploy.py"],
+        ["python3", "../test_calc.py"],
+        ["python3", "/tmp/test_calc.py"],
+        ["python3", "-W", "ignore", "test_calc.py"],
+        ["python3", "-m", "test_calc"],
+        ["python3", "-m", "unittest", "-k", "$NAME"],
+        ["python3", "-m", "unittest", "a;b"],
         ["python3", "-W", "ignore", "-c", "print(1)"],
         ["python3", "-I", "-I", "-c", "print(1)"],
         ["python3", "-IS", "-S", "-c", "print(1)"],
@@ -46,6 +53,47 @@ def test_python_inline_eval_accepts_only_bounded_isolation_flags(flags):
     argv = ["python3", *flags, "-c", "print(1)"]
     assert inline.is_inline_eval(argv)
     assert inline._python_runtime_args(argv) == tuple(flags)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["python3", "test_calc.py"],
+        ["python3", "test_calc.py", "-v"],
+        ["python3", "-I", "tests/test_parser.py"],
+        ["/usr/bin/python3.12", "src/calc_test.py"],
+        ["python3", "run_tests.py"],
+    ],
+)
+def test_test_named_python_scripts_share_the_inline_profile(argv):
+    assert inline.is_inline_eval(argv)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["python3", "-m", "unittest"],
+        ["python3", "-m", "unittest", "-q"],
+        ["python", "-I", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"],
+        ["/usr/bin/python3.12", "-m", "unittest", "test_calc.CalcTest.test_add", "-v"],
+    ],
+)
+def test_unittest_shares_the_inline_profile(argv):
+    assert inline.is_inline_eval(argv)
+
+
+@pytest.mark.parametrize("target", ["missing", "outside", "directory"])
+def test_test_script_must_be_a_workspace_file(tmp_path, target):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "test_outside.py"
+    outside.write_text("print(1)\n")
+    if target == "outside":
+        (workspace / "test_calc.py").symlink_to(outside)
+    elif target == "directory":
+        (workspace / "test_calc.py").mkdir()
+    with pytest.raises(RestrictedPytestError):
+        inline.prepare_restricted_inline_eval(["python3", "test_calc.py"], workspace=workspace)
 
 
 @pytest.mark.parametrize(
@@ -94,10 +142,19 @@ def test_original_and_resolved_eval_need_independent_native_authority(
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Actual macOS execution boundary")
 @pytest.mark.parametrize(
-    "runtime,flags", [("python3", []), ("python3", ["-I", "-S"]), ("python3", ["-IS"]), ("node", [])]
+    "runtime,flags",
+    [
+        ("python3", []),
+        ("python3", ["-I", "-S"]),
+        ("python3", ["-IS"]),
+        ("script", []),
+        ("script", ["-I"]),
+        ("unittest", []),
+        ("node", []),
+    ],
 )
 def test_actual_eval_computes_data_but_cannot_read_credentials_or_mutate_source(tmp_path, runtime, flags, monkeypatch):
-    if shutil.which(runtime) is None:
+    if runtime not in {"script", "unittest"} and shutil.which(runtime) is None:
         pytest.skip(f"{runtime} is unavailable")
     monkeypatch.delenv("PYTHONPATH", raising=False)
     (tmp_path / "pyproject.toml").write_text('[project]\nname="guard-synthetic-eval"\nversion="0.0.0"\n')
@@ -108,7 +165,7 @@ def test_actual_eval_computes_data_but_cannot_read_credentials_or_mutate_source(
     directory = tmp_path / "source-directory"
     directory.mkdir()
     (directory / "ordinary.txt").write_text("original")
-    if runtime == "python3":
+    if runtime in {"python3", "script", "unittest"}:
         code = """import json, pathlib, shutil, socket, subprocess, tempfile
 assert sum(json.loads(pathlib.Path("data.json").read_text())["values"]) == 6
 with tempfile.TemporaryDirectory() as directory:
@@ -139,7 +196,17 @@ print("guard-python-eval-boundary-verified")
             ),
             None,
         )
-        argv = [str(system_python) if system_python else runtime, *flags, "-c", code]
+        python = str(system_python) if system_python else "python3"
+        if runtime == "script":
+            (tmp_path / "test_boundary.py").write_text(code)
+            argv = [python, *flags, "test_boundary.py"]
+        elif runtime == "unittest":
+            # Discovery imports the module; one passing case keeps the run green.
+            case = "import unittest\nclass Boundary(unittest.TestCase):\n    def test_ok(self):\n        pass\n"
+            (tmp_path / "test_boundary.py").write_text(code + case)
+            argv = [python, *flags, "-m", "unittest", "-q"]
+        else:
+            argv = [python, *flags, "-c", code]
     else:
         code = """const fs=require('node:fs'), assert=require('node:assert'), cp=require('node:child_process');
 assert.equal(JSON.parse(fs.readFileSync('data.json')).values.reduce((a,b)=>a+b),6);

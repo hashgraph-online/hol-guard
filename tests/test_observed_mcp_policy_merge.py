@@ -32,11 +32,10 @@ def test_observed_choices_preserve_configured_restrictions(
     from codex_plugin_scanner.guard import config
 
     monkeypatch.setattr(config, "load_guard_config", lambda *args, **kwargs: SimpleNamespace(mode="enforce"))
-    monkeypatch.setattr(inputs_module, "effective_native_policy_v3", lambda config: {})
     monkeypatch.setattr(
         inputs_module,
-        "_merge_effective_native_policies",
-        lambda policies: {"mcp_tool_actions": configured},
+        "compose_effective_native_policies",
+        lambda configs: {"mcp_tool_actions": dict(configured)},
     )
     monkeypatch.setattr(
         observed_mcp_tools,

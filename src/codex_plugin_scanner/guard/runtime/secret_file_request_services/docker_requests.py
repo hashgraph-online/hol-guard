@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shlex
-from pathlib import Path
 
 from ..env_wrapper import parse_env_wrapper
 from ..executable_resolution import which_for_execution_cwd
@@ -23,7 +22,6 @@ from .constants_core import (
 )
 from .constants_patterns import _SHELL_ASSIGNMENT_PATTERN
 from .request_artifacts import _docker_buildx_subcommand_index, _normalized_shell_command_name
-from .request_models import _SENSITIVE_PATH_REASONS, ToolActionRequestMatch, classify_sensitive_path
 from .shell_tokenization import (
     _docker_attached_short_context_option,
     _docker_build_args_are_sensitive,
@@ -37,50 +35,6 @@ from .shell_tokenization import (
 )
 
 _which_for_execution_cwd = which_for_execution_cwd
-
-
-def _docker_sensitive_tool_action_request(
-    *,
-    tool_name: str,
-    normalized_tool_name: str,
-    command_text: str,
-) -> ToolActionRequestMatch | None:
-    if _docker_sensitive_reason(command_text) is None:
-        return None
-    return ToolActionRequestMatch(
-        tool_name=tool_name,
-        normalized_tool_name=normalized_tool_name,
-        command_text=command_text,
-        action_class="docker-sensitive command",
-        reason=(
-            "Guard treats Docker login, run, push, and credential-bearing build "
-            "actions as sensitive because they can expose credentials or execute privileged "
-            "container workflows. Docker Compose actions are sensitive when they use "
-            "subcommands that execute arbitrary commands or copy files (run, exec, cp, push, "
-            "publish, watch), supply secret-bearing input (--env-file), target a non-default "
-            "Docker host or context, or carry TLS/credential material through flags or "
-            "environment variables."
-        ),
-    )
-
-
-def _docker_config_tool_action_request(
-    *,
-    tool_name: str,
-    normalized_tool_name: str,
-    command_text: str,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> ToolActionRequestMatch | None:
-    if _docker_config_path_from_command(command_text, cwd=cwd, home_dir=home_dir) is None:
-        return None
-    return ToolActionRequestMatch(
-        tool_name=tool_name,
-        normalized_tool_name=normalized_tool_name,
-        command_text=command_text,
-        action_class="Docker client config access",
-        reason=_SENSITIVE_PATH_REASONS["Docker client config"],
-    )
 
 
 def _shell_execution_context_validation_reason(context: ShellExecutionContext) -> str | None:
@@ -331,21 +285,6 @@ def _docker_compose_flag_option_matches(token: str) -> bool:
     )
 
 
-def _docker_config_path_from_command(
-    command_text: str,
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> str | None:
-    normalized_command = command_text.replace("\\", "/")
-    if ".docker/config.json" not in normalized_command:
-        return None
-    match = classify_sensitive_path(".docker/config.json", cwd=cwd, home_dir=home_dir)
-    if match is None:
-        return None
-    return match.normalized_path
-
-
 __all__ = [
     "_docker_compose_args_include_secret_bearing_option",
     "_docker_compose_flag_option_matches",
@@ -353,8 +292,6 @@ __all__ = [
     "_docker_compose_option_is_secret_bearing",
     "_docker_compose_sensitive_reason",
     "_docker_compose_subcommand_reason",
-    "_docker_config_path_from_command",
-    "_docker_config_tool_action_request",
     "_docker_env_assignment",
     "_docker_env_assignments_are_sensitive",
     "_docker_env_context_is_sensitive",
@@ -363,7 +300,6 @@ __all__ = [
     "_docker_global_context_is_sensitive",
     "_docker_global_context_value_is_sensitive",
     "_docker_sensitive_reason",
-    "_docker_sensitive_tool_action_request",
     "_shell_execution_context_validation_reason",
     "_which_for_execution_cwd",
     "shell_execution_context_starts_with_literal_cd",

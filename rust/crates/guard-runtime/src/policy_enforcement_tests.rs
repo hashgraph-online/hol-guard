@@ -244,6 +244,30 @@ fn prompt_risk_floor_remains_for_unproven_prompt_intent() {
     .unwrap();
     assert_eq!(result.minimum_action, "require-reapproval");
     assert_eq!(result.decision, "deny");
+    assert!(
+        result.reason.contains("did not send this prompt"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        result
+            .reason
+            .contains("asks to override trusted instructions"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        result.reason.contains("Nothing is waiting for approval"),
+        "{}",
+        result.reason
+    );
+    assert!(
+        result
+            .reason
+            .contains("hol-guard settings set risk prompt_injection"),
+        "{}",
+        result.reason
+    );
 }
 
 #[test]
@@ -326,6 +350,7 @@ fn observe_pre_policy_floor_is_non_blocking_but_intrinsic_block_is_hard() {
     .unwrap();
     assert_eq!(policy_only.minimum_action, "warn");
     assert_eq!(policy_only.decision, "allow");
+    assert_eq!(policy_only.reason_code, "native_policy_observed_floor");
 
     let intrinsic = apply_pre_tool_policy(
         &observed_snapshot,
@@ -440,5 +465,30 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
     );
 }
 
+#[path = "policy_enforcement_omp_eval_output_tests.rs"]
+mod omp_eval_output_tests;
 #[path = "policy_enforcement_post_tool_tests.rs"]
 mod post_tool_tests;
+
+#[test]
+fn observe_keeps_only_a_warn_floor_over_a_proven_allow_silent() {
+    for (floor, intrinsic, expected) in [
+        ("warn", "allow", "native_policy_warning"),
+        ("review", "allow", "native_policy_observed_floor"),
+        ("block", "warn", "native_policy_observed_floor"),
+    ] {
+        let mut observed_snapshot = snapshot(policy(floor));
+        observed_snapshot.mode = "observe".into();
+        let result = apply_pre_tool_policy(
+            &observed_snapshot,
+            &Value::Object(Map::new()),
+            generic_result(intrinsic),
+        )
+        .unwrap();
+        assert_eq!(result.decision, "allow", "{floor} over {intrinsic}");
+        assert_eq!(result.reason_code, expected, "{floor} over {intrinsic}");
+    }
+}
+
+#[path = "policy_enforcement_floor_cause_tests.rs"]
+mod floor_cause;

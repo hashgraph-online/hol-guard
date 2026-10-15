@@ -1,0 +1,2557 @@
+{
+ "artifact_id": "claude-code:native-pretool:Bash",
+ "control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+ "environment": {
+  "HOME": "/home/dev",
+  "LANG": "C.UTF-8",
+  "PATH": "/usr/bin:/bin"
+ },
+ "home_dir": "/home/dev",
+ "queries": [
+  {
+   "artifact_id": "claude-code:native-pretool:Bash",
+   "harness": "claude-code",
+   "name": "bash-command",
+   "payload": {
+    "cwd": "/work/repo",
+    "tool_input": {
+     "command": "npm test",
+     "description": "run"
+    },
+    "tool_name": "Bash"
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": "npm test",
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": "/work/repo",
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": [
+     [
+      "command",
+      "npm test"
+     ],
+     [
+      "description",
+      "run"
+     ]
+    ],
+    "tool_name": "Bash",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:Read",
+   "harness": "claude-code",
+   "name": "camel-case-read",
+   "payload": {
+    "toolInput": {
+     "file_path": "src/a.py",
+     "limit": 20
+    },
+    "toolName": " Read "
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": null,
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": [
+     [
+      "file_path",
+      "src/a.py"
+     ],
+     [
+      "limit",
+      20
+     ]
+    ],
+    "tool_name": "Read",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:shell",
+   "harness": "claude-code",
+   "name": "arguments-cmd",
+   "payload": {
+    "arguments": {
+     "cmd": "ls -la"
+    },
+    "tool": "shell"
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": "ls -la",
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": [
+     [
+      "cmd",
+      "ls -la"
+     ]
+    ],
+    "tool_name": "shell",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:Bash",
+   "harness": "claude-code",
+   "name": "top-level-command-blank-cwd",
+   "payload": {
+    "command": "git status",
+    "cwd": "   ",
+    "tool_name": "Bash"
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": "git status",
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": null,
+    "tool_name": "Bash",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:tool",
+   "harness": "claude-code",
+   "name": "blank-tool-name-later-command",
+   "payload": {
+    "tool_input": {
+     "command": "  ",
+     "shell_command": "make"
+    },
+    "tool_name": "  "
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": "make",
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": [
+     [
+      "command",
+      "  "
+     ],
+     [
+      "shell_command",
+      "make"
+     ]
+    ],
+    "tool_name": "tool",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:Grep",
+   "harness": "claude-code",
+   "name": "grep-nested-values",
+   "payload": {
+    "tool_input": {
+     "-n": true,
+     "glob": null,
+     "head_limit": 5,
+     "path": "src",
+     "pattern": "x",
+     "z": [
+      1,
+      {}
+     ]
+    },
+    "tool_name": "Grep"
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": null,
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": [
+     [
+      "pattern",
+      "x"
+     ],
+     [
+      "path",
+      "src"
+     ],
+     [
+      "-n",
+      true
+     ],
+     [
+      "head_limit",
+      5
+     ],
+     [
+      "glob",
+      null
+     ],
+     [
+      "z",
+      [
+       1,
+       {}
+      ]
+     ]
+    ],
+    "tool_name": "Grep",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:WebFetch",
+   "harness": "claude-code",
+   "name": "no-tool-input",
+   "payload": {
+    "tool_name": "WebFetch"
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": null,
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": "shell",
+     "decision": "deny",
+     "minimum_action": "review",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": null,
+    "tool_name": "WebFetch",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": "claude-code:native-pretool:Bash",
+   "harness": "claude-code",
+   "name": "require-reapproval-no-action",
+   "payload": {
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "query": {
+    "budget_ms": 4000,
+    "command": "rm -rf build",
+    "environment": {
+     "HOME": "/home/dev",
+     "LANG": "C.UTF-8",
+     "PATH": "/usr/bin:/bin"
+    },
+    "extension_control_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "facts": {
+     "action_type": null,
+     "decision": "deny",
+     "minimum_action": "require-reapproval",
+     "policy_action": "review",
+     "reason_code": "native_command_extension_review"
+    },
+    "harness": "claude-code",
+    "home_dir": "/home/dev",
+    "kind": "exact_action",
+    "payload_cwd": null,
+    "policy_binding": {
+     "state": "bound",
+     "value": {
+      "command_extensions": {
+       "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "control_revision": 3,
+       "managed_control_revision": 5,
+       "observation_count": 1,
+       "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+       "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "schema": "guard.native-command-receipt-binding.v1",
+       "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "uncertainty_count": 0
+      },
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "schema": "guard.native-review-policy-binding.v1"
+     }
+    },
+    "tool_input": [
+     [
+      "command",
+      "rm -rf build"
+     ]
+    ],
+    "tool_name": "Bash",
+    "workspace": "/work/repo"
+   },
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": null,
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "require-reapproval",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "claude-code",
+   "name": "unbound-legacy-review",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": {
+    "authority": "rust",
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "e21b0b0c6c62dd4d1375f7211e774ebdec0b56f868ad6c1774df800dd09ba63f",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "claude-code",
+   "name": "receipt-decision-mismatch",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "allow",
+    "decision_id": "5fc10e76fea225d877eed3a0169495b504d0d0c83f44393629b45e2aaa2bf85a",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "claude-code",
+   "name": "receipt-observe-mode-mismatch",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "1b55a4fe88a1a02a27c282eba684fbba50f35e8767ed183aa216b062e81a61ff",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": true,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "claude-code",
+   "name": "negative-uncertainty",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": -1
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "9a5970c9a62bfef8b91ca4cba6e562719aaafbbd3aae338a81d847b892430037",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "codex",
+   "name": "harness-mismatch",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "claude-code",
+   "name": "prompt-risk-classes",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": {
+    "authority": "rust",
+    "command_extensions": {
+     "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "control_revision": 3,
+     "managed_control_revision": 5,
+     "observation_count": 1,
+     "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+     "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "schema": "guard.native-command-receipt-binding.v1",
+     "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "uncertainty_count": 0
+    },
+    "deadline_budget_ms": 750,
+    "decision": "deny",
+    "decision_id": "da519e61bea55f11638ea337986a2fa8cca80d68a3542e5795fecc29c400a609",
+    "event_name": "PreToolUse",
+    "harness": "claude-code",
+    "model_output_action": "not_applicable",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "payload_kind": "inline",
+    "policy_action": "review",
+    "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy_generation": 1,
+    "reason_code": "native_command_extension_review",
+    "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "request_id": "request-1",
+    "reviewed_output_sha256": null,
+    "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "schema": "guard-native-hook-decision-receipt.v1",
+    "source_ref_external_allowed": false,
+    "version": 1,
+    "workspace_bound": true
+   },
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "prompt_risk_classes": [
+     "secrets"
+    ],
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  },
+  {
+   "artifact_id": null,
+   "harness": "claude-code",
+   "name": "missing-receipt",
+   "payload": {
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_name": "Bash"
+   },
+   "query": null,
+   "receipt": null,
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "command_extensions": {
+     "binding": {
+      "catalog_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "control_effective_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "control_revision": 3,
+      "managed_control_revision": 5,
+      "observation_count": 1,
+      "observations_digest": "ec1281d7790462f1f314e571195c858c8c82475058ecf4336d218017e0fc4e76",
+      "program_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "schema": "guard.native-command-receipt-binding.v1",
+      "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "uncertainty_count": 0
+     },
+     "evaluation_error": null,
+     "observations": [
+      {
+       "effective_segment_indexes": [
+        0
+       ],
+       "extension_id": "command.ollama",
+       "extension_version": "1.0.0",
+       "match_class": "unsafe",
+       "match_classes": [
+        "unsafe"
+       ],
+       "matcher_evidence": [
+        {
+         "detail": "Matched bounded structured command constraints.",
+         "executable": "ollama",
+         "segment_index": 0
+        }
+       ],
+       "rule_id": "command.ollama.push",
+       "rule_version": "1.0.0",
+       "safe_variants": [],
+       "uncertainty_reasons": []
+      }
+     ],
+     "permission_observations": [],
+     "schema": "guard.native-command-observations.v1"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "observe_mode": false,
+    "observed_policy_action": null,
+    "policy_action": "review",
+    "reason_code": "native_command_extension_review",
+    "reviewed_output_sha256": null
+   }
+  }
+ ],
+ "schema": "hol-guard.hook-direct-saved-decision-vectors.v1",
+ "token": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+ "verdicts": [
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-require-reapproval",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "require-reapproval",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-no-action",
+   "result": {
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": 7
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-int-action-type",
+   "result": {
+    "action": {
+     "action_type": 7
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "blocked",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "deny",
+     "minimum_action": "block",
+     "policy_action": "block",
+     "reason": "You chose to always block this exact action in HOL Guard.",
+     "reason_code": "saved_exact_action_block"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "block",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "blocked",
+    "verdict": {
+     "action": {
+      "action_type": "guard_control"
+     },
+     "decision": "deny",
+     "minimum_action": "block",
+     "policy_action": "block",
+     "reason": "You chose to always block this exact action in HOL Guard.",
+     "reason_code": "saved_exact_action_block"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "block-guard-control",
+   "result": {
+    "action": {
+     "action_type": "guard_control"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "blocked",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "deny",
+     "minimum_action": "block",
+     "policy_action": "block",
+     "reason": "You chose to always block this exact action in HOL Guard.",
+     "reason_code": "saved_exact_action_block"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "cli"
+    }
+   },
+   "name": "block-policy-block",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "block",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": "2030-01-01T00:00:00+00:00",
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-expiring",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": "",
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-empty-expiry",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": 0,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-zero-expiry",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "cli"
+    }
+   },
+   "name": "allow-cli-source",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-guard-control",
+   "result": {
+    "action": {
+     "action_type": "guard-control-operation"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-package",
+   "result": {
+    "action": {
+     "action_type": "package"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-policy-block",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "block",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "allow-minimum-allow",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "allow",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "workspace",
+     "source": "approval-gate"
+    }
+   },
+   "name": "other-scope",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Read",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "other-artifact",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "other",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "other-token",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    },
+    "ignored_local_integrity": true
+   },
+   "name": "ignored-integrity",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "shell"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
+   "lookup": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    },
+    "ignored_local_integrity": []
+   },
+   "name": "ignored-integrity-empty",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": null
+   },
+   "name": "no-decision",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": [
+     "allow"
+    ]
+   },
+   "name": "decision-not-mapping",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": [
+    "allow"
+   ],
+   "name": "lookup-not-mapping",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  },
+  {
+   "expected": null,
+   "lookup": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "guard-exact-action:v1:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "artifact_id": "claude-code:native-pretool:Bash",
+     "expires_at": null,
+     "scope": "artifact",
+     "source": "approval-gate"
+    }
+   },
+   "name": "other-action",
+   "result": {
+    "action": {
+     "action_type": "shell"
+    },
+    "decision": "deny",
+    "minimum_action": "review",
+    "policy_action": "review",
+    "reason": "Review this command.",
+    "reason_code": "native_command_extension_review"
+   }
+  }
+ ],
+ "workspace": "/work/repo"
+}

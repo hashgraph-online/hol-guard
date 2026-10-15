@@ -1,0 +1,363 @@
+use super::super::tests::{
+    install_test_key, policy_with_default, signed_snapshot, signed_snapshot_with_policy, test_root,
+};
+use super::{now_ms, PolicySnapshotStore};
+use super::{
+    observe_input, DirectLaneDefer, DIRECT_LANE_ACK_DIRECTORY, DIRECT_LANE_ACK_FILE_NAME,
+    DIRECT_LANE_ACK_SCHEMA,
+};
+use guard_policy_snapshot::{PolicySnapshotV3, POLICY_SNAPSHOT_PUSH_SCHEMA};
+use serde_json::{json, Value};
+use std::fs;
+use std::io::Write;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::path::Path;
+
+pub(crate) struct Fixture {
+    pub(crate) root: std::path::PathBuf,
+    pub(crate) store: PolicySnapshotStore,
+    pub(crate) snapshot: PolicySnapshotV3,
+    pub(crate) input: std::path::PathBuf,
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+pub(crate) fn fixture(label: &str) -> Fixture {
+    open_fixture(label, false)
+}
+
+/// Same fixture with an allow default, so a native allow is not raised to warn.
+pub(crate) fn allowing_fixture(label: &str) -> Fixture {
+    open_fixture(label, true)
+}
+
+fn open_fixture(label: &str, allow_default: bool) -> Fixture {
+    let root = test_root(&format!("direct-lane-{label}"));
+    let key = install_test_key(&root, 9);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let snapshot = if allow_default {
+        signed_snapshot_with_policy(1, &key, &root, policy_with_default("allow"))
+    } else {
+        signed_snapshot(1, &key, &root)
+    };
+    let input = root.join("config.toml");
+    fs::write(&input, b"mode = \"enforce\"\n").unwrap();
+    Fixture {
+        root,
+        store,
+        snapshot,
+        input,
+    }
+}
+
+pub(crate) fn binding(fixture: &Fixture, workspace: &str) -> Value {
+    let absent = fixture.root.join("absent.toml");
+    json!({
+        "workspaces": [workspace],
+        "inputs": [
+            {"path": fixture.input.to_str().unwrap(), "stat": observe_input(fixture.input.to_str().unwrap())},
+            {"path": absent.to_str().unwrap(), "stat": null},
+        ],
+    })
+}
+
+pub(crate) fn push(fixture: &Fixture, direct_lane: Option<Value>) -> Result<Vec<u8>, String> {
+    let mut request = json!({
+        "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+        "snapshot": fixture.snapshot,
+    });
+    if let Some(direct_lane) = direct_lane {
+        request["direct_lane"] = direct_lane;
+    }
+    fixture.store.push(&request)
+}
+
+fn write_ack(
+    root: &Path,
+    generation: u64,
+    policy_digest: &str,
+    lease_expires_at_ms: u64,
+    mode: u32,
+) {
+    let directory = root.join(DIRECT_LANE_ACK_DIRECTORY);
+    fs::create_dir_all(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+    let path = directory.join(DIRECT_LANE_ACK_FILE_NAME);
+    let _ = fs::remove_file(&path);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(mode)
+        .open(&path)
+        .unwrap();
+    let body = json!({
+        "schema": DIRECT_LANE_ACK_SCHEMA,
+        "generation": generation,
+        "policy_digest": policy_digest,
+        "lease_expires_at_ms": lease_expires_at_ms,
+    });
+    file.write_all(&serde_json::to_vec(&body).unwrap()).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+pub(crate) fn write_current_ack(fixture: &Fixture) {
+    write_ack(
+        &fixture.root,
+        fixture.snapshot.generation,
+        &fixture.snapshot.policy_digest,
+        now_ms().unwrap() + 30_000,
+        0o600,
+    );
+}
+
+#[test]
+fn bound_snapshot_is_admitted_while_ack_and_inputs_hold() {
+    let fixture = fixture("admit");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMissing)
+    );
+    write_current_ack(&fixture);
+    let admitted = fixture.store.admit_direct_lane("/work/repo").unwrap();
+    assert_eq!(admitted.generation, fixture.snapshot.generation);
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/other").err(),
+        Some(DirectLaneDefer::WorkspaceUnknown)
+    );
+}
+
+#[test]
+fn withdrawn_or_stale_ack_defers() {
+    let fixture = fixture("ack");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    let digest = fixture.snapshot.policy_digest.clone();
+    let wrong_digest = "0".repeat(64);
+    let now = now_ms().unwrap();
+    for (generation, digest, lease, mode, expected) in [
+        (
+            1,
+            digest.as_str(),
+            now.saturating_sub(1),
+            0o600,
+            DirectLaneDefer::AckExpired,
+        ),
+        (
+            2,
+            digest.as_str(),
+            now + 30_000,
+            0o600,
+            DirectLaneDefer::AckMismatch,
+        ),
+        (
+            1,
+            wrong_digest.as_str(),
+            now + 30_000,
+            0o600,
+            DirectLaneDefer::AckMismatch,
+        ),
+        (
+            1,
+            digest.as_str(),
+            now + 600_000,
+            0o600,
+            DirectLaneDefer::AckMismatch,
+        ),
+        (
+            1,
+            digest.as_str(),
+            now + 30_000,
+            0o644,
+            DirectLaneDefer::AckMismatch,
+        ),
+    ] {
+        write_ack(&fixture.root, generation, digest, lease, mode);
+        assert_eq!(
+            fixture.store.admit_direct_lane("/work/repo").err(),
+            Some(expected)
+        );
+    }
+    let directory = fixture.root.join(DIRECT_LANE_ACK_DIRECTORY);
+    write_current_ack(&fixture);
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMismatch)
+    );
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::remove_file(directory.join(DIRECT_LANE_ACK_FILE_NAME)).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMissing)
+    );
+    fs::remove_dir(&directory).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::AckMissing)
+    );
+}
+
+#[test]
+fn changed_or_created_input_defers() {
+    let fixture = fixture("inputs");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    write_current_ack(&fixture);
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
+    fs::write(fixture.root.join("absent.toml"), b"x = 1\n").unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::InputChanged)
+    );
+    fs::remove_file(fixture.root.join("absent.toml")).unwrap();
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
+    fs::write(&fixture.input, b"mode = \"observe\"\n").unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::InputChanged)
+    );
+}
+
+#[test]
+fn idempotent_push_rebinds_and_unbound_push_closes_the_lane() {
+    let fixture = fixture("rebind");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    write_current_ack(&fixture);
+    fs::write(&fixture.input, b"mode = \"enforce\" # touched\n").unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::InputChanged)
+    );
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
+    push(&fixture, None).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_lane("/work/repo").err(),
+        Some(DirectLaneDefer::Unbound)
+    );
+}
+
+#[test]
+fn malformed_binding_rejects_the_push_without_installing_it() {
+    let fixture = fixture("malformed");
+    for direct_lane in [
+        json!({"workspaces": ["relative/repo"], "inputs": []}),
+        json!({"workspaces": ["/a", "/a"], "inputs": []}),
+        json!({"workspaces": [], "inputs": [{"path": "/a", "stat": null}, {"path": "/a", "stat": null}]}),
+        json!({"workspaces": [], "inputs": [], "extra": true}),
+        json!({"workspaces": [], "inputs": [{"path": "/a", "stat": {"mtime_ns": 1, "size": 1, "ino": 1}}]}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bw+c", "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "", "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc", "integrity_key_id": ""}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc", "integrity_key_id": "a\nb"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "A".repeat(2049), "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc", "integrity_key_id": "k".repeat(257)}),
+    ] {
+        assert!(push(&fixture, Some(direct_lane)).is_err());
+        assert_eq!(fixture.store.current_generation(), None);
+    }
+    assert_eq!(
+        fixture.store.admit_direct_lane("/a").err(),
+        Some(DirectLaneDefer::Unbound)
+    );
+}
+
+#[test]
+fn defer_reasons_name_the_daemon_path() {
+    assert_eq!(
+        DirectLaneDefer::Unsupported.code(),
+        "direct_lane_unsupported"
+    );
+    assert_eq!(DirectLaneDefer::Unbound.code(), "direct_lane_unbound");
+    assert_eq!(
+        DirectLaneDefer::SnapshotUnavailable.code(),
+        "direct_lane_snapshot_unavailable"
+    );
+    assert_eq!(
+        DirectLaneDefer::AckMissing.code(),
+        "direct_lane_ack_missing"
+    );
+    assert_eq!(
+        DirectLaneDefer::AckMismatch.code(),
+        "direct_lane_ack_mismatch"
+    );
+    assert_eq!(
+        DirectLaneDefer::AckExpired.code(),
+        "direct_lane_ack_expired"
+    );
+    assert_eq!(
+        DirectLaneDefer::WorkspaceUnknown.code(),
+        "direct_lane_workspace_unknown"
+    );
+    assert_eq!(
+        DirectLaneDefer::InputChanged.code(),
+        "direct_lane_input_changed"
+    );
+}
+
+#[test]
+fn the_bound_integrity_key_is_admitted_only_with_a_current_ack() {
+    let fixture = fixture("integrity-key");
+    let mut bound = binding(&fixture, "/work/repo");
+    bound["integrity_key_b64"] = json!("BwcHBw");
+    bound["integrity_key_id"] = json!("synthetic:07070707");
+    push(&fixture, Some(bound)).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_binding().err(),
+        Some(DirectLaneDefer::AckMissing)
+    );
+    write_current_ack(&fixture);
+    let admitted = fixture.store.admit_direct_binding().unwrap();
+    let key = admitted.integrity_key.as_ref().unwrap();
+    assert_eq!(key.key.as_slice(), &[7, 7, 7, 7]);
+    assert_eq!(key.key_id, "synthetic:07070707");
+
+    // A binding without the key still admits; the hooks that need it defer.
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    write_current_ack(&fixture);
+    assert!(fixture
+        .store
+        .admit_direct_binding()
+        .unwrap()
+        .integrity_key
+        .is_none());
+}
+
+#[test]
+fn review_facts_bind_when_present_and_read_as_absent_otherwise() {
+    let fixture = fixture("review-facts");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    write_current_ack(&fixture);
+    let review = fixture.store.admit_direct_binding().unwrap().review.clone();
+    assert_eq!(review, super::DirectLaneReviewFacts::default());
+
+    let mut bound = binding(&fixture, "/work/repo");
+    bound["blocked_request_mode"] = json!("ask");
+    bound["approval_center_origin"] = json!("http://[::1]:4781");
+    bound["review_oauth_source"] = json!("default");
+    bound["review_host_cwd"] = json!("/work/repo");
+    push(&fixture, Some(bound.clone())).unwrap();
+    let review = fixture.store.admit_direct_binding().unwrap().review.clone();
+    assert_eq!(review.blocked_request_mode.as_deref(), Some("ask"));
+    assert_eq!(
+        review.approval_center_origin.as_deref(),
+        Some("http://[::1]:4781")
+    );
+    assert_eq!(review.review_oauth_source.as_deref(), Some("default"));
+    assert_eq!(review.review_host_cwd.as_deref(), Some("/work/repo"));
+
+    // A fact the resident cannot accept costs only that fact, never the lane.
+    bound["approval_center_origin"] = json!("http://192.168.1.10:4781");
+    bound["blocked_request_mode"] = json!("prompt");
+    push(&fixture, Some(bound)).unwrap();
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
+    let review = fixture.store.admit_direct_binding().unwrap().review.clone();
+    assert_eq!(review.approval_center_origin, None);
+    assert_eq!(review.blocked_request_mode, None);
+    assert_eq!(review.review_oauth_source.as_deref(), Some("default"));
+}

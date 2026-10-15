@@ -17,6 +17,26 @@ from .restricted_pytest_validation import _path_is_within
 _LIMIT = 64 * 1024 * 1024
 
 
+def _private_ancestor(path: Path) -> bool:
+    """Whether a directory above `path` denies search to every other account.
+
+    Package managers such as Bun can unpack images with mode 0777. Under a
+    0700 home directory those bits grant nothing: no other account can
+    traverse to the file, so it cannot replace it.
+    """
+    uid = os.getuid()
+    for directory in path.parents:
+        try:
+            metadata = os.stat(directory, follow_symlinks=False)
+        except OSError:
+            return False
+        if stat.S_ISLNK(metadata.st_mode):
+            return False
+        if metadata.st_uid == uid and not metadata.st_mode & (stat.S_IXGRP | stat.S_IXOTH):
+            return True
+    return False
+
+
 def snapshot_esbuild(workspace: Path, private_root: Path) -> tuple[Path, Path, str] | None:
     manifest = workspace / "node_modules/esbuild/package.json"
     if not manifest.exists():
@@ -48,13 +68,17 @@ def snapshot_esbuild(workspace: Path, private_root: Path) -> tuple[Path, Path, s
         source = (modules / "@esbuild" / f"{system}-{cpu}" / "bin/esbuild").resolve(strict=True)
         if not _path_is_within(source, modules):
             raise ValueError("external image")
+        # Another local account can replace a group- or world-writable image
+        # before this copy. The private 0500 file is only as trustworthy as
+        # the bytes read here, so those write bits stay a refusal unless a
+        # private ancestor keeps every other account from reaching the file.
         descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(descriptor, "rb") as stream:
             metadata = os.fstat(stream.fileno())
             if (
                 not stat.S_ISREG(metadata.st_mode)
                 or metadata.st_uid not in {0, os.getuid()}
-                or metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+                or (metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH) and not _private_ancestor(source))
                 or not metadata.st_mode & stat.S_IXUSR
                 or not 4 <= metadata.st_size <= _LIMIT
             ):

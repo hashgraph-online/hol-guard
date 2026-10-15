@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from scripts.ci import wait_for_pytest_shards as barrier
-from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _jobs
+from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _jobs, _pin_shard_count  # noqa: F401
 
 
 def _fixture(events: list[object]) -> tuple[dict[str, Any], list[str], list[float], list[str]]:

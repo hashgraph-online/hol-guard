@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard import aibom_detection
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
@@ -10,10 +13,11 @@ from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.aibom_detection import (
     INVENTORY_ITEM_KINDS,
+    NativeAibomError,
     discover_codex_skill_artifacts,
     discover_shared_workspace_aibom_artifacts,
+    extend_codex_runtime_inventory,
     extend_detection_with_workspace_aibom,
-    file_content_hash,
     instruction_role_for_path,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
@@ -22,6 +26,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     serialize_inventory_snapshot,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 
 def test_inventory_item_kinds_align_with_portal_contract() -> None:
@@ -147,13 +152,19 @@ def test_discover_codex_skills_and_marketplace_plugins(tmp_path: Path) -> None:
     assert "skill" in {artifact.artifact_type for artifact in skill_artifacts}
 
 
+def _agents_md_content_hash(workspace: Path) -> object:
+    artifacts = discover_shared_workspace_aibom_artifacts("codex", home_dir=workspace / "home", workspace_dir=workspace)
+    (agents_md,) = [artifact for artifact in artifacts if artifact.name == "AGENTS.md"]
+    return agents_md.metadata["content_hash"]
+
+
 def test_content_hash_detects_tail_changes_beyond_one_mebibyte(tmp_path: Path) -> None:
     prefix = b"A" * (1024 * 1024)
     path = tmp_path / "AGENTS.md"
     path.write_bytes(prefix + b"tail-version-one\n")
-    first = file_content_hash(path)
+    first = _agents_md_content_hash(tmp_path)
     path.write_bytes(prefix + b"tail-version-two\n")
-    second = file_content_hash(path)
+    second = _agents_md_content_hash(tmp_path)
 
     assert first is not None
     assert second is not None
@@ -205,9 +216,9 @@ def test_diff_artifact_detects_tail_only_instruction_change(tmp_path: Path) -> N
 def test_content_hash_changes_when_instruction_file_changes(tmp_path: Path) -> None:
     path = tmp_path / "AGENTS.md"
     path.write_text("version one\n", encoding="utf-8")
-    first = file_content_hash(path)
+    first = _agents_md_content_hash(tmp_path)
     path.write_text("version two\n", encoding="utf-8")
-    second = file_content_hash(path)
+    second = _agents_md_content_hash(tmp_path)
 
     assert first is not None
     assert second is not None
@@ -570,3 +581,197 @@ def test_workspace_skills_excluded_for_hermes_inventory_snapshot(tmp_path: Path)
         item.metadata.get("skill_name") or item.display_name for item in snapshot.items if item.item_kind == "skill"
     }
     assert "bare-metal-server" not in skill_names
+
+
+def _unavailable_native(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(kind: str, args: object, guard_home: object = None, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(aibom_detection, "native_runner_authority", refuse)
+
+
+def _recording_native(
+    monkeypatch: pytest.MonkeyPatch,
+    answer: dict[str, object],
+) -> list[tuple[str, dict[str, object]]]:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def answer_with(
+        kind: str, args: dict[str, object], guard_home: object = None, **kwargs: object
+    ) -> dict[str, object]:
+        calls.append((kind, {**args, **kwargs}))
+        return answer
+
+    monkeypatch.setattr(aibom_detection, "native_runner_authority", answer_with)
+    return calls
+
+
+def _detection(
+    *artifacts: GuardArtifact,
+    config_paths: tuple[str, ...] = (),
+    harness: str = "claude-code",
+) -> HarnessDetection:
+    return HarnessDetection(
+        harness=harness,
+        installed=True,
+        command_available=True,
+        config_paths=config_paths,
+        artifacts=artifacts,
+        warnings=(),
+    )
+
+
+def test_discovery_fails_closed_when_native_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _unavailable_native(monkeypatch)
+    (tmp_path / "AGENTS.md").write_text("instructions\n", encoding="utf-8")
+
+    with pytest.raises(NativeAibomError, match="native_runner_authority_unavailable"):
+        discover_shared_workspace_aibom_artifacts("codex", home_dir=tmp_path, workspace_dir=tmp_path)
+    with pytest.raises(NativeAibomError):
+        discover_codex_skill_artifacts("codex", home_dir=tmp_path, workspace_dir=tmp_path)
+    with pytest.raises(NativeAibomError):
+        extend_detection_with_workspace_aibom(_detection(), home_dir=tmp_path, workspace_dir=tmp_path)
+    with pytest.raises(NativeAibomError):
+        extend_codex_runtime_inventory(_detection(harness="codex"), home_dir=tmp_path, workspace_dir=tmp_path)
+
+
+def test_merge_applies_native_plan_to_callers_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def wire(artifact_id: str, config_path: str) -> dict[str, object]:
+        return {
+            "artifact_id": artifact_id,
+            "name": artifact_id,
+            "harness": "claude-code",
+            "artifact_type": "instruction",
+            "source_scope": "project",
+            "config_path": config_path,
+            "command": None,
+            "args": [],
+            "url": None,
+            "transport": None,
+            "publisher": None,
+            "metadata": {"instructionRole": "claude_md"},
+        }
+
+    kept = GuardArtifact(
+        artifact_id="kept",
+        name="kept",
+        harness="claude-code",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path="/kept",
+        runtime_private_metadata={"signed_url": "private"},
+    )
+    replaced = GuardArtifact(
+        artifact_id="rules-old",
+        name="old",
+        harness="claude-code",
+        artifact_type="instruction",
+        source_scope="project",
+        config_path="/old",
+    )
+    calls = _recording_native(
+        monkeypatch,
+        {
+            "extra_count": 2,
+            "replacements": [{"index": 1, "artifact": wire("rules-old", "/new/CLAUDE.md")}],
+            "appended": [wire("added", "/new/AGENTS.md")],
+            "found_paths": ["/new/CLAUDE.md", "/new/AGENTS.md"],
+        },
+    )
+
+    merged = extend_detection_with_workspace_aibom(
+        _detection(kept, replaced, config_paths=("/kept", "/new/AGENTS.md")),
+        home_dir=tmp_path,
+        workspace_dir=tmp_path,
+    )
+
+    assert [artifact.artifact_id for artifact in merged.artifacts] == ["kept", "rules-old", "added"]
+    assert merged.artifacts[0] is kept
+    assert merged.artifacts[0].runtime_private_metadata == {"signed_url": "private"}
+    assert merged.artifacts[1].config_path == "/new/CLAUDE.md"
+    assert merged.config_paths == ("/kept", "/new/AGENTS.md", "/new/CLAUDE.md")
+    kind, request = calls[0]
+    assert kind == "aibom_workspace_plan"
+    assert request["workspace_dir"] == str(tmp_path)
+    assert request["existing"] == [
+        {"artifact_id": "kept", "artifact_type": "mcp_server", "harness": "claude-code", "config_path": "/kept"},
+        {"artifact_id": "rules-old", "artifact_type": "instruction", "harness": "claude-code", "config_path": "/old"},
+    ]
+
+
+def test_merge_returns_detection_unchanged_when_native_finds_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _recording_native(monkeypatch, {"extra_count": 0, "replacements": [], "appended": [], "found_paths": []})
+    detection = _detection()
+
+    assert extend_detection_with_workspace_aibom(detection, home_dir=tmp_path, workspace_dir=tmp_path) is detection
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {},
+        {"artifacts": "not-a-list"},
+        {"artifacts": [{"artifact_id": "x"}]},
+        {"artifacts": [{"artifact_id": 1}]},
+    ],
+)
+def test_malformed_native_answers_are_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    _recording_native(monkeypatch, answer)
+
+    with pytest.raises(NativeAibomError, match="native_runner_authority_result_invalid"):
+        discover_shared_workspace_aibom_artifacts("codex", home_dir=tmp_path, workspace_dir=tmp_path)
+
+
+def test_malformed_merge_plans_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    for plan in (
+        {"extra_count": 1, "replacements": [{"index": 5, "artifact": {}}], "appended": [], "found_paths": []},
+        {"extra_count": 1, "replacements": [], "appended": [], "found_paths": [3]},
+        {"extra_count": "1", "replacements": [], "appended": [], "found_paths": []},
+    ):
+        _recording_native(monkeypatch, plan)
+        with pytest.raises(NativeAibomError):
+            extend_detection_with_workspace_aibom(_detection(), home_dir=tmp_path, workspace_dir=tmp_path)
+
+
+def test_portable_walk_ships_finished_skills_to_native(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hosts the resident cannot walk (Windows) send Python-built skill artifacts."""
+
+    workspace = tmp_path / "work"
+    home = tmp_path / "home"
+    (workspace / ".agents" / "skills" / "proj").mkdir(parents=True)
+    (workspace / ".agents" / "skills" / "proj" / "SKILL.md").write_text("# proj\n", encoding="utf-8")
+    (home / ".codex" / "skills" / "glob").mkdir(parents=True)
+    (home / ".codex" / "skills" / "glob" / "SKILL.md").write_text("# glob\n", encoding="utf-8")
+    monkeypatch.setattr(aibom_detection, "_needs_portable_walk", lambda: True)
+    calls = _recording_native(monkeypatch, {"artifacts": []})
+
+    discover_shared_workspace_aibom_artifacts("codex", home_dir=home, workspace_dir=workspace)
+    discover_codex_skill_artifacts("codex", home_dir=home, workspace_dir=workspace)
+    discover_shared_workspace_aibom_artifacts("hermes", home_dir=home, workspace_dir=workspace)
+
+    workspace_request = calls[0][1]
+    (project,) = workspace_request["skills"]
+    assert project["artifact_id"] == "codex:project:skill:.agents/skills:proj"
+    assert project["source_scope"] == "project"
+    assert project["config_path"] == str(workspace.resolve() / ".agents" / "skills" / "proj" / "SKILL.md")
+    codex_request = calls[1][1]
+    assert [item["name"] for item in codex_request["project_skills"]] == ["proj"]
+    assert [item["name"] for item in codex_request["global_skills"]] == ["glob"]
+    assert "skills" not in calls[2][1]
+
+
+def test_native_walk_is_used_when_the_host_supports_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(aibom_detection, "_needs_portable_walk", lambda: False)
+    calls = _recording_native(monkeypatch, {"artifacts": []})
+
+    discover_shared_workspace_aibom_artifacts("codex", home_dir=tmp_path, workspace_dir=tmp_path)
+    discover_codex_skill_artifacts("codex", home_dir=tmp_path, workspace_dir=None)
+
+    assert "skills" not in calls[0][1]
+    assert calls[1][1]["workspace_dir"] is None
+    assert "project_skills" not in calls[1][1]
+    assert "global_skills" not in calls[1][1]

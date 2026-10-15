@@ -294,16 +294,6 @@ class TestKimiNativeHookBlocking:
         assert _should_emit_native_hook_exit_block(args, event_name="PreToolUse", policy_action="allow") is False
         assert _should_emit_native_hook_exit_block(args, event_name="SessionStart", policy_action="block") is False
 
-    def test_kimi_permission_decision_is_deny_for_blocking(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _native_hook_permission_decision,
-        )
-
-        assert _native_hook_permission_decision("block", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("sandbox-required", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("require-reapproval", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("allow", harness="kimi") == "allow"
-
     def test_normalize_hook_payload_flattens_kimi_content_parts(self) -> None:
         from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
             _normalize_hook_payload,

@@ -45,8 +45,8 @@ def build_extension_source_tail(
     input_start = shared_source.index('  pi.on("input",')
     input_end = shared_source.index('  pi.on("tool_call",', input_start)
     shared_source = shared_source[:input_start] + INPUT_HANDLER_SOURCE + shared_source[input_end:]
-    if harness == "omp":
-        shared_source = with_contained_test_routing(shared_source)
+    if harness in {"omp", "pi"}:
+        shared_source = with_contained_test_routing(shared_source, harness=harness)
     return shared_source + (
         "    const hookDeadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
         "    const signal = handlerAbortSignal(ctx);\n"

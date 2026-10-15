@@ -232,6 +232,7 @@ def _compute_cursor_after_observer_proof(
     secret = _load_cursor_hook_attestation_secret()
     if conversation_id is None or command is None or resolved_binding is None or secret is None:
         return None
+    command = _normalize_cursor_shell_command(_normalize_cursor_shell_command(command))
     message = chr(0).join(
         (conversation_id, command, resolved_binding, observer_event.strip())
     ).encode("utf-8")
@@ -376,12 +377,14 @@ def _main_inner() -> int:
         # Git and pager proofs need the agent's environment, not the daemon's.
         payload_json = stamp_hook_input_text(payload_json)
     deadline_monotonic = _HOOK_DEADLINE_MONOTONIC
-    daemon_result, daemon_failure_kind = _daemon_hook_result(
-        payload_json,
-        deadline_monotonic=deadline_monotonic,
-        workspace=workspace,
-        hook_env_overlay=_daemon_hook_env_overlay(guard_env),
-    )
+    daemon_result, daemon_failure_kind = _native_daemon_reply_from_argv(), None
+    if daemon_result is None:
+        daemon_result, daemon_failure_kind = _daemon_hook_result(
+            payload_json,
+            deadline_monotonic=deadline_monotonic,
+            workspace=workspace,
+            hook_env_overlay=_daemon_hook_env_overlay(guard_env),
+        )
     if daemon_result is None:
         recover_kind = daemon_failure_kind or "transport-failure"
         if recover_kind != "overload":

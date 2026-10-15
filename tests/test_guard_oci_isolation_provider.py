@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
     AtomicGuaranteeKind,
@@ -26,14 +27,13 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
 from codex_plugin_scanner.guard.runtime.isolation_provider import (
     ProviderPlanError,
 )
-from codex_plugin_scanner.guard.runtime.oci_isolation_provider import (
-    OCIIsolationProvider,
-    OCISeccompProfile,
-    _compute_bundle_digest,
-    _map_guarantees,
-    _validate_bundle,
-    build_oci_evidence,
-)
+from codex_plugin_scanner.guard.runtime.oci_isolation_provider import OCIIsolationProvider
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
+
+
+def _digest(spec):
+    return native_runner_authority("oci_bundle_digest", {"spec": spec})["digest"]
 
 
 @pytest.fixture
@@ -125,295 +125,10 @@ class TestProviderHealth:
 # === Evidence building ===
 
 
-class TestEvidenceBuilding:
-    def test_minimal_bundle(self, minimal_bundle):
-        ev = build_oci_evidence(minimal_bundle)
-        assert ev.bundle_valid is True
-        assert ev.bundle_version == "1.0.2"
-        assert ev.namespaces.pid_isolated is True
-        assert ev.namespaces.net_isolated is True
-        assert ev.rootfs.readonly is True
-        assert ev.user.non_root is True
-        assert ev.capabilities.dangerous_capabilities == ()
-
-    def test_forbidden_mount_evidence(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "mounts": [
-                    {"destination": "/", "type": "none"},
-                    {"destination": "/etc", "type": "bind", "source": "/etc"},
-                ],
-            }
-        )
-        assert ev.mounts.forbidden_bind_sources == ("/etc",)
-
-    @pytest.mark.parametrize(
-        "source",
-        ["../etc", "foo/../../etc", "/tmp/../etc", "//etc"],
-    )
-    def test_normalized_forbidden_mount_evidence(self, source):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "mounts": [
-                    {"destination": "/mnt/input", "type": "bind", "source": source},
-                ],
-            }
-        )
-
-        assert ev.mounts.forbidden_bind_sources == (source,)
-
-    @pytest.mark.parametrize("bind_option", ["bind", "rbind"])
-    def test_option_defined_bind_mount_evidence(self, bind_option):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "mounts": [
-                    {
-                        "destination": "/mnt/input",
-                        "type": "none",
-                        "source": "data",
-                        "options": [bind_option, "ro"],
-                    },
-                ],
-            }
-        )
-
-        assert ev.mounts.host_bind_mounts == ("/mnt/input",)
-
-    def test_dangerous_caps_evidence(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"capabilities": {"effective": ["CAP_SYS_ADMIN"]}},
-            }
-        )
-        assert ev.capabilities.dangerous_capabilities == ("CAP_SYS_ADMIN",)
-
-    def test_seccomp_strict(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"seccomp": {"defaultAction": "SCMP_ACT_ERRNO"}},
-            }
-        )
-        assert ev.seccomp.profile_kind is OCISeccompProfile.STRICT
-
-    def test_seccomp_default_action_allow(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"seccomp": {"defaultAction": "SCMP_ACT_ALLOW"}},
-            }
-        )
-        assert ev.seccomp.profile_kind is OCISeccompProfile.DEFAULT
-
-    def test_seccomp_unset_when_absent(self):
-        ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        assert ev.seccomp.profile_kind is OCISeccompProfile.UNSET
-
-    def test_seccomp_none_when_empty_action(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"seccomp": {"defaultAction": ""}},
-            }
-        )
-        assert ev.seccomp.profile_kind is OCISeccompProfile.NONE
-
-    def test_host_namespace(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"namespaces": [{"type": "pid", "host": True}]},
-            }
-        )
-        assert ev.namespaces.pid_isolated is False
-
-    def test_host_network(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"network": {"mode": "host"}},
-            }
-        )
-        assert ev.network.mode == "host"
-
-    def test_world_writable_bind(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "mounts": [
-                    {"destination": "/var/data", "type": "bind", "source": "/var/data", "options": ["world-writable"]},
-                ],
-            }
-        )
-        assert ev.mounts.world_writable_binds == ("/var/data",)
-
-    def test_non_root_user(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "process": {"user": {"uid": 1000, "gid": 1000}},
-            }
-        )
-        assert ev.user.non_root is True
-        assert ev.user.uid == 1000
-
-    def test_root_user(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "process": {"user": {"uid": 0, "gid": 0}},
-            }
-        )
-        assert ev.user.non_root is False
-        assert ev.user.uid == 0
-
-    def test_cgroup_v2(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"cgroupsPath": "/sys/fs/cgroup/unified/guard/test"},
-            }
-        )
-        assert ev.cgroup.v2 is True
-
-    def test_no_cgroup(self):
-        ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        assert ev.cgroup.v2 is False
-        assert ev.cgroup.controller_bound is False
-
-    def test_lsm_apparmor(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"apparmor": "guard-profile"},
-            }
-        )
-        assert ev.lsm.enabled is True
-        assert ev.lsm.profile_name == "guard-profile"
-
-
 # === Validation ===
 
 
-class TestBundleValidation:
-    def test_valid_bundle(self, minimal_bundle, tmp_path):
-        (tmp_path / "rootfs").mkdir()
-        assert _validate_bundle(build_oci_evidence(minimal_bundle, bundle_root=tmp_path)) == ()
-
-    def test_root_user_violation(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "process": {"user": {"uid": 0, "gid": 0}},
-            }
-        )
-        violations = _validate_bundle(ev)
-        assert "running as root (uid=0)" in violations
-
-    def test_host_mount_violation(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "mounts": [
-                    {"destination": "/", "type": "none"},
-                    {"destination": "/etc", "type": "bind", "source": "/etc"},
-                ],
-            }
-        )
-        violations = _validate_bundle(ev)
-        assert "/etc" in violations
-
-    def test_host_network_violation(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"network": {"mode": "host"}},
-            }
-        )
-        violations = _validate_bundle(ev)
-        assert "host network mode" in violations
-
-    def test_host_namespace_violation(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"namespaces": [{"type": "pid", "host": True}]},
-            }
-        )
-        violations = _validate_bundle(ev)
-        assert "pid namespace not isolated" in violations
-
-
 # === Guarantee mapping ===
-
-
-class TestGuaranteeMapping:
-    def test_all_enforced_when_valid(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs", "readonly": True},
-                "process": {"user": {"uid": 1000, "gid": 1000}},
-                "linux": {
-                    "namespaces": [
-                        {"type": "pid"},
-                        {"type": "net"},
-                        {"type": "ipc"},
-                        {"type": "uts"},
-                        {"type": "user"},
-                    ],
-                },
-                "mounts": [{"destination": "/", "type": "none", "options": ["readonly"]}],
-            }
-        )
-        guarantees = _map_guarantees(ev, ())
-        for g in guarantees[:9]:
-            assert g.enforced is True
-            assert g.boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
-
-    def test_dangerous_caps_lower_all(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"capabilities": {"effective": ["CAP_SYS_ADMIN"]}},
-            }
-        )
-        guarantees = _map_guarantees(ev, ("dangerous capabilities",))
-        for g in guarantees:
-            assert g.enforced is False
-            assert g.boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
-
-    def test_absent_guarantees_denied(self):
-        ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        guarantees = _map_guarantees(ev, ())
-        absent_kinds = {AtomicGuaranteeKind.KERNEL_HARDWARE, AtomicGuaranteeKind.TENANT}
-        for g in guarantees:
-            if g.kind in absent_kinds:
-                assert g.enforced is False
-                assert g.boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
 
 # === Plan: refusal ===
@@ -829,29 +544,29 @@ class TestCancelCleanup:
 
 class TestDigestComputation:
     def test_deterministic(self):
-        d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
+        d1 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
+        d2 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
         assert d1 == d2
 
     def test_differs_on_change(self):
-        d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "a"}})
-        d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "b"}})
+        d1 = _digest({"ociVersion": "1.0.2", "root": {"path": "a"}})
+        d2 = _digest({"ociVersion": "1.0.2", "root": {"path": "b"}})
         assert d1 != d2
 
     def test_ignores_unrecognized_keys(self):
-        d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}, "x": 1})
-        d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
+        d1 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}, "x": 1})
+        d2 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
         assert d1 == d2
 
     def test_nested_mapping_order_is_deterministic(self):
-        first = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs", "readonly": True}})
-        second = _compute_bundle_digest({"root": {"readonly": True, "path": "rootfs"}, "ociVersion": "1.0.2"})
+        first = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs", "readonly": True}})
+        second = _digest({"root": {"readonly": True, "path": "rootfs"}, "ociVersion": "1.0.2"})
 
         assert first == second
 
-    def test_rejects_unsupported_values(self):
-        with pytest.raises(ValueError, match="unsupported OCI spec field type: set"):
-            _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": {"unsupported"}}})
+    def test_rejects_values_the_owner_cannot_encode(self):
+        with pytest.raises(ValueError, match="native_runner_authority_component_unencodable"):
+            _digest({"ociVersion": "1.0.2", "root": {"path": {"unsupported"}}})
 
 
 # === Unknown features lower assurance ===
@@ -865,53 +580,3 @@ class TestUnknownFeaturesLowerAssurance:
             bundle_spec={"ociVersion": "1.0.2", "linux": {"capabilities": {"effective": ["CAP_UNKNOWN"]}}},
         )
         assert lease is not None
-
-    def test_unsupported_feature_not_enforced(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"someUnsupportedFeature": "x"},
-            }
-        )
-        guarantees = _map_guarantees(ev, ())
-        for g in guarantees:
-            if g.enforced:
-                assert g.boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
-
-    def test_no_namespace_isolation(self):
-        ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        assert ev.namespaces.pid_isolated is False
-        assert ev.namespaces.net_isolated is False
-
-    def test_missing_linux_no_isolation(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "process": {"user": {"uid": 1000}},
-            }
-        )
-        violations = _validate_bundle(ev)
-        assert len(violations) > 0
-
-    def test_missing_seccomp(self):
-        ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        assert ev.seccomp.profile_kind is OCISeccompProfile.UNSET
-
-    def test_missing_cgroup(self):
-        ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        assert ev.cgroup.controller_bound is False
-
-    def test_lsm_does_not_boost(self):
-        ev = build_oci_evidence(
-            {
-                "ociVersion": "1.0.2",
-                "root": {"path": "rootfs"},
-                "linux": {"apparmor": "guard-default"},
-            }
-        )
-        assert ev.lsm.enabled is True
-        assert ev.lsm.profile_name == "guard-default"
-        guarantees = _map_guarantees(ev, ())
-        assert len(guarantees) == 11

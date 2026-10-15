@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
@@ -23,6 +24,7 @@ from .update_desktop_core import (
     pypi_desktop_core_versions,
     select_desktop_core_latest,
 )
+from .update_release_candidates import live_release_candidates
 
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
 _APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
@@ -69,11 +71,14 @@ def refine_desktop_version_check(
     *,
     candidates: list[str],
     include_alpha: bool,
+    alpha_is_live: Callable[[str], bool] | None = None,
 ) -> dict[str, object]:
     status = str(version_check.get("status") or "")
     source = str(version_check.get("source") or "")
     if status == "unavailable" or source not in {"pypi", "desktop_core"}:
         return version_check
+    if include_alpha and alpha_is_live is not None:
+        candidates = live_release_candidates(candidates, alpha_is_live=alpha_is_live)
     known = [item.strip() for item in candidates if item.strip()]
     latest = version_check.get("latest_version")
     if isinstance(latest, str) and latest.strip() and latest.strip() not in known:
@@ -103,10 +108,17 @@ def desktop_core_apply_failure_message(reason_code: str) -> str:
     return _APPLY_FAILURE_MESSAGES.get(reason_code, _APPLY_FAILURE_FALLBACK)
 
 
+def _alpha_liveness_checker(network_policy: ManagedNetworkPolicy | None) -> Callable[[str], bool]:
+    from . import update_commands as commands
+
+    return commands._alpha_liveness_checker(network_policy)
+
+
 def finalize_desktop_update_status(
     payload: dict[str, object],
     *,
     pypi_payload: object,
+    network_policy: ManagedNetworkPolicy | None = None,
 ) -> dict[str, object]:
     if payload.get("installer") != "desktop":
         return payload
@@ -121,6 +133,7 @@ def finalize_desktop_update_status(
         version_check,
         candidates=candidates,
         include_alpha=include_alpha,
+        alpha_is_live=_alpha_liveness_checker(network_policy) if include_alpha else None,
     )
     latest_version = refined.get("latest_version")
     payload["version_check"] = refined
@@ -168,6 +181,7 @@ def run_desktop_managed_update(
             include_alpha=include_alpha,
         ),
         include_alpha=include_alpha,
+        alpha_is_live=commands._alpha_liveness_checker(network_policy) if include_alpha else None,
     )
     payload["version_check"] = version_check
     already_current = (

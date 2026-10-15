@@ -142,7 +142,7 @@ def test_fork_without_pr_association_is_not_guessed_from_branch():
         ("event", "workflow_dispatch"),
         ("event", "schedule"),
         ("path", ".github/workflows/publish.yml"),
-        ("path", ".github/workflows/native-wheel-ci.yml"),
+        ("path", ".github/workflows/nightly-native.yml"),
         ("workflow_id", 99),
         ("repository", {"full_name": "another/repo"}),
         ("head_repository", {"id": 456}),
@@ -277,9 +277,7 @@ def test_entrypoint_does_not_guess_an_ambiguous_pr(monkeypatch, tmp_path, associ
 
 def test_privileged_workflow_only_executes_trusted_inline_code():
     workflow = yaml.load((ROOT / ".github/workflows/ci-superseded-runs.yml").read_text(), Loader=yaml.BaseLoader)
-    assert workflow["on"] == {
-        "workflow_run": {"workflows": ["CI", "Native wheel CI"], "types": ["requested", "in_progress"]}
-    }
+    assert workflow["on"] == {"workflow_run": {"workflows": ["CI"], "types": ["requested"]}}
     assert workflow["permissions"] == {}
     assert workflow["concurrency"]["cancel-in-progress"] == "false"
     assert "workflow_run.id" in workflow["concurrency"]["group"]

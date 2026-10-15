@@ -73,18 +73,6 @@ def assert_pinned_actions(document: str, ancestry: frozenset[str] = frozenset())
             assert re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", value), value
 
 
-def test_workflow_runs_focused_docker_and_security_gates_with_pinned_actions() -> None:
-    workflow = read(".github/workflows/mdm-cloud-integration-lab.yml")
-    assert "tests/test_guard_mdm_cloud_lab_integration.py" in workflow
-    assert "tests/test_guard_mdm_cloud_hardening.py" in workflow
-    assert "scripts/mdm/run-cloud-integration-lab.py" in workflow
-    assert "nativeCertification" in workflow
-    assert "mdm-cloud-integration-report.json.sha256" in workflow
-    assert "Trivy" in workflow or "trivy" in workflow
-    assert "down --volumes --remove-orphans" in workflow
-    assert_pinned_actions(workflow)
-
-
 def test_report_schema_accepts_only_bounded_honest_result_shape() -> None:
     schema = json.loads(read("docs/guard/schemas/mdm-cloud-lab-report-v1.schema.json"))
     assert schema["additionalProperties"] is False

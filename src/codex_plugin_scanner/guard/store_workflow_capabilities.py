@@ -1,58 +1,54 @@
-"""GuardStore boundary for dormant workflow-capability persistence."""
+"""GuardStore boundary for workflow-capability persistence.
+
+The authority (signature checks, the authority ledger, claim, revocation and
+lookup rules) runs in the native resident. The control blob lives in the
+caller's credential store, so every operation is a plan/commit exchange: the
+resident plans the operation in a rolled-back transaction and names each
+control write to persist, Python persists them, and the resident then replays
+the operation in a real transaction, refusing if it no longer matches the
+plan. A write that must follow the database commit is persisted last.
+Python never recalculates a verdict.
+"""
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnnecessaryIsInstance=false
-# pyright: reportUnusedCallResult=false, reportUnusedFunction=false
 
 from __future__ import annotations
 
-import sqlite3
-from contextlib import AbstractContextManager
+import base64
+import json
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict
+from typing import Any, Final
 from uuid import uuid4
 
-from .store_workflow_capabilities_schema import ensure_workflow_capability_schema
-from .store_workflow_capability_authority import (
-    advance_authority_state,
-    create_authority_state,
-    load_and_validate_authority,
-)
-from .store_workflow_capability_common import (
-    WORKFLOW_CAPABILITY_STORE_CLOCK,
-    _canonical_json,
-    _claim_event_extra,
-    _decode_signed_claim,
-    _private_reference,
-    _require_store_key,
-    _validate_claim_row,
-    _workflow_capability_event_payload,
-)
-from .store_workflow_capability_control import (
-    finalize_control_transition,
-    load_validate_and_observe_control,
-    prepare_control_transition,
-)
+from .native_guard_store import NativeGuardStoreUnavailable
+from .store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from .store_workflow_capability_lock import serialized_workflow_capability_authority
-from .store_workflow_capability_transitions import append_authority_transition, build_authority_transition
 from .workflow_capabilities import (
-    WORKFLOW_CAPABILITY_RECEIPT_SCHEMA,
     SignedWorkflowCapability,
     SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityBinding,
     WorkflowCapabilityError,
-    WorkflowCapabilityReceipt,
-    sign_workflow_capability_receipt,
-    validate_workflow_capability_identifier,
-    verify_workflow_capability,
-    workflow_capability_claim_sha256,
 )
+
+_PLAN_STALE_REASON: Final = "native_guard_store_capability_plan_stale"
+_MAX_PLAN_ATTEMPTS: Final = 3
+
+
+def _canonical_json(payload: object) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _plan_failure(error: Mapping[str, Any]) -> Exception:
+    if error.get("kind") == "capability":
+        return WorkflowCapabilityError(str(error["code"]))
+    return RuntimeError(str(error.get("message", "workflow_capability_failed")))
 
 
 class StoreWorkflowCapabilitiesMixin:
     """Persist and atomically consume exact signed workflow capabilities."""
 
-    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
-        raise NotImplementedError
-
-    def hold_workflow_capability_authority_lock(self) -> AbstractContextManager[None]:
+    def hold_workflow_capability_authority_lock(self) -> Any:
         raise NotImplementedError
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -66,6 +62,57 @@ class StoreWorkflowCapabilitiesMixin:
         _ = encoded
         raise NotImplementedError
 
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any:
+        _ = (method, args)
+        raise NotImplementedError
+
+    def _persist_workflow_capability_controls(self, writes: Sequence[str]) -> None:
+        for encoded in writes:
+            if not self._store_workflow_capability_control(encoded):
+                raise WorkflowCapabilityError("capability_control_unavailable")
+
+    def _run_workflow_capability(self, operation: str, now: str, arguments: Mapping[str, object]) -> Any:
+        """Drive one plan/commit exchange and return the committed result."""
+
+        key, key_id = self._policy_integrity_secret_material(create=False)
+        key_b64 = None if key is None or key_id is None else base64.b64encode(key).decode("ascii")
+        for _attempt in range(_MAX_PLAN_ATTEMPTS):
+            original = self._load_workflow_capability_control()
+            wire: dict[str, object] = {
+                "op": operation,
+                "now": now,
+                "control_blob": original,
+                "key_b64": key_b64,
+                "key_id": key_id if key_b64 is not None else None,
+                **arguments,
+            }
+            plan = self._native_store_call("workflow_capability_plan", wire)
+            self._persist_workflow_capability_controls(plan["writes"])
+            if plan["ok"] is not True:
+                raise _plan_failure(plan["error"])
+            if plan["commit"] is not True:
+                return plan["result"]
+            try:
+                committed = self._native_store_call(
+                    "workflow_capability_commit",
+                    {**wire, "plan_writes": plan["writes"], "plan_post_writes": plan["post_writes"]},
+                )
+            except NativeGuardStoreUnavailable as error:
+                if error.reason != _PLAN_STALE_REASON:
+                    raise
+                # The plan was never committed, so the pending control it saved
+                # has no ledger entry. Put back the last unpended control: the
+                # original, or on a first issue the freshly bootstrapped one,
+                # which is the first write of the plan. Otherwise the retry
+                # would see an unresolved pending sequence and lock authority.
+                baseline = original if original is not None else (plan["writes"][0] if plan["writes"] else None)
+                if baseline is not None and not self._store_workflow_capability_control(baseline):
+                    raise WorkflowCapabilityError("capability_control_unavailable") from error
+                continue
+            self._persist_workflow_capability_controls(committed["post_writes"])
+            return committed["result"]
+        raise WorkflowCapabilityError("capability_plan_stale")
+
     @serialized_workflow_capability_authority
     def issue_workflow_capability(
         self,
@@ -76,78 +123,14 @@ class StoreWorkflowCapabilitiesMixin:
         now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
         if type(signed) is not SignedWorkflowCapability:
             raise WorkflowCapabilityError("invalid_signed_capability")
-        claim = signed.claim
-        validate_workflow_capability_identifier("approval_provenance_id", approval_provenance_id)
-        if approval_provenance_id != claim.approval_provenance_id:
-            raise WorkflowCapabilityError("capability_approval_binding_mismatch")
-        key, key_id = _require_store_key(self, create=False)
-        verify_workflow_capability(
-            signed,
-            key=key,
-            key_id=key_id,
-            now=now,
-            expected_binding=claim.binding,
+        self._run_workflow_capability(
+            "issue",
+            now,
+            {
+                "signed_json": _canonical_json(signed.to_dict()),
+                "approval_provenance_id": approval_provenance_id,
+            },
         )
-        encoded = _canonical_json(signed.to_dict())
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            ensure_workflow_capability_schema(connection, applied_at=now)
-            control = load_validate_and_observe_control(self, connection, key=key, key_id=key_id, now=now, create=True)
-            try:
-                connection.execute(
-                    """
-                    insert into guard_workflow_capabilities (
-                      capability_id, approval_provenance_id, nonce, signed_claim_json, key_id, issued_at, not_before,
-                      expires_at, max_uses, used_count, revoked_at, revocation_code
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, null, null)
-                    """,
-                    (
-                        claim.capability_id,
-                        approval_provenance_id,
-                        claim.nonce,
-                        encoded,
-                        key_id,
-                        claim.issued_at,
-                        claim.not_before,
-                        claim.expires_at,
-                        claim.max_uses,
-                    ),
-                )
-            except sqlite3.IntegrityError as error:
-                raise WorkflowCapabilityError("capability_already_exists") from error
-            event_extra: dict[str, object] = {
-                "approval_provenance_ref": _private_reference("approval-provenance", approval_provenance_id),
-                "max_uses": claim.max_uses,
-                "task_ref": _private_reference("task", claim.task_id),
-            }
-            event_id = self._insert_workflow_capability_event(
-                connection,
-                event_name="workflow_capability.issued",
-                capability_id=claim.capability_id,
-                invocation_id=None,
-                occurred_at=now,
-                extra=event_extra,
-            )
-            signed_state = create_authority_state(connection, signed, key=key, key_id=key_id, now=now)
-            transition = build_authority_transition(
-                signed,
-                signed_state,
-                sequence=control.committed_sequence + 1,
-                previous_transition_sha256=control.committed_head_sha256,
-                transition_kind="issued",
-                event_id=event_id,
-                event_name="workflow_capability.issued",
-                event_payload=_workflow_capability_event_payload(claim.capability_id, None, event_extra),
-                occurred_at=now,
-                use_number=None,
-                receipt_id=None,
-                revocation_id=None,
-                key=key,
-                key_id=key_id,
-            )
-            pending_control = prepare_control_transition(self, control, transition)
-            append_authority_transition(connection, transition)
-        finalize_control_transition(self, pending_control)
         return signed
 
     @serialized_workflow_capability_authority
@@ -165,175 +148,54 @@ class StoreWorkflowCapabilitiesMixin:
         now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
         if type(expected_binding) is not WorkflowCapabilityBinding:
             raise WorkflowCapabilityError("invalid_expected_capability_binding")
-        validate_workflow_capability_identifier("capability_id", capability_id)
-        validate_workflow_capability_identifier("invocation_id", invocation_id)
-        for name, value in (
-            ("expected_subject_id", expected_subject_id),
-            ("expected_task_id", expected_task_id),
-            ("expected_issuer_id", expected_issuer_id),
-            ("expected_approval_provenance_id", expected_approval_provenance_id),
-        ):
-            validate_workflow_capability_identifier(name, value)
-        key, key_id = _require_store_key(self, create=False)
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            ensure_workflow_capability_schema(connection, applied_at=now)
-            control = load_validate_and_observe_control(self, connection, key=key, key_id=key_id, now=now, create=False)
-            row = connection.execute(
-                """
-                select signed_claim_json, key_id, issued_at, not_before, expires_at,
-                       max_uses, used_count, revoked_at, revocation_code, approval_provenance_id, nonce
-                from guard_workflow_capabilities where capability_id = ?
-                """,
-                (capability_id,),
-            ).fetchone()
-            if row is None:
-                raise WorkflowCapabilityError("capability_not_found")
-            signed = _decode_signed_claim(str(row["signed_claim_json"]))
-            _validate_claim_row(signed, row, capability_id)
-            state = load_and_validate_authority(
-                connection,
-                signed,
-                key=key,
-                key_id=key_id,
-                used_count=int(row["used_count"]),
-                revoked_at=row["revoked_at"],
-                revocation_code=row["revocation_code"],
-            )
-            verify_workflow_capability(
-                signed,
-                key=key,
-                key_id=key_id,
-                now=now,
-                expected_binding=expected_binding,
-            )
-            claim = signed.claim
-            if (
-                claim.subject_id != expected_subject_id
-                or claim.task_id != expected_task_id
-                or claim.issuer_id != expected_issuer_id
-                or claim.approval_provenance_id != expected_approval_provenance_id
-            ):
-                raise WorkflowCapabilityError("capability_claimant_context_mismatch")
-            if state.revocation_id is not None:
-                raise WorkflowCapabilityError("capability_revoked")
-            used_count = int(row["used_count"])
-            if used_count >= signed.claim.max_uses:
-                raise WorkflowCapabilityError("capability_exhausted")
-            if (
-                connection.execute(
-                    "select 1 from guard_workflow_capability_receipts where invocation_id = ?",
-                    (invocation_id,),
-                ).fetchone()
-                is not None
-            ):
-                raise WorkflowCapabilityError("capability_invocation_replayed")
-
-            use_number = used_count + 1
-            receipt_id = f"wcr-{uuid4().hex}"
-            updated = connection.execute(
-                """
-                update guard_workflow_capabilities set used_count = ?
-                where capability_id = ? and used_count = ? and revoked_at is null
-                """,
-                (use_number, capability_id, used_count),
-            )
-            if updated.rowcount != 1:
-                raise WorkflowCapabilityError("capability_claim_conflict")
-            event_extra = _claim_event_extra(
-                approval_provenance_id=signed.claim.approval_provenance_id,
-                receipt_id=receipt_id,
-                task_id=signed.claim.task_id,
-                use_number=use_number,
-            )
-            event_id = self._insert_workflow_capability_event(
-                connection,
-                event_name="workflow_capability.claimed",
-                capability_id=capability_id,
-                invocation_id=invocation_id,
-                occurred_at=now,
-                extra=event_extra,
-            )
-            receipt = WorkflowCapabilityReceipt(
-                schema_version=WORKFLOW_CAPABILITY_RECEIPT_SCHEMA,
-                receipt_id=receipt_id,
-                capability_id=capability_id,
-                task_id=signed.claim.task_id,
-                invocation_id=invocation_id,
-                approval_provenance_id=signed.claim.approval_provenance_id,
-                claim_sha256=workflow_capability_claim_sha256(signed),
-                binding=expected_binding,
-                use_number=use_number,
-                event_id=event_id,
-                claimed_at=now,
-            )
-            signed_receipt = sign_workflow_capability_receipt(receipt, key=key, key_id=key_id)
-            try:
-                connection.execute(
-                    """
-                    insert into guard_workflow_capability_receipts (
-                      receipt_id, capability_id, task_id, invocation_id, approval_provenance_id, signed_receipt_json,
-                      claimed_at, use_number, event_id
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        receipt.receipt_id,
-                        capability_id,
-                        receipt.task_id,
-                        invocation_id,
-                        receipt.approval_provenance_id,
-                        _canonical_json(signed_receipt.to_dict()),
-                        now,
-                        use_number,
-                        event_id,
-                    ),
-                )
-            except sqlite3.IntegrityError as error:
-                raise WorkflowCapabilityError("capability_claim_conflict") from error
-            signed_state = advance_authority_state(
-                connection,
-                state,
-                key=key,
-                key_id=key_id,
-                now=now,
-                use_high_water=use_number,
-            )
-            transition = build_authority_transition(
-                signed,
-                signed_state,
-                sequence=control.committed_sequence + 1,
-                previous_transition_sha256=control.committed_head_sha256,
-                transition_kind="claimed",
-                event_id=event_id,
-                event_name="workflow_capability.claimed",
-                event_payload=_workflow_capability_event_payload(capability_id, invocation_id, event_extra),
-                occurred_at=now,
-                use_number=use_number,
-                receipt_id=receipt_id,
-                revocation_id=None,
-                key=key,
-                key_id=key_id,
-            )
-            pending_control = prepare_control_transition(self, control, transition)
-            append_authority_transition(connection, transition)
-        finalize_control_transition(self, pending_control)
-        return signed_receipt
-
-    @staticmethod
-    def _insert_workflow_capability_event(
-        connection: sqlite3.Connection,
-        *,
-        event_name: str,
-        capability_id: str,
-        invocation_id: str | None,
-        occurred_at: str,
-        extra: dict[str, object],
-    ) -> int:
-        payload = _workflow_capability_event_payload(capability_id, invocation_id, extra)
-        cursor = connection.execute(
-            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-            (event_name, _canonical_json(payload), occurred_at),
+        receipt = self._run_workflow_capability(
+            "claim",
+            now,
+            {
+                "capability_id": capability_id,
+                "invocation_id": invocation_id,
+                "expected_binding": asdict(expected_binding),
+                "expected_subject_id": expected_subject_id,
+                "expected_task_id": expected_task_id,
+                "expected_issuer_id": expected_issuer_id,
+                "expected_approval_provenance_id": expected_approval_provenance_id,
+                "receipt_id": f"wcr-{uuid4().hex}",
+            },
         )
-        if cursor.lastrowid is None:
-            raise WorkflowCapabilityError("capability_event_link_failed")
-        return int(cursor.lastrowid)
+        return SignedWorkflowCapabilityReceipt.from_dict(receipt)
+
+    @serialized_workflow_capability_authority
+    def revoke_workflow_capability(self, capability_id: str, *, reason_code: str) -> bool:
+        now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
+        return bool(
+            self._run_workflow_capability(
+                "revoke",
+                now,
+                {
+                    "capability_id": capability_id,
+                    "reason_code": reason_code,
+                    "revocation_id": f"wcv-{uuid4().hex}",
+                },
+            )
+        )
+
+    @serialized_workflow_capability_authority
+    def lookup_workflow_capability(self, capability_id: str) -> SignedWorkflowCapability | None:
+        now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
+        signed = self._run_workflow_capability("lookup", now, {"capability_id": capability_id})
+        return None if signed is None else SignedWorkflowCapability.from_dict(signed)
+
+    @serialized_workflow_capability_authority
+    def lookup_workflow_capability_receipt(
+        self,
+        *,
+        receipt_id: str | None = None,
+        invocation_id: str | None = None,
+    ) -> SignedWorkflowCapabilityReceipt | None:
+        now = WORKFLOW_CAPABILITY_STORE_CLOCK.now()
+        signed = self._run_workflow_capability(
+            "receipt_lookup",
+            now,
+            {"receipt_id": receipt_id, "invocation_id": invocation_id},
+        )
+        return None if signed is None else SignedWorkflowCapabilityReceipt.from_dict(signed)

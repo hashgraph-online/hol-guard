@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_policy_snapshot_harness_postures import recording_only_for_binding
+from ..native_resident_client import native_resident_client_failure_code
 from .hook_native_review_fence import native_review_fence
 
 if TYPE_CHECKING:
@@ -17,15 +19,61 @@ if TYPE_CHECKING:
 CONTROL_BINDING_REFRESH_ERRORS = frozenset(
     {"native_command_control_mutation_in_progress", "native_command_control_authority_not_current"}
 )
+# The resident holds one current snapshot per Guard home. A short-lived CLI
+# hook or another publisher can supersede the generation this worker last
+# saw ACKed, so the worker refreshes its own binding and retries once.
+SNAPSHOT_NOT_CURRENT_ERROR = "native_policy_snapshot_not_current"
+NATIVE_REVIEW_REFRESH_ERRORS = CONTROL_BINDING_REFRESH_ERRORS | {SNAPSHOT_NOT_CURRENT_ERROR}
 
 
 class NativePolicyBindingRefreshError(RuntimeError):
-    def __init__(self, code: str, generation: object = None) -> None:
-        if code not in CONTROL_BINDING_REFRESH_ERRORS:
+    def __init__(self, code: str, generation: object = None, *, recording_only: bool = False) -> None:
+        if code not in NATIVE_REVIEW_REFRESH_ERRORS:
             raise ValueError("unsupported native binding refresh")
         super().__init__(code)
         self.code = code
         self.generation = generation if isinstance(generation, int) and not isinstance(generation, bool) else None
+        # Posture of the rejected ACKed binding, so a refresh that cannot
+        # complete keeps a Watch binding recording instead of stopping.
+        self.recording_only = recording_only is True
+
+
+def superseded_post_tool_snapshot(
+    worker: _HookWorkerNativeHost,
+    policy_snapshot: Mapping[str, object] | None,
+    event_name: str,
+    *,
+    workspace: Path | None,
+    deadline: float | None,
+) -> Mapping[str, object] | None:
+    """Return a fresh ACKed binding after another publisher superseded this one.
+
+    A contained test run or other short-lived CLI hook publishes its own
+    snapshot while the tool runs, so the PostToolUse that follows can find the
+    worker's binding no longer current. Refresh once within the original
+    deadline; any other failure, including a refresh that cannot complete,
+    keeps the existing unavailable answer.
+    """
+    if (
+        event_name != "PostToolUse"
+        or policy_snapshot is None
+        or deadline is None
+        or time.monotonic() >= deadline
+        or native_resident_client_failure_code() != SNAPSHOT_NOT_CURRENT_ERROR
+        or getattr(worker, "_publish_native_policy", False) is not True
+    ):
+        return None
+    publisher = getattr(worker, "policy_snapshot_publisher", None)
+    request_refresh = getattr(publisher, "request_control_binding_refresh", None)
+    if not callable(request_refresh):
+        return None
+    generation = policy_snapshot.get("generation")
+    try:
+        request_refresh(generation if isinstance(generation, int) and not isinstance(generation, bool) else None)
+        refreshed = worker._native_policy_snapshot(workspace, deadline=deadline)
+    except (OSError, TimeoutError, NativePolicySnapshotError):
+        return None
+    return refreshed if refreshed is not None and time.monotonic() < deadline else None
 
 
 def review_native_edge(
@@ -82,7 +130,10 @@ def review_native_edge(
                 if callable(request_refresh):
                     request_refresh(error.generation)
                     snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
-                    if snapshot is not None and snapshot.get("mode") == "enforce" and time.monotonic() < deadline:
+                    refreshed = snapshot is not None and (
+                        error.code == SNAPSHOT_NOT_CURRENT_ERROR or snapshot.get("mode") == "enforce"
+                    )
+                    if refreshed and time.monotonic() < deadline:
                         continue
             response = _record_unavailable_native(
                 worker,
@@ -93,7 +144,11 @@ def review_native_edge(
                 workspace=workspace,
                 home_dir=home_dir,
                 guard_home=guard_home,
+                # Control-binding failures only refresh enforce bindings and
+                # stay blocking; a superseded Watch snapshot keeps recording.
                 recording_only=False,
+                watch_continue=error.code == SNAPSHOT_NOT_CURRENT_ERROR and error.recording_only,
+                deadline=deadline,
             )
             response["native_failure_code"] = error.code
             return response
@@ -127,7 +182,7 @@ def _review_native_edge_once(
     # posture. A local Watch edit cannot weaken an enforcing snapshot
     # before its replacement is accepted. A missing binding takes the
     # unavailable route and cannot establish recording-only authority.
-    recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+    recording_only = recording_only_for_binding(policy_snapshot, harness)
     fenced: bool | None = None
     capture_receipts: list[Mapping[str, object]] = []
     try:

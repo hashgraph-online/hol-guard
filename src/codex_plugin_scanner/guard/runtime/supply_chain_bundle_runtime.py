@@ -30,7 +30,6 @@ from .supply_chain_bundle_models import (
     SupplyChainBundleEmergencyDeny,
     SupplyChainBundlePackage,
     SupplyChainBundleResponse,
-    SupplyChainVerificationKey,
 )
 from .supply_chain_package_identity import (
     PackageIdentityError,
@@ -38,6 +37,7 @@ from .supply_chain_package_identity import (
     normalize_ecosystem,
     parse_package_identity,
 )
+from .supply_chain_verification_keys import SupplyChainVerificationKey, load_supply_chain_verification_keys
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,22 +62,6 @@ def canonical_supply_chain_bundle_payload(bundle: SupplyChainBundle | dict[str, 
 
 def payload_hash_for_supply_chain_bundle(bundle: SupplyChainBundle | dict[str, object]) -> str:
     return hashlib.sha256(canonical_supply_chain_bundle_payload(bundle)).hexdigest()
-
-
-def load_supply_chain_verification_keys(raw: object) -> tuple[SupplyChainVerificationKey, ...]:
-    """Load verification keys from a list payload or sync_state wrapper."""
-
-    raw_keys = raw
-    if isinstance(raw, dict):
-        raw_keys = raw.get("keys")
-    if not isinstance(raw_keys, list):
-        return ()
-    parsed: list[SupplyChainVerificationKey] = []
-    for item in raw_keys:
-        if not isinstance(item, dict):
-            raise SupplyChainBundleMalformedError("verificationKeys must contain objects")
-        parsed.append(SupplyChainVerificationKey.from_dict(item))
-    return tuple(parsed)
 
 
 def load_supply_chain_bundle_response(raw_json: str | dict[str, object]) -> SupplyChainBundleResponse:

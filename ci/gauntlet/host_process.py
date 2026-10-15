@@ -38,10 +38,47 @@ def live_ledger_groups(ledger: Path) -> list[int]:
     return list(live)
 
 
+# Mirrors the contained Python runner's trusted interpreter roots; others (Conda, pyenv) it refuses.
+TRUSTED_PYTHON_ROOTS = tuple(
+    Path(root) for root in ("/bin", "/opt/homebrew", "/opt/hostedtoolcache/Python", "/System", "/usr/bin", "/usr/local")
+)
+
+
+def python_shim(directory: Path, search_path: str) -> str | None:
+    """Expose the developer's own ``python3`` ahead of the candidate virtualenv.
+
+    The candidate venv must stay on PATH so ``hol-guard`` resolves to the build under test, but a
+    developer shell does not resolve ``python3`` to a tool's private interpreter. Link ``python3``
+    and ``python`` to the first ``python3`` on PATH outside any virtualenv whose real path lies in a
+    root Guard's contained runner trusts; without one, add nothing.
+    """
+    if os.name != "posix":
+        return None
+    candidate_bin = Path(sys.executable).parent
+    for entry in search_path.split(os.pathsep):
+        folder = Path(entry)
+        if not folder.is_absolute() or folder == candidate_bin or (folder.parent / "pyvenv.cfg").exists():
+            continue
+        interpreter = folder / "python3"
+        if (
+            interpreter.is_file()
+            and os.access(interpreter, os.X_OK)
+            and any(interpreter.resolve().is_relative_to(root) for root in TRUSTED_PYTHON_ROOTS)
+        ):
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            for name in ("python3", "python"):
+                (directory / name).unlink(missing_ok=True)
+                (directory / name).symlink_to(interpreter)
+            return str(directory)
+    return None
+
+
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
     """The model/host receives no inherited provider, cloud or GitHub credential."""
     environment = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR") if key in os.environ}
     environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
+    if shim := python_shim(agent_dir.parent / "python-bin", environment["PATH"]):
+        environment["PATH"] = shim + os.pathsep + environment["PATH"]
     if os.name == "nt":
         environment.update(_windows_environment(home))
     environment.update(
@@ -54,6 +91,43 @@ def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str
         NO_COLOR="1",
         GIT_CONFIG_NOSYSTEM="1",
     )
+    return environment
+
+
+def realistic_environment(environment: dict[str, str], home: Path) -> dict[str, str]:
+    """Overlay the variables a developer shell carries that a bare environment lacks.
+
+    On Linux and macOS the loader path points at an empty directory, so it is set but inert.
+    Together with the fixture's global git config (LFS filter, gpg program, hooks path) it
+    reproduces the shapes that made ordinary shell commands look unusual to Guard.
+    """
+    environment = dict(environment)
+    environment.update(
+        {
+            "SHELL": "/bin/sh",
+            "USER": "developer",
+            "LOGNAME": "developer",
+            "EDITOR": "true",
+            "PAGER": "cat",
+            "GIT_PAGER": "cat",
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_CACHE_HOME": str(home / ".cache"),
+            "CARGO_HOME": str(home / ".cargo"),
+            "npm_config_cache": str(home / ".npm"),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+    )
+    # Developer shells put per-user CLIs such as doctl in ~/.local/bin ahead of the system PATH.
+    local_bin = home / ".local/bin"
+    if "PATH" in environment and local_bin.is_dir():
+        environment["PATH"] = str(local_bin) + os.pathsep + environment["PATH"]
+    # Windows resolves DLLs through PATH, so a Windows developer shell carries no loader path.
+    if os.name != "nt":
+        libraries = home / ".local/lib"
+        libraries.mkdir(parents=True, exist_ok=True)
+        environment["LD_LIBRARY_PATH"] = str(libraries)
+        if sys.platform == "darwin":
+            environment["DYLD_LIBRARY_PATH"] = str(libraries)
     return environment
 
 

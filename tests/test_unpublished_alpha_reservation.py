@@ -26,9 +26,9 @@ def test_unpublished_alpha_reservation_is_released_when_publish_fails() -> None:
     assert "Not Found" in script
 
 
-def test_native_guard_wheel_timeout_covers_musl_builds() -> None:
+def test_native_guard_wheel_timeout_covers_in_job_release_compiles() -> None:
     native = load_workflow(PUBLISH_WORKFLOW)["jobs"]["build-native-guard-wheels"]
-    assert native["timeout-minutes"] == 45
+    assert native["timeout-minutes"] == 90
 
 
 def test_windows_native_guard_wheel_uses_reproducible_linker_mode() -> None:

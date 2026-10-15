@@ -79,7 +79,7 @@ _NATIVE_PAIR_MINIMUM_ACTIONS = {
     "p-shell-data-vs-eval": ("allow", "block"),
     "p-cloud-help-redirection": ("review", "block"),
     "p-patch-check-vs-apply": ("review", "review"),
-    "p-capability-replay": ("review", "review"),
+    "p-capability-replay": ("block", "block"),
 }
 
 
@@ -370,6 +370,11 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
             text=True,
             timeout=90,
             cwd=Path.cwd(),
+            # Evaluation is the resident's verdict, so the runner and its
+            # workers must always run in force mode. Jobs that bind the
+            # native binary without the regression flag would otherwise leave
+            # the mode off and every worker would see the resident unavailable.
+            env={**os.environ, "HOL_GUARD_NATIVE": "force"},
         )
     except subprocess.CalledProcessError as error:
         raise AssertionError(
@@ -394,9 +399,9 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
     assert {key: tuple(value) for key, value in native_groups.items()} == expected_native_groups()
     rejection_groups = cast(dict[str, list[object]], report["native_rejection_groups"])
     assert {key: tuple(value) for key, value in rejection_groups.items()} == expected_native_rejection_groups()
-    assert report["native_rejection_count"] == 27_084
+    assert report["native_rejection_count"] == 25_002
     assert report["original_oracle_below_count"] == 0
-    assert report["original_oracle_above_count"] == 10_541
+    assert report["original_oracle_above_count"] == 8_484
     assert isinstance(report["elapsed"], int | float) and report["elapsed"] < int(
         load_seed_manifest()["evaluation_budget_seconds"]
     )

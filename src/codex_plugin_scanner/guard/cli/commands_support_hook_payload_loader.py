@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
+from ..adapters.hook_input_reader import read_stdin_text
 from ..adapters.kimi_hooks import normalize_kimi_prompt
 
 
@@ -27,7 +27,7 @@ def load_hook_payload(
     if event_file:
         raw = Path(event_file).read_text(encoding="utf-8")
     else:
-        raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
+        raw = input_text.strip() if isinstance(input_text, str) else read_stdin_text()[0].strip()
     if not raw:
         return {}
     payload = json.loads(raw)

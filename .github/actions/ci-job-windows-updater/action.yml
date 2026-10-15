@@ -7,11 +7,6 @@ inputs:
 runs:
   using: composite
   steps:
-  - name: Download this run's current command projections
-    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-    with:
-      name: pytest-native-command-projections
-      path: .
   - name: Download this attempt's verified Windows native command evaluators
     uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
     with:
@@ -46,14 +41,12 @@ runs:
     run: |
       $runtime = (Resolve-Path -LiteralPath "rust/target/release/hol-guard-runtime.exe").Path
       $compiler = (Resolve-Path -LiteralPath "rust/target/release/guard-command-source.exe").Path
-      uv run --no-sync python scripts/build_native_command_program.py --compiler $compiler --check
-      if ($LASTEXITCODE -ne 0) {
-        throw "Windows native source compiler does not match this checkout"
-      }
+      uv run --no-sync python scripts/build_native_command_program.py --projections-only --compiler $compiler
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      uv run --no-sync python scripts/build_native_command_program.py --projections-only --compiler $compiler --check
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       $capabilitiesJson = & $runtime capabilities
-      if ($LASTEXITCODE -ne 0) {
-        throw "Reading Windows native runtime capabilities failed with exit code $LASTEXITCODE"
-      }
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       $capabilities = $capabilitiesJson | ConvertFrom-Json
       if ($capabilities.build_sha -ne $env:EXPECTED_SOURCE_SHA) {
         throw "Windows native runtime does not match this checkout's source SHA"
@@ -63,6 +56,10 @@ runs:
       "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       "HOL_GUARD_BUILD_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
   - name: Run trusted updater and daemon regressions
+    env:
+      # The binding step verified this source SHA. Regression mode selects
+      # that compiled authority; auto mode ignores external test binaries.
+      HOL_GUARD_NATIVE_REGRESSION: "1"
     run: uv run --no-sync pytest tests/test_guard_update_artifact.py tests/test_guard_update_subprocess.py tests/test_guard_update_isolation.py
       tests/test_guard_phase03_local_install.py tests/test_guard_phase03_remainder.py tests/test_dashboard_update.py tests/test_guard_daemon_manager.py
       tests/test_guard_mdm_policy.py --tb=short

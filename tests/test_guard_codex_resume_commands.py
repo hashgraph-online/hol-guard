@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import tempfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_app_server_fake import codex_app_server
 
 
 def _request(request_id: str) -> GuardApprovalRequest:
@@ -79,80 +81,60 @@ def _seed_codex_operation(
 def test_guard_approvals_resume_retries_failed_codex_resume(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    send_calls = 0
-
-    def _fake_send(**kwargs):
-        nonlocal send_calls
-        send_calls += 1
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
-
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
-
     home_dir = tmp_path / "guard-home"
     store = GuardStore(home_dir)
     store.add_approval_request(_request("req-cli"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-cli.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(store, request_id="req-cli", socket_path=socket_path)
-    store.resolve_approval_request(
-        "req-cli",
-        resolution_action="allow",
-        resolution_scope="artifact",
-        reason="reviewed",
-        resolved_at="2026-05-19T10:01:00+00:00",
-    )
+    with codex_app_server() as server:
+        _seed_codex_operation(store, request_id="req-cli", socket_path=server.socket_path)
+        store.resolve_approval_request(
+            "req-cli",
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-05-19T10:01:00+00:00",
+        )
 
-    rc = main(["guard", "approvals", "resume", "req-cli", "--home", str(home_dir), "--json"])
+        rc = main(["guard", "approvals", "resume", "req-cli", "--home", str(home_dir), "--json"])
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
     assert output["request_id"] == "req-cli"
     assert output["status"] == "sent"
-    assert send_calls == 1
+    [continuation] = server.continuations()
+    assert continuation["params"]["threadId"] == "thread-1"
+    assert continuation["params"]["responsesapiClientMetadata"]["hol_guard_request_id"] == "req-cli"
 
 
 def test_guard_approvals_resume_uses_codex_home_default_socket(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    socket_paths: list[str] = []
-
-    def _fake_send(**kwargs):
-        socket_paths.append(str(kwargs["socket_path"]))
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
-
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
-
     home_dir = tmp_path / "guard-home"
-    codex_home = tmp_path / "codex-home"
-    socket_path = codex_home / "app-server-control" / "app-server-control.sock"
-    socket_path.parent.mkdir(parents=True)
-    socket_path.write_text("", encoding="utf-8")
     store = GuardStore(home_dir)
     store.add_approval_request(_request("req-cli-home"), "2026-05-19T10:00:00+00:00")
-    _seed_codex_operation(
-        store,
-        request_id="req-cli-home",
-        socket_path=None,
-        codex_home=str(codex_home),
-    )
-    store.resolve_approval_request(
-        "req-cli-home",
-        resolution_action="allow",
-        resolution_scope="artifact",
-        reason="reviewed",
-        resolved_at="2026-05-19T10:01:00+00:00",
-    )
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-cli-home",
+            socket_path=None,
+            codex_home=str(server.codex_home),
+        )
+        store.resolve_approval_request(
+            "req-cli-home",
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-05-19T10:01:00+00:00",
+        )
 
-    rc = main(["guard", "approvals", "resume", "req-cli-home", "--home", str(home_dir), "--json"])
+        rc = main(["guard", "approvals", "resume", "req-cli-home", "--home", str(home_dir), "--json"])
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
     assert output["status"] == "sent"
-    assert socket_paths == [str(socket_path)]
+    [continuation] = server.continuations()
+    assert continuation["params"]["responsesapiClientMetadata"]["hol_guard_request_id"] == "req-cli-home"
 
 
 def test_default_codex_app_server_socket_probe_uses_codex_home(
@@ -421,3 +403,24 @@ def test_guard_approvals_resume_reports_missing_app_server_without_spawning(
     assert output["status"] == "failed"
     assert output["reason"] == "socket_not_available"
     assert output["strategy"] == "codex-app-server-thread"
+
+
+def test_guard_approvals_resume_command_reports_resident_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import approval_commands
+    from codex_plugin_scanner.guard.codex_resume import ResumeUnavailableError
+
+    def _retry(*args: object, **kwargs: object) -> dict[str, object]:
+        raise ResumeUnavailableError()
+
+    monkeypatch.setattr(approval_commands, "retry_request_resume", _retry)
+    store = GuardStore(tmp_path / "guard-home")
+    payload, code = approval_commands.run_approval_resume_command(
+        argparse.Namespace(request_id="req-unavailable", force=False),
+        store=store,
+    )
+
+    assert payload == {"error": "resume_unavailable", "request_id": "req-unavailable"}
+    assert code == 1

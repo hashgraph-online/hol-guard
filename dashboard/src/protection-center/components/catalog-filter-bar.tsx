@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type RefObject } from "react";
 import { HiMiniAdjustmentsHorizontal, HiMiniCheck, HiMiniChevronDown, HiMiniXMark } from "react-icons/hi2";
 
-import type { ExtensionCatalogItem, ExtensionTrustClass } from "../../extension-controls-api";
+import type { ExtensionCatalogSummary, ExtensionTrustClass } from "../../extension-controls-api";
 import type { ProtectionCategoryId } from "../model/protection-categories";
 import {
   CATALOG_KIND_FILTERS,
@@ -182,7 +182,7 @@ export function CatalogFilterTrigger(props: {
  * parent owns the open state so the trigger can live beside the search input.
  */
 export function CatalogFilterBar(props: {
-  catalog: readonly ExtensionCatalogItem[];
+  catalog: readonly ExtensionCatalogSummary[];
   filters: CatalogFilterState;
   onChange: (next: CatalogFilterState) => void;
   open: boolean;

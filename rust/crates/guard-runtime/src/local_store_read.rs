@@ -8,7 +8,11 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
-const STORE_FILE_NAME: &str = "guard.db";
+#[path = "local_store_read_cache.rs"]
+mod cache;
+pub(crate) use cache::{open_read_only_cached, CachedConnection};
+
+pub(crate) const STORE_FILE_NAME: &str = "guard.db";
 /// Highest `local_cli_schema_migration` version this build reads.
 pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 11;
 
@@ -58,11 +62,8 @@ pub(crate) fn open_read_only(store_path: &Path) -> Result<Option<Connection>, St
 
 pub(crate) fn table_exists(connection: &Connection, table: &str) -> Result<bool, StoreReadError> {
     connection
-        .query_row(
-            "select 1 from sqlite_master where type = 'table' and name = ?1",
-            params![table],
-            |_| Ok(()),
-        )
+        .prepare_cached("select 1 from sqlite_master where type = 'table' and name = ?1")
+        .and_then(|mut statement| statement.query_row(params![table], |_| Ok(())))
         .optional()
         .map(|found| found.is_some())
         .map_err(|_| StoreReadError::StoreUnavailable)
@@ -86,11 +87,10 @@ pub(crate) fn schema_version(connection: &Connection) -> Result<Option<i64>, Sto
         return Ok(None);
     }
     let marker: Option<(i64, String)> = connection
-        .query_row(
+        .prepare_cached(
             "select version, checksum from local_cli_schema_migration where singleton = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
         )
+        .and_then(|mut statement| statement.query_row([], |row| Ok((row.get(0)?, row.get(1)?))))
         .optional()
         .map_err(|_| StoreReadError::StoreUnavailable)?;
     let Some((version, checksum)) = marker else {
@@ -122,5 +122,108 @@ pub(crate) fn column_exists(
         )
         .optional()
         .map(|found| found.is_some())
+        .map_err(|_| StoreReadError::StoreUnavailable)
+}
+
+/// How long a hook-path probe waits on a writer before giving up.
+const HOOK_PROBE_BUSY_TIMEOUT_MS: u64 = 50;
+
+/// What the daemon reads from the store before a hook reaches the edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HookStoreProbe {
+    /// A custom command-line block rule exists, answered the way
+    /// `GuardStore.has_local_cli_block_rules` answers it.
+    pub(crate) local_cli_block_rules: bool,
+    /// The hook belongs to an app Guard is not protecting, answered the way
+    /// `_hook_harness_is_unmanaged` answers it, so the daemon passes it
+    /// through. A manifest the daemon could not parse counts as unmanaged
+    /// here, while the daemon would review it: that only sends the hook to
+    /// the daemon.
+    pub(crate) harness_unmanaged: bool,
+}
+
+/// Read the store state the daemon checks for one hook of `harness`. A
+/// missing store or table holds no rule and no managed install, since the
+/// daemon would create them empty.
+pub(crate) fn hook_store_probe(
+    guard_home: &Path,
+    harness: &str,
+) -> Result<HookStoreProbe, StoreReadError> {
+    let mut probe = HookStoreProbe {
+        local_cli_block_rules: false,
+        harness_unmanaged: false,
+    };
+    let Some(connection) = open_read_only(&guard_home.join(STORE_FILE_NAME))? else {
+        return Ok(probe);
+    };
+    connection
+        .busy_timeout(std::time::Duration::from_millis(HOOK_PROBE_BUSY_TIMEOUT_MS))
+        .map_err(|_| StoreReadError::StoreUnavailable)?;
+    for (table, query) in [
+        (
+            "local_cli_grant",
+            "select exists(select 1 from local_cli_grant where state = 'blocked')",
+        ),
+        (
+            "local_cli_command_grant",
+            "select exists(select 1 from local_cli_command_grant where state = 'block')",
+        ),
+    ] {
+        if probe.local_cli_block_rules || !table_exists(&connection, table)? {
+            continue;
+        }
+        probe.local_cli_block_rules = connection
+            .query_row(query, [], |row| row.get(0))
+            .map_err(|_| StoreReadError::StoreUnavailable)?;
+    }
+    if table_exists(&connection, "managed_installs")? {
+        // Its own row decides; without one, another app's active install
+        // means this app's hooks are leftovers.
+        probe.harness_unmanaged = connection
+            .query_row(
+                "select case \
+                   when exists(select 1 from managed_installs where harness = ?1) \
+                     then exists(select 1 from managed_installs where harness = ?1 and active = 0) \
+                   else exists(select 1 from managed_installs where harness <> ?1 and active <> 0) \
+                 end",
+                params![harness],
+                |row| row.get(0),
+            )
+            .map_err(|_| StoreReadError::StoreUnavailable)?;
+    }
+    Ok(probe)
+}
+
+/// Whether `sync_state` holds a Claude Code permission notice for
+/// `session_id`, under its session key or any of its tool keys. A row that
+/// fails verification counts too: only the daemon, which holds the key,
+/// can tell a valid notice from one it must invalidate.
+pub(crate) fn claude_permission_notice_present(
+    guard_home: &Path,
+    session_id: &str,
+) -> Result<bool, StoreReadError> {
+    let Some(connection) = open_read_only(&guard_home.join(STORE_FILE_NAME))? else {
+        return Ok(false);
+    };
+    connection
+        .busy_timeout(std::time::Duration::from_millis(HOOK_PROBE_BUSY_TIMEOUT_MS))
+        .map_err(|_| StoreReadError::StoreUnavailable)?;
+    if !table_exists(&connection, "sync_state")? {
+        return Ok(false);
+    }
+    // Under the binary collation every `<session key>:<tool>` key sorts at or
+    // after `<session key>:` and before `<session key>;`.
+    let session_key = format!("claude_permission_notice:{session_id}");
+    connection
+        .query_row(
+            "select exists(select 1 from sync_state \
+               where state_key = ?1 or (state_key >= ?2 and state_key < ?3))",
+            params![
+                session_key,
+                format!("{session_key}:"),
+                format!("{session_key};")
+            ],
+            |row| row.get(0),
+        )
         .map_err(|_| StoreReadError::StoreUnavailable)
 }

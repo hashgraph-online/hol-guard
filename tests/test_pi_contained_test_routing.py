@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import pre
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 
 
-def test_routing_is_active_omp_only_and_does_not_change_frozen_previous(tmp_path: Path) -> None:
+def test_routing_is_active_for_pi_and_omp_and_does_not_change_frozen_previous(tmp_path: Path) -> None:
     arguments = {
         "guard_home": tmp_path / "guard",
         "home_dir": tmp_path / "home",
@@ -27,10 +27,22 @@ def test_routing_is_active_omp_only_and_does_not_change_frozen_previous(tmp_path
     }
     active = managed_extension_source(**arguments)
     assert "prepareContainedTestInput(response, snapshot)" in active
-    assert "cleanupContainedTestRequest(event.toolCallId)" in active
+    assert "cleanupContainedTestRequest(event.toolCallId, event.details)" in active
+    assert "      return { input };\n" in active
+    assert '"--harness", "pi"' not in active
     assert "prepareContainedTestInput" not in previous_managed_extension_source(**arguments)
-    arguments["harness"] = "pi"
-    assert "prepareContainedTestInput" not in managed_extension_source(**arguments)
+    arguments.update(harness="pi", display_name="Pi")
+    pi_source = managed_extension_source(**arguments)
+    assert "prepareContainedTestInput" not in previous_managed_extension_source(**arguments)
+    assert "prepareContainedTestInput(response, snapshot)" in pi_source
+    assert "cleanupContainedTestRequest(event.toolCallId, event.details)" in pi_source
+    # Pi ignores a returned input; only an in-place mutation reaches the tool.
+    assert "return { input };" not in pi_source
+    assert pi_source.count("Object.assign(event.input, input);") == 1
+    # The sink re-checks authority under Pi's own harness policy, not OMP's default.
+    assert pi_source.count('"execute-contained-test", "--harness", "pi", "--guard-home"') == 1
+    # Pi has no session_stop event, so shutdown releases unconsumed request files.
+    assert "for (const key of containedTestRequests.keys()) cleanupContainedTestRequest(key);\n  });" in pi_source
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="active profile is macOS-only until Linux enforcement exists")
@@ -81,11 +93,31 @@ const details = handlers.tool_result({toolCallId:'test-call', details:{ordinary:
 output.projected = handlers.context({messages:[assistant]}).messages[0].content[0].arguments.command;
 output.storedTransportUnchanged = assistant.content[0].arguments.command === input.command;
 containedTestPresentations.clear();
-output.resumed = handlers.context({messages:[assistant, {role:'toolResult', toolCallId:'test-call', details}]}).messages[0].content[0].arguments.command;
-output.mismatched = handlers.context({messages:[assistant, {role:'toolResult', toolCallId:'different-call', details}]}) === undefined;
+const resumedContext = handlers.context({messages:[assistant, {role:'toolResult', toolCallId:'test-call', details}]});
+output.resumed = resumedContext.messages[0].content[0].arguments.command;
+const mismatchedResult = {role:'toolResult', toolCallId:'different-call', details};
+output.mismatched = handlers.context({messages:[assistant, mismatchedResult]}) === undefined;
 handlers.session_stop();
 output.cleaned = containedTestRequests.size === 0;
 try { statSync(directory); output.cleaned = false; } catch {}
+// A backgrounded call settles before its job reads the request: keep the file
+// for the sink, and release it only at shutdown.
+const exists = (path) => { try { statSync(path); return true; } catch { return false; } };
+const background = { ...snapshot, payload: { ...snapshot.payload, tool_call_id: 'background-call' } };
+if (!prepareContainedTestInput(required, background)) throw new Error('background rewrite not produced');
+const backgroundDirectory = containedTestRequests.get('background-call');
+cleanupContainedTestRequest('background-call', { async: { state: 'running', jobId: 'job-1', type: 'bash' } });
+output.backgroundKept = exists(join(backgroundDirectory, 'request.json'))
+  && !containedTestRequests.has('background-call');
+handlers.session_stop();
+output.backgroundSurvivesStop = exists(backgroundDirectory);
+handlers.session_shutdown();
+output.backgroundReleased = !exists(backgroundDirectory);
+const finished = { ...snapshot, payload: { ...snapshot.payload, tool_call_id: 'finished-call' } };
+if (!prepareContainedTestInput(required, finished)) throw new Error('finished rewrite not produced');
+const finishedDirectory = containedTestRequests.get('finished-call');
+cleanupContainedTestRequest('finished-call', { async: { state: 'completed', jobId: 'job-2', type: 'bash' } });
+output.finishedRemoved = !exists(finishedDirectory);
 console.log(JSON.stringify(output));
 """,
         encoding="utf-8",
@@ -96,6 +128,10 @@ console.log(JSON.stringify(output));
     assert result["rejected"] == [None, None, None]
     assert result["duplicate"] is None
     assert result["cleaned"] is True
+    assert result["backgroundKept"] is True
+    assert result["backgroundSurvivesStop"] is True
+    assert result["backgroundReleased"] is True
+    assert result["finishedRemoved"] is True
     assert result["projected"] == "python3 -m pytest -q"
     assert result["resumed"] == "python3 -m pytest -q"
     assert result["storedTransportUnchanged"] is True

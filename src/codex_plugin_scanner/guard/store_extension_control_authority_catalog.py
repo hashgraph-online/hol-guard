@@ -34,12 +34,6 @@ from .store_extension_control_authority_support import (
 )
 
 
-def _canonical_contract_value(value: object) -> object:
-    from .store_extension_control_authority import _canonical_contract_value as canonical
-
-    return canonical(value)
-
-
 class ExtensionControlAuthorityCatalogMixin:
     @staticmethod
     def _catalog_target_manifest(registry: CommandSafetyExtensionRegistry) -> dict[str, str]:

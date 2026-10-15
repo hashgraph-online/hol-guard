@@ -47,8 +47,8 @@ The [canonical source](../../contributions/command-sources/command.pyrig.json),
 are authored inputs. The fixture embeds the exact source in its build envelope.
 After changing the source, synchronize that embedded copy before testing.
 
-Use an admitted packaged `guard-command-source` compiler with matching
-contracts, or the repository's native compiler:
+Use an admitted packaged `hol-guard-runtime` executable hosting the source
+compiler with matching contracts, or the repository's native compiler:
 
 ```sh
 "$COMPILER" validate < <(jq '.build' tests/fixtures/command-source-pyrig.v1.json)

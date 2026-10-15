@@ -108,12 +108,10 @@ pub struct McpToolEvidenceRequestV1 {
     pub schema: String,
     /// Caller correlation id; echoed back in the result.
     pub request_id: String,
-    /// `risk` or `firewall`.
+    /// `firewall`.
     pub subop: String,
     /// Resolved guard home the request is scoped to.
     pub guard_home: String,
-    #[serde(deserialize_with = "required")]
-    pub risk: Option<McpToolRiskInputV1>,
     #[serde(deserialize_with = "required")]
     pub firewall: Option<McpFirewallInputV1>,
 }
@@ -129,8 +127,8 @@ pub struct McpToolEvidenceResultV1 {
     pub status: String,
     /// `ok`, or one of the `native_mcp_tool_evidence_*` failure codes.
     pub code: String,
-    /// `risk`: `{risk_categories, signals, summary}`. `firewall`:
-    /// `{metadata_patch}` where `null` leaves the artifact unchanged.
+    /// `firewall`: `{metadata_patch}` where `null` leaves the artifact
+    /// unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }

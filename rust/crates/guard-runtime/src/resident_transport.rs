@@ -1,6 +1,7 @@
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::Arc;
 use std::thread;
@@ -267,9 +268,87 @@ fn write_overload(pending: &mut PendingRequest) {
     let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
 }
 
+/// Continuation I/O can run for the caller's whole minute. Keep it off the
+/// evaluation workers. Two side threads are enough; a third fails closed.
+const CODEX_RESUME_RETRY_SIDE_LIMIT: usize = 2;
+static CODEX_RESUME_RETRY_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+
+struct ContinuationSlot;
+
+impl Drop for ContinuationSlot {
+    fn drop(&mut self) {
+        CODEX_RESUME_RETRY_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+fn reserve_continuation_slot() -> bool {
+    let mut in_flight = CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire);
+    while in_flight < CODEX_RESUME_RETRY_SIDE_LIMIT {
+        match CODEX_RESUME_RETRY_IN_FLIGHT.compare_exchange_weak(
+            in_flight,
+            in_flight + 1,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return true,
+            Err(observed) => in_flight = observed,
+        }
+    }
+    false
+}
+
+/// Only a resume retry sends a continuation; the other resume calls are
+/// store reads and writes that stay on the evaluation workers.
+fn is_codex_resume_retry(request: &[u8]) -> bool {
+    crate::strict_json_value(request).is_ok_and(|value| {
+        value.get("operation").and_then(serde_json::Value::as_str) == Some("codex_request_resume")
+            && value
+                .get("request")
+                .and_then(|request| request.get("call"))
+                .and_then(serde_json::Value::as_str)
+                == Some("retry")
+    })
+}
+
+/// The slot is already reserved. A thread that cannot be started drops the
+/// connection and releases the slot.
+fn spawn_codex_resume_retry(
+    pending: PendingRequest,
+    request: Vec<u8>,
+    policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
+) {
+    if thread::Builder::new()
+        .spawn(move || {
+            let slot = ContinuationSlot;
+            let response = match catch_unwind(AssertUnwindSafe(|| {
+                observe(Phase::ResidentEvaluate, || {
+                    crate::resident_protocol::evaluate_resident_bytes(
+                        &request,
+                        policy_store.as_deref(),
+                    )
+                })
+            })) {
+                Ok(Ok(response)) => response,
+                Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
+                Err(_panic) => {
+                    crate::resident_protocol::error_response("native_runtime_panicked", false)
+                }
+            };
+            // Free the slot before replying so a caller that sends again on
+            // receipt never sees this finished continuation as in flight.
+            drop(slot);
+            let mut pending = pending;
+            let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+        })
+        .is_err()
+    {
+        CODEX_RESUME_RETRY_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 fn handle_pending_request(
     mut pending: PendingRequest,
-    policy_store: Option<&crate::policy_store::PolicySnapshotStore>,
+    policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 ) {
     let expired = crate::hardening::request_expired(pending.accepted_at);
     resident_diagnostics::finish_since(
@@ -299,10 +378,20 @@ fn handle_pending_request(
         let digest = Sha256::digest(&request);
         if !constant_time_eq(&digest, &pending.request_digest) {
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
+        } else if is_codex_resume_retry(&request) {
+            if reserve_continuation_slot() {
+                spawn_codex_resume_retry(pending, request, policy_store.clone());
+            } else {
+                write_overload(&mut pending);
+            }
+            return;
         } else {
             match catch_unwind(AssertUnwindSafe(|| {
                 observe(Phase::ResidentEvaluate, || {
-                    crate::resident_protocol::evaluate_resident_bytes(&request, policy_store)
+                    crate::resident_protocol::evaluate_resident_bytes(
+                        &request,
+                        policy_store.as_deref(),
+                    )
                 })
             })) {
                 Ok(Ok(response)) => response,
@@ -337,6 +426,10 @@ pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
     drop(primary);
     drop(overflow);
     worker_pool::drain(workers, Duration::from_secs(2));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
 }
 
 fn retry_overflow_admissions(
@@ -372,7 +465,7 @@ pub(crate) fn start_resident_workers(
         crate::evaluation_workers(),
         evaluation_receiver,
         move |pending| {
-            handle_pending_request(pending, evaluation_policy_store.as_deref());
+            handle_pending_request(pending, evaluation_policy_store.clone());
         },
     );
 
@@ -405,7 +498,7 @@ pub(crate) fn start_resident_workers(
             };
             pending.payload_prefix.truncate(available);
             if available == pending.length {
-                handle_pending_request(pending, policy_store.as_deref());
+                handle_pending_request(pending, policy_store.clone());
                 return;
             }
             match evaluation_sender.try_send(pending) {
@@ -462,3 +555,7 @@ mod peer_tests;
 #[cfg(test)]
 #[path = "resident_transport_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "resident_transport_continuation_tests.rs"]
+mod continuation_tests;

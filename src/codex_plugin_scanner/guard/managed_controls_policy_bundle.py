@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from pathlib import Path
 from typing import cast
 
 from .managed_controls_policy_fields import (
@@ -13,8 +13,6 @@ from .managed_controls_policy_fields import (
     is_mapping,
     parse_managed_controls_policy_fields,
 )
-from .policy_bundle_trusted_keys import PolicyBundleVerificationKey
-from .policy_bundle_v2 import validated_policy_bundle_v2_payload
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     ExtensionControlAuthorityError,
@@ -147,49 +145,13 @@ def signed_cloud_extension_projection_digest(
     return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
 
 
-def validated_managed_controls_policy_bundle_v2_payload(
-    policy_bundle: dict[str, object],
-    *,
-    registry: CommandSafetyExtensionRegistry,
-    negotiated_capabilities: frozenset[str],
-    trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
-    anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
-    package_firewall_supported: bool = False,
-    now: datetime | None = None,
-):
-    """Validate the signed envelope first, then parse negotiated Extension semantics."""
-
-    validated, reason = validated_policy_bundle_v2_payload(
-        policy_bundle,
-        trusted_verification_keys=trusted_verification_keys,
-        anchored_verification_keys=anchored_verification_keys,
-        now=now,
-    )
-    if validated is None:
-        return None, None, reason
-    payload = validated.get("payload")
-    if not is_mapping(payload):
-        return None, None, "invalid_policy_document"
-    try:
-        parsed = parse_managed_controls_policy_fields(
-            payload,
-            registry=registry,
-            negotiated_capabilities=negotiated_capabilities,
-            package_firewall_supported=package_firewall_supported,
-        )
-    except ManagedControlsPolicyError as error:
-        return None, None, error.code
-    except ValueError:
-        return None, None, "invalid_extension_semantics"
-    return validated, parsed, None
-
-
 def parsed_managed_controls_from_validated_policy_bundle(
     policy_bundle: dict[str, object],
     *,
     registry: CommandSafetyExtensionRegistry,
     negotiated_capabilities: frozenset[str],
     package_firewall_supported: bool = False,
+    guard_home: Path | None = None,
 ):
     """Parse Extension semantics from an already authenticated v2 envelope."""
 
@@ -201,6 +163,7 @@ def parsed_managed_controls_from_validated_policy_bundle(
         registry=registry,
         negotiated_capabilities=negotiated_capabilities,
         package_firewall_supported=package_firewall_supported,
+        guard_home=guard_home,
     )
 
 

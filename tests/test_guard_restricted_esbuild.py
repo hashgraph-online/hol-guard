@@ -36,13 +36,21 @@ def test_local_native_image_is_snapshotted(tmp_path, monkeypatch):
     assert image.read_bytes() != source.read_bytes()
 
 
-@pytest.mark.parametrize("unsafe", ["script", "writable", "external", "version", "nonregular"])
+@pytest.mark.parametrize(
+    "unsafe", ["script", "unexecutable", "world-writable", "group-writable", "external", "version", "nonregular"]
+)
 def test_invalid_or_external_transform_image_is_rejected(tmp_path, monkeypatch, unsafe):
     source, private = fixture(tmp_path, monkeypatch)
+    # Pytest's base directory is private; model a tree other accounts can reach.
+    monkeypatch.setattr(module, "_private_ancestor", lambda _path: False)
     if unsafe == "script":
         source.write_bytes(b"#!/bin/sh\n")
-    elif unsafe == "writable":
+    elif unsafe == "unexecutable":
+        source.chmod(0o600)
+    elif unsafe == "world-writable":
         source.chmod(0o777)
+    elif unsafe == "group-writable":
+        source.chmod(0o770)
     elif unsafe == "external":
         external = tmp_path / "outside"
         source.rename(external)
@@ -54,6 +62,20 @@ def test_invalid_or_external_transform_image_is_rejected(tmp_path, monkeypatch, 
         source.mkdir()
     with pytest.raises(RestrictedPytestError):
         module.snapshot_esbuild(tmp_path, private)
+
+
+@pytest.mark.parametrize("mode", [0o777, 0o775])
+def test_writable_image_under_a_private_home_is_snapshotted(tmp_path, monkeypatch, mode):
+    source, private = fixture(tmp_path, monkeypatch)
+    source.chmod(mode)
+    assert module._private_ancestor(source)
+    assert module.snapshot_esbuild(tmp_path, private) is not None
+
+
+def test_a_directory_owned_by_another_account_is_not_private(tmp_path, monkeypatch):
+    source, _private = fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(module.os, "getuid", lambda: 4242)
+    assert not module._private_ancestor(source)
 
 
 def test_missing_dependency_does_not_download_or_grant_an_image(tmp_path):

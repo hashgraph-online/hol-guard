@@ -66,10 +66,6 @@ def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]
         payload["latest_connect_state"] = _guard_doctor_latest_connect_state_payload(latest_state)
     return payload
 
-def _guard_doctor_oauth_storage_health_payload(store: GuardStore) -> dict[str, str]:
-    return _guard_doctor_oauth_storage_health_payload_from_health(
-        store.get_oauth_local_credential_health(),
-    )
 
 def _guard_doctor_oauth_storage_health_payload_from_health(oauth_storage_health: dict[str, object]) -> dict[str, str]:
     state = "unknown"
@@ -524,7 +520,6 @@ __all__ = [
     "_guard_cloud_urls_for_connect",
     "_guard_doctor_connect_health_payload",
     "_guard_doctor_latest_connect_state_payload",
-    "_guard_doctor_oauth_storage_health_payload",
     "_guard_service_runtime_profile",
     "_manual_guard_login_payload",
     "_refresh_cloud_policy_bundle",

@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from codex_plugin_scanner.guard import approval_gate as approval_gate_module
+from codex_plugin_scanner.guard import native_approval_gate
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -90,7 +90,7 @@ def test_recent_totp_proof_reuses_factor_without_replaying_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-a"])
     _enable_gate(guard_home)
     secret = _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
 
@@ -128,7 +128,7 @@ def test_fresh_totp_requirement_rejects_missing_code_despite_recent_proof(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-a"])
     _enable_gate(guard_home)
     secret = _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
     _satisfy_totp(guard_home, secret=secret, now="2026-04-11T00:00:31+00:00")
@@ -151,12 +151,12 @@ def test_recent_totp_proof_is_bound_to_local_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-a"])
     _enable_gate(guard_home)
     secret = _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
     _satisfy_totp(guard_home, secret=secret, now="2026-04-11T00:00:31+00:00")
 
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-b")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-b"])
     assert recent_totp_satisfied(guard_home, now="2026-04-11T00:00:45+00:00") is False
     with pytest.raises(ApprovalGateError) as error:
         require_approval_decision(
@@ -174,7 +174,7 @@ def test_recent_totp_proof_expires_after_sixty_seconds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-a"])
     _enable_gate(guard_home)
     secret = _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
     _satisfy_totp(guard_home, secret=secret, now="2026-04-11T00:00:31+00:00")
@@ -208,7 +208,7 @@ def test_recent_totp_proof_tampering_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-a"])
     _enable_gate(guard_home)
     secret = _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
     _satisfy_totp(guard_home, secret=secret, now="2026-04-11T00:00:31+00:00")
@@ -236,7 +236,7 @@ def test_totp_enrollment_alone_does_not_create_recent_proof(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["session-a"])
     _enable_gate(guard_home)
     _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
 

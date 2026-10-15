@@ -17,23 +17,20 @@ from .codex_daemon_hook_auth import (
     _daemon_url,
     _DaemonResponseError,
     _http_json_response,
+    _json_object,
+    _remaining_seconds,
     _verify_challenge_response,
 )
 
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MINIMUM_OPERATION_SECONDS = 0.01
+# Same ceiling as the hook stdin reader. A timing hint must not push a body the
+# daemon would already have accepted over this limit.
+_MAX_HOOK_REQUEST_BYTES = 1_000_000
 
 
 class _DaemonGenerationChangedError(ValueError):
     """The authenticated daemon generation rotated during one hook request."""
-
-
-def _json_object(text: str) -> dict[str, object] | None:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
 
 
 def _with_remaining_hint(data: str, deadline: float) -> str:
@@ -41,7 +38,14 @@ def _with_remaining_hint(data: str, deadline: float) -> str:
     if payload is None:
         return data
     payload["guard_remaining_ms"] = min(60_000, max(1, int((deadline - time.monotonic()) * 1000)))
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    hinted = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    try:
+        hinted_bytes = hinted.encode("utf-8")
+    except UnicodeEncodeError:
+        return data
+    if len(hinted_bytes) > _MAX_HOOK_REQUEST_BYTES:
+        return data
+    return hinted
 
 
 def _event_name(data: str) -> str:
@@ -50,11 +54,6 @@ def _event_name(data: str) -> str:
         return "PreToolUse"
     value = payload.get("hook_event_name", payload.get("event", "PreToolUse"))
     return value.strip() if isinstance(value, str) and value.strip() else "PreToolUse"
-
-
-def _remaining_seconds(deadline: float, *, cap: float | None = None) -> float:
-    remaining = max(0.0, deadline - time.monotonic())
-    return remaining if cap is None else min(remaining, cap)
 
 
 def _daemon_json_get(

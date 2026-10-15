@@ -1,13 +1,13 @@
 """Privileged setup consumes exact evidence and cannot silently weaken mounts."""
 
 import hashlib
-import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime import restricted_linux_mappings as mapping
+
+pytestmark = pytest.mark.usefixtures("native_context_digest")
 
 
 def _record(path):
@@ -25,36 +25,6 @@ def test_valid_mapping_evidence_keeps_exact_targets(tmp_path):
     record = _record(path)
     validated = mapping.validate_records([record], approved_paths={path})
     assert validated == [(path, tuple(record["identity"]), record["sha256"], (path,))]
-
-
-def test_private_snapshot_is_an_independent_complete_copy(tmp_path):
-    original, copy = tmp_path / "original", tmp_path / "copy"
-    record = _record(original)
-    descriptor = mapping._seal_copy(original, tuple(record["identity"]), record["sha256"], copy)
-    try:
-        assert os.fstat(descriptor).st_ino != original.stat().st_ino
-        assert copy.read_bytes() == original.read_bytes()
-        assert copy.stat().st_mode & 0o777 == 0o500
-        original.write_bytes(b"changed host original")
-        assert copy.read_bytes() == b"synthetic approved executable"
-    finally:
-        os.close(descriptor)
-
-
-@pytest.mark.parametrize("mutation", ["identity", "hash", "existing-destination"])
-def test_unverified_snapshot_cannot_become_a_mapping(tmp_path, mutation):
-    original, copy = tmp_path / "original", tmp_path / "copy"
-    record = _record(original)
-    if mutation == "identity":
-        original.write_bytes(b"changed")
-    elif mutation == "hash":
-        record["sha256"] = "0" * 64
-    else:
-        copy.write_bytes(b"do not overwrite")
-    with pytest.raises((ValueError, OSError)):
-        mapping._seal_copy(original, tuple(record["identity"]), record["sha256"], copy)
-    if mutation == "existing-destination":
-        assert copy.read_bytes() == b"do not overwrite"
 
 
 @pytest.mark.parametrize(
@@ -119,13 +89,3 @@ def test_noexec_remount_preserves_locked_atime_flags(options, flags):
 def test_invalid_mount_snapshot_is_not_ignored(raw):
     with pytest.raises(ValueError):
         mapping.mount_targets(raw)
-
-
-@pytest.mark.parametrize("option", [38, 47, 24])
-def test_failed_capability_drop_prevents_repository_execution(option):
-    def prctl(command, *args):
-        return -1 if command == option else 0
-
-    libc = SimpleNamespace(prctl=prctl)
-    with pytest.raises(ValueError):
-        mapping.drop_capabilities(libc)

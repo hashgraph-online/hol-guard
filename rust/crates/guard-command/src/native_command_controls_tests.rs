@@ -406,7 +406,7 @@ fn delegated_deadline_failure_is_not_an_administrator_disable() {
     );
     assert_eq!(
         result.reason,
-        "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
+        "HOL Guard could not check this command against the installed extension controls, so it stays blocked. Split it into simpler commands, or ask the user to run `hol-guard doctor` if this keeps happening."
     );
 }
 
@@ -450,6 +450,6 @@ fn expired_extension_deadline_fail_closes_a_proven_benign_command() {
     );
     assert_eq!(
         result.reason,
-        "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
+        "HOL Guard could not check this command against the installed extension controls, so it stays blocked. Split it into simpler commands, or ask the user to run `hol-guard doctor` if this keeps happening."
     );
 }

@@ -3,6 +3,13 @@ name: Fuzzing
 on:
   pull_request:
     branches: [main]
+    # The Atheris harnesses fuzz the Python package; pushes to main and the
+    # weekly campaign still fuzz every revision.
+    paths:
+      - "src/**"
+      - "fuzzers/**"
+      - ".clusterfuzzlite/**"
+      - ".github/workflows/fuzz.yml"
   push:
     branches: [main]
   schedule:

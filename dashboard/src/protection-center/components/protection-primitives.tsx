@@ -26,8 +26,8 @@ export function ProtectionStatusHero(props: {
       {safe ? <HiMiniShieldCheck className="size-4" /> : <HiMiniExclamationTriangle className="size-4" />}
     </span>
     <div className="min-w-0 flex-1">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Local protection</p>
-      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <p className="text-sm text-brand-dark/60">Local protection</p>
         <h2 id="protection-status-heading" className="text-sm font-semibold text-brand-dark">{props.status.title}</h2>
         <p className="text-sm leading-5 text-brand-dark/70">{props.status.summary}</p>
       </div>
@@ -63,7 +63,7 @@ function ProtectionStatusAction(props: {
   }
   if (props.safe) {
     return (
-      <span className="inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800">
+      <span className="inline-flex shrink-0 items-center gap-1.5 self-center text-xs font-semibold text-emerald-800">
         <HiMiniCheckCircle className="size-3.5" />
         No action required
       </span>

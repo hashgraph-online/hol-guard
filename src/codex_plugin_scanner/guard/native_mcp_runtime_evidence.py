@@ -26,6 +26,7 @@ from .native_context import (
     ensure_resident_prerequisite,
 )
 from .native_resident_client import native_resident_client_request
+from .native_resident_prerequisite_reason import prerequisite_unavailable_code
 from .native_runtime import _isolated_environment
 from .native_runtime_resilience import (
     native_record_overload,
@@ -81,12 +82,6 @@ def command_text_key(key: str) -> bool:
     return key in _COMMAND_TEXT_KEYS
 
 
-def runtime_action_key(key: str) -> bool:
-    """Whether the standalone ``runtime_action`` subop records this key as a path."""
-    lowered = key.lower()
-    return any(token in lowered for token in _PATH_TOKENS)
-
-
 def argument_entries(
     arguments: object,
     *,
@@ -123,8 +118,7 @@ def _request(subop: str, guard_home: Path | None, **fields: Any) -> dict[str, An
     }
     status = _native_runtime_status_memo()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
@@ -137,7 +131,9 @@ def _request(subop: str, guard_home: Path | None, **fields: Any) -> dict[str, An
     except Exception as error:
         raise NativeMcpRuntimeEvidenceError("native_mcp_runtime_evidence_prerequisite_unavailable") from error
     if not prerequisite:
-        raise NativeMcpRuntimeEvidenceError("native_mcp_runtime_evidence_prerequisite_unavailable")
+        raise NativeMcpRuntimeEvidenceError(
+            prerequisite_unavailable_code("native_mcp_runtime_evidence_prerequisite_unavailable", guard_home)
+        )
     try:
         request_sha256 = _canonical_request_sha256(request)
         # Rust bounds the ASCII-escaped canonical form, which can exceed the
@@ -199,38 +195,6 @@ def _request(subop: str, guard_home: Path | None, **fields: Any) -> dict[str, An
         )
     native_record_resident_success(status.identity.sha256, guard_home)
     return payload["payload"]
-
-
-def native_runtime_action_record(
-    *,
-    tool_description: str | None,
-    arguments: list[list[Any]] | None,
-    risk_categories: Sequence[str],
-    envelope: dict[str, object] | None,
-    guard_home: Path | None = None,
-) -> dict[str, object] | None:
-    result = _request(
-        "runtime_action",
-        guard_home,
-        tool_description=tool_description,
-        arguments=arguments,
-        risk_categories=list(risk_categories),
-        envelope=envelope,
-    )
-    record = result.get("runtime_action")
-    if "runtime_action" not in result or not (record is None or isinstance(record, dict)):
-        raise NativeMcpRuntimeEvidenceError(_INVALID_RESULT)
-    return record
-
-
-def native_command_text(
-    artifact_name: str, arguments: list[list[Any]] | None, *, guard_home: Path | None = None
-) -> str | None:
-    result = _request("command_text", guard_home, artifact_name=artifact_name, arguments=arguments)
-    text = result.get("command_text")
-    if "command_text" not in result or not (text is None or isinstance(text, str)):
-        raise NativeMcpRuntimeEvidenceError(_INVALID_RESULT)
-    return text
 
 
 def native_receipt_evidence(

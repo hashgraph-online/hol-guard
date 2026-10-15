@@ -235,58 +235,6 @@ class TruthfulState(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class TruthfulStateTerm:
-    label: str
-    meaning: str
-
-
-TRUTHFUL_STATE_GLOSSARY: Final[Mapping[TruthfulState, TruthfulStateTerm]] = MappingProxyType(
-    {
-        TruthfulState.PROTECTED: TruthfulStateTerm(
-            "Protected",
-            "Required hooks, services, policy, containment, tamper checks, and evidence health all pass.",
-        ),
-        TruthfulState.PARTIAL: TruthfulStateTerm(
-            "Partial",
-            "Core enforcement checks pass, but complete local evidence health cannot be proven.",
-        ),
-        TruthfulState.DEGRADED: TruthfulStateTerm(
-            "Degraded",
-            "One or more required protection checks do not pass.",
-        ),
-        TruthfulState.CHECKED: TruthfulStateTerm(
-            "Checked",
-            "Guard evaluated the command; this label does not classify it as a threat.",
-        ),
-        TruthfulState.PERMITTED: TruthfulStateTerm(
-            "Permitted",
-            "Guard permitted the command; this does not prove execution.",
-        ),
-        TruthfulState.ALLOWED_UNCONFIRMED: TruthfulStateTerm(
-            "Allowed — unconfirmed",
-            "Guard permitted the command but has no correlated post-execution proof.",
-        ),
-        TruthfulState.CONFIRMED_SUCCESS: TruthfulStateTerm(
-            "Confirmed success",
-            "Strongly correlated post-execution evidence reports successful completion.",
-        ),
-        TruthfulState.CONFIRMED_FAILURE: TruthfulStateTerm(
-            "Confirmed failure",
-            "Strongly correlated post-execution evidence reports failed completion.",
-        ),
-        TruthfulState.INTERRUPTED: TruthfulStateTerm(
-            "Interrupted",
-            "Guard required review or reapproval before execution could continue.",
-        ),
-        TruthfulState.BLOCKED: TruthfulStateTerm(
-            "Blocked",
-            "Guard prevented the command from proceeding.",
-        ),
-    }
-)
-
-
-@dataclass(frozen=True, slots=True)
 class ProtectionHealth:
     required_hooks: bool
     daemon_and_policy: bool
@@ -299,38 +247,6 @@ class ProtectionHealth:
             raise ValueError("ProtectionHealth fields must be booleans")
 
 
-class EnforcementOutcome(str, Enum):
-    CHECKED = "checked"
-    PERMITTED = "permitted"
-    INTERRUPTED = "interrupted"
-    BLOCKED = "blocked"
-
-
-class PostProofEligibility(str, Enum):
-    INELIGIBLE = "ineligible"
-    STRONG_CORRELATION = "strong-correlation"
-
-
-class PostExecutionOutcome(str, Enum):
-    SUCCESS = "success"
-    FAILURE = "failure"
-
-
-@dataclass(frozen=True, slots=True)
-class PostExecutionProof:
-    eligibility: PostProofEligibility
-    outcome: PostExecutionOutcome | None
-
-    def __post_init__(self) -> None:
-        _require_enum(self.eligibility, PostProofEligibility, "eligibility")
-        if self.outcome is not None:
-            _require_enum(self.outcome, PostExecutionOutcome, "outcome")
-        if self.eligibility is PostProofEligibility.INELIGIBLE and self.outcome is not None:
-            raise ValueError("ineligible post-execution proof cannot claim an outcome")
-        if self.eligibility is PostProofEligibility.STRONG_CORRELATION and self.outcome is None:
-            raise ValueError("strongly correlated post-execution proof requires an outcome")
-
-
 def derive_protection_state(health: ProtectionHealth) -> TruthfulState:
     health = _require_instance(health, ProtectionHealth, "health")
     core_healthy = (
@@ -341,77 +257,6 @@ def derive_protection_state(health: ProtectionHealth) -> TruthfulState:
     if not health.evidence_health:
         return TruthfulState.PARTIAL
     return TruthfulState.PROTECTED
-
-
-def derive_activity_state(outcome: EnforcementOutcome, proof: PostExecutionProof) -> TruthfulState:
-    _require_enum(outcome, EnforcementOutcome, "outcome")
-    proof = _require_instance(proof, PostExecutionProof, "proof")
-    if outcome is not EnforcementOutcome.PERMITTED:
-        if proof.outcome is not None:
-            raise ValueError("only a permitted command may consume post-execution proof")
-        return {
-            EnforcementOutcome.CHECKED: TruthfulState.CHECKED,
-            EnforcementOutcome.INTERRUPTED: TruthfulState.INTERRUPTED,
-            EnforcementOutcome.BLOCKED: TruthfulState.BLOCKED,
-        }[outcome]
-    if proof.outcome is PostExecutionOutcome.SUCCESS:
-        return TruthfulState.CONFIRMED_SUCCESS
-    if proof.outcome is PostExecutionOutcome.FAILURE:
-        return TruthfulState.CONFIRMED_FAILURE
-    return TruthfulState.ALLOWED_UNCONFIRMED
-
-
-class BoundaryVersionStatus(str, Enum):
-    CURRENT = "current"
-    MALFORMED = "malformed"
-    UNKNOWN = "unknown"
-    ROLLBACK = "rollback"
-
-
-@dataclass(frozen=True, slots=True)
-class BoundaryVersionClassification:
-    status: BoundaryVersionStatus
-    version: str | None
-    expected_version: str
-    uncertainty: UncertaintyKind | None
-    action_floor: GuardAction | None
-
-    def __post_init__(self) -> None:
-        expected = _parse_boundary_version(self.expected_version)
-        received = _parse_boundary_version(self.version)
-        _require_enum(self.status, BoundaryVersionStatus, "status")
-        if expected is None:
-            raise ValueError("invalid boundary version classification")
-        failure = {
-            BoundaryVersionStatus.MALFORMED: UncertaintyKind.MALFORMED_BOUNDARY_VERSION,
-            BoundaryVersionStatus.UNKNOWN: UncertaintyKind.UNKNOWN_BOUNDARY_VERSION,
-            BoundaryVersionStatus.ROLLBACK: UncertaintyKind.ROLLBACK_BOUNDARY_VERSION,
-        }.get(self.status)
-        if self.status is BoundaryVersionStatus.CURRENT:
-            valid = (received, self.uncertainty, self.action_floor) == (expected, None, None)
-        elif failure is None or self.uncertainty is not failure or self.action_floor != "block":
-            valid = False
-        elif self.status is BoundaryVersionStatus.MALFORMED:
-            valid = self.version is None
-        else:
-            valid = received is not None and (
-                (self.status is BoundaryVersionStatus.UNKNOWN and received > expected)
-                or (self.status is BoundaryVersionStatus.ROLLBACK and received < expected)
-            )
-        if not valid:
-            raise ValueError("invalid boundary version classification")
-
-
-def _parse_boundary_version(value: object) -> tuple[int, int, int] | None:
-    if not isinstance(value, str) or len(value) > 32:
-        return None
-    parts = value.split(".")
-    if len(parts) != 3 or any(
-        not part.isascii() or not part.isdigit() or len(part) > 9 or (len(part) > 1 and part.startswith("0"))
-        for part in parts
-    ):
-        return None
-    return int(parts[0]), int(parts[1]), int(parts[2])
 
 
 def _require_guard_action(value: object, label: str) -> GuardAction:
