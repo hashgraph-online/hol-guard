@@ -108,6 +108,7 @@ mod safe_links;
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
+mod script_content;
 mod search;
 mod search_scope;
 mod search_scope_filter;
@@ -704,6 +705,14 @@ fn evaluate_single_command(
             "block",
             "native_secret_exfiltration",
             "HOL Guard blocked a local script that combines credential access with outbound posting.",
+        ));
+    }
+    if script_content::exfiltrates(&model, context) {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_secret_exfiltration",
+            "HOL Guard blocked a script that reads a credential store and uses the network.",
         ));
     }
     if exact_safe_command_with_context(&model, false, context)

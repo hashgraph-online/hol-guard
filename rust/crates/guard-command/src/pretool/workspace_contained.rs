@@ -412,6 +412,7 @@ pub(super) fn convert(
     let (Some(model), Some(controls), Some(cwd)) = (model, controls, context.cwd) else {
         return;
     };
+    let launch_context = context;
     let projected = super::contained_wrapper::package_dir::as_cd_list(model, context);
     let (issued, model) = (model, projected.as_ref().map_or(model, |list| &list.model));
     let command_text = projected
@@ -481,6 +482,10 @@ pub(super) fn convert(
         || removal::destroys_workspace(result, issued, &workspace)
         || removal::loses_work(result, issued, context, execution_environment)
     {
+        return;
+    }
+    // Last, so a check above that keeps the review keeps its own reason.
+    if super::script_content::keeps_network_review(result, issued, launch_context) {
         return;
     }
     mark_contained(result);
