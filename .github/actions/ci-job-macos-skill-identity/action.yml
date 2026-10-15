@@ -84,5 +84,5 @@ runs:
         sort gate-nodes.txt | awk -v n="$SHARD_COUNT" -v i="$SHARD_INDEX" '(NR - 1) % n == i' > gate-shard.txt
         test -s gate-shard.txt
         echo "shard $SHARD_INDEX runs $(wc -l < gate-shard.txt) of $(wc -l < gate-nodes.txt) gate cases"
-        uv run --no-sync pytest -q --tb=short -n 2 --dist load --max-worker-restart 0 "@gate-shard.txt"
+        uv run --no-sync pytest -q --tb=short --durations=10 -n 2 --dist load --max-worker-restart 0 "@gate-shard.txt"
       shell: bash
