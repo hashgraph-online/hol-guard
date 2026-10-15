@@ -31,7 +31,8 @@ fn home(name: &str) -> PathBuf {
         ".local/share/opencode",
         ".local/share/keyrings",
         ".aws",
-        ".codex",
+        ".claude/projects/p/memory",
+        ".codex/plans",
         ".copilot",
         ".docker",
         ".gemini",
@@ -51,6 +52,12 @@ fn home(name: &str) -> PathBuf {
             "{\"theme\": \"dark\"}\n",
         ),
         (".config/gh/hosts.yml", "example.com:\n"),
+        (".claude/.credentials.json", "{}\n"),
+        (".claude/settings.json", "{}\n"),
+        (".claude/projects/p/memory/note.md", "# Note\n"),
+        (".codex/auth.json", "{}\n"),
+        (".codex/config.toml", "model = \"x\"\n"),
+        (".codex/plans/todo.md", "# Todo\n"),
         (".ssh/config", "Host example\n"),
         ("work/project/.git/HEAD", "ref: refs/heads/main\n"),
     ] {
@@ -111,7 +118,6 @@ fn credential_stores_keep_review_at_any_depth() {
         "ls ~/.kube",
         "ls ~/.docker",
         "ls ~/.hol-guard",
-        "ls ~/.codex",
         "ls ~/.gemini",
         "ls ~/.omp",
         "ls ~/.omp/agent",
@@ -146,6 +152,40 @@ fn walks_reads_globs_and_writes_in_home_dot_directories_keep_review() {
         "ls ~/.config/missing",
         "mkdir -p ~/.config/app-portal/extra",
         "touch ~/.config/app-portal/new.json",
+    ] {
+        assert_ne!(action(&home, "codex", command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn harness_homes_list_and_read_notes_but_not_logins() {
+    let home = home("harness");
+    for harness in ["claude-code", "codex", "omp"] {
+        for command in [
+            "ls ~/.codex",
+            "ls -la ~/.codex/plans",
+            "ls ~/.claude/projects/p/memory",
+            "find ~/.claude -maxdepth 1",
+            "cat ~/.claude/projects/p/memory/note.md",
+            "sed -n 1,5p ~/.claude/projects/p/memory/note.md",
+            "head -20 ~/.codex/plans/todo.md",
+        ] {
+            assert_eq!(
+                action(&home, harness, command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+    for command in [
+        "ls -R ~/.claude",
+        "find ~/.codex -maxdepth 3",
+        "cat ~/.codex/auth.json",
+        "cat ~/.claude/.credentials.json",
+        "grep -n -i guard ~/.claude/settings.json",
+        "head ~/.codex/config.toml",
+        "sed -i s/a/b/ ~/.claude/projects/p/memory/note.md",
+        "ls ~/.claude/.credentials.json",
     ] {
         assert_ne!(action(&home, "codex", command), "allow", "{command}");
     }

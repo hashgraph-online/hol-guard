@@ -45,6 +45,16 @@ pub(in crate::pretool) fn temporary_checkout_parent(
         || private_temporary_root(parent, context)
 }
 
+/// Whether canonical `parent` is a temporary directory no other user can
+/// create an entry in: an owned directory below the shared temporary root,
+/// or the home owner's private macOS temporary directory or one below it.
+pub(in crate::pretool) fn private_temporary_parent(
+    parent: &std::path::Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    owned_temporary_directory(parent, context) || private_temporary_root(parent, context)
+}
+
 /// A sticky shared root owned by root or the home owner, so entries another
 /// user creates there can never be renamed or removed out from under ours.
 #[cfg(unix)]

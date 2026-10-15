@@ -5,18 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shlex
 import stat
 import sys
-from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..windows_paths import trusted_windows_local_temp
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
+from .contained_command_prefix import _assignments_applied, _peel_for_receipt, _split_command_prefix
 from .contained_run_directory import as_directory_change, as_run_root
-from .contained_wrapper import bounded_output, peel_contained_wrapper, sibling_project_root
+from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
@@ -163,82 +162,6 @@ def _decode_request(raw: bytes, expected_sha256: str, *, workspace: Path) -> dic
         raise _reject() from error
 
 
-# Mirrors the native inert-assignment allowlist: these names change output or
-# presentation, never which program runs or what it loads.
-_INERT_ENVIRONMENT_NAMES = frozenset(
-    {
-        "CI",
-        "NODE_ENV",
-        "FORCE_COLOR",
-        "NO_COLOR",
-        "CLICOLOR",
-        "CLICOLOR_FORCE",
-        "TERM",
-        "TZ",
-        "LANG",
-        "LANGUAGE",
-        "COLUMNS",
-        "LINES",
-        "DEBUG",
-        "NODE_NO_WARNINGS",
-        "RUST_LOG",
-        "RUST_BACKTRACE",
-        "PYTHONUNBUFFERED",
-        "PYTHONDONTWRITEBYTECODE",
-    }
-)
-
-
-def _inert_assignment(word: str) -> tuple[str, str] | None:
-    name, separator, value = word.partition("=")
-    if (
-        separator
-        and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
-        and (name in _INERT_ENVIRONMENT_NAMES or name.startswith("LC_"))
-    ):
-        return name, value
-    return None
-
-
-def _split_command_prefix(command: list[str]) -> tuple[list[str], dict[str, str]]:
-    """Peel `command`/`time`/`env` prefixes and inert `NAME=value` assignments.
-
-    The native model reads `CI=1 command bun run build` as `bun run build`
-    with an inert assignment. An option such as `command -v` or `env -i`
-    keeps its prefix, and any other assignment stays in the command, so the
-    core is rejected.
-    """
-    assignments: dict[str, str] = {}
-    for _ in range(16):
-        if len(command) > 1 and command[0] in {"command", "time", "env"} and not command[1].startswith("-"):
-            command = command[1:]
-        elif command and (assignment := _inert_assignment(command[0])) is not None:
-            assignments[assignment[0]] = assignment[1]
-            command = command[1:]
-        else:
-            break
-    return command, assignments
-
-
-@contextmanager
-def _assignments_applied(assignments: Mapping[str, str]) -> Iterator[None]:
-    """Export the assignments to the runner's source environment for one run.
-
-    Each restricted profile still filters that environment, exactly as it
-    filters a variable the agent's shell exported.
-    """
-    previous = {name: os.environ.get(name) for name in assignments}
-    os.environ.update(assignments)
-    try:
-        yield
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
-
-
 def _contained_receipt(receipt: object) -> bool:
     return (
         isinstance(receipt, Mapping)
@@ -379,14 +302,29 @@ def run_authorized_contained_test(
         sys.stdout.flush()
         return 0
 
+    anchored = anchored_sibling_root(tool_input["command"], workspace=workspace, cwd=cwd, home=home_dir)
+    receipt = authorize(payload) if anchored is not None else None
+    if anchored is not None and receipt_matches(receipt) and isinstance(receipt, Mapping):
+        # An absolute script in a sibling repository runs from that root, as
+        # after `cd <root> &&`; any other receipt takes the paths below.
+        return run_workspace_contained(
+            payload,
+            workspace=anchored,
+            cwd=anchored,
+            authorize=authorize,
+            first_receipt=receipt,
+            home_dir=home_dir,
+            timeout_seconds=timeout_seconds,
+            merge_stderr=merge_stderr,
+        )
     try:
-        core, assignments = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
+        core, assignments, dropped = _peel_for_receipt(shlex.split(tool_input["command"], posix=True))
     except ValueError:
-        core, assignments = [], {}
-    if assignments:
+        core, assignments, dropped = [], {}, False
+    if assignments or dropped:
         # Like a wrapper: the original carries the receipt, then the core is
-        # authorized again and runs with the assignments exported. A workspace
-        # receipt runs the original as issued.
+        # authorized again and runs with the assignments exported (a dropped
+        # data setting too). A workspace receipt runs the original as issued.
         receipt = authorize(payload)
         exit_code = run_workspace(receipt)
         if exit_code is not None:

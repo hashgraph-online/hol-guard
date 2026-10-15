@@ -150,6 +150,11 @@ fn init_of_a_fresh_owned_temporary_directory_is_quiet() {
     ] {
         session.assert_allow(&command, INIT);
     }
+    // `pretool_git_init_chain` covers what may follow in the new directory.
+    session.assert_allow(
+        &format!("git init -q {target}/scratch && cd {target}/scratch && git add ."),
+        "native_exact_safe_git_init_chain",
+    );
     for command in [
         format!("git init -q {target}"),
         format!("git init -q {target}/.scratch"),
@@ -157,7 +162,6 @@ fn init_of_a_fresh_owned_temporary_directory_is_quiet() {
         format!("git init --bare {target}/scratch"),
         format!("git init --template={target} {target}/scratch"),
         format!("git init --separate-git-dir {target}/sep {target}/scratch"),
-        format!("git init -q {target}/scratch && cd {target}/scratch && git add ."),
         format!("git init -q {target}/scratch > {target}/init.log"),
         "git init -q /etc/guard-scratch".to_owned(),
     ] {
@@ -207,9 +211,16 @@ fn init_of_a_fresh_leaf_directly_in_a_temporary_root_is_quiet() {
             format!("git init -q {}/.{unique}", root.display()),
             format!("git init -q {target}/nested"),
             format!("git init --bare {target}"),
-            format!("git init -q {target} && cd {target} && git add ."),
         ] {
             session.assert_not_allow(&command);
+        }
+        // Another user may create the leaf in the shared root first, so only
+        // the user's private macOS root lets later steps use it.
+        let chain = format!("git init -q {target} && cd {target} && git add .");
+        if root.starts_with("/private/var/folders") {
+            session.assert_allow(&chain, "native_exact_safe_git_init_chain");
+        } else {
+            session.assert_not_allow(&chain);
         }
         // A directory that already exists there, which in the shared root
         // another user may have planted, keeps its review.

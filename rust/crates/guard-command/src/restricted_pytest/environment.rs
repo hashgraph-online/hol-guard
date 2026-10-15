@@ -78,6 +78,14 @@ static SECRET: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|_)(?:API_?KEY|AUTH(?:ORIZATION)?|BEARER|COOKIE|CREDENTIALS?|DSN|KEY(?:_?ID)?|PASSWORD|PRIVATE_?KEY|SECRET|SESSION|TOKEN)(?:_|$)").unwrap()
 });
 
+/// Whether [`filter`] can pass the caller's setting `key` to the run; it
+/// drops every other name.
+pub(crate) fn forwarded_setting(key: &str) -> bool {
+    matches!(key, "PYTHONPATH" | "VIRTUAL_ENV")
+        || SAFE_ENV_KEYS.contains(&key)
+        || key.starts_with("LC_")
+}
+
 pub(super) fn filter(
     source: &BTreeMap<String, String>,
     workspace: &Path,

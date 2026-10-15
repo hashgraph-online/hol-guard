@@ -134,17 +134,19 @@ class BenignFixture:
             "org_app": self.org / "app-portal",
             "org_wt": self.org.parent / "app-portal-fix",
             "tmp_org": self.tmp_org,
+            "org_rebase": self.org.parent / "app-portal-rebase",
+            "org_rebase_exec": self.org.parent / "app-portal-rebase-exec",
         }[name]
 
 
-def _git(cwd: Path, *args: str, home: Path) -> str:
+def _git(cwd: Path, *args: str, home: Path, check: bool = True) -> str:
     environment = {
         "PATH": os.environ.get("PATH", ""),
         "HOME": str(home),
         "GIT_CONFIG_NOSYSTEM": "1",
         **_GIT_IDENTITY,
     }
-    completed = subprocess.run(["git", *args], cwd=cwd, env=environment, check=True, capture_output=True, text=True)
+    completed = subprocess.run(["git", *args], cwd=cwd, env=environment, check=check, capture_output=True, text=True)
     return completed.stdout.strip()
 
 
@@ -227,7 +229,30 @@ def _session_worktree(org: Path, home: Path) -> None:
     for name in ("findings", "prd", "todo"):
         _write(home / ".codex" / "plans" / f"remediation-{name}.md", f"# Remediation {name}\nSynthetic plan notes.\n")
     _write(home / ".codex" / "plans" / "remediation-evidence.json", '{"cases": []}\n')
+    _write(home / ".codex" / "plans" / "todo.md", "# Todo\n- Synthetic plan item.\n")
     _write(home / ".codex" / "auth.json", '{"tokens": "synthetic-not-a-secret"}\n')
+    # Claude Code home: a memory note agents read, beside a login and a settings file that must stay guarded.
+    _write(home / ".claude" / "projects" / "p" / "memory" / "note.md", "# Note\nSynthetic memory note.\n")
+    _write(home / ".claude" / ".credentials.json", '{"token": "synthetic-not-a-secret"}\n')
+    _write(home / ".claude" / "settings.json", '{"env": {"SYNTHETIC": "not-a-secret"}}\n')
+
+
+def _stopped_rebase(org: Path, home: Path, name: str, *options: str) -> None:
+    """Linked ``app-portal`` worktree whose ``git rebase`` stopped on a conflict the agent resolved and staged."""
+    worktree, onto = org.parent / name, f"{name}-onto"
+    _git(org / "app-portal", "worktree", "add", "--quiet", "-b", onto, str(worktree), "main", home=home)
+    _write(worktree / "README.md", "# onto\n")
+    _git(worktree, "commit", "--quiet", "-am", "onto change", home=home)
+    _git(worktree, "checkout", "--quiet", "-b", name, "main", home=home)
+    _write(worktree / "README.md", "# lane\n")
+    _git(worktree, "commit", "--quiet", "-am", "lane change", home=home)
+    _write(worktree / "later.txt", "later\n")
+    _git(worktree, "add", "later.txt", home=home)
+    _git(worktree, "commit", "--quiet", "-m", "later change", home=home)
+    _git(worktree, "rebase", *options, onto, home=home, check=False)
+    _git(worktree, "rev-parse", "--verify", "--quiet", "REBASE_HEAD", home=home)
+    _write(worktree / "README.md", "# resolved\n")
+    _git(worktree, "add", "README.md", home=home)
 
 
 def build_fixture(root: Path) -> BenignFixture:
@@ -252,6 +277,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')
     _write(home / "other-project" / ".keep", "")
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
+    _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
     _write(home / "kubeconfig.yaml", _KUBECONFIG)
     _write(home / ".ssh" / "id_rsa", "-----BEGIN FIXTURE KEY-----\nnot-a-real-key\n-----END FIXTURE KEY-----\n")
     # Sibling repository outside the workspace, as in the live Gauntlet fixture.
@@ -315,10 +341,15 @@ def build_fixture(root: Path) -> BenignFixture:
     private_tmp = Path(tempfile.mkdtemp(prefix="tmp.", dir=_system_tmp())).resolve()
     _write(private_tmp / "notes.txt", "first draft\n")
     _write(private_tmp / "resume-phase1.mjs", "console.log('resume');\n")
+    # A PostgreSQL run directory: agents glob its hidden socket lock files by name.
+    _write(private_tmp / "pg-run" / ".s.PGSQL.5432.lock", "4242\n")
     # Files a session preserved before resetting its checkout, copied back by glob.
     _write(private_tmp / "preserved" / "src" / "discovery" / "catalog.ts", "export const catalog = [];\n")
     _write(private_tmp / "preserved" / "src" / "discovery" / "rank.ts", "export const rank = 1;\n")
     _write(private_tmp / "preserved" / "tests" / "discovery.test.ts", "export const covered = true;\n")
+    # A repository any session could `git init` in the shared temp area: no sibling root for its scripts.
+    _write(private_tmp / "scratch-repo" / "run.py", "print('run')\n")
+    _git(private_tmp / "scratch-repo", "init", "--quiet", "--initial-branch=main", home=home)
     # Workspace as a linked worktree under the system temp area whose registered siblings are outside cwd.
     tmp_worktree = Path(tempfile.mkdtemp(prefix="wt.", dir=_system_tmp())).resolve() / "workspace"
     _git(parent, "worktree", "add", "--quiet", "-b", "tmp-feature", str(tmp_worktree), home=home)
@@ -353,6 +384,7 @@ def build_fixture(root: Path) -> BenignFixture:
             _write(repository / "contracts" / "commands.json", '{"commands": []}\n')
             _write(repository / "validation" / "schema.json", '{"type": "object"}\n')
             _write(repository / "rust" / "crates" / "catalog" / "src" / "lib.rs", "pub fn catalog_read() {}\n")
+            _write(repository / "src" / "daemon" / "read.py", "print('daemon read')\n")
             # A real target, so the sibling `.env` negative controls prove a refusal.
             _write(repository / ".env", "TOKEN=synthetic-not-a-secret\n")
             _write(repository / ".gitignore", "node_modules/\n")
@@ -363,6 +395,9 @@ def build_fixture(root: Path) -> BenignFixture:
             _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
     _session_worktree(org, home)
+    _stopped_rebase(org, home, "app-portal-rebase")
+    # A rebase started with an `exec` step keeps that program in its saved todo list.
+    _stopped_rebase(org, home, "app-portal-rebase-exec", "-x", "true")
     # Repositories whose `.gitignore` re-includes literal paths: an ordinary
     # kept file and editor setting, and a `.env` template that stays reviewed.
     for name, ignore, files in (
@@ -402,6 +437,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(tmp_org / "app" / "package.json", '{"name": "app", "version": "1.0.0"}\n')
     _write(tmp_org / "app" / "src" / "index.ts", "export const railStage = 1;\n")
     _write(tmp_org / "app" / "tests" / "index.test.ts", "import { railStage } from '../src';\n")
+    _write(tmp_org / "app" / "scripts" / "report.py", "print('report')\n")
     _git(tmp_org / "app", "add", "-A", home=home)
     _git(tmp_org / "app", "commit", "--quiet", "-m", "app base", home=home)
     followup = str(tmp_org.parent / "app-followup")

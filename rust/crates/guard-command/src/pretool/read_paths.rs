@@ -4,6 +4,8 @@ pub(super) use allowances::{
     agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
+#[path = "read_path_harness_notes.rs"]
+mod harness_notes;
 #[path = "hidden_listing.rs"]
 mod hidden_listing;
 #[path = "omp_json_query.rs"]
@@ -237,6 +239,7 @@ pub(super) fn resolved_path_allowed_for_operation(
                     || agent_home_state(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)
+                    || harness_notes::harness_home_document(canonical, home_dir)
                     || git_ref_document(canonical, home_dir, cwd)
                     || git_config_document(canonical, cwd)
                     || worktree_gitfile(canonical)

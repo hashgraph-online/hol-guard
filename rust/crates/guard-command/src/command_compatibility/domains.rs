@@ -363,22 +363,24 @@ pub(super) fn observe(
             );
         }
     }
-    let write_command = matches!(
-        executable.as_str(),
-        "cp" | "mv"
-            | "tee"
-            | "dd"
-            | "install"
-            | "touch"
-            | "truncate"
-            | "sed"
-            | "awk"
-            | "gawk"
-            | "ln"
-            | "chmod"
-            | "chown"
-            | "chgrp"
-    );
+    // A proven `sed` print or stdout substitution writes no file.
+    let write_command = (executable == "sed"
+        && !crate::pretool::sed_edits::proven_read_segment(command, segment, context))
+        || matches!(
+            executable.as_str(),
+            "cp" | "mv"
+                | "tee"
+                | "dd"
+                | "install"
+                | "touch"
+                | "truncate"
+                | "awk"
+                | "gawk"
+                | "ln"
+                | "chmod"
+                | "chown"
+                | "chgrp"
+        );
     // A quoted `>` in a POSIX argument (a Markdown placeholder or arrow in a
     // comment body) writes nothing; interpreter code keeps the raw check.
     let redirect = if interpreter || command.dialect != "posix" {

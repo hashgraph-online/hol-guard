@@ -390,6 +390,8 @@ impl<'a> super::PathContext<'a> {
         let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
             canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         });
+        let psql_environment =
+            super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
         Self {
             home_dir,
             cwd,
@@ -398,6 +400,7 @@ impl<'a> super::PathContext<'a> {
             npm_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            psql_environment,
         }
     }
 }

@@ -193,6 +193,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
         ),
         vec![0, 1]

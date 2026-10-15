@@ -21,6 +21,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         npm_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        psql_environment: Default::default(),
     }
 }
 
@@ -133,6 +134,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         npm_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        psql_environment: Default::default(),
     };
     for command in [
         "echo hi > link/hosts".to_owned(),

@@ -50,34 +50,72 @@ pub(super) fn rm(rest: &[&str]) -> bool {
 
 /// A commit whose message is on the command line, so no editor starts.
 pub(super) fn commit(rest: &[&str]) -> bool {
-    let (mut message, mut amend, mut no_edit) = (false, false, false);
+    commit_form(rest).is_some()
+}
+
+/// Whether a `git commit` segment asks Git to sign the commit, which starts
+/// the configured signing program (`git_local_writes_signing`).
+pub(super) fn signs(segment: &CommandSegmentV1) -> bool {
+    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    matches!(words.split_first(), Some((&"commit", rest)) if commit_form(rest) == Some(true))
+}
+
+/// `Some(signs)` for a commit form the proof accepts. An author or a reset
+/// author only changes the commit's metadata; `-S` and `--gpg-sign` (with an
+/// attached key) start the signing program, which the caller must prove.
+/// Short options may be clustered as Git allows: `-qm msg`, `-am msg`.
+pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
+    let (mut message, mut amend, mut no_edit, mut signs) = (false, false, false, false);
     let mut options = true;
     let mut words = rest.iter();
     while let Some(word) = words.next() {
         if !options || !word.starts_with('-') {
             if word.is_empty() {
-                return false;
+                return None;
             }
             continue;
         }
         match *word {
             "--" => options = false,
-            "-m" | "--message" | "-am" => {
-                if words.next().is_none() {
-                    return false;
-                }
-                message = true;
+            "--message" | "--author" => {
+                words.next()?;
+                message |= *word == "--message";
             }
             value if value.starts_with("--message=") => message = true,
-            value if value.len() > 2 && value.starts_with("-m") => message = true,
-            "-q" | "--quiet" | "-a" | "--all" | "-s" | "--signoff" | "-n" | "--no-verify"
-            | "--allow-empty" | "--no-gpg-sign" => {}
+            value if value.starts_with("--author=") => {}
+            value if value == "--gpg-sign" || value.starts_with("--gpg-sign=") => signs = true,
+            "--quiet" | "--all" | "--signoff" | "--no-verify" | "--allow-empty"
+            | "--no-gpg-sign" | "--reset-author" => {}
             "--amend" => amend = true,
             "--no-edit" => no_edit = true,
-            _ => return false,
+            value if value.starts_with("--") => return None,
+            "-" => return None,
+            cluster => {
+                for (offset, flag) in cluster[1..].char_indices() {
+                    match flag {
+                        'q' | 'a' | 's' | 'n' => {}
+                        // The rest of the cluster, or else the next word, is
+                        // the message.
+                        'm' => {
+                            if cluster.len() == offset + 2 {
+                                words.next()?;
+                            }
+                            message = true;
+                            break;
+                        }
+                        // The rest of the cluster names the key; Git never
+                        // takes it from the next word.
+                        'S' => {
+                            signs = true;
+                            break;
+                        }
+                        _ => return None,
+                    }
+                }
+            }
         }
     }
-    message || (amend && no_edit)
+    (message || (amend && no_edit)).then_some(signs)
 }
 
 /// `branch -m NEW` or `branch -m OLD NEW`, options first. A rename moves the

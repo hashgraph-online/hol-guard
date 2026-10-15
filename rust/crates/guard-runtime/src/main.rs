@@ -368,6 +368,7 @@ mod guard_store_wfcap_state;
 mod guard_store_wfcap_wire;
 #[cfg(test)]
 mod guard_store_workflow_capability_vectors_tests;
+mod guard_store_write_cache;
 mod hardening;
 mod hermes_detect;
 mod hermes_inspect;

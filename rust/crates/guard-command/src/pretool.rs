@@ -22,6 +22,10 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// What a `psql` read inherits from the session: startup files only a
+    /// read without `-X` runs, and the server libpq picks. Literal contexts
+    /// leave both false.
+    pub psql_environment: PsqlEnvironment,
 }
 
 mod contained_wrapper;
@@ -56,6 +60,7 @@ mod git_config;
 pub(crate) mod git_config_reads;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
+mod git_init_chain;
 pub(crate) mod git_init_target;
 pub(crate) mod git_object_reads;
 mod git_read_floor;
@@ -133,12 +138,12 @@ pub mod generic;
 mod package_scripts_disabled;
 pub use package_scripts_disabled::{held_command_installs, no_script_install_command};
 
-pub use generic::bounded_task_metadata_output;
-pub use generic::evaluate_pre_tool_envelope;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
+pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
+pub use safe_scalar::PsqlEnvironment;
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -814,7 +819,7 @@ fn evaluate_single_command(
         ));
     }
     if exact_safe_command_with_context(&model, false, context)
-        && !bun_eval::node_inline_preload_configured(&model, execution_environment)
+        && !bun_eval::inherited_preload_configured(&model, execution_environment)
     {
         let reason_code = docker_start::proven_reason_code(&model)
             .unwrap_or_else(|| curl_reads::proven_reason_code(&model));

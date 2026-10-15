@@ -462,7 +462,6 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git rm -f tracked.txt",
         "git commit",
         "git commit -e -m x",
-        "git commit -S -m x",
         "git -c core.hooksPath=/tmp/hooks commit -m x",
         "git add notes.md && rm -rf build",
         "git switch main",

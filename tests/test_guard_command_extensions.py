@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -756,7 +757,9 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
         "--title 'feat(guard): add protection_posture with dual-write to mode and level' "
         "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
     )
-    assert _gh_pr_create_uses_safe_static_body_file(command, cwd=workspace, home_dir=home_dir)
+    # The native body-file proof models POSIX paths only, so Windows fails closed.
+    safe_body = _gh_pr_create_uses_safe_static_body_file(command, cwd=workspace, home_dir=home_dir)
+    assert safe_body is (sys.platform != "win32")
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         ExtensionControlAuthorityView(
             health=health,
@@ -767,12 +770,7 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
     )
 
     with use_extension_control_snapshot(snapshot):
-        request = extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=workspace,
-            home_dir=home_dir,
-        )
+        request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=workspace, home_dir=home_dir)
 
     # Host discovery can recognize the file, but the offline native request
     # does not bind its contents or identity. Proposal permission cannot remove

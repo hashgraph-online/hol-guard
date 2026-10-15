@@ -1,5 +1,6 @@
 //! `GuardStore` — resident op owning request-path persistence over
-//! `guard.db`. Each call opens the store, applies the same connection pragmas
+//! `guard.db`. Each call opens the store (reusing a kept connection to the
+//! same file), applies the same connection pragmas
 //! as the Python store, runs one method in a single SQLite transaction,
 //! finalizes trigger-written outbox payload hashes, commits, and reports the
 //! outbox generation when rows changed.
@@ -15,7 +16,7 @@ use guard_contracts::{
     GUARD_STORE_REQUEST_SCHEMA, GUARD_STORE_RESULT_SCHEMA,
 };
 use guard_policy_snapshot::digest_bytes;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::context_digest_json::write_canonical_json_with_limit;
@@ -113,10 +114,9 @@ pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Opt
         Some(kind) => kind,
         None => return invalid("native_guard_store_method_unknown"),
     };
-    let connection = Connection::open_with_flags(
-        &path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
+    // A warm call reuses a kept connection: reopening parsed the whole schema
+    // on every call (see `guard_store_write_cache`).
+    let connection = crate::guard_store_write_cache::open_read_write_cached(&path)?;
     connection.busy_timeout(Duration::from_millis(request.busy_timeout_ms))?;
     apply_pragmas(&connection)?;
     // A total read only writes for the one-time rebuild a migration requests;

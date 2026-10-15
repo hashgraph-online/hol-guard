@@ -9,6 +9,23 @@ use std::path::{Component, Path};
 /// Guard's own command line manages state outside any workspace.
 const GUARD_CLIS: &[&str] = &["hol-guard", "guard"];
 
+/// Database clients change a server outside any workspace, even over a local
+/// socket: `psql -c 'drop table t'` is no workspace work the sandbox could keep.
+const DATABASE_CLIENTS: &[&str] = &[
+    "psql",
+    "pg_dump",
+    "pg_dumpall",
+    "pg_restore",
+    "mysql",
+    "mariadb",
+    "mysqldump",
+    "sqlcmd",
+    "redis-cli",
+    "mongo",
+    "mongosh",
+    "cqlsh",
+];
+
 /// Devices every sandbox profile offers.
 const DEVICES: &[&str] = &[
     "/dev/null",
@@ -26,7 +43,7 @@ pub(super) fn reaches_outside(
     workspace: &Path,
     temp_fixed: bool,
 ) -> bool {
-    if GUARD_CLIS.contains(&name) {
+    if GUARD_CLIS.contains(&name) || DATABASE_CLIENTS.contains(&name) {
         return true;
     }
     // A variable or home path the sandbox would resolve differently. Redirect

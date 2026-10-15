@@ -111,7 +111,7 @@ pub(super) fn review_reason(action_type: PreToolActionTypeV1) -> (&'static str, 
         ),
         PreToolActionTypeV1::Package => (
             "native_package_review",
-            "HOL Guard requires review before this package action can execute.",
+            "HOL Guard requires review before this package or script command can execute.",
         ),
         PreToolActionTypeV1::McpTool => (
             "native_mcp_tool_review",
