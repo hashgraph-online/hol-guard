@@ -267,20 +267,6 @@ def complex_control_flow_may_invoke_github(
     )
 
 
-def segment_starts_function_definition(segment: list[str], *, command_index: int, normalized_tokens: list[str]) -> bool:
-    """Return whether a shell segment begins a function definition."""
-
-    raw_command = segment[command_index].strip("\"'").lower()
-    if raw_command.endswith("(){"):
-        return True
-    suffix_index = command_index + 1
-    has_function_suffix = raw_command.endswith("()")
-    if suffix_index < len(normalized_tokens) and normalized_tokens[suffix_index] == "()":
-        has_function_suffix = True
-        suffix_index += 1
-    return has_function_suffix and any(token in {"{", "("} for token in normalized_tokens[suffix_index:])
-
-
 def definition_payload(segment: list[str], *, command_name: str, command_index: int) -> str:
     """Extract the executable body of an alias or function definition."""
 

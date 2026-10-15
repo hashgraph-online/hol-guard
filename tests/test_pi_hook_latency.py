@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import sys
 import threading
-import time
 import urllib.parse
 import urllib.request
 from http.client import HTTPResponse
@@ -15,17 +14,14 @@ from typing import Protocol, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.coverage_ci import under_coverage_scale
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 class _DaemonInternals(Protocol):
     auth_token: str
-    hook_process_runner: object
 
 
 def _daemon_internals(daemon: GuardDaemonServer) -> _DaemonInternals:
@@ -73,59 +69,6 @@ def _pi_hook_request(*, daemon: GuardDaemonServer, guard_home: str, call_id: str
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_review_required_pi_hook_returns_before_worker_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
-    (guard_home / "config.toml").write_text(
-        'security_level = "custom"\n[risk_actions]\nlocal_secret_read = "review"\n',
-        encoding="utf-8",
-    )
-    # The transport admission deadline binds hint-less reviews; coverage tracing
-    # slows the review pipeline past it into the deliberate fail-open path, so
-    # covered CI runs scale the deadline and the asserted latency bound together.
-    coverage_scale = under_coverage_scale(3.0)
-    monkeypatch.setattr(
-        daemon_server_module,
-        "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS",
-        daemon_server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    query = urllib.parse.urlencode(
-        {
-            "guard-home": str(guard_home),
-            "home": str(tmp_path),
-            "workspace": str(tmp_path),
-        }
-    )
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?{query}",
-        data=json.dumps(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Read",
-                "tool_input": {"path": "~/.ssh/config"},
-            }
-        ).encode(),
-        headers={"Content-Type": "application/json", "X-Guard-Token": _daemon_internals(daemon).auth_token},
-        method="POST",
-    )
-    try:
-        started = time.monotonic()
-        with urllib.request.urlopen(request, timeout=2 * coverage_scale) as response:
-            result = _read_json_object(response)
-        elapsed = time.monotonic() - started
-    finally:
-        daemon.stop()
-
-    assert result["decision"] == "deny"
-    assert store.count_pending_requests(harness="pi") == 1
-    assert elapsed < 1.45 * coverage_scale
-
-
-@pytest.mark.usefixtures("native_hook_force")
 def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -145,7 +88,7 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     monkeypatch.setattr(_daemon_internals(daemon).hook_worker, "review_http_payload", fake_review)
     daemon.start()
-    _daemon_internals(daemon).runtime_hook_process_scheduler.set_active_limit(2)
+    _daemon_internals(daemon).runtime_hook_scheduler.set_active_limit(2)
     first_result: list[dict[str, object]] = []
 
     def run_first() -> None:

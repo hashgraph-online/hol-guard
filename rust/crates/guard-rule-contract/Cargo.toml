@@ -11,5 +11,9 @@ hex.workspace = true
 serde.workspace = true
 sha2.workspace = true
 
+[build-dependencies]
+hex.workspace = true
+sha2.workspace = true
+
 [lints]
 workspace = true

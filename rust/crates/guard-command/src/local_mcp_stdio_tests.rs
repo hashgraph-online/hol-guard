@@ -10,6 +10,103 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[test]
+fn private_group_teardown_stops_descendant_and_preserves_unrelated_group() {
+    use std::io::{BufRead, BufReader};
+    use std::os::unix::process::CommandExt;
+    use std::process::{Child, Command, Stdio};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    #[cfg(target_os = "linux")]
+    {
+        // Fresh containers can allocate IDs within kill's signal-number
+        // range, masking the missing operand separator. Exercise larger IDs.
+        let mut reached_larger_pid = false;
+        for _ in 0..128 {
+            let mut warmup = Command::new("/bin/true").spawn().unwrap();
+            let pid = warmup.id();
+            assert!(warmup.wait().unwrap().success());
+            if pid > 64 {
+                reached_larger_pid = true;
+                break;
+            }
+        }
+        assert!(reached_larger_pid);
+    }
+
+    struct OwnedGroup(Child);
+    impl Drop for OwnedGroup {
+        fn drop(&mut self) {
+            kill_process_group(self.0.id() as i32);
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let mut unrelated = OwnedGroup(
+        Command::new("/bin/sleep")
+            .arg("30")
+            .process_group(0)
+            .spawn()
+            .unwrap(),
+    );
+    let mut group = OwnedGroup(
+        Command::new("/bin/sh")
+            .args(["-c", "sleep 30 & echo $!; wait"])
+            .process_group(0)
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let stdout = group.0.stdout.take().unwrap();
+    let (sender, receiver) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut line = String::new();
+        BufReader::new(stdout).read_line(&mut line).unwrap();
+        let _ = sender.send(line);
+    });
+    let line = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
+    reader.join().unwrap();
+    let descendant: u32 = line.trim().parse().unwrap();
+    assert!(descendant > 1);
+
+    // Check reserved IDs without ever issuing those dangerous kernel calls.
+    for invalid in [i32::MIN, -1, 0, 1] {
+        assert!(process_group_operand(invalid).is_none());
+    }
+    assert!(group.0.try_wait().unwrap().is_none());
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    kill_process_group(group.0.id() as i32);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while group.0.try_wait().unwrap().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(group.0.try_wait().unwrap().is_some());
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    #[cfg(target_os = "linux")]
+    {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let status = std::fs::read_to_string(format!("/proc/{descendant}/stat"));
+            match status {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+                Ok(status)
+                    if matches!(
+                        status
+                            .rsplit_once(") ")
+                            .and_then(|(_, rest)| rest.split_whitespace().next()),
+                        Some("Z" | "X")
+                    ) =>
+                {
+                    break
+                }
+                _ if Instant::now() >= deadline => panic!("owned descendant remains active"),
+                _ => std::thread::sleep(Duration::from_millis(10)),
+            }
+        }
+    }
+}
+
+#[test]
 fn pop_json_message_newline_framing() {
     let raw = b"{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[]}}\n";
     let (msg, consumed) = pop_json_message(raw).unwrap();

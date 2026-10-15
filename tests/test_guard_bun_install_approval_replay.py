@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_js_supply_chain_phase11 import WORKSPACE_ID, _bundle_response, _package
+from tests.test_guard_package_shims import _seed_guard_cloud
 
 
 @pytest.fixture(autouse=True)
@@ -30,12 +31,13 @@ def _write_bun_workspace(workspace_dir: Path) -> None:
     )
 
 
+@pytest.mark.usefixtures("bundle_first_cloud")
 def test_bun_install_approval_never_lowers_current_block_when_integrity_is_degraded(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     _write_bun_workspace(workspace_dir)
-    store.get_cloud_workspace_id = lambda: WORKSPACE_ID  # type: ignore[method-assign]
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),

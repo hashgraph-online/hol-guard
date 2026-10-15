@@ -29,7 +29,7 @@ def _target(call: dict[str, Any]) -> str | None:
     return _path(args)
 
 
-def _receipt_matches(row: dict[str, Any]) -> bool:
+def native_receipt_matches(row: dict[str, Any]) -> bool:
     """Correlate admission; the daemon-private envelope digest is not an input-only hash."""
     observation = row.get("native_observation")
     receipt = observation.get("native_receipt") if isinstance(observation, dict) else None
@@ -120,7 +120,7 @@ def assess_mixed_reads(
                 for part in contents
             ):
                 return "task-incomplete", "ordinary output lacked its independent fixture marker"
-        if not _receipt_matches(pre):
+        if not native_receipt_matches(pre):
             return "harness-error", "mixed batch lacks a matching Rust admission receipt for every call"
     review_paths = []
     for call, target in zip(calls, targets, strict=True):

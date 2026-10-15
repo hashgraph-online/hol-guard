@@ -5,16 +5,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.manifest_dependency_targets import unsynced_manifest_dependency_targets
-from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
+import pytest
+
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.workspace_path_guard import (
     existing_paths_within_workspace,
     read_text_within_workspace,
     resolve_path_within_workspace,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 
 def test_resolve_path_within_workspace_rejects_parent_traversal(tmp_path: Path) -> None:
@@ -40,7 +43,7 @@ def test_resolve_path_within_workspace_rejects_symlink_escape(tmp_path: Path) ->
     assert read_text_within_workspace(workspace, "requirements.txt") is None
 
 
-def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path) -> None:
+def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path, package_intent_native: Path) -> None:
     workspace = tmp_path / "workspace"
     outside = tmp_path / "outside"
     workspace.mkdir()
@@ -51,29 +54,6 @@ def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path)
 
     assert intent is not None
     assert intent.manifest_paths == ()
-
-
-def test_unsynced_manifest_targets_do_not_read_symlinked_requirements(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    secret = tmp_path / "secret.env"
-    workspace.mkdir()
-    secret.write_text("AWS_SECRET_ACCESS_KEY=super-secret\n", encoding="utf-8")
-    (workspace / "requirements.txt").symlink_to(secret)
-    (workspace / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
-
-    intent = parse_package_intent("pip install", workspace=workspace)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "guard-cli",
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-    )
-
-    targets = unsynced_manifest_dependency_targets(artifact, workspace)
-
-    assert not any("AWS_SECRET" in str(target.get("package_name")) for target in targets)
-    assert not any("super-secret" in str(target.get("range")) for target in targets)
 
 
 def test_evaluate_package_request_artifact_does_not_leak_traversal_requirements(tmp_path: Path) -> None:

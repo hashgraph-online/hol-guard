@@ -4,6 +4,28 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+## Hook verdict exit codes
+
+`guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
+authority for verdict exit codes, including `--json` responses. Emitters pass
+the canonical harness, resolved policy action, and normalized hook event;
+they do not maintain independent exit-code tables.
+
+| Harness | Blocking verdict | Nonblocking verdict |
+| --- | --- | --- |
+| Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Cursor, Devin, Kimi, Hermes | `2` | `0` |
+| OpenCode, Superagent | `1` | `0` |
+| Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
+| Unknown harness | `1` | `0` |
+
+Blocking actions are `review`, `require-reapproval`, `sandbox-required`, and
+`block`. Missing event context does not imply that an envelope will be consumed.
+`PostToolUse` reports a policy violation; it cannot undo an executed tool.
+
+## Harness coverage
+
+
 Current Guard support in this repo:
 
 - `codex`
@@ -26,6 +48,7 @@ Current Guard support in this repo:
   - supports local hook install and uninstall in `.claude/settings.local.json`
   - has native `PreToolUse` and `PermissionRequest` Guard hook coverage; Guard does not install `UserPromptSubmit`, so native prompt submission is not intercepted
   - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
+  - on macOS and Linux, when the bundled runtime supports it, the `SessionStart` hook first checks in the native runtime that the Guard hook entries are already current and the verified daemon is live, and prints the Guard context without starting Python; otherwise it hands the session start to the Python hook, which starts the daemon and refreshes the entries as before
   - is the best current harness for graceful approval deferral
 - `copilot`
   - detects read-only user config in `~/.copilot/config.json` and `~/.copilot/mcp-config.json`

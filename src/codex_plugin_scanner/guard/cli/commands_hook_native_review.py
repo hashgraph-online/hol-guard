@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
+from ..harness_posture import harness_is_recording_only
 from ..models import GuardAction
 from ..retry_lineage import capture_retry_lineage
 from ._commands_shared import *
@@ -201,13 +202,13 @@ def review_native_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
-    observe_mode = config.mode == "observe"
+    observe_mode = harness_is_recording_only(config, args.harness)
     from ..blocked_request_mode import asks_for_approval
 
     if (
         not observe_mode
         and not asks_for_approval(config)
-        and (policy_action in {"review", "require-reapproval"} or cursor_native_queue)
+        and (policy_action in {"review", "require-reapproval", "block"} or cursor_native_queue)
     ):
         from .commands_hook_native_silent_review import apply_unprompted_native_review
 

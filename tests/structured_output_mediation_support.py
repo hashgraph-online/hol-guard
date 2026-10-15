@@ -134,6 +134,7 @@ class _NativeRouteFixture(HookWorkerNativeMixin):
             "harness": "pi",
             "result": result,
             "receipt": receipt,
+            "harness_response": dict(result),
         }
 
     def _record_native_decision_receipt(self, receipt: object) -> object:
@@ -168,4 +169,5 @@ class _ObserveNativeRouteFixture(_NativeRouteFixture):
             "harness": "pi",
             "result": result,
             "receipt": receipt,
+            "harness_response": dict(result),
         }

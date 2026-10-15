@@ -1,25 +1,17 @@
-"""State helpers for the local approval password gate."""
+"""Public shapes and tiny helpers for the local approval password gate.
+
+The native resident owns the gate state file, verifier, lockout, cooldown and
+grant table. This module keeps only the immutable public snapshot the CLI,
+dashboard and daemon present, plus two clock/coercion helpers.
+"""
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Literal
 
 APPROVAL_GATE_STATE_FILE = "approval-gate.json"
-APPROVAL_GATE_MAX_COOLDOWN_SECONDS = 3600
-APPROVAL_GATE_ALLOWED_COOLDOWNS = (0, 900, APPROVAL_GATE_MAX_COOLDOWN_SECONDS)
-APPROVAL_GATE_LOCKOUT_FAILURES = 5
-APPROVAL_GATE_LOCKOUT_SECONDS = 300
-APPROVAL_GATE_COMBINED_LOCKOUT_FAILURES = 5
-
-ApprovalGateFactor = Literal["password", "totp"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,97 +46,6 @@ class ApprovalGatePublicConfig:
         }
 
 
-def write_state(guard_home: Path, state: dict[str, object], *, now: str | None) -> None:
-    guard_home.mkdir(parents=True, exist_ok=True)
-    payload = dict(state)
-    payload["updated_at"] = now or iso_from_epoch(time.time())
-    path = guard_home / APPROVAL_GATE_STATE_FILE
-    tmp_path = path.with_suffix(".json.tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp_path.chmod(0o600)
-    tmp_path.replace(path)
-
-
-def default_state() -> dict[str, object]:
-    return {
-        "enabled": False,
-        "cooldown_seconds": 0,
-        "strict_all_decisions": False,
-        "failed_attempts": 0,
-        "password_failed_attempts": 0,
-        "totp_failed_attempts": 0,
-        "factor_generation": 0,
-        "totp_enabled": False,
-    }
-
-
-def verifier(state: dict[str, object]) -> dict[str, object] | None:
-    value = state.get("verifier")
-    return value if isinstance(value, dict) else None
-
-
-def verify_password(password: str, verifier_payload: dict[str, object] | None) -> bool:
-    if verifier_payload is None:
-        return False
-    iterations = optional_int(verifier_payload.get("iterations"))
-    if iterations is None:
-        return False
-    try:
-        salt = base64.b64decode(str(verifier_payload["salt"]))
-        expected = base64.b64decode(str(verifier_payload["hash"]))
-    except (KeyError, TypeError, ValueError):
-        return False
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
-    return hmac.compare_digest(digest, expected)
-
-
-def enabled(state: dict[str, object]) -> bool:
-    return state.get("enabled") is True or state.get("fail_closed") is True
-
-
-def record_failed_attempt(
-    guard_home: Path,
-    state: dict[str, object],
-    *,
-    factor: ApprovalGateFactor,
-    now: str | None,
-) -> None:
-    now_epoch = epoch(now)
-    factor_key = f"{factor}_failed_attempts"
-    factor_attempts = (optional_int(state.get(factor_key)) or 0) + 1
-    combined_attempts = (optional_int(state.get("failed_attempts")) or 0) + 1
-    state[factor_key] = factor_attempts
-    state["failed_attempts"] = combined_attempts
-    if (
-        factor_attempts >= APPROVAL_GATE_LOCKOUT_FAILURES
-        or combined_attempts >= APPROVAL_GATE_COMBINED_LOCKOUT_FAILURES
-    ):
-        state["locked_until"] = iso_from_epoch(now_epoch + APPROVAL_GATE_LOCKOUT_SECONDS)
-        state["failed_attempts"] = 0
-        state["password_failed_attempts"] = 0
-        state["totp_failed_attempts"] = 0
-    write_state(guard_home, state, now=now)
-
-
-def reset_failed_attempts(state: dict[str, object]) -> None:
-    """Reset every factor budget only after the required factor set succeeds."""
-
-    state["failed_attempts"] = 0
-    state["password_failed_attempts"] = 0
-    state["totp_failed_attempts"] = 0
-    state.pop("locked_until", None)
-
-
-def cooldown_active(state: dict[str, object], now_epoch: float) -> bool:
-    return is_future(optional_string(state.get("cooldown_expires_at")), now_epoch)
-
-
-def is_future(value: str | None, now_epoch: float) -> bool:
-    if value is None:
-        return False
-    return epoch(value) > now_epoch
-
-
 def epoch(value: str | None) -> float:
     if value is None:
         return time.time()
@@ -171,39 +72,3 @@ def optional_bool(value: object, fallback: object) -> bool | None:
     if isinstance(fallback, bool):
         return fallback
     return None
-
-
-def optional_int(value: object) -> int | None:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            return int(value)
-        except ValueError:
-            return None
-    return None
-
-
-def optional_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str) and value.strip():
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
-def prune_grants(grants: dict[str, dict[str, object]], now_epoch: float) -> None:
-    expired = [
-        grant_id
-        for grant_id, metadata in grants.items()
-        if (optional_float(metadata.get("expires_epoch")) or 0.0) <= now_epoch
-    ]
-    for grant_id in expired:
-        grants.pop(grant_id, None)

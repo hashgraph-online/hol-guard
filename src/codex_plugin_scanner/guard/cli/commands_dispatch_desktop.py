@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, TextIO
 
@@ -640,12 +641,23 @@ def _run_guard_desktop_command(
             guard_home=resolved_guard_home,
             home_dir=getattr(context, "home_dir", None),
         )
-    payload = assemble_desktop_bootstrap_document(
-        context=context,
-        store=store,
-        config=config,
-        session_url=session_url,
-    )
+    # The projection makes ~30 short reads. One shared connection avoids a
+    # connect/close (and WAL checkpoint) per read, which Desktop's bounded
+    # update preflight cannot afford on a loaded machine. The scope holds the
+    # shared storage gate, so it covers only these reads, not daemon start/adopt
+    # or output.
+    with ExitStack() as scope:
+        try:
+            scope.enter_context(store.connection_scope())
+        except (OSError, TimeoutError, ValueError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        payload = assemble_desktop_bootstrap_document(
+            context=context,
+            store=store,
+            config=config,
+            session_url=session_url,
+        )
     print(json.dumps(payload, sort_keys=True), file=output_stream or sys.stdout)
     return 0
 

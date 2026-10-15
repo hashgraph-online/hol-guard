@@ -13,6 +13,7 @@ from .manager import (
     clear_guard_daemon_recovery_reservation,
     recover_guard_daemon_after_hook_failure,
 )
+from .start_classification import GuardDaemonStillStartingError
 
 
 def main() -> int:
@@ -35,6 +36,9 @@ def main() -> int:
             failure_kind=failure_kind,
             recovery_lock_timeout_seconds=_GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
         )
+    except GuardDaemonStillStartingError:
+        # The daemon was left running and will publish its state when ready.
+        return 0
     finally:
         with suppress(OSError, RuntimeError, ValueError):
             _ = clear_guard_daemon_recovery_reservation(

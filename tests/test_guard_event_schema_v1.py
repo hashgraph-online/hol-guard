@@ -6,13 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import ClassVar
 
 from codex_plugin_scanner.guard.edge_events import (
-    build_access_graph_snapshot_event,
-    build_agent_handshake_event,
-    build_approval_event,
-    build_notification_delivery_event,
-    build_policy_event,
     build_receipt_event,
-    build_runtime_session_event,
 )
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.runner import sync_guard_events, sync_receipts
@@ -154,80 +148,6 @@ def test_receipt_persistence_dual_writes_pending_cloud_event(tmp_path) -> None:
     pending = store.list_guard_events_v1(uploaded=False, limit=10)
     assert pending[0]["event_type"] == "receipt.created"
     assert pending[0]["payload"]["payload"]["artifactId"] == "artifact-1"
-
-
-def test_approval_and_policy_events_are_contract_valid() -> None:
-    approval_event = build_approval_event(
-        request_id="approval-1",
-        event_type="approval.created",
-        occurred_at="2026-04-24T00:00:00+00:00",
-        payload={"artifactId": "artifact-1"},
-        workspace_id="workspace-1",
-    )
-    policy_event = build_policy_event(
-        policy_key="policy-1",
-        occurred_at="2026-04-24T00:00:00+00:00",
-        payload={"policyId": "policy-1"},
-        workspace_id="workspace-1",
-    )
-
-    assert GuardEventV1.from_dict(approval_event.to_dict()).event_type == "approval.created"
-    assert GuardEventV1.from_dict(policy_event.to_dict()).event_type == "policy.changed"
-
-
-def test_new_guard_cloud_event_types_are_contract_valid() -> None:
-    runtime_session = build_runtime_session_event(
-        session_id="session-1",
-        occurred_at="2026-04-24T00:00:00+00:00",
-        payload={"status": "active"},
-        workspace_id="workspace-1",
-        device_id="device-1",
-    )
-    access_graph = build_access_graph_snapshot_event(
-        snapshot_id="snapshot-1",
-        occurred_at="2026-04-24T00:00:01+00:00",
-        payload={
-            "snapshotId": "snapshot-1",
-            "generatedAt": "2026-04-24T00:00:01+00:00",
-            "entities": [
-                {
-                    "entityType": "device",
-                    "entityId": "device-1",
-                    "displayName": "Local machine",
-                    "fingerprint": "device:device-1",
-                    "metadata": {},
-                }
-            ],
-            "edges": [],
-        },
-        workspace_id="workspace-1",
-        device_id="device-1",
-    )
-    handshake = build_agent_handshake_event(
-        handshake_id="handshake-1",
-        occurred_at="2026-04-24T00:00:02+00:00",
-        payload={"agentId": "agent-1", "capabilities": ["chat"]},
-        workspace_id="workspace-1",
-        device_id="device-1",
-    )
-    notification = build_notification_delivery_event(
-        delivery_id="delivery-1",
-        occurred_at="2026-04-24T00:00:03+00:00",
-        payload={"channel": "slack", "status": "delivered"},
-        workspace_id="workspace-1",
-        device_id="device-1",
-    )
-
-    events = [runtime_session, access_graph, handshake, notification]
-
-    assert {event.event_type for event in events} == {
-        "runtime.session",
-        "access_graph.snapshot",
-        "agent.handshake",
-        "notification.delivery",
-    }
-    assert all(GuardEventV1.from_dict(event.to_dict()).workspace_id == "workspace-1" for event in events)
-    assert all(event.to_dict()["schemaVersion"] == "guard.event.v1" for event in events)
 
 
 def test_sync_guard_events_posts_to_v1_ingest(tmp_path) -> None:

@@ -10,7 +10,6 @@ import shlex
 import shutil
 import stat
 import subprocess
-import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -20,6 +19,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
+from .agent_configuration import write_agent_configuration
 from .catalog import catalog_digest
 from .cleanup import cleanup_case_resources
 from .contained_judge import (
@@ -30,16 +30,11 @@ from .contained_judge import (
     assess_contained_execution,
 )
 from .evidence import public_events, read_events
-from .fixtures import create_fixture, digest_file
+from .fixtures import create_fixture, create_run_root, digest_file
+from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .provider import InferenceRelay, LoopbackCollector
-from .runner import (
-    HERE,
-    REPO,
-    _agent_configuration,
-    clean_environment,
-    run_process,
-)
+from .runner import HERE, REPO
 from .source_files import digest_runner_files
 from .source_identity import source_identity
 
@@ -163,7 +158,7 @@ def run_contained_profile(
     started_at = datetime.now(timezone.utc).isoformat()
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="guard-gauntlet-contained-", dir=parent)).resolve()
+    root = create_run_root(parent)
     fixture = create_fixture(root / "fixture")
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
@@ -211,7 +206,7 @@ def run_contained_profile(
     try:
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             agent_dir = private / "agent"
-            _agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -282,7 +277,7 @@ def run_contained_profile(
             time.sleep(0.1)
             native_routes = worker.metrics.snapshot().get("routes", {})
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
-            inference = relay.evidence()
+            inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
             events = public_events(raw_events, replacements)
             if guard_log.exists():
@@ -431,10 +426,7 @@ def run_contained_profile(
                 "",
                 "| Case | Outcome | Actual tools |",
                 "| --- | --- | ---: |",
-                *[
-                    f"| {case['id']} | {case['outcome']} | {case['tool_calls']} |"
-                    for case in report["cases"]
-                ],
+                *[f"| {case['id']} | {case['outcome']} | {case['tool_calls']} |" for case in report["cases"]],
             ]
         )
         + "\n",

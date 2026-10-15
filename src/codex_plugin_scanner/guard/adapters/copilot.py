@@ -13,8 +13,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 from ...ecosystems.opencode import _strip_jsonc
+from ..aibom_detection import native_adapter_detection_with_warnings
 from ..launcher import merge_guard_launcher_env
-from ..models import GuardArtifact, HarnessDetection
+from ..models import HarnessDetection
+from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import (
@@ -26,6 +28,7 @@ from .base import (
     _run_command_probe,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
+from .codex_detect_sources import path_restorations, restore_paths
 from .copilot_state_paths import (
     commit_copilot_target_and_state,
     copilot_lifecycle_install,
@@ -35,6 +38,7 @@ from .copilot_state_paths import (
     validated_copilot_state_entries,
 )
 from .hook_payloads import inline_hooks_payload
+from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -49,16 +53,6 @@ if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
 _MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
-_DETECTABLE_HOOK_EVENTS = (
-    "sessionStart",
-    "sessionEnd",
-    "userPromptSubmitted",
-    "preToolUse",
-    "postToolUse",
-    "permissionRequest",
-    "permissionRequestV2",
-    "errorOccurred",
-)
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 _LEGACY_MANAGED_HOOK_PATTERNS = (
@@ -171,9 +165,13 @@ def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) ->
     if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
         return True
     try:
-        tokens = shlex.split(command)
+        split_tokens = shlex.split(command)
     except ValueError:
         return False
+    from .bounded_cli_hook_native import bounded_python_argv
+
+    # A native launcher prefix wraps the same Python bridge argv.
+    tokens = [str(token) for token in bounded_python_argv(split_tokens)]
     if len(tokens) == 3 and tokens[1] == "__guard-bounded-hook":
         if Path(tokens[0]).name.lower() not in {"hol guard", "hol-guard", "hol-guard.exe"}:
             return False
@@ -321,24 +319,7 @@ def _remove_hook_entries(
     ]
 
 
-def _hooks_payload(payload: dict[str, object]) -> dict[str, object]:
-    hooks = payload.get("hooks")
-    if isinstance(hooks, dict):
-        return hooks
-    return payload
-
-
 _inline_hooks_payload = inline_hooks_payload
-
-
-def _hook_command_variants(entry: dict[str, object]) -> tuple[tuple[str, str], ...]:
-    variants: list[tuple[str, str]] = []
-    for shell_name in ("command", "bash", "powershell"):
-        command = entry.get(shell_name)
-        if not isinstance(command, str):
-            continue
-        variants.append((shell_name, command))
-    return tuple(variants)
 
 
 def _managed_hook_payload(payload: dict[str, object]) -> _ManagedHookPayload:
@@ -396,8 +377,8 @@ def _refresh_guard_proxy_entry(
 ) -> dict[str, object]:
     refreshed = dict(server_config)
     _command, args = _command_parts(server_config)
-    refreshed["command"] = sys.executable
-    refreshed["args"] = list(args)
+    _, python_args = python_proxy_launch(_command, args)
+    refreshed["command"], refreshed["args"] = mcp_proxy_launch(sys.executable, python_args)
     if launcher_env:
         refreshed["env"] = launcher_env
     else:
@@ -498,30 +479,14 @@ class CopilotHarnessAdapter(HarnessAdapter):
         *,
         config_contents: dict[Path, bytes | None] | None = None,
     ) -> HarnessDetection:
-        def captured_payload(path: Path) -> dict[str, object]:
-            if config_contents is None:
-                return _copilot_json_payload(path)
-            data = config_contents.get(path)
-            return _parse_copilot_json_text(data.decode("utf-8")) or {} if data is not None else {}
-
-        config_candidates = [
-            context.home_dir / ".copilot" / "config.json",
-            context.home_dir / ".copilot" / "mcp-config.json",
+        # The native resident parses each config and owns hook and MCP server
+        # discovery. Python resolves the candidates, their scopes and the
+        # `.github/hooks` listing, and fails closed without the resident.
+        sources: list[tuple[Path, str]] = [
+            (context.home_dir / ".copilot" / "config.json", "config"),
+            (context.home_dir / ".copilot" / "mcp-config.json", "mcp"),
+            *((path, "mcp") for path in self._workspace_mcp_paths(context)),
         ]
-        config_candidates.extend(self._workspace_mcp_paths(context))
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
-        for config_path in config_candidates:
-            payload = captured_payload(config_path)
-            if not payload:
-                continue
-            found_paths.append(str(config_path))
-            scope = self._scope_for(context, config_path)
-            hook_artifacts = self._hook_artifacts(config_path, payload, scope)
-            if len(hook_artifacts) > 0:
-                artifacts.extend(hook_artifacts)
-            if config_path.name == "mcp-config.json" or config_path in self._workspace_mcp_paths(context):
-                artifacts.extend(self._mcp_artifacts(config_path, payload, scope))
         if context.workspace_dir is not None:
             hooks_dir = context.workspace_dir / ".github" / "hooks"
             if hooks_dir.is_dir() or config_contents is not None:
@@ -530,21 +495,29 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     if config_contents is not None
                     else sorted(path for path in hooks_dir.glob("*.json") if path.is_file())
                 )
-                for hook_path in hook_paths:
-                    payload = captured_payload(hook_path)
-                    if not payload:
-                        continue
-                    hook_artifacts = self._hook_artifacts(hook_path, payload, "project")
-                    if len(hook_artifacts) == 0:
-                        continue
-                    found_paths.append(str(hook_path))
-                    artifacts.extend(hook_artifacts)
+                sources.extend((path, "hooks") for path in hook_paths)
+        request: dict[str, object] = {
+            "harness": self.harness,
+            "sources": [
+                {"path": anchor_to_process_directory(path), "scope": self._scope_for(context, path), "kind": kind}
+                for path, kind in sources
+            ],
+        }
+        if config_contents is not None:
+            request["contents"] = {
+                anchor_to_process_directory(path): None if (data := config_contents.get(path)) is None else data.hex()
+                for path, _kind in sources
+            }
+        artifacts, found_paths, _warnings = native_adapter_detection_with_warnings("copilot_detect", request)
+        artifacts, found_paths, _warnings = restore_paths(
+            path_restorations(tuple(path for path, _kind in sources)), artifacts, found_paths, ()
+        )
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or self.resolved_executable(context) is not None,
             command_available=self.resolved_executable(context) is not None,
-            config_paths=tuple(found_paths),
-            artifacts=tuple(artifacts),
+            config_paths=found_paths,
+            artifacts=artifacts,
             warnings=(),
         )
 
@@ -929,83 +902,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
         ):
             warnings.append("Copilot CLI was found on PATH, but `copilot --help` did not complete successfully.")
         return warnings
-
-    def _mcp_artifacts(
-        self,
-        config_path: Path,
-        payload: dict[str, object],
-        scope: str,
-    ) -> list[GuardArtifact]:
-        servers = _mcp_servers_payload(config_path, payload)
-        if servers is None:
-            return []
-        artifacts: list[GuardArtifact] = []
-        for name, server_config in servers.items():
-            if not isinstance(name, str) or not isinstance(server_config, dict):
-                continue
-            command, args = _command_parts(server_config)
-            if is_guard_proxy_command(command, args):
-                continue
-            url = server_config.get("url")
-            environment = server_config.get("env")
-            if not isinstance(environment, dict):
-                environment = server_config.get("environment")
-            artifacts.append(
-                GuardArtifact(
-                    artifact_id=f"copilot:{scope}:{name}",
-                    name=name,
-                    harness=self.harness,
-                    artifact_type="mcp_server",
-                    source_scope=scope,
-                    config_path=str(config_path),
-                    command=command,
-                    args=args,
-                    url=url if isinstance(url, str) else None,
-                    transport="http" if isinstance(url, str) else "stdio",
-                    metadata={
-                        "env": {
-                            str(key): str(value)
-                            for key, value in environment.items()
-                            if isinstance(key, str) and isinstance(value, str)
-                        }
-                        if isinstance(environment, dict)
-                        else {}
-                    },
-                )
-            )
-        return artifacts
-
-    def _hook_artifacts(
-        self,
-        config_path: Path,
-        payload: dict[str, object],
-        scope: str,
-    ) -> list[GuardArtifact]:
-        artifacts: list[GuardArtifact] = []
-        hooks_payload = _hooks_payload(payload)
-        for hook_name in _DETECTABLE_HOOK_EVENTS:
-            entries = hooks_payload.get(hook_name)
-            if not isinstance(entries, list):
-                continue
-            for index, entry in enumerate(entries):
-                if not isinstance(entry, dict):
-                    continue
-                for shell_name, command in _hook_command_variants(entry):
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=(
-                                f"copilot:{scope}:hook:{config_path.stem}:{hook_name.lower()}:{index}:{shell_name}"
-                            ),
-                            name=hook_name,
-                            harness=self.harness,
-                            artifact_type="hook",
-                            source_scope=scope,
-                            config_path=str(config_path),
-                            command=command,
-                            metadata={"shell": shell_name},
-                        )
-                    )
-        return artifacts
 
     def _proxy_server_entry(
         self,

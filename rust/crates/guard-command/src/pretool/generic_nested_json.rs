@@ -136,7 +136,7 @@ impl<'de> Visitor<'de> for StrictNestedJsonVisitor {
     }
 }
 
-pub(super) fn parse_strict_nested_json(bytes: &[u8]) -> Result<Value, GenericExtractionError> {
+pub(crate) fn parse_strict_nested_json(bytes: &[u8]) -> Result<Value, GenericExtractionError> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let value = StrictNestedJsonSeed { depth: 0 }
         .deserialize(&mut deserializer)

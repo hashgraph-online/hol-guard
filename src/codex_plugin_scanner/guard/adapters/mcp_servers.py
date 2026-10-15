@@ -19,6 +19,7 @@ from .managed_mcp_upstream import (
     proxy_argument_tail,
     read_managed_mcp_upstream,
 )
+from .mcp_relay_native import mcp_proxy_launch
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,9 +209,10 @@ def proxy_launcher_entry(
         home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
     )
+    command, launch_args = mcp_proxy_launch(sys.executable, args)
     entry: dict[str, object] = {
-        "command": sys.executable,
-        "args": args,
+        "command": command,
+        "args": launch_args,
     }
     env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
     if env:

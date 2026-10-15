@@ -94,7 +94,9 @@ def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypa
     original_run = subprocess.run
 
     def traced_run(*args, **kwargs):
-        kwargs["timeout"] *= under_coverage_scale(3.0)
+        # Keep the production probe's 5s contract pinned by the mock test above,
+        # but give a real Node process room to start on a saturated CI host.
+        kwargs["timeout"] = max(kwargs["timeout"] * under_coverage_scale(3.0), 15)
         return original_run(*args, **kwargs)
 
     monkeypatch.setattr(cline_plugin_probe.subprocess, "run", traced_run)

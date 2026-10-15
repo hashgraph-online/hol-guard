@@ -52,6 +52,7 @@ def test_skipped_cases_cannot_produce_complete_evidence(
     monkeypatch.setattr(runner, "verify_install", lambda *_args: {"outside_checkout": True})
 
     def partial_run(_arguments, *, plugins):
+        plugins[0].collected = 37
         plugins[0].passed = 36
         plugins[0].skipped = 1
         return 0
@@ -59,7 +60,7 @@ def test_skipped_cases_cannot_produce_complete_evidence(
     monkeypatch.setattr(runner.pytest, "main", partial_run)
     assert runner.main() == 1
     assert not output.exists()
-    assert "all 45 cases" in capsys.readouterr().err
+    assert "every collected case" in capsys.readouterr().err
 
 
 def test_checkout_import_invalidates_installed_evidence(
@@ -71,6 +72,7 @@ def test_checkout_import_invalidates_installed_evidence(
     monkeypatch.setattr(runner, "verify_install", lambda *_args: {"outside_checkout": True})
 
     def injected_run(_arguments, *, plugins):
+        plugins[0].collected = 45
         plugins[0].passed = 45
         module = ModuleType("codex_plugin_scanner.fixture_source_injection")
         module.__file__ = str(tmp_path / "src" / "fixture.py")
@@ -81,3 +83,36 @@ def test_checkout_import_invalidates_installed_evidence(
     assert runner.main() == 1
     assert not output.exists()
     assert "imported checkout code" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("collected", "passed", "status", "accepted"),
+    [
+        (0, 0, 0, False),
+        (46, 45, 0, False),
+        (46, 46, 1, False),
+        (45, 45, 0, True),
+        (46, 46, 0, True),
+    ],
+)
+def test_complete_evidence_tracks_collected_cases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    collected: int,
+    passed: int,
+    status: int,
+    accepted: bool,
+) -> None:
+    output = tmp_path / "evidence.json"
+    _arguments(monkeypatch, tmp_path, output)
+    monkeypatch.setattr(runner, "load_subject", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(runner, "verify_install", lambda *_args: {"outside_checkout": True})
+
+    def run(_arguments, *, plugins):
+        plugins[0].collected = collected
+        plugins[0].passed = passed
+        return status
+
+    monkeypatch.setattr(runner.pytest, "main", run)
+    assert runner.main() == (0 if accepted else 1)
+    assert output.exists() is accepted

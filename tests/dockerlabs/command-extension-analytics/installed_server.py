@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -16,6 +17,7 @@ from pathlib import Path
 
 from codex_plugin_scanner import __version__
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.store import GuardStore
@@ -30,48 +32,13 @@ _GH_FIXTURE = Path("/opt/guard-lab/github-cli-fixture.sh")
 _REPOSITORY = "hashgraph-online/hol-guard"
 _VIEWER = "dashboard-reviewer"
 _WORKFLOW_COMMAND = f"{_GH_EXECUTABLE} issue lock 17 --repo {_REPOSITORY}"
-_KEYRING_MODULE = """\
-import hashlib
-import os
-from pathlib import Path
-
-from keyring.backend import KeyringBackend
-from keyring.errors import PasswordDeleteError
-
-
-class GuardLabKeyring(KeyringBackend):
-    priority = 1
-    _root = Path("/guard-home/lab-keyring")
-
-    def _path(self, service, username):
-        identity = f"{service}\\0{username}".encode("utf-8")
-        return self._root / hashlib.sha256(identity).hexdigest()
-
-    def get_password(self, service, username):
-        try:
-            return self._path(service, username).read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return None
-
-    def set_password(self, service, username, password):
-        self._root.mkdir(mode=0o700, exist_ok=True)
-        path = self._path(service, username)
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            stream.write(password)
-
-    def delete_password(self, service, username):
-        try:
-            self._path(service, username).unlink()
-        except FileNotFoundError as error:
-            raise PasswordDeleteError("credential unavailable") from error
-"""
+_KEYRING_FIXTURE = Path(__file__).with_name("keyring_fixture.py")
 
 
 def _safe_hook_diagnostic(value: str) -> str:
-    redacted = value.replace(SENTINEL, "[REDACTED]")
-    if len(redacted) <= _MAX_HOOK_DIAGNOSTIC_CHARS:
-        return redacted
+    redacted = re.sub(
+        r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]")
+    )
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
 
 
@@ -138,8 +105,12 @@ def _run_installed_hook(
     payload: Mapping[str, object],
     *,
     expected_status: int = 0,
+    expect_denial: bool = False,
+    expect_approval: bool = False,
     policy_action: str | None = None,
 ) -> str:
+    if expect_denial and expect_approval:
+        raise ValueError("hook cannot expect both denial and approval")
     command = [
         "hol-guard",
         "hook",
@@ -165,21 +136,32 @@ def _run_installed_hook(
         env={**os.environ, "HOME": str(GUARD_HOME)},
         timeout=30,
     )
-    # Every denial assertion in this fixture expects exit 1 from the Python hook path.
-    native_codex_denial = False
-    if harness == "codex" and expected_status == 1 and completed.returncode == 0:
+    if expect_denial:
+        expected_status = native_hook_verdict_exit_code(harness, "block", str(payload.get("hook_event_name", "")))
+    native_denial = False
+    native_approval = False
+    if (expect_denial or expect_approval) and expected_status == 0 and completed.returncode == 0:
         try:
             response = json.loads(completed.stdout)
         except json.JSONDecodeError:
             response = None
         if isinstance(response, dict):
             hook_output = response.get("hookSpecificOutput")
-            native_codex_denial = (
+            native_denial = (
                 response.get("policy_action") in {None, "review", "require-reapproval", "sandbox-required", "block"}
                 and isinstance(hook_output, dict)
                 and hook_output.get("permissionDecision") == "deny"
             )
-    if completed.returncode != expected_status and not native_codex_denial:
+            native_approval = harness == "claude-code" and (
+                response.get("policy_action") in {"review", "require-reapproval"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "ask"
+            )
+    if (
+        completed.returncode != expected_status
+        or (expect_denial and expected_status == 0 and not native_denial)
+        or (expect_approval and not native_approval)
+    ):
         diagnostic = (
             f"installed {harness} hook returned {completed.returncode}, expected {expected_status}; "
             + f"response={_safe_hook_response_summary(completed.stdout)}; "
@@ -224,8 +206,8 @@ def _invoke_real_harnesses() -> int:
     _run_installed_hook("codex", codex_pre)
     _run_installed_hook("codex", codex_post)
     _run_installed_hook("claude-code", claude_no_post)
-    _run_installed_hook("claude-code", claude_review, expected_status=1)
-    _run_installed_hook("cursor", cursor_block, expected_status=1, policy_action="block")
+    _run_installed_hook("claude-code", claude_review, expect_approval=True)
+    _run_installed_hook("cursor", cursor_block, expect_denial=True, policy_action="block")
     return 2
 
 
@@ -236,7 +218,7 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
         "tool_input": {"command": _WORKFLOW_COMMAND},
         "tool_call_id": "codex_lab_workflow_initial_0001",
     }
-    hook_summary = _run_installed_hook("codex", payload, expected_status=1)
+    hook_summary = _run_installed_hook("codex", payload, expect_denial=True)
     all_pending = store.list_approval_requests(status="pending")
     pending = [
         request
@@ -306,7 +288,7 @@ def _complete_workflow_authorization(store: GuardStore, request_id: str) -> dict
         "tool_input": {"command": _WORKFLOW_COMMAND},
         "tool_call_id": "codex_lab_workflow_drift_0002",
     }
-    _run_installed_hook("codex", drift, expected_status=1)
+    _run_installed_hook("codex", drift, expect_denial=True)
     if len(store.list_events(event_name="workflow_capability.issued")) != 1:
         raise RuntimeError("executable drift changed capability issuance")
     if store.list_events(event_name="workflow_capability.claimed"):
@@ -364,7 +346,7 @@ def _prepare_workspace() -> None:
     os.environ["PATH"] = f"{_GH_EXECUTABLE.parent}:{os.environ.get('PATH', '')}"
     os.environ["GITHUB_TOKEN"] = SENTINEL
     keyring_module = GUARD_HOME / "guard_lab_keyring.py"
-    _ = keyring_module.write_text(_KEYRING_MODULE, encoding="utf-8")
+    _ = keyring_module.write_text(_KEYRING_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     keyring_module.chmod(0o600)
     os.environ["PYTHONPATH"] = str(GUARD_HOME)
     os.environ["PYTHON_KEYRING_BACKEND"] = "guard_lab_keyring.GuardLabKeyring"

@@ -1,11 +1,10 @@
 #![cfg(windows)]
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
-use guard_runtime_windows_process::is_single_link_file;
+use guard_runtime_windows_process::{is_single_link_file, is_single_link_handle};
 use serde_json::json;
 use std::path::Path;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 #[test]
 fn windows_home_writes_verify_real_file_link_counts() {
@@ -42,6 +41,8 @@ fn windows_home_writes_verify_real_file_link_counts() {
     assert!(!is_single_link_file(&linked).unwrap());
     assert!(is_single_link_file(&other).is_err());
     assert!(is_single_link_file(&other.join("missing.txt")).is_err());
+    assert!(is_single_link_handle(&std::fs::File::open(&ordinary).unwrap()).unwrap());
+    assert!(!is_single_link_handle(&std::fs::File::open(&linked).unwrap()).unwrap());
     for (path, allowed) in [
         (ordinary, true),
         (other.join("new.txt"), true),

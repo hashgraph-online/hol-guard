@@ -71,20 +71,22 @@ fn shell_assignment(t: &str) -> bool {
 }
 
 fn redirection_token(t: &str) -> bool {
-    // `^(?:[012]?(?:>|>>|<|<<|<>).*)$`
+    // `^(?:[012]?(?:>|>>|<|<<|<>).*)$`: one operator character, then any
+    // text that holds no newline except a single trailing one.
     let chars: Vec<char> = t.chars().collect();
     let mut i = 0;
     if i < chars.len() && matches!(chars[i], '0' | '1' | '2') {
         i += 1;
     }
-    if i >= chars.len() {
+    if i >= chars.len() || !matches!(chars[i], '>' | '<') {
         return false;
     }
-    match chars[i] {
-        '>' => i + 1 == chars.len() || chars[i + 1] == '>',
-        '<' => i + 1 == chars.len() || chars[i + 1] == '<' || chars[i + 1] == '>',
-        _ => false,
-    }
+    let rest = &chars[i + 1..];
+    let body = match rest.last() {
+        Some('\n') => &rest[..rest.len() - 1],
+        _ => rest,
+    };
+    !body.contains(&'\n')
 }
 
 /// `ShellPathIdentity` (:47-66).

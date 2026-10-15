@@ -26,6 +26,15 @@ const SOURCE_EXTENSIONS: &[&str] = &[
     "py", "rs", "sh", "toml", "ts", "tsx", "yaml", "yml",
 ];
 const BENIGN_SOURCE_DOTFILES: &[&str] = &[".nvmrc", ".worktrees"];
+/// Ordinary project config files. They are benign only as the final path
+/// component, so a directory spelled `.gitignore/` opens no hidden tree.
+const BENIGN_PROJECT_DOTFILES: &[&str] = &[
+    ".dockerignore",
+    ".editorconfig",
+    ".eslintignore",
+    ".gitignore",
+    ".prettierignore",
+];
 const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
     ".aws",
     ".docker",
@@ -59,6 +68,7 @@ pub const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
     "id_ecdsa",
     "id_ed25519",
     "id_rsa",
+    "kubeconfig",
     "passwd",
     "password",
     "private-key",
@@ -72,8 +82,14 @@ const KNOWN_SKILL_DOC_ROOTS: &[&str] = &[
     ".codex/superpowers/skills",
     ".codex/skills",
     ".agents/skills",
+    ".agent/skills",
     ".claude/skills",
 ];
+/// Home roots where coding agents keep their own Markdown documents: OMP
+/// artifacts and the plan files Claude Code and Codex users write and read
+/// back. Only plain `.md` files below them qualify; see
+/// `known_artifact_doc_path`.
+const KNOWN_AGENT_DOC_ROOTS: &[&str] = &[".agent/artifacts", ".claude/plans", ".codex/plans"];
 
 fn lowered_parts(path: &Path) -> Vec<String> {
     path.components()
@@ -85,6 +101,18 @@ fn lowered_parts(path: &Path) -> Vec<String> {
 }
 
 fn hidden_parts_allowed(parts: &[String]) -> bool {
+    match parts.split_last() {
+        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_dir_parts_allowed(parts),
+    }
+}
+
+/// Every hidden component is a benign dotfile or the `.github/workflows`
+/// prefix. Project dotfiles get no exception here, so parent components
+/// never admit a directory spelled `.gitignore/`.
+fn hidden_dir_parts_allowed(parts: &[String]) -> bool {
     let hidden: Vec<&str> = parts
         .iter()
         .map(String::as_str)
@@ -126,24 +154,6 @@ pub fn sensitive_external_filename(path: &Path) -> bool {
     stem.replace(['-', '.'], "_")
         .split('_')
         .any(|token| !token.is_empty() && EXTERNAL_SENSITIVE_PARTS.contains(&token))
-}
-
-pub fn credential_named_path(path: &Path) -> bool {
-    let normalized = path.to_string_lossy().replace('\\', "/");
-    let Some(last) = normalized.rsplit('/').find(|part| !part.is_empty()) else {
-        return false;
-    };
-    let last = Path::new(last);
-    let extension = last
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    // Keep bounded source-code inspection; credential data directories still
-    // retain review even when their final filename has no credential marker.
-    !is_source_code_extension(extension)
-        && normalized
-            .split('/')
-            .any(|part| sensitive_external_filename(Path::new(part)))
 }
 
 /// Code syntax eligible for source inspection. Data formats such as JSON,
@@ -269,6 +279,29 @@ fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
     None
 }
 
+fn known_artifact_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
+    let lexical = resolve_candidate(target, None, home).ok()?;
+    let relative = KNOWN_AGENT_DOC_ROOTS
+        .iter()
+        .find_map(|root| lexical.strip_prefix(home.join(root)).ok())?;
+    if contains_symlink_component(&lexical)
+        || lexical
+            .extension()
+            .is_none_or(|extension| extension != "md")
+        || relative.components().any(|component| match component {
+            Component::Normal(value) => {
+                value.to_string_lossy().starts_with('.')
+                    || sensitive_external_filename(Path::new(value))
+            }
+            _ => true,
+        })
+    {
+        return None;
+    }
+    let real = fs::canonicalize(lexical).ok()?;
+    real.is_file().then_some(real)
+}
+
 pub fn classify_source_path(
     target: &str,
     cwd: &Path,
@@ -301,6 +334,9 @@ pub fn classify_source_path(
         return SourcePathDecision::deny("sensitive_basename");
     }
     if let Some(home) = home {
+        if let Some(artifact_path) = known_artifact_doc_path(stripped, home) {
+            return SourcePathDecision::allow("known_artifact_doc_path", artifact_path);
+        }
         if let Some(skill_path) = known_skill_doc_path(stripped, home) {
             return SourcePathDecision::allow("known_skill_doc_path", skill_path);
         }
@@ -411,11 +447,42 @@ mod sensitive;
 pub use sensitive::sensitive_path_family;
 
 /// True when every hidden (`.`-prefixed) path component is on the benign
-/// dotfile list or the `.github/workflows` prefix. Used by the native
+/// dotfile list or the `.github/workflows` prefix, or is a project config
+/// file such as `.gitignore` in the final position. Used by the native
 /// PreToolUse floor so absolute/home-relative reads cannot silently enter
 /// dot-directories such as `.hol-guard`, `.git`, or `.config`.
 pub fn hidden_read_parts_allowed(path: &Path) -> bool {
     hidden_parts_allowed(&lowered_parts(path))
+}
+
+/// An existing, empty, regular hidden file (a marker such as a deploy
+/// sentinel) inside a git work tree. Only the final component may be hidden;
+/// every other hidden component must be on the benign list. Size zero bounds
+/// the boundary: a non-empty hidden file could hold credentials or state, so
+/// it keeps the normal review. Sensitive names and families stay refused.
+pub fn hidden_empty_work_tree_file(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() != 0 {
+        return false;
+    }
+    let parts = lowered_parts(path);
+    let Some((name, parents)) = parts.split_last() else {
+        return false;
+    };
+    if !name.starts_with('.')
+        || name.starts_with(".env")
+        || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
+        || sensitive_external_filename(path)
+        || !hidden_dir_parts_allowed(parents)
+    {
+        return false;
+    }
+    path.ancestors()
+        .skip(1)
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
 }
 
 pub fn source_like(path: &Path) -> bool {

@@ -15,6 +15,7 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
+from .native_policy_snapshot_direct_lane import DIRECT_LANE_PUSH_FEATURE
 from .native_policy_snapshot_generation import native_policy_snapshot_v3
 
 
@@ -106,6 +107,8 @@ def _publish_snapshot_v3(
     master_key: bytes,
     client: Callable[..., bytes | None],
     renew_after_generation: int | None,
+    business_policy: Mapping[str, object] | None = None,
+    direct_lane: Mapping[str, object] | None = None,
 ) -> tuple[dict[str, object], int]:
     """Materialize, push, and authenticate a snapshot, including one recovery retry."""
 
@@ -113,6 +116,10 @@ def _publish_snapshot_v3(
     from .native_runtime import _isolated_environment
 
     recovery_attempted = False
+    if business_policy is not None:
+        from .native_policy_snapshot_business_bridge import capture_business_binding
+
+        business_policy = capture_business_binding(business_policy)
     bound_extensions = _stamp_runtime_program_digest(command_extensions, capabilities)
     while True:
         # A cold or replacement resident needs the Rust startup allowance.
@@ -127,6 +134,11 @@ def _publish_snapshot_v3(
             )
             else _PUBLISH_TIMEOUT_SECONDS
         )
+        # Resident build and inspect exchanges run on the process monotonic
+        # clock. A business binding keeps one shared deadline for the build and
+        # push; otherwise the build gets a finite publication-sized budget and
+        # the push gets a fresh warm window.
+        build_deadline = time.monotonic() + publish_timeout
         snapshot = native_policy_snapshot_v3(
             config=config,
             guard_home=publisher.guard_home,
@@ -134,17 +146,32 @@ def _publish_snapshot_v3(
             rule_digest=capabilities.rule_digest,
             policy_integrity_key=master_key,
             issued_at_ms=int(publisher._wall_clock() * 1_000),
-            deadline_monotonic=publisher._monotonic_clock() + publish_timeout,
+            deadline_monotonic=build_deadline,
             renew_after_generation=renew_after_generation,
             command_extensions=bound_extensions,
+            business_policy=business_policy,
         )
-        encoded = _policy_snapshot_push_bytes_v3(snapshot, deadline_budget_ms=int(publish_timeout * 1_000))
+        if business_policy is not None:
+            publication_deadline = build_deadline
+            remaining_ms = int((publication_deadline - time.monotonic()) * 1_000)
+            if remaining_ms <= 0:
+                raise NativePolicySnapshotError("native_policy_snapshot_deadline_exceeded")
+            budget_ms = min(remaining_ms, 9_000)
+        else:
+            publication_deadline = time.monotonic() + publish_timeout
+            budget_ms = int(publish_timeout * 1_000)
+        encoded = _policy_snapshot_push_bytes_v3(
+            snapshot,
+            deadline_budget_ms=budget_ms,
+            # An older resident rejects unknown push fields.
+            direct_lane=direct_lane if DIRECT_LANE_PUSH_FEATURE in getattr(capabilities, "features", ()) else None,
+        )
         output = client(
             executable=identity.path,
             guard_home=publisher.guard_home,
             environment=_isolated_environment(),
             payload=encoded,
-            deadline_monotonic=time.monotonic() + publish_timeout,
+            deadline_monotonic=publication_deadline,
         )
         ack = _ack_from_resident_output(output)
         if ack is None:

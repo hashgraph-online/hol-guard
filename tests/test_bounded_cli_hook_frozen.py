@@ -10,7 +10,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, bounded_cli_hook_daemon, desktop_hook_proxy
-from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult, isolated_hook_environment
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
@@ -33,10 +33,25 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
     tmp_path: Path,
 ) -> None:
     bundle, proxy, core = _signed_bundle_fixture(tmp_path)
+    forwarded = isolated_hook_environment(
+        {
+            "PATH": "/usr/bin",
+            "HOME": str(tmp_path),
+            "HOL_GUARD_DESKTOP": "1",
+            "HOL_GUARD_DESKTOP_HOOK_PROXY": str(proxy),
+            "HOL_GUARD_DESKTOP_RUNTIME_OWNER": str(tmp_path / "untrusted-runtime-owner"),
+        }
+    )
+    assert forwarded == {
+        "PATH": "/usr/bin",
+        "HOME": str(tmp_path),
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": str(proxy),
+    }
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", forwarded["HOL_GUARD_DESKTOP"])
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", forwarded["HOL_GUARD_DESKTOP_HOOK_PROXY"])
     monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
 
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
@@ -80,6 +95,7 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
         "frozen_launcher": True,
     }
     assert command[8] == str(core)
+    assert command[9] == "0"
 
 
 def test_untrusted_native_proxy_falls_back_to_internal_frozen_bridge(

@@ -1,0 +1,50 @@
+name: CI Windows shim admin
+description: Replay the Windows package-shim admin vectors and run the native shim op on a real Windows host.
+inputs:
+  shim-gate:
+    description: Exact required Windows shim test family (vectors or native-op).
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: "3.12"
+    - name: Stage trust bindings the native build embeds
+      shell: pwsh
+      run: |
+        python scripts/refresh_extension_artifacts.py --trust-only
+        if ($LASTEXITCODE -ne 0) {
+          throw "Staging Windows native trust bindings failed with exit code $LASTEXITCODE"
+        }
+    - name: Validate the selected Windows shim contract gate
+      shell: pwsh
+      env:
+        SHIM_GATE: ${{ inputs.shim-gate }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ($env:SHIM_GATE -notin @('vectors', 'native-op')) {
+          throw "Unknown Windows shim contract gate: $env:SHIM_GATE"
+        }
+    - uses: ./.github/actions/setup-rust
+      with:
+        # Distinct cache writers preserve complete dependencies for each
+        # matrix child. Seed existing trustworthy Windows caches on first run.
+        cache-key: windows-shim-${{ inputs.shim-gate }}
+        cache-fallback-key: native-wheel
+    - name: Replay the recorded Windows shim vectors
+      if: inputs.shim-gate == 'vectors'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        $env:SHIM_VECTOR_ROOT_BASE = Join-Path $env:RUNNER_TEMP 'shim-vectors'
+        New-Item -ItemType Directory -Force $env:SHIM_VECTOR_ROOT_BASE | Out-Null
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors
+    - name: Install and report shims through the native op on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op

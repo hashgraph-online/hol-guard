@@ -267,7 +267,7 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
 
     payload = _json_line(output)
 
-    assert exit_code == 0
+    assert exit_code == 1
     assert payload["decision"] == "block"
     assert payload["continue"] is True
     assert observed_timeouts == [8]

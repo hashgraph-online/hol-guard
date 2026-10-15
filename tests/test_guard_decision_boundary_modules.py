@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.decision_projection_boundaries import (
 )
 from codex_plugin_scanner.guard.runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def test_decision_boundary_facade_preserves_approval_projection_exports() -> None:
     assert CanonicalApprovalDecision is ProjectionCanonicalApprovalDecision

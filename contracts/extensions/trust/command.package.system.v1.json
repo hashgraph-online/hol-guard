@@ -1,0 +1,5 @@
+{
+  "extension": "command.package.system",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "first-party"
+}

@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.extension_builder.models import Discovery, Metad
 from codex_plugin_scanner.guard.extension_builder.repository_edits import (
     PYPROJECT_PATH,
     STAGING_PATH,
-    TRUST_PATH,
 )
 from codex_plugin_scanner.guard.extension_builder.review import default_review, load_review
 
@@ -120,7 +119,6 @@ def repository_fixture(tmp_path: Path) -> Path:
     root = tmp_path / "repository"
     for name in (
         PYPROJECT_PATH,
-        TRUST_PATH,
         STAGING_PATH,
     ):
         destination = root / name
@@ -128,6 +126,9 @@ def repository_fixture(tmp_path: Path) -> Path:
         shutil.copyfile(REPOSITORY / name, destination)
     for family in ("extensions", "mcp-servers"):
         shutil.copytree(REPOSITORY / "contributions" / family, root / "contributions" / family)
+    # Authored trust bindings are the source of truth for the builder's
+    # aggregate projection; a real checkout always has them.
+    shutil.copytree(REPOSITORY / "contracts/extensions/trust", root / "contracts/extensions/trust")
     return root
 
 

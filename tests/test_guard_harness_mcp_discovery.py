@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
 )
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_mcp_grant, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
@@ -26,6 +26,9 @@ from codex_plugin_scanner.guard.runtime.local_mcp_probe import McpProbeResult
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_extension_driver import matching_local_mcp_grant
 
 
 def _artifact(
@@ -327,13 +330,12 @@ def test_legacy_authority_split_carries_deny_without_migrating_allow(
         )
     labels = persist_discovered_harness_mcp_servers(store, servers, seen_at=utc_now())
     assert server.identity.cli_id in labels
-    grant = store.read_local_mcp_grant(
-        old_hash,
-        command=server.server_identity.command,
-        args_hash=server.server_identity.args_hash,
-        connection_identity_hash=server.identity.identity_hash,
-    )
-    assert (grant["state"] if grant is not None else None) == expected_new_state
+    with store._connect() as connection:
+        grant = connection.execute(
+            "select state from local_cli_grant where cli_id = ? and identity_hash = ?",
+            (server.identity.cli_id, server.identity.identity_hash),
+        ).fetchone()
+    assert (grant[0] if grant is not None else None) == expected_new_state
     listed = LocalCliApiService(store=store).list_items()["items"]
     assert [item["cli_id"] for item in listed] == [server.identity.cli_id]
     assert listed[0]["state"] == ("blocked" if expected_new_state == "blocked" else "unset")

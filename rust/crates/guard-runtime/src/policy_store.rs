@@ -31,10 +31,16 @@ pub(crate) mod native_review_origin;
 mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
+#[path = "policy_store_business_floor.rs"]
+mod policy_store_business_floor;
+#[path = "policy_store_business_source.rs"]
+mod policy_store_business_source;
 #[path = "policy_store_command_authority.rs"]
 mod policy_store_command_authority;
 #[path = "policy_store_command_floor.rs"]
 mod policy_store_command_floor;
+#[path = "policy_store_direct_lane.rs"]
+pub(crate) mod policy_store_direct_lane;
 #[path = "policy_store_migration.rs"]
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
@@ -49,10 +55,14 @@ pub(crate) mod resident_workspace_review_context;
 pub(crate) mod workspace_review_authority;
 #[path = "workspace_review_business.rs"]
 pub(crate) mod workspace_review_business;
+#[path = "workspace_review_business_queue.rs"]
+pub(crate) mod workspace_review_business_queue;
 #[path = "workspace_review_claim_index.rs"]
 pub(crate) mod workspace_review_claim_index;
 #[path = "workspace_review_decision.rs"]
 pub(crate) mod workspace_review_decision;
+#[path = "workspace_review_local_summary.rs"]
+pub(crate) mod workspace_review_local_summary;
 #[path = "workspace_review_request.rs"]
 pub(crate) mod workspace_review_request;
 #[path = "workspace_review_secure_state.rs"]
@@ -130,6 +140,12 @@ struct PolicyAuthorityRecordV3 {
     pub(super) floor_mac: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
+    #[serde(
+        default,
+        deserialize_with = "policy_store_business_floor::present_floor",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(super) business_policy_floor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,16 +164,25 @@ struct PolicyState {
     pub(super) policy_digest: Option<String>,
     pub(super) invalid_on_startup: bool,
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
+    pub(super) business_policy_floor: Option<String>,
+    /// The snapshot `validate_v3` last accepted and the generation floor it
+    /// was checked against. Everything it checks but the clock is fixed for
+    /// an `Arc` and floor, so a request re-checks only expiry against it.
+    pub(super) verified: Option<(Arc<AdmittedPolicySnapshot>, u64)>,
 }
 
 struct LoadedAuthority {
     pub(super) snapshot: Option<PolicySnapshotV3>,
+    // Authenticated legacy content may remain useful for recovery while it is
+    // expired or incompatible with the current runtime admission context.
+    pub(super) recovered_snapshot: Option<PolicySnapshotV3>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
     pub(super) policy_digest: Option<String>,
     pub(super) invalid_on_startup: bool,
     pub(super) migrate: bool,
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
+    pub(super) business_policy_floor: Option<String>,
 }
 
 pub(crate) struct PolicySnapshotStore {
@@ -177,6 +202,11 @@ pub(crate) struct PolicySnapshotStore {
     authority_observed: Arc<Mutex<Option<String>>>,
     authority_changed: Arc<AtomicBool>,
     state: Mutex<PolicyState>,
+    direct_lane: Mutex<Option<Arc<policy_store_direct_lane::DirectLaneBinding>>>,
+    direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue,
+    mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence,
+    mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::ClaimContext>,
+    mcp_relay_servers: crate::mcp_relay_servers::RelayServers,
 }
 
 impl PolicySnapshotStore {
@@ -202,6 +232,11 @@ impl PolicySnapshotStore {
             &expected_scope_digest,
             &verifier_key,
         )?;
+        if loaded.migrate {
+            // Persist the recovered floor and its authenticated body before any
+            // startup or idempotent ACK can rely on them. Failure keeps us closed.
+            persist_loaded_authority(&authority_path, &loaded, &verifier_key)?;
+        }
         let approval_authority = approval_authority::load(state_base)?;
         let approval_v4_authority = approval_v4_authority::load(state_base)?;
         let approval_authority_observed = Arc::new(Mutex::new(
@@ -272,12 +307,41 @@ impl PolicySnapshotStore {
                 policy_digest: loaded.policy_digest,
                 invalid_on_startup: loaded.invalid_on_startup || admission_failed,
                 command_control_floor: loaded.command_control_floor,
+                business_policy_floor: loaded.business_policy_floor,
+                verified: None,
             }),
+            direct_lane: Mutex::new(None),
+            direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue::default(),
+            mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence::default(),
+            mcp_relay_claims: crate::mcp_relay_claims::HeldClaims::default(),
+            mcp_relay_servers: crate::mcp_relay_servers::RelayServers::default(),
         })
     }
 
     pub(crate) fn state_base(&self) -> &Path {
         &self.state_base
+    }
+
+    /// Evidence of direct hook answers, waiting for the daemon to drain it.
+    pub(crate) fn direct_evidence(&self) -> &crate::hook_direct_evidence::DirectEvidenceQueue {
+        &self.direct_evidence
+    }
+
+    /// Relayed forwards' evidence, waiting for the relay to commit it.
+    pub(crate) fn mcp_relay_pending(&self) -> &crate::mcp_relay_pending::PendingRelayEvidence {
+        &self.mcp_relay_pending
+    }
+
+    /// Relayed decisions' saved-approval claims, waiting for the relay.
+    pub(crate) fn mcp_relay_claims(
+        &self,
+    ) -> &crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::ClaimContext> {
+        &self.mcp_relay_claims
+    }
+
+    /// The MCP servers whose relay sessions run under the proxy.
+    pub(crate) fn mcp_relay_servers(&self) -> &crate::mcp_relay_servers::RelayServers {
+        &self.mcp_relay_servers
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.
@@ -301,15 +365,7 @@ impl PolicySnapshotStore {
             &verifier_key,
         )?;
         if loaded.migrate {
-            if let Some(digest) = loaded.policy_digest.as_deref() {
-                persist_authority(
-                    &authority_path,
-                    loaded.generation_floor,
-                    digest,
-                    loaded.snapshot.as_ref(),
-                    &verifier_key,
-                )?;
-            }
+            persist_loaded_authority(&authority_path, &loaded, &verifier_key)?;
         }
         Ok(())
     }
@@ -320,6 +376,19 @@ impl PolicySnapshotStore {
         if request.schema != POLICY_SNAPSHOT_PUSH_SCHEMA {
             return Err("native_policy_snapshot_push_schema_mismatch".to_owned());
         }
+        if request
+            .direct_lane
+            .as_ref()
+            .is_some_and(|binding| !binding.is_valid())
+        {
+            return Err("native_policy_snapshot_push_invalid".to_owned());
+        }
+        let state_base = self.state_base().to_owned();
+        approval_enrollment::with_transition_lock(&state_base, || self.push_locked(request))
+    }
+
+    fn push_locked(&self, mut request: PolicySnapshotPushV1) -> Result<Vec<u8>, String> {
+        let direct_lane = request.direct_lane.take();
         let _command_lease = self.command_authority_lease(&request.snapshot)?;
         let snapshot_bytes = snapshot_bytes(&request.snapshot).map_err(snapshot_error)?;
         let now = now_ms()?;
@@ -359,6 +428,10 @@ impl PolicySnapshotStore {
                 if snapshot_bytes != state.canonical_bytes {
                     return Err("native_policy_snapshot_generation_reused".to_owned());
                 }
+                // An idempotent push refreshes what the same snapshot is
+                // bound to, so the publisher can reopen the lane after a
+                // benign input change without allocating a generation.
+                self.bind_direct_lane(current.generation, &current.policy_digest, direct_lane);
                 return encode_ack(current.as_ref(), true, self.resident_generation);
             }
         } else if request.snapshot.generation <= state.generation_floor {
@@ -370,6 +443,10 @@ impl PolicySnapshotStore {
         }
         let control_floor = policy_store_command_floor::next_floor(
             state.command_control_floor.as_ref(),
+            &request.snapshot,
+        )?;
+        let business_floor = policy_store_business_floor::next_floor(
+            state.business_policy_floor.as_deref(),
             &request.snapshot,
         )?;
         let admitted = Arc::new(AdmittedPolicySnapshot::new(request.snapshot)?);
@@ -391,13 +468,17 @@ impl PolicySnapshotStore {
             Some(admitted.snapshot()),
             &self.verifier_key,
             control_floor.as_ref(),
+            business_floor.as_deref(),
         )?;
         state.generation_floor = admitted.generation;
         state.policy_digest = Some(admitted.policy_digest.clone());
         state.snapshot = Some(Arc::clone(&admitted));
+        state.verified = None;
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
         state.command_control_floor = control_floor;
+        state.business_policy_floor = business_floor;
+        self.bind_direct_lane(admitted.generation, &admitted.policy_digest, direct_lane);
         *observed = authority_fingerprint(&self.authority_path);
         drop(observed);
         self.authority_changed.store(

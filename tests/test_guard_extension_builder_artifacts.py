@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.extension_builder.discover import discover
 from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit, write_kit
 from codex_plugin_scanner.guard.extension_builder.models import make_discovery, make_operation
-from codex_plugin_scanner.guard.extension_builder.python_literals import LiteralCall, emit, inline
 from codex_plugin_scanner.guard.extension_builder.review import default_review, load_review
 from codex_plugin_scanner.guard.extension_builder.schemas import DISCOVERY_JSON_SCHEMA, REVIEW_JSON_SCHEMA
 from tests.extension_builder_support import REPOSITORY, make_kit, metadata
@@ -35,35 +34,6 @@ def test_documented_exports_produce_valid_kits(tmp_path: Path, kind: str, filena
     kit = build_kit(discovery, default_review(discovery))
     write_kit(kit, tmp_path / "kit")
     assert kit.summary()["reviewedOperations"] == 0
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        None,
-        "",
-        "plain",
-        "quote\" slash\\ apostrophe'",
-        "line\nbreak",
-        "界" * 128,
-        "\U0001f680" * 128,
-        (),
-        ("a",),
-        ("x" * 64,) * 8,
-        (("first", "second"), ("third", "fourth")),
-    ],
-)
-def test_literal_emission_preserves_values_without_version_dependent_formatters(value: object) -> None:
-    source = "\n".join(emit(value, prefix="VALUE = "))
-    tree = ast.parse(source, feature_version=(3, 10))
-    assert isinstance(tree.body[0], ast.Assign)
-    assert ast.literal_eval(tree.body[0].value) == value
-    assert all(len(line) <= 120 for line in source.splitlines())
-
-
-def test_literal_emitter_rejects_arbitrary_constructor_names() -> None:
-    with pytest.raises(ValueError, match="Unsupported"):
-        inline(LiteralCall("__import__", "os"))
 
 
 def test_maximum_field_lengths_produce_linted_portable_native_source(tmp_path: Path) -> None:

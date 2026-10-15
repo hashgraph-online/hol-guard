@@ -106,7 +106,7 @@ def _verify_legacy_generation_floor(guard_home: Path, verifier_key: bytes) -> No
 def read_native_control_floor_for_home(guard_home: Path, verifier_key: bytes) -> Mapping[str, object] | None:
     """Verify every retained floor without constructing a credential-bearing store."""
 
-    from .native_command_control_binding import native_command_control_floor_mac
+    from .native_business_policy_floor import native_policy_authority_fields, native_policy_authority_floor_mac
 
     _verify_legacy_generation_floor(guard_home, verifier_key)
     content = read_private_state(guard_home, _RUST_SNAPSHOT_STATE_NAME, POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES)
@@ -115,9 +115,7 @@ def read_native_control_floor_for_home(guard_home: Path, verifier_key: bytes) ->
     record = _strict_json_loads_v3(content)
     if not isinstance(record, Mapping) or record.get("schema") != POLICY_SNAPSHOT_AUTHORITY_SCHEMA:
         raise NativePolicySnapshotError("native_command_control_recovery_floor_invalid")
-    fields = {"schema", "generation_floor", "policy_digest", "snapshot", "floor_mac"}
-    if "command_control_floor" in record:
-        fields.add("command_control_floor")
+    fields = native_policy_authority_fields(record, "native_command_control_recovery_floor_invalid")
     generation = record.get("generation_floor")
     digest, mac = record.get("policy_digest"), record.get("floor_mac")
     floor = record.get("command_control_floor")
@@ -128,11 +126,13 @@ def read_native_control_floor_for_home(guard_home: Path, verifier_key: bytes) ->
         or not _valid_digest_v3(digest)
         or not _valid_digest_v3(mac)
         or _canonical_json_bytes_v3(record) != content
-        or ("command_control_floor" in record and floor is None)
     ):
         raise NativePolicySnapshotError("native_command_control_recovery_floor_invalid")
     if not hmac.compare_digest(
-        cast(str, mac), native_command_control_floor_mac(generation, cast(str, digest), floor, verifier_key)
+        cast(str, mac),
+        native_policy_authority_floor_mac(
+            generation, cast(str, digest), floor, record.get("business_policy_floor"), verifier_key
+        ),
     ):
         raise NativePolicySnapshotError("native_command_control_recovery_floor_invalid")
     return None if floor is None else validate_control_floor(floor)

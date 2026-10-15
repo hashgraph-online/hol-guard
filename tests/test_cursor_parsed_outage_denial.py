@@ -137,7 +137,7 @@ def test_generated_parsed_cursor_preserves_trusted_decision(
         "sandbox-required": "deny",
         "block": "deny",
     }[policy]
-    if event == "beforeReadFile" and permission == "ask":
+    if event in {"beforeReadFile", "preToolUse"} and permission == "ask":
         permission = "deny"
     assert module_globals["main"]() == (2 if permission == "deny" else 0)
     assert json.loads(capsys.readouterr().out)["permission"] == permission

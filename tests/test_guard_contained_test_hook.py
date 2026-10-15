@@ -209,3 +209,74 @@ def test_node_requires_its_own_fresh_profile(
                 original, workspace=tmp_path, timeout_seconds=20, authorize=lambda value: response
             )
         assert executed == []
+
+
+@pytest.mark.parametrize(
+    ("words", "expected", "assignments"),
+    [
+        (["command", "bun", "run", "build"], ["bun", "run", "build"], {}),
+        (["time", "command", "bun", "test"], ["bun", "test"], {}),
+        (["command", "-p", "bun"], ["command", "-p", "bun"], {}),
+        (["time", "-p", "bun"], ["time", "-p", "bun"], {}),
+        (["command"], ["command"], {}),
+        (["env", "CI=1", "bun"], ["bun"], {"CI": "1"}),
+        (["CI=1", "NODE_ENV=test", "bun", "run", "test"], ["bun", "run", "test"], {"CI": "1", "NODE_ENV": "test"}),
+        (["LC_ALL=C", "time", "bun"], ["bun"], {"LC_ALL": "C"}),
+        (["env", "-i", "CI=1", "bun"], ["env", "-i", "CI=1", "bun"], {}),
+        (["NODE_OPTIONS=--require=x", "bun"], ["NODE_OPTIONS=--require=x", "bun"], {}),
+        (["CI=1", "APP_FLAG=1", "bun"], ["APP_FLAG=1", "bun"], {"CI": "1"}),
+        (["CI=1"], [], {"CI": "1"}),
+    ],
+)
+def test_command_prefixes_and_inert_assignments_peel_to_the_named_program(words, expected, assignments):
+    assert sink._split_command_prefix(words) == (expected, assignments)
+
+
+def test_inert_assignments_reach_the_runner_after_both_receipts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv("NODE_ENV", "development")
+    authorized = []
+    executed = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", lambda *args, **kwargs: None)
+
+    def execute(command, **kwargs):
+        executed.append((command, os.environ.get("CI"), os.environ.get("NODE_ENV")))
+        return 0
+
+    def authorize(original):
+        authorized.append(original["tool_input"]["command"])
+        return required_profile()
+
+    monkeypatch.setattr(sink, "run_restricted_pytest", execute)
+    original = payload()
+    original["tool_input"] = {"command": "CI=1 NODE_ENV=test python3 -m pytest -q"}
+    assert (
+        sink.run_authorized_contained_test(original, workspace=tmp_path, timeout_seconds=20, authorize=authorize) == 0
+    )
+    assert authorized == ["CI=1 NODE_ENV=test python3 -m pytest -q", "python3 -m pytest -q"]
+    assert executed == [(["python3", "-m", "pytest", "-q"], "1", "test")]
+    assert "CI" not in os.environ
+    assert os.environ["NODE_ENV"] == "development"
+
+
+@pytest.mark.parametrize("command", ["CI=1", "APP_FLAG=1 python3 -m pytest -q", "CI=1 python3 -m pytest -q"])
+def test_assignments_without_a_contained_receipt_never_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, command: str
+) -> None:
+    prepared = []
+    executed = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", lambda argv, **kwargs: prepared.append(argv))
+    monkeypatch.setattr(sink, "run_restricted_pytest", lambda *args, **kwargs: executed.append(args) or 0)
+    original = payload()
+    original["tool_input"] = {"command": command}
+    response = required_profile()
+    response["policy_action"] = "block"
+    with pytest.raises(RestrictedPytestError):
+        sink.run_authorized_contained_test(
+            original, workspace=tmp_path, timeout_seconds=20, authorize=lambda _: response
+        )
+    assert executed == []
+    # An unknown name is never peeled, so classification sees it.
+    assert all(argv[0] != "python3" for argv in prepared if command.startswith("APP_FLAG"))

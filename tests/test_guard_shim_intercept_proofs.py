@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -13,7 +15,9 @@ from codex_plugin_scanner.guard import shims as shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES
+from codex_plugin_scanner.guard.native_shim_admin import probe_package_shim_intercepts as _probe_entry
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
+from codex_plugin_scanner.guard.sqlite_tuning import SQLITE_CONNECT_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import (
     manager_probe_args,
@@ -21,7 +25,12 @@ from tests.shim_execution_helpers import (
     protect_evaluator_evidence,
     write_fake_manager_script,
 )
-from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
+from tests.test_guard_headless_daemon_api import (
+    PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
+    _dashboard_token_for,
+    _read_json_response,
+    _request,
+)
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -138,6 +147,15 @@ def test_package_shim_intercept_probe_records_evaluator_evidence(
     assert not (tmp_path / "npm-never-runs.json").exists()
 
 
+def _hold_probe_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the shim interpreter from reaching the evaluator inside a short probe."""
+
+    startup = tmp_path / "probe-startup"
+    startup.mkdir()
+    (startup / "sitecustomize.py").write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(startup))
+
+
 def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -148,13 +166,14 @@ def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
     install_package_shims(context, managers=("npm",))
     shim_dir = context.guard_home / "package-shims" / "bin"
     monkeypatch.setenv("PATH", str(shim_dir))
+    _hold_probe_open(tmp_path, monkeypatch)
 
-    def raise_timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired(cmd=["npm"], timeout=15)
-
-    monkeypatch.setattr(shims_module.subprocess, "run", raise_timeout)
-
-    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
+    result = probe_package_shim_intercepts(
+        context,
+        managers=("npm",),
+        workspace_dir=workspace_dir,
+        timeout_seconds=1,
+    )
 
     assert result["intercept_proved"] is False
     assert result["manager_results"] == [
@@ -176,29 +195,23 @@ def test_package_shim_intercept_probe_timeout_covers_store_busy_wait(
     context = _harness_context(tmp_path, workspace_dir=workspace_dir)
     install_package_shims(context, managers=("npm",))
     shim_dir = context.guard_home / "package-shims" / "bin"
-    fake_bin = tmp_path / "fake-bin"
-    fake_bin.mkdir(parents=True)
-    write_fake_manager_script(
-        fake_bin=fake_bin,
-        manager="npm",
-        marker_path=tmp_path / "npm-never-runs.json",
-        exit_code=0,
+    monkeypatch.setenv("PATH", str(shim_dir))
+    _hold_probe_open(tmp_path, monkeypatch)
+    # The default probe budget has to outlast the shim's store-lock retry.
+    # A one-second budget still classifies a probe that does not finish.
+    default_timeout = inspect.signature(_probe_entry).parameters["timeout_seconds"].default
+
+    result = probe_package_shim_intercepts(
+        context,
+        managers=("npm",),
+        workspace_dir=workspace_dir,
+        timeout_seconds=1,
     )
-    monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
-    captured_timeout: dict[str, int] = {}
 
-    def raise_timeout(*_args, **kwargs):
-        captured_timeout["value"] = kwargs["timeout"]
-        raise subprocess.TimeoutExpired(cmd=["npm"], timeout=kwargs["timeout"])
-
-    monkeypatch.setattr(shims_module.subprocess, "run", raise_timeout)
-
-    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
-
+    assert default_timeout == int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
+    assert default_timeout > 15
     assert result["intercept_proved"] is False
     assert result["manager_results"][0]["skipped_reason"] == "probe_failed"
-    assert captured_timeout["value"] == shims_module._PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS
-    assert captured_timeout["value"] > 15
 
 
 def test_package_shim_intercept_probe_omits_manager_stdout_secrets(
@@ -251,14 +264,18 @@ def test_package_shim_intercept_skips_tampered_shim(tmp_path: Path, monkeypatch:
     ]
 
 
-def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
+def _run_daemon_package_shim_install_and_test(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    *,
+    rewrite_profile: Callable[[str], str] | None,
+) -> tuple[int, dict[str, object], dict[str, object]]:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+    monkeypatch.setattr(shims_module, "_is_transient_path", lambda _path: False)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload(
@@ -278,6 +295,14 @@ def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
                 payload={"managers": ["npm"]},
             ),
         )
+        assert install_status == 200
+        if rewrite_profile is not None:
+            for profile in home_dir.iterdir():
+                if profile.is_file():
+                    profile.write_text(rewrite_profile(profile.read_text(encoding="utf-8")), encoding="utf-8")
+        _cards_status, cards_payload = _read_json_response(
+            _request(daemon.port, "/v1/supply-chain/package-shims", method="GET", token=token),
+        )
         test_status, test_payload = _read_json_response(
             _request(
                 daemon.port,
@@ -285,12 +310,53 @@ def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
                 token=token,
                 payload={"managers": ["npm"]},
             ),
+            timeout=PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
         )
     finally:
         daemon.stop()
+    return test_status, test_payload, cards_payload
 
-    assert install_status == 200
+
+def test_daemon_package_shim_test_uses_projected_shell_profile_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The daemon PATH never contains the shim dir; Test must agree with the Protected cards."""
+
+    test_status, test_payload, cards_payload = _run_daemon_package_shim_install_and_test(
+        tmp_path,
+        monkeypatch,
+        rewrite_profile=None,
+    )
+
+    assert cards_payload["package_shims"]["protected_managers"] == ["npm"]
+    assert test_status == 200
+    result = test_payload["result"]
+    assert result["path_repair_required"] == []
+    assert result["manager_results"][0]["manager"] == "npm"
+    assert "skipped_reason" not in result["manager_results"][0]
+    assert result["manager_results"][0]["evaluator_invoked"] is True
+    assert result["intercept_proved"] is True
+
+
+def _comment_out(content: str) -> str:
+    return "".join(f"# {line}" for line in content.splitlines(keepends=True))
+
+
+@pytest.mark.parametrize("rewrite_profile", [lambda _content: "", _comment_out], ids=["removed", "commented"])
+def test_daemon_package_shim_test_reports_path_inactive_without_profile_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rewrite_profile: Callable[[str], str],
+) -> None:
+    test_status, test_payload, _cards_payload = _run_daemon_package_shim_install_and_test(
+        tmp_path,
+        monkeypatch,
+        rewrite_profile=rewrite_profile,
+    )
+
     assert test_status == 200
     assert test_payload["result"]["intercept_proved"] is False
+    assert test_payload["result"]["path_repair_required"] == ["npm"]
     assert test_payload["result"]["manager_results"][0]["skipped_reason"] == "path_inactive"
     assert test_payload["result"]["manager_results"][0]["evaluator_invoked"] is False

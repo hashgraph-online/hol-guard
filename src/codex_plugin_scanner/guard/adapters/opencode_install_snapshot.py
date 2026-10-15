@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...ecosystems.opencode import _load_json_or_jsonc, _load_json_or_jsonc_text
-from ..models import GuardArtifact, HarnessDetection
+from ..models import HarnessDetection
 from .base import HarnessContext
 from .mcp_servers import (
     GUARD_MCP_COMPANION_PREFIX,
@@ -20,10 +20,8 @@ from .mcp_servers import (
 )
 from .opencode_artifacts import (
     _command_parts,
-    append_config_artifacts,
-    append_directory_artifacts,
-    append_found_path,
     config_paths,
+    native_artifacts,
 )
 
 
@@ -87,9 +85,6 @@ def load_opencode_install_snapshot(
     """Load and normalize every config before deriving managed servers."""
 
     configs: list[NormalizedOpenCodeConfig] = []
-    artifacts: list[GuardArtifact] = []
-    found_paths: list[str] = []
-    seen_artifact_ids: set[str] = set()
     for config_path in config_paths(context):
         if config_contents is None:
             if not config_path.exists():
@@ -116,20 +111,10 @@ def load_opencode_install_snapshot(
             config_path=config_path,
         )
         configs.append(NormalizedOpenCodeConfig(path=config_path, scope=scope, payload=normalized))
-        append_found_path(found_paths, config_path)
-        append_config_artifacts(
-            artifacts=artifacts,
-            seen_artifact_ids=seen_artifact_ids,
-            scope=scope,
-            config_path=config_path,
-            payload=normalized,
-            skip_verified_mcp_companions=False,
-        )
-    append_directory_artifacts(
-        context=context,
-        artifacts=artifacts,
-        found_paths=found_paths,
-        seen_artifact_ids=seen_artifact_ids,
+    artifacts, found_paths = native_artifacts(
+        context,
+        [(config.path, config.scope, config.payload) for config in configs],
+        skip_verified_mcp_companions=False,
     )
     detection = HarnessDetection(
         harness="opencode",

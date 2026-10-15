@@ -102,6 +102,9 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -d src && ls src",
         "test -e src/lib.rs; echo done",
         "test -r src/lib.rs && head -1 src/lib.rs",
+        "test -x src && echo searchable || echo closed",
+        "test -s src/lib.rs && echo non-empty",
+        "[ -f src/lib.rs ] && echo present || echo missing",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -117,7 +120,11 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -f src/lib.rs && rm -rf src",
         "test -f src/lib.rs -o -f .env",
         "test -f $(echo src/lib.rs)",
-        "test -x src/lib.rs",
+        "test -x ~/.ssh/id_rsa",
+        "test -s .env && echo set",
+        "test -w src/lib.rs",
+        "[ -f .env ] && echo set",
+        "[ -f src/lib.rs",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -181,6 +188,11 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
             PathContext {
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
+                cdpath_unset: false,
+                rustup_override_absent: false,
+                npm_config_inert: false,
+                shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
         ),
         vec![0, 1]
@@ -411,6 +423,8 @@ fn allows_bounded_exact_commands() {
         "rg -n authority src",
         "rg -g*.ts authority src",
         "rg --glob '*.{ts,tsx}' authority src",
+        "rg --files -g '!**/.git/**'",
+        "rg --glob='!*.lock' authority src",
         "rg --line-number --color=never authority src",
         "grep -n authority README.md",
         "grep --line-number --color=never authority README.md",
@@ -506,7 +520,6 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat //etc/passwd",
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
-        "cat README.md Cargo.toml",
         "head -n 10 README.md Cargo.toml",
         "ls /",
         "cat /root/secret",
@@ -534,6 +547,7 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
             "rg -L authority .",
             "rg --no-ignore-files authority .",
             "rg --glob '*.env' TOKEN .",
+            "rg --glob '!*.md' --glob '*.env' TOKEN .",
             "rg --glob '*.{env,ts}' TOKEN .",
             "rg --glob 'nested/*.env' TOKEN .",
             "rg --glob 'nested/[.]env' TOKEN .",
@@ -613,5 +627,51 @@ fn denies_uncertain_or_networked_commands_but_allows_proven_constant_expression(
         let decision = evaluate_pre_tool(&request(command)).unwrap();
         assert_eq!(decision.decision == "allow", permitted, "{command}");
         assert_eq!(decision.minimum_action == "allow", permitted, "{command}");
+    }
+}
+
+#[test]
+fn guard_control_floors_block_natively_instead_of_queueing_review() {
+    for command in [
+        "hol-guard uninstall",
+        "hol-guard uninstall --all",
+        "hol-guard hooks remove --all",
+        "hol-guard hooks remove",
+        "/usr/local/bin/hol-guard hooks remove --all",
+        "HOL-GUARD Hooks Remove --all",
+        "hol-guard policy disable",
+        "hol-guard capability consume token",
+        "hol-guard clear --all",
+        "sudo hol-guard hooks remove --all",
+        "echo ok && hol-guard hooks remove --all",
+        "echo x | xargs hol-guard uninstall",
+        "find . -exec hol-guard hooks remove --all \\;",
+    ] {
+        let decision = evaluate_pre_tool(&request(command)).unwrap();
+        assert_eq!(decision.minimum_action, "block", "{command}");
+        assert_eq!(
+            decision.reason_code, "native_guard_self_protection",
+            "{command}"
+        );
+        assert!(!decision.explicitly_benign, "{command}");
+    }
+}
+
+#[test]
+fn guard_control_help_and_other_subcommands_keep_review() {
+    for command in [
+        "hol-guard hooks remove --help",
+        "hol-guard uninstall --help",
+        "hol-guard hooks list",
+        "hol-guard repair",
+        "echo x | xargs echo",
+        "find . -name '*.py' -exec echo {} \\;",
+    ] {
+        let decision = evaluate_pre_tool(&request(command)).unwrap();
+        assert_ne!(decision.minimum_action, "block", "{command}");
+        assert_ne!(
+            decision.reason_code, "native_guard_self_protection",
+            "{command}"
+        );
     }
 }

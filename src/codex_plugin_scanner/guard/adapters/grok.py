@@ -10,18 +10,17 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..aibom_detection import extend_detection_with_workspace_aibom
-from ..codex_config import read_toml_payload
-from ..models import GuardArtifact, HarnessDetection
+from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection_with_warnings
+from ..models import HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
     PreparedHarnessInstall,
     _ensure_path_within_root,
-    _json_payload,
     _run_command_probe,
     _shell_command,
+    detection_request,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .grok_config import (
@@ -30,21 +29,13 @@ from .grok_config import (
     GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
     GROK_HOOKS_DIR,
     GROK_MANAGED_CONFIG_FILE,
-    GROK_PROJECT_SURFACE_RELATIVES,
-    GROK_REQUIREMENTS_FILE,
-    GROK_SURFACE_RELATIVES,
     GUARD_HOOK_PRETOOL_FILE,
     GUARD_HOOK_PROMPT_FILE,
     GUARD_MANAGED_BEGIN,
     SYSTEM_MANAGED_CONFIG,
     SYSTEM_REQUIREMENTS,
-    append_found_path,
-    append_hooks_dir_artifacts,
-    append_mcp_artifacts,
-    append_permission_artifacts,
     build_observe_hook_json,
     build_pretool_hook_json,
-    degraded_mode_warnings,
     remove_managed_block,
 )
 from .grok_executable import (
@@ -107,10 +98,6 @@ class GrokHarnessAdapter(HarnessAdapter):
         return cls._grok_root(context) / GROK_CONFIG_FILE
 
     @classmethod
-    def _requirements_path(cls, context: HarnessContext) -> Path:
-        return cls._grok_root(context) / GROK_REQUIREMENTS_FILE
-
-    @classmethod
     def _hooks_dir(cls, context: HarnessContext) -> Path:
         return cls._grok_root(context) / GROK_HOOKS_DIR
 
@@ -125,8 +112,6 @@ class GrokHarnessAdapter(HarnessAdapter):
         if project_root is not None and (project_root / GROK_CONFIG_FILE).is_file():
             return project_root / GROK_CONFIG_FILE
         return self._config_path(context)
-
-    _read_toml = staticmethod(read_toml_payload)
 
     @staticmethod
     def _version_probe(context: HarnessContext, resolution: GrokExecutableResolution) -> dict[str, object]:
@@ -173,111 +158,18 @@ class GrokHarnessAdapter(HarnessAdapter):
         return environment
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
-        warnings: list[str] = []
-        grok_root = self._grok_root(context)
-
-        for config_path in (
-            self._config_path(context),
-            self._managed_config_path(context),
-            self._requirements_path(context),
-        ):
-            if config_path.is_file():
-                append_found_path(found_paths, config_path)
-                payload = self._read_toml(config_path)
-                if payload:
-                    append_permission_artifacts(
-                        harness=self.harness,
-                        artifacts=artifacts,
-                        payload=payload,
-                        config_path=config_path,
-                        scope="global",
-                    )
-                    append_mcp_artifacts(
-                        harness=self.harness,
-                        artifacts=artifacts,
-                        payload=payload,
-                        config_path=config_path,
-                        scope="global",
-                    )
-                    warnings.extend(degraded_mode_warnings(config_path, payload))
-
-        for system_path in (SYSTEM_MANAGED_CONFIG, SYSTEM_REQUIREMENTS):
-            if system_path.is_file() and os.access(system_path, os.R_OK):
-                append_found_path(found_paths, system_path)
-                warnings.append(f"Enterprise Grok policy detected at {system_path.name}.")
-
-        append_hooks_dir_artifacts(
-            harness=self.harness,
-            artifacts=artifacts,
-            found_paths=found_paths,
-            hooks_dir=self._hooks_dir(context),
-            scope="global",
-        )
-        project_root = self._project_grok_root(context)
-        if project_root is not None:
-            if (project_root / GROK_CONFIG_FILE).is_file():
-                append_found_path(found_paths, project_root / GROK_CONFIG_FILE)
-            append_hooks_dir_artifacts(
-                harness=self.harness,
-                artifacts=artifacts,
-                found_paths=found_paths,
-                hooks_dir=project_root / GROK_HOOKS_DIR,
-                scope="project",
-            )
-
-        hooks_paths_file = grok_root / "hooks-paths"
-        if hooks_paths_file.is_file():
-            append_found_path(found_paths, hooks_paths_file)
-
-        marketplaces_file = grok_root / "plugins" / "known_marketplaces.json"
-        if marketplaces_file.is_file():
-            append_found_path(found_paths, marketplaces_file)
-            payload = _json_payload(marketplaces_file)
-            if payload:
-                artifacts.append(
-                    GuardArtifact(
-                        artifact_id="grok:global:marketplace-metadata",
-                        name="known_marketplaces",
-                        harness=self.harness,
-                        artifact_type="marketplace",
-                        source_scope="global",
-                        config_path=str(marketplaces_file),
-                        metadata={"entries": len(payload) if isinstance(payload, dict) else 0},
-                    )
-                )
-
-        for relative in GROK_SURFACE_RELATIVES:
-            candidate = grok_root / relative
-            if candidate.exists():
-                append_found_path(found_paths, candidate)
-
-        if project_root is not None:
-            for relative in GROK_PROJECT_SURFACE_RELATIVES:
-                candidate = project_root / relative
-                if candidate.exists():
-                    append_found_path(found_paths, candidate)
-
-        for agents_path in (context.home_dir / ".agents" / "skills", context.home_dir / ".agents" / "commands"):
-            if agents_path.exists():
-                append_found_path(found_paths, agents_path)
-
-        if context.workspace_dir is not None:
-            for agents_file in ("AGENTS.md", "CLAUDE.md"):
-                candidate = context.workspace_dir / agents_file
-                if candidate.is_file():
-                    append_found_path(found_paths, candidate)
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"grok:project:instruction:{agents_file.lower()}",
-                            name=agents_file,
-                            harness=self.harness,
-                            artifact_type="instruction_surface",
-                            source_scope="project",
-                            config_path=str(candidate),
-                        )
-                    )
+        system_policy_paths = [
+            str(system_path)
+            for system_path in (SYSTEM_MANAGED_CONFIG, SYSTEM_REQUIREMENTS)
+            if system_path.is_file() and os.access(system_path, os.R_OK)
+        ]
+        request = {
+            **detection_request(self.harness, context),
+            "grok_home": str(self._grok_home_dir(context)),
+            "system_policy_paths": system_policy_paths,
+        }
+        artifacts, found_paths, native_warnings = native_adapter_detection_with_warnings("grok_detect", request)
+        warnings = list(native_warnings)
 
         executable_resolution = resolve_trusted_grok_executable(context)
         version_probe = self._version_probe(context, executable_resolution)

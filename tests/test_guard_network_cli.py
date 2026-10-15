@@ -103,6 +103,13 @@ def test_network_status_reads_live_authenticated_daemon(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    from codex_plugin_scanner.guard.cli import network_status_command
+    from codex_plugin_scanner.guard.daemon import client
+
+    # This checks authenticated response content. Shared CI load must not turn
+    # its quarter-second production deadline into a scheduling assertion.
+    monkeypatch.setattr(client, "_STATUS_REQUEST_TIMEOUT_S", 2.0)
+    monkeypatch.setattr(network_status_command, "_NETWORK_STATUS_DAEMON_IDENTITY_TIMEOUT_S", 2.0)
     guard_home = tmp_path / "guard-home"
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     emitted: list[dict[str, object]] = []

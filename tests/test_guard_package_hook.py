@@ -14,13 +14,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+import codex_plugin_scanner.guard.native_supply_chain_egress as egress_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
+from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
@@ -361,7 +361,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     pending = store.list_approval_requests(limit=5)
@@ -393,7 +393,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
         raise TimeoutError("cloud evaluation timed out")
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", timeout)
+    monkeypatch.setattr(egress_module, "managed_urlopen", timeout)
 
     rc = main(
         [
@@ -413,7 +413,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     output = json.loads(capsys.readouterr().out)
     pending = store.list_approval_requests(status="pending", limit=5)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     assert len(pending) == 1
@@ -651,7 +651,7 @@ def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
     assert output["decision_v2_json"]["user_title"] == "Critical install blocked"
     # The scanner escalation must reach the composed copy: the primary detail is
@@ -721,7 +721,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
     assert "network host" in output["risk_summary"]
     assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
@@ -809,7 +809,7 @@ def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_inst
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     decision = output["decision_v2_json"]
     instruction = "Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install."
     assert instruction in decision["user_body"]

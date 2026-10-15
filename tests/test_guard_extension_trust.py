@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -32,9 +31,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import (
-    catalog_enabled,
-    ids_for_class,
-    mapped_ids,
     trust_class_for,
 )
 from tests.command_extension_contracts import enable_local_admin_extension_layer
@@ -77,51 +73,6 @@ def _disable_layer(extension_id: str) -> ExtensionControlLayer:
             ),
         ),
     )
-
-
-def test_trust_map_covers_every_builtin_extension() -> None:
-    """Verify trust map covers every builtin extension."""
-    registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
-    assert mapped_ids() == registry_ids
-    # Expected membership comes from authored policy, never generated Python.
-    root = Path(__file__).resolve().parents[1]
-    authored = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())
-    for trust_class, expected_ids in authored["classes"].items():
-        assert ids_for_class(trust_class) == set(expected_ids)
-    assert trust_class_for("command.git") == "first-party"
-    assert trust_class_for("command.cloud.aws") == "trusted-library"
-    assert trust_class_for("command.cloud.azure") == "trusted-library"
-    assert trust_class_for("command.noodle") == "external"
-    assert trust_class_for("command.unmapped-community") == "first-party"
-    assert trust_class_for("command.test") == "first-party"
-
-
-def test_local_catalog_marks_external_off_and_libraries_on() -> None:
-    noodle = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.noodle")
-    essh = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.remote.essh")
-    aws = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.cloud.aws")
-    git = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.git")
-    assert noodle is not None and essh is not None and aws is not None and git is not None
-    noodle_payload = noodle.to_dict()
-    essh_payload = essh.to_dict()
-    aws_payload = aws.to_dict()
-    git_payload = git.to_dict()
-    assert noodle_payload["enabled"] is False
-    assert noodle_payload["trust_class"] == "external"
-    assert noodle_payload["activation"] == "opt-in"
-    assert noodle_payload["publisher"]["id"] == "community.wilfredinni"
-    assert noodle_payload["icon"]["kind"] == "react-icon"
-    assert noodle_payload["icon"]["name"] == "HiMiniBolt"
-    assert essh_payload["enabled"] is False
-    assert essh_payload["trust_class"] == "external"
-    assert essh_payload["activation"] == "opt-in"
-    assert essh_payload["publisher"]["id"] == "community.matthart1983"
-    assert aws_payload["enabled"] is True
-    assert aws_payload["trust_class"] == "trusted-library"
-    assert git_payload["enabled"] is True
-    assert git_payload["trust_class"] == "first-party"
-    assert catalog_enabled("command.noodle", required=False) is False
-    assert catalog_enabled("command.remote.essh", required=False) is False
 
 
 def test_noodle_stays_inert_until_explicitly_enabled(tmp_path: Path) -> None:
@@ -316,12 +267,12 @@ def test_disabling_aws_still_blocks(tmp_path: Path) -> None:
 
 
 def test_frozen_trust_map_reads_meipass_package_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    source = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust-class-map.v1.json"
+    bindings = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust"
     target = (
         tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions" / "trust-class-map.v1.json"
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, target)
+    target.write_text(json.dumps(extension_trust_module.trust_map_from_bindings(bindings)))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
 

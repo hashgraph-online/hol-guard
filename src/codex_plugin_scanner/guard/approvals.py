@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
-from typing import ParamSpec, TypeGuard, TypeVar
+from typing import ParamSpec, TypeVar, cast
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from ..version import __version__
@@ -25,12 +25,12 @@ from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
-    exact_action_allow_persistence_eligible,
+    apply_scope_surfaces,
     package_request_portable_workspace_scope,
-    request_scope_contract,
-    request_scope_contract_payload,
+    request_scope_observation,
     resolve_request_scope_selection,
     resolve_request_workspace_scope,
+    scope_payload_for_request,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -42,11 +42,12 @@ from .cli.connect_flow import (
 from .config import load_guard_config, maybe_auto_revert_watch
 from .continuation_runtime import continuation_offer_payload
 from .daemon.manager import load_guard_daemon_auth_token
-from .decision_boundaries import canonical_approval_surfaces
+from .decision_boundaries import canonical_approval_artifact
 from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
+from .harness_posture import harness_posture_summary
 from .incident import build_incident_context
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
@@ -58,34 +59,32 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
-    DECISION_SCOPE_VALUES,
-    DecisionScope,
     GuardApprovalRequest,
     GuardArtifact,
     HarnessDetection,
     PolicyDecision,
 )
+from .native_approval_resolution import (
+    INTEGRITY_UNAVAILABLE,
+    ApprovalResolutionPlanUnavailableError,
+    native_approval_resolution_plan,
+)
+from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
+from .native_approval_scope import ApprovalScopeUnavailableError
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .protection_capabilities import protection_capability_payloads
 from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
-from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
+from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
+from .runtime.extension_allow_hint import validated_extension_allow_hint
 from .runtime.github_workflow_runtime import (
     issue_github_workflow_capability_for_resolution,
 )
-from .runtime.package_protect_projection import LOCAL_SUPPLY_CHAIN_HARNESS
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
-    _global_runtime_scoped_exact_match_key,
-    _is_runtime_scoped_exact_match_key,
-    _runtime_scoped_exact_match_key,
-    browser_mcp_exact_match_context,
-    runtime_tool_action_exact_match_context,
-    runtime_tool_action_policy_artifact_id,
-    runtime_tool_action_portable_match_context,
 )
 from .synced_policy import synced_policy_bundle_validation
 from .temporary_mcp_approvals import (
@@ -107,18 +106,9 @@ GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
 GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
-_APPROVAL_ONCE_POLICY_TTL = timedelta(minutes=15)
 _APPROVAL_RESOLUTION_LOCKS = tuple(threading.RLock() for _ in range(64))
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
-_WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
-    {
-        "file_read_request",
-        "package_request",
-        "prompt_request",
-        "tool_action_request",
-    }
-)
 
 
 def _current_guard_version() -> str:
@@ -163,24 +153,6 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
-
-
-def _approval_policy_harness(request: Mapping[str, object]) -> str:
-    """Keep local package policy identity separate from display attribution."""
-
-    artifact_type = request.get("artifact_type")
-    artifact_id = request.get("artifact_id")
-    if (
-        artifact_type == "package_request"
-        and isinstance(artifact_id, str)
-        and artifact_id.startswith(f"{LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
-    ):
-        return LOCAL_SUPPLY_CHAIN_HARNESS
-    return str(request["harness"])
-
-
-def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
-    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
 
 
 def _queued_request_dicts(queued: Sequence[object]) -> list[dict[str, object]]:
@@ -492,12 +464,8 @@ def queue_blocked_approvals(
             "action_envelope_json": action_envelope_json,
         }
         try:
-            _ = authoritative_decision_from_artifact(boundary_item)
-            canonical_decision = canonical_approval_surfaces(
-                policy_action,
-                item.get("decision_v2_json"),
-                action_envelope_json,
-                reject_contradiction=True,
+            canonical_decision = canonical_approval_artifact(
+                boundary_item, guard_home=getattr(store, "guard_home", None)
             )
         except (TypeError, ValueError) as error:
             raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT) from error
@@ -542,6 +510,7 @@ def queue_blocked_approvals(
             policy_action=canonical_decision.policy_action,
             launch_target=launch_target,
             risk_summary=risk_summary,
+            guard_home=getattr(store, "guard_home", None),
         )
         guard_version = _current_guard_version()
         request = GuardApprovalRequest(
@@ -578,6 +547,7 @@ def queue_blocked_approvals(
             guard_version=guard_version,
             first_seen_guard_version=guard_version,
             last_seen_guard_version=guard_version,
+            extension_allow_hint=_item_extension_allow_hint(item, artifact),
         )
         request = replace(
             request,
@@ -697,7 +667,7 @@ def apply_approval_resolution(
     local_tool_grant_target: object | None = None,
     local_tool_grant_duration: object | None = None,
 ) -> dict[str, object]:
-    request = store.get_approval_request(request_id)
+    request = store.get_approval_request(request_id, derive_scope=False)
     if request is None:
         raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
@@ -732,12 +702,14 @@ def apply_approval_resolution(
             duration=local_tool_grant_duration,
             now=resolved_at,
         )
+    contract, exact_token = request_scope_observation(request)
     selection = resolve_request_scope_selection(
         request,
         action=action,
         requested_scope=scope,
         contract_version=scope_contract_version,
         contract_digest=scope_contract_digest,
+        contract=contract,
     )
     requested_scope = selection.requested_scope
     scope = selection.applied_scope
@@ -745,23 +717,17 @@ def apply_approval_resolution(
         persist_policy = None
     elif scope == "artifact" and persist_policy is True:
         if scope_contract_version is not None:
-            if not exact_action_allow_persistence_eligible(request):
+            if not contract.exact_action_persistence_eligible:
                 raise IneligibleApprovalScopeError(
                     "saved_allow_scope_ineligible" if action == "allow" else "saved_block_scope_ineligible",
-                    request_scope_contract(request),
+                    contract,
                     action="allow" if action == "allow" else "block",
                     requested_scope=scope,
                 )
         else:
             persist_policy = None
-    workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
-    approval_context_token = (
-        request_artifact_hash if parse_approval_context_token(request_artifact_hash) is not None else None
-    )
-    exact_context_allow = action == "allow" and approval_context_token is not None
-    request_publisher = _string_or_none(request.get("publisher"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     portable_package_workspace = package_request_portable_workspace_scope(
         artifact_id=request_artifact_id,
@@ -771,38 +737,47 @@ def apply_approval_resolution(
     )
     if scope == "workspace" and portable_package_workspace is not None:
         resolved_workspace = portable_package_workspace
-    scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
-    scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
-    if exact_context_allow:
-        # The token already binds the exact request across every security
-        # dimension. Broad scopes remain match selectors; they do not discard
-        # this exact approval identity or turn it into a broad permission.
-        scoped_artifact_hash = approval_context_token
-        if scope in {"artifact", "workspace", "harness", "global"}:
-            scoped_artifact_id = request_artifact_id
-    else:
-        artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(
+    # The resident owns the decision identity, persistence mode, local-once row
+    # and sibling selector; this function only executes the plan against the store.
+    from .native_policy_snapshot_constants import NativePolicySnapshotError
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    # The resident refuses every request until this home's verifier key exists.
+    # A store that cannot derive one may still have a key from an earlier run, so
+    # try the plan anyway and name the missing integrity backend if it fails.
+    integrity_unavailable = False
+    try:
+        provision_native_verifier_key_for_store(store)
+    except NativePolicySnapshotError:
+        integrity_unavailable = True
+    try:
+        plan = native_approval_resolution_plan(
             request,
-            scope,
-            include_envelope_command=persist_policy is True,
+            guard_home=store.guard_home,
+            action=action,
+            scope=scope,
+            persist_policy=persist_policy,
+            temporary_mcp=temporary_mcp_selection is not None,
+            local_tool=local_tool_selection is not None,
+            resolve_scope_matches=resolve_scope_matches,
+            requires_local_once=action == "allow" and requires_local_once_approval(request),
+            resolved_workspace=resolved_workspace,
+            native_exact_token=exact_token if persist_policy is True and scope == "artifact" else None,
+            resolved_at=resolved_at,
         )
-        if artifact_runtime_exact_match_key is not None:
-            scoped_artifact_id = runtime_tool_action_policy_artifact_id(request_artifact_id)
-            scoped_artifact_hash = artifact_runtime_exact_match_key
-        broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
-        if broad_runtime_exact_match_key is not None:
-            scoped_artifact_hash = broad_runtime_exact_match_key
-        browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
-        if browser_mcp_exact_key is not None:
-            scoped_artifact_hash = browser_mcp_exact_key
+    except ApprovalResolutionPlanUnavailableError as error:
+        if integrity_unavailable:
+            raise ApprovalResolutionPlanUnavailableError(INTEGRITY_UNAVAILABLE) from error
+        raise
+    planned = cast(Mapping[str, object], plan["decision"])
     decision = PolicyDecision(
-        harness="*" if scope == "global" else _approval_policy_harness(request),
+        harness=str(planned["harness"]),
         scope=scope,
-        action="allow" if action == "allow" else "block",
-        artifact_id=scoped_artifact_id,
-        artifact_hash=scoped_artifact_hash,
-        workspace=resolved_workspace if scope == "workspace" else None,
-        publisher=request_publisher if scope == "publisher" else None,
+        action="allow" if planned["action"] == "allow" else "block",
+        artifact_id=_string_or_none(planned.get("artifact_id")),
+        artifact_hash=_string_or_none(planned.get("artifact_hash")),
+        workspace=_string_or_none(planned.get("workspace")),
+        publisher=_string_or_none(planned.get("publisher")),
         reason=reason,
         source="approval-gate",
     )
@@ -815,28 +790,18 @@ def apply_approval_resolution(
         subject=approval_gate_subject or f"approval-request:{request_id}",
         now=resolved_at,
     )
-    persisted_rule = persist_policy is True or (persist_policy is None and scope != "artifact")
+    persistence = plan["persistence"]
+    persisted_rule = persistence == "persisted"
     local_once_fallback = False
-    if persisted_rule:
+    if persistence == "persisted":
         store.ensure_policy_integrity_ready_for_write(
             harness=decision.harness if decision.harness != "*" else None,
             approval_gate_grant=resolved_gate_grant,
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
-        if action == "allow" and requires_local_once_approval(request):
-            local_once_fallback = _record_local_once_approval(
-                store,
-                request_id=request_id,
-                decision=decision,
-                harness=_approval_policy_harness(request),
-                created_at=resolved_at,
-            )
-    elif persist_policy is None and scope == "artifact" and temporary_mcp_selection is None:
-        once_decision = replace(
-            decision,
-            expires_at=_approval_once_policy_expires_at(resolved_at),
-        )
+    elif persistence == "once":
+        once_decision = replace(decision, expires_at=_string_or_none(plan.get("once_expires_at")))
         store.ensure_policy_integrity_ready_for_write(
             harness=once_decision.harness if once_decision.harness != "*" else None,
             approval_gate_grant=resolved_gate_grant,
@@ -847,33 +812,19 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-        if action == "allow" and requires_local_once_approval(request):
-            local_once_fallback = _record_local_once_approval(
-                store,
-                request_id=request_id,
-                decision=once_decision,
-                harness=_approval_policy_harness(request),
-                created_at=resolved_at,
-            )
-
-    elif (
-        persist_policy is False
-        and scope == "artifact"
-        and exact_context_allow
-        and temporary_mcp_selection is None
-        and local_tool_selection is None
-    ):
+    elif persistence == "exact_once":
         # "Do not remember" still authorizes the exact approved retry once.
         store.ensure_policy_integrity_ready_for_write(
             harness=decision.harness,
             approval_gate_grant=resolved_gate_grant,
             now=resolved_at,
         )
+    local_once_row = plan.get("local_once")
+    if isinstance(local_once_row, Mapping):
         local_once_fallback = _record_local_once_approval(
             store,
             request_id=request_id,
-            decision=decision,
-            harness=_approval_policy_harness(request),
+            row=local_once_row,
             created_at=resolved_at,
         )
 
@@ -925,12 +876,7 @@ def apply_approval_resolution(
             approval_gate_grant=resolved_gate_grant,
         )
 
-    resolution_harness = None if scope == "global" else str(request["harness"])
-    resolve_matching_scope_requests = (
-        resolve_scope_matches
-        and not (action == "allow" and scope != "artifact")
-        and not (scope == "artifact" and _is_runtime_scoped_exact_match_key(scoped_artifact_hash))
-    )
+    matching = plan.get("matching")
     if return_queue_result:
         result = (
             temporary_mcp_result
@@ -952,19 +898,11 @@ def apply_approval_resolution(
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
             if isinstance(error, str) and error:
                 raise ValueError(error)
-        if resolve_matching_scope_requests and not exact_context_allow:
-            resolved_scope_ids = store.resolve_matching_approval_requests(
-                harness=resolution_harness,
-                scope=scope,
-                artifact_id=scoped_artifact_id,
-                workspace=resolved_workspace if scope == "workspace" else None,
-                publisher=(
-                    str(request["publisher"])
-                    if scope == "publisher" and isinstance(request.get("publisher"), str)
-                    else None
-                ),
-                resolution_action=action,
-                resolution_scope=scope,
+        if isinstance(matching, Mapping):
+            resolved_scope_ids = _resolve_matching_requests(
+                store,
+                matching,
+                action=action,
                 reason=reason,
                 resolved_at=resolved_at,
                 approval_gate_grant=resolved_gate_grant,
@@ -981,7 +919,7 @@ def apply_approval_resolution(
             local_once_fallback=local_once_fallback,
         )
         issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-        result.update(request_scope_contract_payload(request))
+        result.update(scope_payload_for_request(request, contract))
         result["requested_scope"] = requested_scope
         result["applied_scope"] = scope
         if selection.warning is not None:
@@ -992,19 +930,11 @@ def apply_approval_resolution(
                 _refresh_queue_result(store, result, temporary_mcp_resolved_ids)
         return result
     resolved_ids: list[str] = []
-    if resolve_matching_scope_requests and not exact_context_allow:
-        resolved_ids = store.resolve_matching_approval_requests(
-            harness=resolution_harness,
-            scope=scope,
-            artifact_id=scoped_artifact_id,
-            workspace=resolved_workspace if scope == "workspace" else None,
-            publisher=(
-                str(request["publisher"])
-                if scope == "publisher" and isinstance(request.get("publisher"), str)
-                else None
-            ),
-            resolution_action=action,
-            resolution_scope=scope,
+    if isinstance(matching, Mapping):
+        resolved_ids = _resolve_matching_requests(
+            store,
+            matching,
+            action=action,
             reason=reason,
             resolved_at=resolved_at,
             approval_gate_grant=resolved_gate_grant,
@@ -1018,7 +948,7 @@ def apply_approval_resolution(
             resolved_at=resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-    updated = store.get_approval_request(request_id)
+    updated = store.get_approval_request(request_id, derive_scope=False)
     if updated is None:
         raise ValueError(f"Approval request disappeared: {request_id}")
     _record_resolution_event(
@@ -1031,7 +961,8 @@ def apply_approval_resolution(
         local_once_fallback=local_once_fallback,
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-    updated.update(request_scope_contract_payload(request))
+    updated.update(scope_payload_for_request(request, contract))
+    apply_scope_surfaces(updated)
     updated["requested_scope"] = requested_scope
     updated["applied_scope"] = scope
     if selection.warning is not None:
@@ -1061,138 +992,6 @@ def _local_tool_grant_result(selection: LocalToolGrantSelection) -> dict[str, ob
         "tool_name": selection.eligibility.tool_name,
         "capability": selection.eligibility.capability,
     }
-
-
-def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -> tuple[str | None, str | None]:
-    if scope != "workspace" or request.get("artifact_type") not in _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES:
-        return None, None
-    artifact_id = request.get("artifact_id")
-    artifact_hash = request.get("artifact_hash")
-    if not isinstance(artifact_id, str) or not artifact_id:
-        return None, None
-    if not isinstance(artifact_hash, str) or not artifact_hash:
-        return artifact_id, None
-    return artifact_id, artifact_hash
-
-
-def _artifact_scope_runtime_exact_match_key(
-    request: Mapping[str, object],
-    scope: str,
-    *,
-    include_envelope_command: bool = False,
-) -> str | None:
-    if scope != "artifact" or request.get("artifact_type") != "tool_action_request":
-        return None
-    request_artifact_id = _string_or_none(request.get("artifact_id"))
-    artifact_id = runtime_tool_action_policy_artifact_id(request_artifact_id)
-    synthesized_artifact_id = artifact_id != request_artifact_id
-    if synthesized_artifact_id and not include_envelope_command:
-        return None
-    raw_command_text = _string_or_none(request.get("raw_command_text"))
-    wrapper_chain = request.get("wrapper_chain")
-    envelope = request.get("action_envelope_json")
-    if isinstance(envelope, Mapping):
-        raw_command_text = (
-            raw_command_text
-            or _string_or_none(envelope.get("raw_command_text"))
-            or (_string_or_none(envelope.get("command")) if include_envelope_command else None)
-        )
-        if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str):
-            wrapper_chain = envelope.get("wrapper_chain")
-    normalized_wrapper_chain = (
-        wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
-    )
-    if synthesized_artifact_id and raw_command_text is None:
-        return None
-    context = runtime_tool_action_exact_match_context(
-        config_path=_string_or_none(request.get("config_path")),
-        source_scope=_string_or_none(request.get("source_scope")),
-        raw_command_text=raw_command_text,
-        wrapper_chain=normalized_wrapper_chain,
-        permission_mode=_request_permission_mode(request),
-    )
-    return _runtime_scoped_exact_match_key(artifact_id, context) if isinstance(artifact_id, str) else None
-
-
-def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
-    if scope not in {"harness", "global"}:
-        return None
-    if request.get("artifact_type") not in _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES:
-        return None
-    artifact_id = request.get("artifact_id")
-    if not isinstance(artifact_id, str) or not artifact_id:
-        return None
-    if request.get("artifact_type") == "tool_action_request":
-        raw_command_text = _string_or_none(request.get("raw_command_text"))
-        wrapper_chain = request.get("wrapper_chain")
-        envelope = request.get("action_envelope_json")
-        if isinstance(envelope, Mapping):
-            raw_command_text = raw_command_text or _string_or_none(envelope.get("raw_command_text"))
-            raw_command_text = raw_command_text or _string_or_none(envelope.get("command"))
-            if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str):
-                wrapper_chain = envelope.get("wrapper_chain")
-        if raw_command_text is None:
-            return None
-        context = runtime_tool_action_exact_match_context(
-            config_path=_string_or_none(request.get("config_path")),
-            source_scope=_string_or_none(request.get("source_scope")),
-            raw_command_text=raw_command_text,
-            wrapper_chain=(
-                wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
-            ),
-            permission_mode=_request_permission_mode(request),
-        )
-        portable_context = runtime_tool_action_portable_match_context(context)
-        if scope == "global":
-            return _global_runtime_scoped_exact_match_key(artifact_id, portable_context)
-        return _runtime_scoped_exact_match_key(artifact_id, portable_context)
-    return _runtime_scoped_exact_match_key(artifact_id)
-
-
-def _request_permission_mode(request: Mapping[str, object]) -> str | None:
-    envelope = request.get("action_envelope_json")
-    if not isinstance(envelope, Mapping):
-        return None
-    raw_payload = envelope.get("raw_payload_redacted")
-    if not isinstance(raw_payload, Mapping):
-        return None
-    return _string_or_none(raw_payload.get("permission_mode")) or _string_or_none(raw_payload.get("permissionMode"))
-
-
-def _extract_surface_flags(browser_intent: Mapping[str, object]) -> list[str] | None:
-    raw = browser_intent.get("sensitive_surface_flags")
-    if isinstance(raw, (list, tuple)):
-        return [str(f) for f in raw]
-    return None
-
-
-def _browser_mcp_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
-    """Build a browser MCP exact-match key for tool_call artifacts with browser intent.
-
-    Only activates for artifact_type == 'tool_call' when browser intent
-    metadata is present. Returns a runtime-exact key scoped to the browser
-    identity (intent, origin, path, profile, sensitive surfaces).
-    """
-    if scope != "artifact" or request.get("artifact_type") != "tool_call":
-        return None
-    browser_intent = request.get("browser_intent")
-    if not isinstance(browser_intent, Mapping):
-        return None
-    artifact_id = request.get("artifact_id")
-    if not isinstance(artifact_id, str) or not artifact_id:
-        return None
-    context = browser_mcp_exact_match_context(
-        intent=_string_or_none(browser_intent.get("intent")),
-        operation=_string_or_none(browser_intent.get("operation")),
-        target_origin=_string_or_none(browser_intent.get("target_origin")),
-        target_path_prefix=_string_or_none(browser_intent.get("target_path_prefix")),
-        profile_mode=_string_or_none(browser_intent.get("profile_mode")),
-        mcp_server_identity_hash=_string_or_none(browser_intent.get("mcp_server_identity_hash")),
-        mcp_tool_identity_hash=_string_or_none(browser_intent.get("mcp_tool_identity_hash")),
-        mcp_schema_hash=_string_or_none(browser_intent.get("mcp_schema_hash")),
-        sensitive_surface_flags=_extract_surface_flags(browser_intent),
-    )
-    return _runtime_scoped_exact_match_key(artifact_id, context) if context else None
 
 
 def _append_guard_token_to_url(url: str, auth_token: str) -> str:
@@ -1322,7 +1121,7 @@ def _enqueue_memory_decision_for_resolution(
     error must never break the local approval that already succeeded.
     """
     try:
-        request = store.get_approval_request(request_id)
+        request = store.get_approval_request(request_id, derive_scope=False)
     except Exception:
         request = None
     if not request:
@@ -1546,21 +1345,6 @@ def attach_primary_approval_link(
         payload["primary_approval_url"] = review_url
 
 
-_UNPROVEN_HOOK_REASONS = frozenset({"guard_cursor_cli_attestation_unavailable"})
-
-
-def _recorded_hook_verification(value: object) -> bool | None:
-    """Return proven hook state, or None when current proof is still unavailable."""
-
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, Mapping):
-        return None
-    if value.get("reason") in _UNPROVEN_HOOK_REASONS or value.get("integrity_status") == "attestation-unavailable":
-        return None
-    return value.get("protection_active") is True
-
-
 def _live_hook_verification(
     managed_installs: Sequence[Mapping[str, object]],
     store: GuardStore,
@@ -1740,6 +1524,7 @@ def _build_runtime_snapshot(
         "protection_health": protection_health,
         "protection_capabilities": protection_capability_payloads(),
         "protection_posture": config.protection_posture,
+        **harness_posture_summary(config),
     }
 
 
@@ -1907,6 +1692,13 @@ def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, 
     return item
 
 
+def _item_extension_allow_hint(item: dict[str, object], artifact) -> dict[str, object] | None:
+    value = artifact.metadata.get("extension_allow_hint") if artifact is not None else None
+    if value is None:
+        value = item.get("extension_allow_hint")
+    return validated_extension_allow_hint(value)
+
+
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:
     value = item.get("scanner_evidence")
     if not isinstance(value, list | tuple):
@@ -1924,29 +1716,50 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _approval_once_policy_expires_at(resolved_at: str) -> str:
-    parsed = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
-    return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
+def _resolve_matching_requests(
+    store: GuardStore,
+    matching: Mapping[str, object],
+    *,
+    action: str,
+    reason: str | None,
+    resolved_at: str,
+    approval_gate_grant: ApprovalGateGrant | None,
+) -> list[str]:
+    """Resolve the sibling requests the resident selected for this resolution."""
+
+    scope = str(matching["scope"])
+    return store.resolve_matching_approval_requests(
+        harness=_string_or_none(matching.get("harness")),
+        scope=scope,
+        artifact_id=_string_or_none(matching.get("artifact_id")),
+        artifact_hash=_string_or_none(matching.get("artifact_hash")),
+        workspace=_string_or_none(matching.get("workspace")),
+        publisher=_string_or_none(matching.get("publisher")),
+        resolution_action=action,
+        resolution_scope=scope,
+        reason=reason,
+        resolved_at=resolved_at,
+        approval_gate_grant=approval_gate_grant,
+    )
 
 
 def _record_local_once_approval(
     store: GuardStore,
     *,
     request_id: str,
-    decision: PolicyDecision,
-    harness: str,
+    row: Mapping[str, object],
     created_at: str,
 ) -> bool:
     approval_id = store.record_local_once_approval(
         request_id=request_id,
-        harness=harness,
-        artifact_id=decision.artifact_id,
-        artifact_hash=decision.artifact_hash,
-        workspace=decision.workspace,
-        publisher=decision.publisher,
-        action=decision.action,
+        harness=str(row["harness"]),
+        artifact_id=_string_or_none(row.get("artifact_id")),
+        artifact_hash=_string_or_none(row.get("artifact_hash")),
+        workspace=_string_or_none(row.get("workspace")),
+        publisher=_string_or_none(row.get("publisher")),
+        action=str(row["action"]),
         created_at=created_at,
-        expires_at=decision.expires_at or _approval_once_policy_expires_at(created_at),
+        expires_at=str(row["expires_at"]),
     )
     return approval_id is not None
 
@@ -2460,240 +2273,15 @@ def _runtime_headline_detail(headline_state: str) -> str:
     return details.get(headline_state, "Complete local protection cannot be proven.")
 
 
-_BULK_SECRET_TEXT_HINTS = (
-    "credential",
-    "secret",
-    ".env",
-    "token",
-    "api key",
-    "apikey",
-    "password",
-    "private key",
-    "ssh key",
-    "aws_access_key",
-    "github_token",
-)
-
-
-def _bulk_queue_category_text(request: Mapping[str, object]) -> str:
-    envelope = request.get("action_envelope_json")
-    envelope_fields: list[str] = []
-    if isinstance(envelope, dict):
-        for key in (
-            "action_type",
-            "command",
-            "tool_name",
-            "prompt_excerpt",
-            "mcp_server",
-            "mcp_tool",
-            "package_manager",
-            "package_name",
-            "script_name",
-        ):
-            value = envelope.get(key)
-            if isinstance(value, str) and value:
-                envelope_fields.append(value)
-        target_paths = envelope.get("target_paths")
-        if isinstance(target_paths, list):
-            envelope_fields.extend(str(path) for path in target_paths if isinstance(path, str))
-        decision_signals = envelope.get("signals")
-        if isinstance(decision_signals, list):
-            for signal in decision_signals:
-                if isinstance(signal, dict):
-                    for key in ("category", "title", "plain_reason"):
-                        value = signal.get(key)
-                        if isinstance(value, str) and value:
-                            envelope_fields.append(value)
-    return " ".join(
-        [
-            str(request.get("artifact_name") or ""),
-            str(request.get("artifact_type") or ""),
-            str(request.get("risk_headline") or ""),
-            str(request.get("risk_summary") or ""),
-            str(request.get("trigger_summary") or ""),
-            str(request.get("launch_summary") or ""),
-            str(request.get("why_now") or ""),
-            str(request.get("launch_target") or ""),
-            *_string_list(request.get("risk_signals")),
-            *envelope_fields,
-        ]
-    )
-
-
-def _bulk_action_text(request: Mapping[str, object]) -> str:
-    """Return user-supplied action text, excluding generated risk prose."""
-
-    envelope = request.get("action_envelope_json")
-    envelope_fields: list[str] = []
-    if isinstance(envelope, dict):
-        for key in (
-            "command",
-            "prompt_text",
-            "prompt_excerpt",
-            "mcp_server",
-            "mcp_tool",
-            "package_manager",
-            "package_name",
-            "script_name",
-        ):
-            value = envelope.get(key)
-            if isinstance(value, str) and value:
-                envelope_fields.append(value)
-        target_paths = envelope.get("target_paths")
-        if isinstance(target_paths, list):
-            envelope_fields.extend(str(path) for path in target_paths if isinstance(path, str))
-    return " ".join(
-        [
-            str(request.get("artifact_name") or ""),
-            str(request.get("artifact_type") or ""),
-            str(request.get("raw_command_text") or ""),
-            str(request.get("launch_target") or ""),
-            *envelope_fields,
-        ]
-    )
-
-
-def _bulk_decision_v2_categories(request: Mapping[str, object]) -> tuple[str, ...]:
-    decision_v2 = request.get("decision_v2_json")
-    if not isinstance(decision_v2, dict):
-        return ()
-    signals = decision_v2.get("signals")
-    if not isinstance(signals, list):
-        return ()
-    categories: list[str] = []
-    for signal in signals:
-        if isinstance(signal, dict):
-            category = signal.get("category")
-            if isinstance(category, str) and category:
-                categories.append(category)
-    return tuple(categories)
-
-
-def _bulk_has_secret_signal(request: Mapping[str, object]) -> bool:
-    categories = _bulk_decision_v2_categories(request)
-    if "secret" in categories:
-        return True
-    lowered = _bulk_action_text(request).lower()
-    return any(hint in lowered for hint in _BULK_SECRET_TEXT_HINTS)
-
-
-def _bulk_read_command(command: str) -> bool:
-    import re
-
-    return re.search(r"\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b", command.lower()) is not None
-
-
-def _bulk_has_secret_path_text(text: str) -> bool:
-    lowered = text.lower()
-    return any(
-        hint in lowered for hint in (".env", "token", "secret", "credential", "password", "private key", "api key")
-    )
-
-
-def _bulk_is_file_read_request(request: Mapping[str, object]) -> bool:
-    envelope = request.get("action_envelope_json")
-    artifact_type = str(request.get("artifact_type") or "")
-    if isinstance(envelope, dict) and envelope.get("action_type") == "file_read":
-        return True
-    if artifact_type == "file_read_request":
-        return True
-    command = ""
-    if isinstance(envelope, dict):
-        command = str(envelope.get("command") or "")
-    command = command or str(request.get("launch_target") or "")
-    return _bulk_read_command(command) and _bulk_has_secret_path_text(_bulk_queue_category_text(request))
-
-
-def _bulk_target_paths_are_secret(request: Mapping[str, object]) -> bool:
-    from .runtime.secret_sensitivity import classify_secret_path
-
-    envelope = request.get("action_envelope_json")
-    if not isinstance(envelope, dict):
-        return False
-    target_paths = envelope.get("target_paths")
-    if not isinstance(target_paths, list):
-        return False
-    workspace = envelope.get("workspace")
-    workspace_dir = Path(str(workspace)).expanduser() if isinstance(workspace, str) and workspace else None
-    path_context = {"cwd": workspace_dir}
-    return any(
-        isinstance(path, str) and classify_secret_path(path, **path_context) is not None for path in target_paths
-    )
-
-
-def _is_sensitive_file_read_request(request: Mapping[str, object]) -> bool:
-    if not _bulk_is_file_read_request(request):
-        return False
-    if _bulk_target_paths_are_secret(request):
-        return True
-    return _bulk_has_secret_signal(request)
-
-
-# Decision signal categories that must never be bulk-approved. These are the
-# genuinely catastrophic or trust-breaking cases: secret exfiltration, credential
-# output, prompt injection, system prompt access, guard bypass, and encoded
-# payloads. Everything else is bulk-eligible with a tiered risk disclosure.
-_BULK_BLOCKED_DECISION_CATEGORIES = frozenset(
-    {
-        "secret",
-        "credential",
-        "bypass",
-        "prompt_injection",
-        "system_prompt",
-        "encoded",
-    }
-)
-
-_BULK_BLOCKED_COMMAND_HINTS = (
-    "prompt injection",
-    "ignore previous",
-    "disregard previous",
-    "override instruction",
-    "bypass guard",
-    "disable guard",
-    "skip approval",
-    "ignore approval",
-    "without approval",
-    "guard_bypass",
-    "no guard",
-    "base64",
-    "openssl enc",
-    "xxd -r",
-    "decode-and-exec",
-    "exfiltrat",
-    "clipboard",
-    "pastebin",
-)
-
-
-def _bulk_request_is_bulk_blocked(request: Mapping[str, object]) -> bool:
-    """True for actions that must be reviewed individually, never bulk-approved."""
-    if str(request.get("policy_action") or "") in {"block", "sandbox-required"}:
-        return True
-    if str(request.get("status") or "") != "pending":
-        return True
-    # Secret file reads and credential-bearing file reads stay gated.
-    if _bulk_is_file_read_request(request) and _is_sensitive_file_read_request(request):
-        return True
-    categories = _bulk_decision_v2_categories(request)
-    if any(category in _BULK_BLOCKED_DECISION_CATEGORIES for category in categories):
-        return True
-    # Generated risk summaries commonly describe what remote execution could
-    # do. Treating that explanatory prose as action content makes the server
-    # reject requests the dashboard correctly classified as bulk-eligible.
-    text = _bulk_action_text(request).lower()
-    return any(hint in text for hint in _BULK_BLOCKED_COMMAND_HINTS)
-
-
-def is_bulk_allow_once_eligible(request: Mapping[str, object]) -> bool:
+def is_bulk_allow_once_eligible(request: Mapping[str, object], *, guard_home: Path) -> bool:
     """Whether a request can be approved once via the bulk approval flow.
 
-    Broadened beyond read-only file reads: any pending, non-blocked action that
-    is not in the bulk-blocked set (secrets, exfiltration, prompt injection,
-    guard bypass, destructive deletes, encoded payloads) is eligible. The
-    dashboard layers a tiered risk disclosure on top of this.
+    The resident owns the decision; an unavailable resident raises rather than
+    approving.
     """
-    return not _bulk_request_is_bulk_blocked(request)
+    from .native_approval_bulk_eligibility import native_bulk_allow_once_eligibility
+
+    return native_bulk_allow_once_eligibility([request], guard_home=guard_home)[0]
 
 
 def bulk_allow_read_only_once(
@@ -2722,13 +2310,23 @@ def bulk_allow_read_only_once(
     resolved_count = 0
     failed: list[dict[str, str]] = []
     eligible_ids: list[str] = []
+    candidates: list[tuple[str, Mapping[str, object] | None]] = []
     for request_id in request_ids:
         if not isinstance(request_id, str) or not request_id.strip():
             failed.append({"request_id": str(request_id), "error": "invalid_request_id"})
             continue
         normalized_id = request_id.strip()
-        request = store.get_approval_request(normalized_id)
-        if request is None or not is_bulk_allow_once_eligible(request):
+        candidates.append((normalized_id, store.get_approval_request(normalized_id)))
+    from .native_approval_bulk_eligibility import native_bulk_allow_once_eligibility
+
+    verdicts = iter(
+        native_bulk_allow_once_eligibility(
+            [request for _, request in candidates if request is not None],
+            guard_home=store.guard_home,
+        )
+    )
+    for normalized_id, request in candidates:
+        if request is None or not next(verdicts):
             failed.append({"request_id": normalized_id, "error": "ineligible"})
             continue
         eligible_ids.append(normalized_id)
@@ -2750,7 +2348,8 @@ def bulk_allow_read_only_once(
         now=resolved_at,
     )
 
-    for normalized_id in eligible_ids:
+    scope_unavailable = False
+    for index, normalized_id in enumerate(eligible_ids):
         try:
             apply_approval_resolution(
                 store=store,
@@ -2767,14 +2366,22 @@ def bulk_allow_read_only_once(
                 persist_policy=False,
             )
             resolved_count += 1
+        except ApprovalScopeUnavailableError as error:
+            # A resident outage affects every remaining row; stop instead of retrying each one.
+            failed.extend({"request_id": remaining, "error": str(error)} for remaining in eligible_ids[index:])
+            scope_unavailable = True
+            break
         except (ApprovalRequestNotFoundError, ApprovalRequestAlreadyResolvedError, ValueError) as error:
             failed.append({"request_id": normalized_id, "error": str(error)})
 
-    return {
+    result: dict[str, object] = {
         "resolved_count": resolved_count,
         "failed": failed,
         "resolution_summary": f"{resolved_count} action{'s' if resolved_count != 1 else ''} approved once.",
     }
+    if scope_unavailable:
+        result["error"] = APPROVAL_SCOPE_UNAVAILABLE
+    return result
 
 
 def _optional_string(value: object) -> str | None:

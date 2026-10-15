@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
     managed_stdio_servers,
     proxy_cli_args,
 )
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import append_config_artifacts
+from codex_plugin_scanner.guard.adapters.opencode_artifacts import native_artifacts
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
@@ -427,14 +427,9 @@ def test_opencode_installed_inventory_normalizes_padded_env_keys(tmp_path: Path)
         enabled=True,
     )
     args = proxy_cli_args(proxy_command="opencode-mcp-proxy", guard_home=str(tmp_path / "guard"), server=server)
-    artifacts: list[GuardArtifact] = []
-    append_config_artifacts(
-        artifacts=artifacts,
-        seen_artifact_ids=set(),
-        scope="global",
-        config_path=Path(server.config_path),
-        payload={"mcp": {"fixture": {"type": "local", "command": ["hol-guard", *args], "environment": server.env}}},
-    )
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    payload = {"mcp": {"fixture": {"type": "local", "command": ["hol-guard", *args], "environment": server.env}}}
+    artifacts, _found = native_artifacts(context, [(Path(server.config_path), "global", payload)])
     servers = discover_harness_mcp_servers(
         home_dir=tmp_path,
         guard_home=tmp_path / "guard",

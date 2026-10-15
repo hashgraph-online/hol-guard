@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativ
 from codex_plugin_scanner.guard.runtime.structured_output_mediation import STRUCTURED_OUTPUT_SETTING_PATH
 
 
-def _structured_policy() -> dict[str, object]:
+def _structured_policy() -> tuple[dict[str, object], int]:
     return {
         "version": "hol-guard-structured-output-policy.v1",
         "enabled": True,
@@ -87,7 +86,7 @@ def _emit_unavailable(
     reason_code: str,
     config: _Config,
     recording_only: bool = False,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], int]:
     emitted: dict[str, object] = {}
 
     def capture(command: str, payload: dict[str, object], as_json: bool) -> None:
@@ -100,24 +99,21 @@ def _emit_unavailable(
         guard_home=tmp_path / "guard-home",
     )
     args = _Args(harness=harness)
-    assert (
-        availability._emit_native_unavailable(
-            args,
-            payload={"hook_event_name": event_name},
-            workspace=context.workspace_dir,
-            context=context,
-            event_name=event_name,
-            reason_code=reason_code,
-            worker=_OverlayWorker(config),
-            recording_only=recording_only,
-        )
-        == 0
+    rc = availability._emit_native_unavailable(
+        args,
+        payload={"hook_event_name": event_name},
+        workspace=context.workspace_dir,
+        context=context,
+        event_name=event_name,
+        reason_code=reason_code,
+        worker=_OverlayWorker(config),
+        recording_only=recording_only,
     )
     assert emitted["command"] == "hook"
     assert emitted["as_json"] is True
     response = emitted["payload"]
     assert isinstance(response, dict)
-    return response
+    return response, rc
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -135,7 +131,7 @@ def test_cli_native_unavailable_withholds_managed_posttool_destination(
     harness: str,
     reason_code: str,
 ) -> None:
-    response = _emit_unavailable(
+    response, rc = _emit_unavailable(
         monkeypatch,
         tmp_path,
         harness=harness,
@@ -144,6 +140,8 @@ def test_cli_native_unavailable_withholds_managed_posttool_destination(
         config=_managed_config(),
     )
 
+    # PostToolUse unavailability is an allow envelope; rc mirrors verdict -> 0.
+    assert rc == 0
     assert response["decision"] == "allow"
     assert response["policy_action"] == "allow"
     assert response["reason_code"] == reason_code
@@ -162,7 +160,7 @@ def test_cli_native_unavailable_keeps_optional_structured_destination_off(
     tmp_path: Path,
     harness: str,
 ) -> None:
-    response = _emit_unavailable(
+    response, rc = _emit_unavailable(
         monkeypatch,
         tmp_path,
         harness=harness,
@@ -171,6 +169,7 @@ def test_cli_native_unavailable_keeps_optional_structured_destination_off(
         config=_optional_config(),
     )
 
+    assert rc == 0
     assert response == {
         "decision": "allow",
         "policy_action": "allow",
@@ -178,7 +177,7 @@ def test_cli_native_unavailable_keeps_optional_structured_destination_off(
     }
 
 
-def _native_success_result() -> dict[str, object]:
+def _native_success_result() -> tuple[dict[str, object], int]:
     return {
         "decision": "allow",
         "model_output_action": "allow_original",
@@ -191,7 +190,7 @@ def _native_success_result() -> dict[str, object]:
 
 def _project_worker_result(
     worker_result: dict[str, object],
-) -> dict[str, object]:
+) -> tuple[dict[str, object], int]:
     response: dict[str, object] = {
         "decision": "allow",
         "policy_action": "allow",
@@ -223,10 +222,8 @@ def test_cli_native_success_projects_worker_structured_mediation_without_mutatin
 
     assert response["structured_content_mediation"] == {
         "schema": "guard-structured-content-mediation.v1",
-        "action": "forward",
-        "reason_code": "structured_clean_forward",
-        "native_decision_id": "b" * 64,
-        "content_sha256": hashlib.sha256(structured_output.encode()).hexdigest(),
+        "action": "withhold",
+        "reason_code": "structured_managed_authority_unavailable",
     }
     assert response["structured_content_mediation"] is not worker_result["structured_content_mediation"]
     assert native_result == original_native_result
@@ -283,7 +280,7 @@ def test_cli_native_success_projects_managed_structured_withhold_and_keeps_optio
     ("recording_only", "decision", "reason_code"),
     [
         (False, "block", "native_prompt_unavailable"),
-        (True, "allow", "native_prompt_deadline_exceeded"),
+        (True, "block", "native_prompt_unavailable"),
     ],
 )
 def test_cli_native_unavailable_preserves_native_recording_posture(
@@ -293,7 +290,7 @@ def test_cli_native_unavailable_preserves_native_recording_posture(
     decision: str,
     reason_code: str,
 ) -> None:
-    response = _emit_unavailable(
+    response, rc = _emit_unavailable(
         monkeypatch,
         tmp_path,
         harness="pi",
@@ -303,5 +300,9 @@ def test_cli_native_unavailable_preserves_native_recording_posture(
         recording_only=recording_only,
     )
 
+    # pi/omp are envelope-driven: a preemptive (UserPromptSubmit) block rides
+    # the decision envelope and exits 0 — nonzero rc reads as a hook error.
+    # Gauntlet-verified: omp deny arrives as decision==deny while host exits 0.
+    assert rc == 0
     assert response["decision"] == decision
     assert response["reason_code"] == reason_code

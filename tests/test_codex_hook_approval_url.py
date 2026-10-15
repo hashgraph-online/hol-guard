@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
     _native_hook_reason_for_harness,
 )
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool_review
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -149,7 +149,7 @@ def test_native_review_reason_uses_signed_loopback_link(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     _write_daemon_token(guard_home, "secret-daemon-token")
     review_url = "http://127.0.0.1:5474/requests/req-native-1"
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "codex",
         {"reason": "HOL Guard paused this action.", "reason_code": "native_pre_tool_review"},
         approval={"request_id": "req-native-1", "approval_url": review_url},

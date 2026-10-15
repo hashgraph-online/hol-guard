@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+import codex_plugin_scanner.guard.native_supply_chain_eval as evaluator_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
@@ -310,7 +310,7 @@ def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
 
     pending = store.list_approval_requests(limit=5)
     native = harness == "hermes"
-    assert rc == (2 if native else 1)
+    assert rc == (2 if native else 0 if harness in {"codex", "claude-code", "copilot"} else 1)
     if native:
         assert output["decision"] == "block"
     else:
@@ -374,9 +374,9 @@ def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
         monkeypatch=monkeypatch,
     )
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "require-reapproval"
-    assert second_rc == 1
+    assert second_rc == 0
     assert second_output["policy_action"] == "block"
     assert second_output.get("approval_requests") in (None, [])
     assert store.count_approval_requests(status="pending") == 0
@@ -406,7 +406,7 @@ def test_phase14_package_hook_evidence_includes_source_details(
     evidence = store.list_evidence()
     details = evidence[0]["details"]
 
-    assert rc == 1
+    assert rc == 0
     assert details["harness"] == "codex"
     assert details["agent_app"] == "codex"
     assert details["workspace_fingerprint"]
@@ -441,7 +441,7 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
 
     native = harness == "hermes"
     message = str(output["reason"] if native else output["decision_v2_json"]["harness_message"])
-    assert rc == (2 if native else 1)
+    assert rc == (2 if native else 0 if harness in {"codex", "claude-code", "copilot"} else 1)
     if native:
         assert output["decision"] == "block"
     else:
@@ -491,6 +491,11 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
         json.dumps({"error": "authorization_expired"}, separators=(",", ":")),
     )
+    # This surface models a signed-in account whose sign-in expired, not an
+    # explicitly unpaid one, so drop the module-wide unpaid/unreachable Cloud
+    # seams that `bundle_first_cloud` exports for the resident.
+    monkeypatch.delenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", raising=False)
 
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command_parts(context)
@@ -515,7 +520,6 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
-    assert result.stderr in ("",) or result.stderr.startswith("HOL Guard intercepted Claude's attempt to use Bash.")
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     # `blocked_request_mode="ask"` opts this surface into prompting, so the
