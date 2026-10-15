@@ -332,7 +332,9 @@ class TestPiInstall:
         assert "return waitForGuardCliChildExit(child, 200)" in text
         assert "guardCliContainmentFailed = true" in text
         assert "containmentFailure," in text
-        assert 'reason_code: "guard_cli_containment_failed"' in text
+        # Containment failure only stops daemon recovery; the decision path
+        # never falls back to the Python CLI.
+        assert 'reason_code: "guard_cli_containment_failed"' not in text
         assert "{ code: 'ECONTAINMENT' }" in text
         recovery_block = text.split("async function recoverGuardDaemon(", 1)[1].split(
             "async function daemonGuardResponse(",
@@ -393,21 +395,21 @@ class TestPiInstall:
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
         assert "serializedPayload = JSON.stringify(payloadToSend);" in text
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
-        assert "[...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]" in text
         assert "async function daemonGuardResponse(" in text
         assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
         assert "serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt" in text
         assert "parsedPayload.guard_remaining_ms" in text
         assert "body: daemonPayload" in text
-        assert 'recoveryKind: "authenticated-control-plane-failure",\n        };' in text
+        assert 'recoveryKind: "authenticated-control-plane-failure",\n      };' in text
         assert "const response = await runGuard(" in text
-        assert "if (result.error) {" in text
-        assert "const errorMessage = result.error.message;" in text
-        assert "const errorCode =" in text
         assert 'decision: "deny"' in text
-        assert "errorCode === 'ETIMEDOUT'" in text
-        assert "could not complete fallback review before the Pi deadline" in text
-        assert "HOL Guard Pi hook failed before completing review" in text
+        # A daemon that stays unreachable after recovery denies the hook; no
+        # Python CLI reviews it instead.
+        assert 'return fallbackGuardResponse(\n    "daemon_unavailable",' in text
+        assert "could not complete fallback review" not in text
+        assert "HOL Guard Pi hook failed before completing review" not in text
+        decision_block = text.split("async function runGuard(", 1)[1]
+        assert "runGuardCliCommand(" not in decision_block
 
     def test_managed_extension_fails_safe_on_ambiguous_success_payloads(
         self,
@@ -421,14 +423,13 @@ class TestPiInstall:
 
         assert 'if (!raw) return { response: null, recoveryKind: "transport-failure" };' in text
         assert "function normalizeGuardResponse(" in text
-        assert "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);" in text
+        assert "const normalized = normalizePromptGuardResponse(" in text
         assert 'parsed.reason !== undefined && parsed.reason !== null && typeof parsed.reason !== "string"' in text
         assert 'if (parsed.decision === "block")' in text
         assert "Array.isArray(value)" in text
         assert "function fallbackGuardResponse(" in text
-        assert '"guard_cli_invalid_response"' in text
-        assert 'normalized !== null && (result.status === 0 || normalized.decision === "deny")' in text
-        assert "if (result.status !== 0)" in text
+        assert '"guard_cli_invalid_response"' not in text
+        assert '"daemon_unavailable",' in text
         assert 'hook_event_name: "PreToolUse"' in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
@@ -480,7 +481,8 @@ class TestPiInstall:
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
         assert "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string" in text
         assert "Do not retry the same tool call automatically" in text
-        assert 'reasonCode === "guard_cli_recovery_timeout"' in text
+        assert 'reasonCode === "daemon_unavailable"' in text
+        assert 'reasonCode === "guard_cli_recovery_timeout"' not in text
         assert 'reasonCode === "daemon_hook_deadline_exhausted"' in text
         assert "const modelReason = modelVisibleBlockedReason(reason, response.reason_code);" in text
         assert "if (toolCallId) blockedToolResults.set(toolCallId, modelReason);" in text
@@ -540,7 +542,7 @@ class TestPiInstall:
         assert extension_path == ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
         assert '"--harness", "omp"' in extension_path.read_text(encoding="utf-8")
         assert "/v1/hooks/omp?" in extension_path.read_text(encoding="utf-8")
-        assert "Oh My Pi hook failed before completing review" in extension_path.read_text(encoding="utf-8")
+        assert "HOL Guard could not serialize Oh My Pi hook payload" in extension_path.read_text(encoding="utf-8")
         assert "before Pi could use it" not in extension_path.read_text(encoding="utf-8")
         assert not (ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts").exists()
 
@@ -561,7 +563,7 @@ class TestPiInstall:
         assert str(home_dir) in source
         assert "Oh My Pieter" not in source
         assert "Pieter/Oh My Pi" not in source
-        assert "Oh My Pi hook failed before completing review" in source
+        assert "HOL Guard could not serialize Oh My Pi hook payload" in source
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

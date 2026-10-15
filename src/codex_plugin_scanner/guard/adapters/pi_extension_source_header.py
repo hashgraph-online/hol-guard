@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
+from .pi_extension_native_hook import native_hook_runtime_source
 from .pi_extension_source_header_shared_v1 import make_source_header_builder_v1
 
-build_extension_source_header = make_source_header_builder_v1(
+_build_shared_source_header = make_source_header_builder_v1(
     content_review_helpers_source=CONTENT_REVIEW_HELPERS_SOURCE,
     structured_constants_source=(
         "// Python JSON responses can escape one astral character as two Unicode escapes.\n"
@@ -27,3 +28,11 @@ build_extension_source_header = make_source_header_builder_v1(
         "  content_sha256?: string;\n"
     ),
 )
+
+
+def build_extension_source_header(*, guard_home_json: str, **fields: object) -> str:
+    # The frozen shared header has no native runtime; only current extensions
+    # name the runtime that answers their hooks.
+    return _build_shared_source_header(guard_home_json=guard_home_json, **fields) + native_hook_runtime_source(
+        guard_home_json
+    )

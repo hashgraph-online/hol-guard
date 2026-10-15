@@ -511,6 +511,7 @@ mod package_posture_op;
 mod package_protect_projection_op;
 mod pi_detect;
 mod pi_glob;
+mod pi_hook_bridge;
 #[cfg(all(test, unix))]
 mod pi_vectors_tests;
 mod policy_bundle_crypto;

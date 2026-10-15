@@ -121,6 +121,7 @@ fn a_hook_with_the_daemon_context_becomes_a_hook_direct_request() {
         request,
         json!({
             "operation": "hook_direct",
+            "deadline_budget_ms": 400,
             "request": {
                 "harness": "codex",
                 "guard_home": text(&homes.guard_home),
@@ -181,6 +182,7 @@ fn a_bounded_hook_asks_under_the_daemons_own_homes() {
             built(harness, &homes.guard_home).unwrap(),
             json!({
                 "operation": "hook_direct",
+                "deadline_budget_ms": 300,
                 "request": {
                     "harness": harness,
                     "guard_home": text(&homes.guard_home),
@@ -220,6 +222,7 @@ fn a_grok_hook_asks_with_the_home_the_daemon_keeps() {
     };
     let mut expected = json!({
         "operation": "hook_direct",
+        "deadline_budget_ms": 300,
         "request": {
             "harness": "grok",
             "guard_home": text(&homes.guard_home),
@@ -333,6 +336,7 @@ fn a_hook_without_a_home_leaves_the_resident_the_daemon_home() {
         request,
         json!({
             "operation": "hook_direct",
+            "deadline_budget_ms": 400,
             "request": {
                 "harness": "claude-code",
                 "guard_home": text(&homes.guard_home),

@@ -111,6 +111,21 @@ def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pyt
 
 
 @pytest.fixture(autouse=True)
+def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generate Pi and Oh My Pi extensions that post to the daemon themselves.
+
+    Pi extension tests stub the extension's ``fetch``. Tests marked
+    ``native_pi_hook_bridge`` keep the native runtime selection.
+    """
+
+    if request.node.get_closest_marker("native_pi_hook_bridge") is not None:
+        return
+    # Subprocess installers copy os.environ and do not see a monkeypatched
+    # function, so the generated source pins the daemon request by value.
+    monkeypatch.setenv("HOL_GUARD_PI_HOOK_BRIDGE", "fetch")
+
+
+@pytest.fixture(autouse=True)
 def _python_mcp_proxy_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
     """Install MCP proxies with the Python launcher argv unless a test opts in.
 

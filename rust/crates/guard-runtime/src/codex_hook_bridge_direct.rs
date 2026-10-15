@@ -53,6 +53,17 @@ pub(crate) const CURSOR: DirectHarness = DirectHarness {
     name: "cursor",
     switch: "HOL_GUARD_CURSOR_DIRECT_HOOK",
 };
+/// Oh My Pi and its `omp` install, whose generated extension runs the native
+/// Pi bridge. `HOL_GUARD_PI_DIRECT_HOOK=0` keeps their hooks on the daemon,
+/// which then asks the resident itself unless the same switch is set.
+pub(crate) const PI: DirectHarness = DirectHarness {
+    name: "pi",
+    switch: "HOL_GUARD_PI_DIRECT_HOOK",
+};
+pub(crate) const OMP: DirectHarness = DirectHarness {
+    name: "omp",
+    switch: "HOL_GUARD_PI_DIRECT_HOOK",
+};
 /// The bounded bridge harnesses the resident answers. The resident routes a
 /// ZCode sandbox requirement to contained execution as the daemon does.
 /// Grok runs its own client, which asks through [`grok_direct_answer`].
@@ -282,7 +293,13 @@ fn request_body(
     if let Some(workspace) = workspace {
         request["workspace"] = Value::String(workspace);
     }
-    serde_json::to_vec(&json!({ "operation": "hook_direct", "request": request })).ok()
+    serde_json::to_vec(&json!({
+        "operation": "hook_direct",
+        // Without a budget the resident client falls back to 750 ms.
+        "deadline_budget_ms": budget_ms,
+        "request": request,
+    }))
+    .ok()
 }
 
 /// The harness response of an `answer`, or `None` for a defer or anything
