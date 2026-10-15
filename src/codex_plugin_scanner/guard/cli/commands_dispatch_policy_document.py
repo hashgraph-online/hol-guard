@@ -33,7 +33,7 @@ from ..policy_document_io import (
     write_private_policy_text,
 )
 from ..policy_document_yaml import PolicyDocumentError, format_policy_document_yaml
-from ..policy_starters import with_modeline
+from ..policy_starters import LEGACY_POLICY_MODELINES, with_modeline
 from ..runtime.command_policy import compile_command_policy_rules, evaluate_command_policy_rules
 from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
@@ -163,8 +163,9 @@ def _run_guard_policy_document_command(
             document = load_trusted_policy_document(path)
             canonical = format_policy_document_yaml(document)
             formatted = with_modeline(canonical)
-            # A file formatted before the modeline existed is still canonical, so --check accepts it.
-            changed = original not in (canonical, formatted) if bool(args.check) else original != formatted
+            # A file formatted before the modeline existed, or under an earlier modeline, is still canonical.
+            accepted = (canonical, formatted, *(f"{line}\n{canonical}" for line in LEGACY_POLICY_MODELINES))
+            changed = original not in accepted if bool(args.check) else original != formatted
             if bool(args.check):
                 _write_payload(
                     "policy fmt",

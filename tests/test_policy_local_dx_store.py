@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.policy_delivery_status import (
 )
 from codex_plugin_scanner.guard.policy_document_compile import compile_policy_document
 from codex_plugin_scanner.guard.policy_document_yaml import parse_policy_document_yaml
-from codex_plugin_scanner.guard.policy_starters import POLICY_MODELINE
+from codex_plugin_scanner.guard.policy_starters import LEGACY_POLICY_MODELINES, POLICY_MODELINE
 from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).resolve().parents[1] / "spec" / "guard-policy" / "v1alpha1" / "fixtures"
@@ -337,6 +337,23 @@ def test_fmt_check_accepts_a_canonical_file_that_has_no_modeline(
 
     assert main(["guard", "policy", "fmt", str(plain), "--check"]) == 0
     capsys.readouterr()
+
+
+def test_fmt_check_accepts_an_earlier_modeline_and_fmt_rewrites_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exported = tmp_path / "exported.yaml"
+    assert main(["guard", "policy", "export", "--home", str(tmp_path / "home"), "--output", str(exported)]) == 0
+    capsys.readouterr()
+    current = exported.read_text(encoding="utf-8")
+    legacy = tmp_path / "legacy.yaml"
+    legacy.write_text(current.replace(POLICY_MODELINE, LEGACY_POLICY_MODELINES[0], 1), encoding="utf-8")
+    legacy.chmod(0o600)
+
+    assert main(["guard", "policy", "fmt", str(legacy), "--check"]) == 0
+    assert main(["guard", "policy", "fmt", str(legacy)]) == 0
+    capsys.readouterr()
+    assert legacy.read_text(encoding="utf-8") == current
 
 
 def test_status_reads_version_two_integer_versions_and_observed_at(
