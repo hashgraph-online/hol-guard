@@ -32,10 +32,10 @@ if os.environ.get("HOL_GUARD_NATIVE") != "force" or not os.environ.get("HOL_GUAR
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from approval_read_scenarios import PAD, SCENARIOS, SOURCE, expand, padded_envelope
+from approval_read_scenarios import PAD, SCENARIOS, SOURCE, encode_page_cursor, expand, padded_envelope
 
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import _decode_page_cursor, _encode_page_cursor
+from codex_plugin_scanner.guard.store_approvals import _decode_page_cursor
 
 LONG_STRING = 65_536
 
@@ -61,7 +61,7 @@ def list_args(args: dict[str, object], rows: list[dict[str, object]]) -> dict[st
     cursor_of = resolved.pop("cursor_of", None)
     if cursor_of is not None:
         anchor = next(item for item in rows if item["request_id"] == cursor_of)
-        resolved["cursor"] = _encode_page_cursor(anchor)
+        resolved["cursor"] = encode_page_cursor(anchor)
     return resolved
 
 

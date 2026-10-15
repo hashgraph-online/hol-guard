@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_advisory_cache as advisory_cache;
 use crate::guard_store_approval_backfill;
+use crate::guard_store_approval_page_reads as approval_pages;
 use crate::guard_store_approval_reads as approval_reads;
 use crate::guard_store_approval_write::{add_approval_request, add_native_review_approval_request};
 use crate::guard_store_args::Args;
@@ -300,7 +301,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "observed_mcp_tool_actions"
         | "workflow_capability_plan"
         | "get_approval_request"
-        | "list_approval_requests" => Kind::Snapshot,
+        | "list_approval_requests"
+        | "list_approval_request_page"
+        | "count_approval_requests"
+        | "get_next_pending_request" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "add_approval_request"
@@ -533,6 +537,11 @@ fn dispatch(
         "get_receipt" => receipt_reads::get_receipt(connection, args),
         "get_approval_request" => approval_reads::get_approval_request(connection, args),
         "list_approval_requests" => approval_reads::list_approval_requests(connection, args),
+        "list_approval_request_page" => {
+            approval_pages::list_approval_request_page(connection, args)
+        }
+        "count_approval_requests" => approval_pages::count_approval_requests(connection, args),
+        "get_next_pending_request" => approval_pages::get_next_pending_request(connection, args),
         "get_receipt_for_approval_request" => {
             receipt_reads::get_for_approval_request(connection, args)
         }

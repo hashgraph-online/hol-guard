@@ -7,6 +7,8 @@ connection writes before each native call.
 
 from __future__ import annotations
 
+import base64
+import json
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -40,6 +42,19 @@ def _store_for(conn: sqlite3.Connection) -> GuardStore:
             raise AssertionError(f"connection {path} is not a Guard store database")
         _STORES[key] = store
     return store
+
+
+def native_store(conn: sqlite3.Connection) -> GuardStore:
+    """Commit ``conn`` and return its store, whose queue reads go to the native resident."""
+    conn.commit()
+    return _store_for(conn)
+
+
+def page_cursor(item: dict[str, object]) -> str:
+    """The approval queue page cursor that continues after ``item``."""
+    marker = {"last_seen_at": item["last_seen_at"], "request_id": item["request_id"]}
+    raw = json.dumps(marker, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def add_approval_request(conn: sqlite3.Connection, request: GuardApprovalRequest, now: str) -> str:

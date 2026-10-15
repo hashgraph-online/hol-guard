@@ -26,6 +26,17 @@ def _with_approval_hints(payload: dict[str, object]) -> dict[str, object]:
     return payload
 
 
+def _cursor_marker(cursor: str | None) -> list[str] | None:
+    """The `[last_seen_at, request_id]` a page cursor names; Python rejects a bad cursor first."""
+
+    if cursor is None:
+        return None
+    marker = _decode_page_cursor(cursor)
+    if marker is None:
+        raise InvalidApprovalCursorError("invalid approval queue cursor")
+    return [marker["last_seen_at"], marker["request_id"]]
+
+
 class StoreApprovalQueriesMixin:
     def list_approval_requests(
         self,
@@ -36,25 +47,17 @@ class StoreApprovalQueriesMixin:
         cursor: str | None = None,
         search: str | None = None,
     ) -> list[dict[str, object]]:
-        marker = None
-        if cursor is not None:
-            marker = _decode_page_cursor(cursor)
-            if marker is None:
-                raise InvalidApprovalCursorError("invalid approval queue cursor")
-        args = {
-            "status": status,
-            "harness": harness,
-            "limit": limit,
-            "cursor": None if marker is None else [marker["last_seen_at"], marker["request_id"]],
-            "search": search,
-        }
-        items: list[dict[str, object]] = []
-        while True:
-            # The resident returns bounded chunks; each continues at the next row.
-            page = self._native_approval_read("list_approval_requests", {**args, "offset": len(items)})
-            items.extend(page["items"])
-            if page["complete"]:
-                return [_with_approval_hints(item) for item in items]
+        items = self._native_approval_pages(
+            "list_approval_requests",
+            {
+                "status": status,
+                "harness": harness,
+                "limit": limit,
+                "cursor": _cursor_marker(cursor),
+                "search": search,
+            },
+        )["items"]
+        return [_with_approval_hints(item) for item in items]
 
     def list_pending_approval_summaries(
         self,
@@ -66,16 +69,15 @@ class StoreApprovalQueriesMixin:
         include_totals: bool = True,
         exclude_watch_only: bool = False,
     ) -> dict[str, object]:
-        with self._connect() as connection:
-            return load_pending_approval_summaries(
-                connection,
-                limit=limit,
-                cursor=cursor,
-                harness=harness,
-                search=search,
-                include_totals=include_totals,
-                exclude_watch_only=exclude_watch_only,
-            )
+        return self.list_approval_request_page(
+            status="pending",
+            limit=limit,
+            cursor=cursor,
+            harness=harness,
+            search=search,
+            include_totals=include_totals,
+            exclude_watch_only=exclude_watch_only,
+        )
 
     def list_approval_request_page(
         self,
@@ -88,23 +90,34 @@ class StoreApprovalQueriesMixin:
         include_totals: bool = True,
         exclude_watch_only: bool = False,
     ) -> dict[str, object]:
-        with self._connect() as connection:
-            return load_approval_request_page(
-                connection,
-                status=status,
-                limit=limit,
-                cursor=cursor,
-                harness=harness,
-                search=search,
-                include_totals=include_totals,
-                exclude_watch_only=exclude_watch_only,
-            )
+        return self._native_approval_pages(
+            "list_approval_request_page",
+            {
+                "status": status,
+                "limit": limit,
+                "cursor": _cursor_marker(cursor),
+                "harness": harness,
+                "search": search,
+                "include_totals": include_totals,
+                "exclude_watch_only": exclude_watch_only,
+            },
+        )
 
     def get_approval_request(self, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         payload = self._native_approval_read(
             "get_approval_request", {"request_id": request_id, "derive_scope": derive_scope}
         )
         return _with_approval_hints(payload) if payload is not None and derive_scope else payload
+
+    def _native_approval_pages(self, method: str, args: dict[str, object]) -> dict[str, Any]:
+        """Every chunk of one native queue page; each chunk continues at the next item."""
+
+        items: list[dict[str, object]] = []
+        while True:
+            page = self._native_approval_read(method, {**args, "offset": len(items)})
+            items.extend(page.pop("items"))
+            if page.pop("complete"):
+                return {"items": items, **page}
 
     def _native_approval_read(self, method: str, args: dict[str, object]) -> Any:
         """One native queue read; a resident without an answer reads as scope unavailable."""
@@ -163,8 +176,7 @@ class StoreApprovalQueriesMixin:
             )
 
     def get_next_pending_request(self, *, exclude_ids: set[str] | None = None) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_next_pending_request(connection, exclude_ids=exclude_ids)
+        return self._native_approval_read("get_next_pending_request", {"exclude_ids": sorted(exclude_ids or ())})
 
     def count_approval_requests(
         self,
@@ -176,16 +188,19 @@ class StoreApprovalQueriesMixin:
         resolved_at_before: str | None = None,
         exclude_watch_only: bool = False,
     ) -> int:
-        with self._connect() as connection:
-            return count_pending_approval_requests(
-                connection,
-                status=status,
-                harness=harness,
-                search=search,
-                resolved_at_from=resolved_at_from,
-                resolved_at_before=resolved_at_before,
-                exclude_watch_only=exclude_watch_only,
+        return int(
+            self._native_approval_read(
+                "count_approval_requests",
+                {
+                    "status": status,
+                    "harness": harness,
+                    "search": search,
+                    "resolved_at_from": resolved_at_from,
+                    "resolved_at_before": resolved_at_before,
+                    "exclude_watch_only": exclude_watch_only,
+                },
             )
+        )
 
     def oldest_approval_request_created_at(self, *, status: str = "pending") -> str | None:
         with self._connect() as connection:

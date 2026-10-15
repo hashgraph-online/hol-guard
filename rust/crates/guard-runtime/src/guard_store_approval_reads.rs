@@ -6,12 +6,13 @@
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
+use crate::guard_store_approval_page_reads::{Filter, ORDER};
 use crate::guard_store_approval_read_rows::draft;
 use crate::guard_store_approval_read_scope::{project, scope_contract, unavailable};
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
+use crate::guard_store_db::{query_all, query_one, Row, StoreResult};
 
-const COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact_type, \
+pub(crate) const COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact_type, \
      artifact_hash, publisher, policy_action, recommended_scope, changed_fields_json, \
      source_scope, oauth_source, config_path, workspace, launch_target, \
      normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, \
@@ -21,28 +22,11 @@ const COLUMNS: &str = "request_id, harness, artifact_id, artifact_name, artifact
      browser_intent_json, continuation_snapshot_json, review_command, approval_url, status, \
      resolution_action, resolution_scope, reason, created_at, resolved_at, raw_command_text, \
      guard_version, first_seen_guard_version, last_seen_guard_version";
-const SEARCH_COLUMNS: [&str; 15] = [
-    "artifact_name",
-    "artifact_id",
-    "risk_summary",
-    "risk_headline",
-    "trigger_summary",
-    "why_now",
-    "launch_summary",
-    "launch_target",
-    "raw_command_text",
-    "fallback_cli_command",
-    "review_command",
-    "action_identity",
-    "action_envelope_json",
-    "decision_v2_json",
-    "config_path",
-];
 const SUPERSEDED_PREFIX: &str = "superseded_by_fresh_review:";
 /// Rows one list call reads, and the payload bytes it returns before the
 /// caller asks for the rest; the reply must stay under the resident cap.
 const PAGE_ROWS: i64 = 128;
-const PAGE_BYTES: usize = 1536 * 1024;
+pub(crate) const PAGE_BYTES: usize = 1536 * 1024;
 
 /// `get_approval_request(request_id, derive_scope=...)`.
 pub(crate) fn get_approval_request(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
@@ -86,41 +70,16 @@ pub(crate) fn list_approval_requests(
         Some(limit) if limit >= 0 => (limit - offset).clamp(0, PAGE_ROWS),
         _ => PAGE_ROWS,
     };
-    let mut clauses = Vec::new();
-    let mut params = Vec::new();
-    for column in ["status", "harness"] {
-        if let Some(value) = args.opt_str(column)? {
-            clauses.push(format!("{column} = ?"));
-            params.push(Value::from(value));
-        }
-    }
-    if let Some(cursor) = args.strings("cursor")? {
-        let [last_seen_at, request_id] = cursor[..] else {
-            return Err(StoreError::Invalid("native_guard_store_args_invalid"));
-        };
-        clauses.push("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))".to_owned());
-        params.extend([last_seen_at, last_seen_at, request_id].map(Value::from));
-    }
-    if let Some(search) = args.opt_str("search")? {
-        let terms: Vec<String> = SEARCH_COLUMNS
-            .iter()
-            .map(|column| format!("lower(coalesce({column}, '')) like lower(?)"))
-            .collect();
-        clauses.push(format!("({})", terms.join(" or ")));
-        params.extend(SEARCH_COLUMNS.map(|_| Value::from(format!("%{search}%"))));
-    }
-    let filter = if clauses.is_empty() {
-        String::new()
-    } else {
-        format!("where {}", clauses.join(" and "))
-    };
+    let mut filter = Filter::default();
+    filter.equals("status", args.opt_str("status")?);
+    filter.equals("harness", args.opt_str("harness")?);
+    filter.after(args.strings("cursor")?)?;
+    filter.search(args.opt_str("search")?);
+    let (filter, mut params) = filter.finish();
     params.extend([Value::from(page), Value::from(offset)]);
     let rows = query_all(
         connection,
-        &format!(
-            "select {COLUMNS} from approval_requests {filter} \
-             order by last_seen_at desc, request_id desc limit ? offset ?"
-        ),
+        &format!("select {COLUMNS} from approval_requests {filter} {ORDER} limit ? offset ?"),
         &params,
     )?;
     let projections = rows.iter().map(project).collect::<StoreResult<Vec<_>>>()?;
@@ -143,7 +102,10 @@ pub(crate) fn list_approval_requests(
 
 /// `_rows_to_payloads` for projected rows: drafts first, then each draft's
 /// scope contract and its legacy scope surfaces.
-fn payloads(rows: Vec<(&Row, Value)>, cwd: Option<&str>) -> StoreResult<Vec<Map<String, Value>>> {
+pub(crate) fn payloads(
+    rows: Vec<(&Row, Value)>,
+    cwd: Option<&str>,
+) -> StoreResult<Vec<Map<String, Value>>> {
     let drafts = rows
         .iter()
         .map(|(row, projection)| draft(row, projection))
@@ -230,4 +192,4 @@ fn superseded_by(connection: &Connection, row: &Row) -> StoreResult<Option<Strin
 
 #[cfg(all(test, unix))]
 #[path = "guard_store_approval_reads_tests.rs"]
-mod tests;
+pub(crate) mod tests;

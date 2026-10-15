@@ -41,7 +41,6 @@ from .store_approval_projection import (
 
 logger = logging.getLogger(__name__)
 
-MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _APPROVAL_RESOLUTION_BATCH_SIZE = 500
 
@@ -124,6 +123,13 @@ _APPROVAL_COLUMNS = """
     approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
     raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
 """
+_SUMMARY_COLUMNS = """
+    request_id, harness, artifact_id, artifact_name, artifact_type, policy_action, decision_v2_json,
+    action_envelope_json, changed_fields_json, source_scope, config_path, workspace, launch_target,
+    risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count, raw_command_text,
+    fallback_cli_command, watch_only_observation, review_command, created_at, last_seen_at, status
+"""
+_REMAINING_SUMMARIES = 10
 _SUPERSEDED_PREFIX = "superseded_by_fresh_review:"
 
 
@@ -244,31 +250,6 @@ def _column_expr(existing: set[str], column_name: str, fallback_sql: str) -> str
     return f"{fallback_sql} as {column_name}"
 
 
-def _approval_search_clause(search: str) -> tuple[str, list[object]]:
-    pattern = f"%{search}%"
-    columns = [
-        "artifact_name",
-        "artifact_id",
-        "risk_summary",
-        "risk_headline",
-        "trigger_summary",
-        "why_now",
-        "launch_summary",
-        "launch_target",
-        "raw_command_text",
-        "fallback_cli_command",
-        "review_command",
-        "action_identity",
-        "action_envelope_json",
-        "decision_v2_json",
-        "config_path",
-    ]
-    return (
-        "(" + " or ".join(f"lower(coalesce({column}, '')) like lower(?)" for column in columns) + ")",
-        [pattern] * len(columns),
-    )
-
-
 def resolve_approval_request(
     connection: sqlite3.Connection,
     request_id: str,
@@ -290,41 +271,6 @@ def resolve_approval_request(
         """,
         (resolution_action, resolution_scope, reason, resolved_at, request_id),
     )
-
-
-def count_approval_requests(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    harness: str | None = None,
-    search: str | None = None,
-    resolved_at_from: str | None = None,
-    resolved_at_before: str | None = None,
-    exclude_watch_only: bool = False,
-) -> int:
-    clauses = []
-    params: list[object] = []
-    if status is not None:
-        clauses.append("status = ?")
-        params.append(status)
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if search is not None:
-        search_clause, search_params = _approval_search_clause(search)
-        clauses.append(search_clause)
-        params.extend(search_params)
-    if resolved_at_from is not None:
-        clauses.append("resolved_at >= ?")
-        params.append(resolved_at_from)
-    if resolved_at_before is not None:
-        clauses.append("resolved_at < ?")
-        params.append(resolved_at_before)
-    if exclude_watch_only:
-        clauses.append("watch_only_observation = 0")
-    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
-    row = connection.execute(f"select count(*) as total from approval_requests {where_clause}", params).fetchone()
-    return int(row["total"]) if row is not None else 0
 
 
 def approval_index_statements() -> list[str]:
@@ -362,182 +308,19 @@ def approval_index_statements() -> list[str]:
     ]
 
 
-def list_pending_approval_summaries(
-    connection: sqlite3.Connection,
-    *,
-    limit: int = 50,
-    cursor: str | None = None,
-    harness: str | None = None,
-    search: str | None = None,
-    include_totals: bool = True,
-    exclude_watch_only: bool = False,
-) -> dict[str, object]:
-    return list_approval_request_page(
-        connection,
-        status="pending",
-        limit=limit,
-        cursor=cursor,
-        harness=harness,
-        search=search,
-        include_totals=include_totals,
-        exclude_watch_only=exclude_watch_only,
-    )
+def _pending_summaries(connection: sqlite3.Connection) -> tuple[list[dict[str, object]], int]:
+    """The first pending summaries and the pending count, read inside a caller's transaction."""
 
-
-def _approval_summary_where_clause(
-    *,
-    status: str | None,
-    harness: str | None,
-    cursor: str | None,
-    search: str | None,
-    exclude_watch_only: bool,
-) -> tuple[str, list[object]]:
-    clauses: list[str] = []
-    params: list[object] = []
-    if status is not None:
-        clauses.append("status = ?")
-        params.append(status)
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if cursor is not None:
-        marker = _decode_page_cursor(cursor)
-        if marker is None:
-            raise InvalidApprovalCursorError("invalid approval queue cursor")
-        clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
-        params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
-    if search is not None:
-        search_clause, search_params = _approval_search_clause(search)
-        clauses.append(search_clause)
-        params.extend(search_params)
-    if exclude_watch_only:
-        clauses.append("watch_only_observation = 0")
-    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
-    return where_clause, params
-
-
-def list_approval_request_summary_rows(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    harness: str | None = None,
-    limit: int | None = 50,
-    cursor: str | None = None,
-    search: str | None = None,
-    exclude_watch_only: bool = False,
-) -> list[dict[str, object]]:
-    where_clause, params = _approval_summary_where_clause(
-        status=status,
-        harness=harness,
-        cursor=cursor,
-        search=search,
-        exclude_watch_only=exclude_watch_only,
-    )
-    query = f"""
-        select request_id, harness, artifact_id, artifact_name, artifact_type, policy_action,
-               decision_v2_json, action_envelope_json,
-               changed_fields_json, source_scope, config_path, workspace, launch_target,
-               risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
-               raw_command_text, fallback_cli_command, watch_only_observation,
-               review_command, created_at, last_seen_at, status
-        from approval_requests
-        {where_clause}
-        order by last_seen_at desc, request_id desc
-    """
-    if limit is None:
-        rows = connection.execute(query, params).fetchall()
-    else:
-        rows = connection.execute(f"{query}\nlimit ?", (*params, limit)).fetchall()
+    rows = connection.execute(
+        f"select {_SUMMARY_COLUMNS} from approval_requests where status = 'pending' "
+        "order by last_seen_at desc, request_id desc limit ?",
+        (_REMAINING_SUMMARIES + 1,),
+    ).fetchall()
+    # Every fetched row is projected, as the page read that came before did.
     projections = _project_listing_rows(rows, guard_home=connection_guard_home(connection))
-    return [_row_to_approval_summary(row, projection) for row, projection in zip(rows, projections, strict=True)]
-
-
-def list_approval_request_page(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    limit: int = 50,
-    cursor: str | None = None,
-    harness: str | None = None,
-    search: str | None = None,
-    include_totals: bool = True,
-    exclude_watch_only: bool = False,
-) -> dict[str, object]:
-    page_limit = min(MAX_APPROVAL_PAGE_LIMIT, max(1, limit))
-    rows = list_approval_request_summary_rows(
-        connection,
-        status=status,
-        harness=harness,
-        limit=page_limit + 1,
-        cursor=cursor,
-        search=search,
-        exclude_watch_only=exclude_watch_only,
-    )
-    items = rows[:page_limit]
-    next_cursor = _encode_page_cursor(items[-1]) if len(rows) > page_limit and items else None
-    payload: dict[str, object] = {
-        "items": items,
-        "next_cursor": next_cursor,
-        "status": status or "all",
-    }
-    if include_totals:
-        if status == "pending":
-            pending_total = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_pending_count"] = pending_total
-            payload["total_count"] = pending_total
-        elif status == "resolved":
-            resolved_total = count_approval_requests(
-                connection,
-                status="resolved",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_count"] = resolved_total
-            payload["total_pending_count"] = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-        elif status is None:
-            payload["total_count"] = count_approval_requests(
-                connection,
-                status=None,
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_pending_count"] = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-        else:
-            payload["total_pending_count"] = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_count"] = count_approval_requests(
-                connection,
-                status=status,
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-    return payload
+    summaries = [_row_to_approval_summary(row, projection) for row, projection in zip(rows, projections, strict=True)]
+    total = connection.execute("select count(*) from approval_requests where status = 'pending'").fetchone()
+    return summaries[:_REMAINING_SUMMARIES], int(total[0])
 
 
 def get_next_pending_request(
@@ -619,16 +402,14 @@ def resolve_request_with_queue_result(
     )
     updated = get_approval_request(connection, request_id)
     next_request = get_next_pending_request(connection, exclude_ids={request_id, *duplicate_ids})
-    remaining_page = list_pending_approval_summaries(connection, limit=10)
-    remaining_count_value = remaining_page.get("total_pending_count")
-    remaining_count = int(remaining_count_value) if isinstance(remaining_count_value, int) else 0
+    remaining_summaries, remaining_count = _pending_summaries(connection)
     return {
         "resolved": True,
         "item": updated,
         "resolved_request": updated,
         "remaining_pending_count": remaining_count,
         "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
-        "remaining_pending_summaries": remaining_page["items"],
+        "remaining_pending_summaries": remaining_summaries,
         "resolved_duplicate_ids": duplicate_ids,
         "resolution_summary": _resolution_summary(remaining_count),
         "retry_hint": "Retry the action in your AI assistant if you approved it.",
@@ -876,15 +657,6 @@ def _resolve_request_ids(
         )
 
 
-def _encode_page_cursor(item: dict[str, object]) -> str:
-    raw = json.dumps(
-        {"last_seen_at": item["last_seen_at"], "request_id": item["request_id"]},
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-
-
 def _decode_page_cursor(cursor: str) -> dict[str, str] | None:
     try:
         padded = cursor + ("=" * (-len(cursor) % 4))
@@ -915,16 +687,15 @@ def _unresolved_queue_result(
     error: str,
     item: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    remaining_page = list_pending_approval_summaries(connection, limit=10)
+    remaining_summaries, remaining_count = _pending_summaries(connection)
     next_request = get_next_pending_request(connection)
-    remaining_count_value = remaining_page.get("total_pending_count")
     return {
         "resolved": False,
         "error": error,
         "item": item,
-        "remaining_pending_count": int(remaining_count_value) if isinstance(remaining_count_value, int) else 0,
+        "remaining_pending_count": remaining_count,
         "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
-        "remaining_pending_summaries": remaining_page["items"],
+        "remaining_pending_summaries": remaining_summaries,
         "resolved_duplicate_ids": [],
         "resolution_summary": "Request was not resolved.",
         "retry_hint": "Refresh the approval queue and choose an active request.",
