@@ -10,6 +10,7 @@
 //! prove that their vectors load, materialize and remap deterministically.
 #![cfg(unix)]
 
+#[path = "sfrs_support/mod.rs"]
 mod sfrs_support;
 
 use std::fs;

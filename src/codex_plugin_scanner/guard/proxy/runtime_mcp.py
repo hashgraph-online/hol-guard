@@ -42,8 +42,6 @@ from ..mcp_tool_calls import (
     block_tool_call,
     build_tool_call_identity,
     evaluate_tool_call,
-    tool_call_risk_categories,
-    tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_approval_proof import (
@@ -65,6 +63,7 @@ from ..native_mcp_proxy_decision import (
     package_facts,
     tool_facts,
 )
+from ..native_mcp_relay_server_report import report_mcp_relay_server
 from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
 from ..runtime.approval_context import (
@@ -73,7 +72,6 @@ from ..runtime.approval_context import (
     resolved_runtime_launch_executable,
     runtime_launch_identity_matches,
 )
-from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from ..runtime.composio_contract import composio_requires_action_review
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -85,6 +83,7 @@ from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
 from ._env import _build_scrubbed_env
 from .native_mcp_child_io import _ChildOutputFrame, _NativeChildProcess, _NativeMcpChildIo
+from .runtime_mcp_projection import McpCallProjector, review_artifact_payload
 from .stdio import (
     ProxyIoTimeoutError,
     _blocked_tool_response,
@@ -146,67 +145,10 @@ def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: st
     )
 
 
-def _safe_mcp_arguments(value: object) -> object:
-    """Project MCP arguments into a display/persistence-safe representation.
-
-    Native authority only: the resident `mcp_arguments_projection` op owns the
-    secret-shaped-key masking, URL query redaction, and scalar fragment tables.
-    `None` means no `arguments` key — preserved so absent and null digest alike.
-    Native failure is terminal; the silent-Python-redaction fallback was an
-    accountability leak (secrets could persist unredacted).
-    """
-    from ..native_context import context_mcp_arguments_projection
-
-    safe_arguments, _launch, _digest = context_mcp_arguments_projection("", value)
-    return safe_arguments
-
-
-def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
-    return cast(dict[str, object], _safe_mcp_arguments(params))
-
-
-def _browser_intent_payload(
-    artifact: Any,
-    arguments: object,
-    *,
-    default_launch_target: str,
-) -> tuple[str, dict[str, object] | None]:
-    """Project the launch target label and safe browser intent payload for a tool call."""
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    if browser_intent is None:
-        return default_launch_target, None
-    # Build a safer browser-specific launch target label
-    target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-    launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-    browser_intent_dict = cast(
-        dict[str, object],
-        _safe_mcp_arguments(
-            {
-                "version": browser_intent.version,
-                "intent": browser_intent.intent,
-                "operation": browser_intent.operation,
-                "target_url": browser_intent.target_url,
-                "target_origin": browser_intent.target_origin,
-                "target_domain": browser_intent.target_domain,
-                "target_path_prefix": browser_intent.target_path_prefix,
-                "method": browser_intent.method,
-                "profile_mode": browser_intent.profile_mode,
-                "mcp_server_name": browser_intent.mcp_server_name,
-                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                "mcp_tool_name": browser_intent.mcp_tool_name,
-                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-            }
-        ),
-    )
-    return launch_target, browser_intent_dict
-
-
 _ToolCatalogState = Literal["unobserved", "pending", "complete", "invalidated", "error"]
 _TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED = "tool_catalog_changed_at_execution_boundary"
 _TOOLS_CALL_PREWRITE_QUIET_SECONDS = 0.005
+_RELAY_REPORT_EXIT_SECONDS = 2.0
 
 
 class _ToolCatalogBoundaryChangedError(RuntimeError):
@@ -372,6 +314,7 @@ class RuntimeMcpGuardProxy:
                 env=_configured_server_environment(initial_launch_env, self.server_env_keys),
                 env_keys=self.server_env_keys,
             )
+        self._call_projector = McpCallProjector(context.guard_home)
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
@@ -386,6 +329,9 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog_inflight = False
         self._tool_catalog_inflight_cursor: str | None = None
         self._tool_catalog_generation = 0
+        # The last complete catalog reported for the relay.
+        self._relay_reported_catalog: str | None = None
+        self._relay_report: threading.Thread | None = None
         self._active_process: _NativeChildProcess | None = None
         self._active_runtime_launch_identity: dict[str, object] | None = None
         self._active_executable_identity: dict[str, object] | None = None
@@ -525,6 +471,7 @@ class RuntimeMcpGuardProxy:
             self._active_server_env_values_hash = None
             self._active_server_identity = None
             self._deactivate_child_process_io()
+            self._finish_relay_report()
 
     def _reset_child_process_state(self) -> None:
         self._buffered_child_responses.clear()
@@ -920,7 +867,6 @@ class RuntimeMcpGuardProxy:
         artifact_hash: str,
         decision: ToolCallDecision,
         scanner_evidence: tuple[dict[str, object], ...],
-        arguments: object,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         block_tool_call(
             store=self.store,
@@ -930,7 +876,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=decision.signals,
             risk_categories=decision.risk_categories,
-            arguments=_safe_mcp_arguments(arguments),
+            arguments=self._call_projector.project(tool_name, message.get("params")).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action="block",
         )
@@ -986,7 +932,11 @@ class RuntimeMcpGuardProxy:
             "method": method,
             "tool_name": params.get("name") if isinstance(params, dict) else None,
             "decision": "forward",
-            "redacted_params": _safe_mcp_params(params) if isinstance(params, Mapping) else {},
+            "redacted_params": (
+                self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params
+                if isinstance(params, dict)
+                else {}
+            ),
         }
         if method in {"notifications/tools/list_changed", "tools/list_changed"}:
             self._invalidate_tools_catalog()
@@ -1262,7 +1212,6 @@ class RuntimeMcpGuardProxy:
                     artifact_hash=tool_artifact_hash,
                     decision=decision,
                     scanner_evidence=decision_scanner_evidence,
-                    arguments=arguments,
                 ),
                 tool_name=tool_name,
             )
@@ -1282,7 +1231,7 @@ class RuntimeMcpGuardProxy:
                         signals=decision.signals,
                         risk_categories=decision.risk_categories,
                         remember=bool(route["remember"]),
-                        arguments=_safe_mcp_arguments(arguments),
+                        arguments=self._call_projector.project(tool_name, params).safe_arguments,
                         additional_scanner_evidence=decision_scanner_evidence,
                         emit_runtime_evidence=False,
                     )
@@ -2123,7 +2072,7 @@ class RuntimeMcpGuardProxy:
                 signals=receipt_signals or reason_signals,
                 risk_categories=receipt_risk_categories,
                 remember=True,
-                arguments=_safe_mcp_arguments(params.get("arguments")),
+                arguments=self._call_projector.project(tool_name, params).safe_arguments,
                 policy_workspace=policy_workspace,
                 additional_scanner_evidence=scanner_evidence,
                 policy_action=policy_action,
@@ -2158,7 +2107,7 @@ class RuntimeMcpGuardProxy:
             signals=receipt_signals or reason_signals,
             risk_categories=receipt_risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             policy_workspace=policy_workspace,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
@@ -2168,7 +2117,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "timeout" if _is_timeout_response(response) else event_decision,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "scanner_evidence": list(scanner_evidence),
         }
 
@@ -2278,7 +2227,7 @@ class RuntimeMcpGuardProxy:
                         "config_path": artifact.config_path,
                         "changed_fields": ["runtime_tool_call", "package_request"],
                         "policy_action": policy_action,
-                        "launch_target": self._launch_target(tool_name, params.get("arguments")),
+                        "launch_target": self._call_projector.project(tool_name, params).launch_target,
                         "risk_summary": package_evaluation.risk_summary,
                         "risk_signals": list(risk_signals),
                         "decision_v2_json": decision_v2_payload,
@@ -2298,7 +2247,7 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=risk_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2329,7 +2278,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-package-approval",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
@@ -2357,7 +2306,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=signals,
             risk_categories=risk_categories,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2380,7 +2329,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": f"terminal-{policy_action}",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
         }
         if scanner_evidence:
@@ -2407,7 +2356,7 @@ class RuntimeMcpGuardProxy:
             decision_source="policy-block",
             now=_now(),
             signals=reason_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2455,7 +2404,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": f"terminal-package-{policy_action}",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
             "scanner_evidence": list(scanner_evidence),
         }
@@ -2481,7 +2430,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=signals,
             risk_categories=risk_categories,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action="block",
         )
@@ -2503,7 +2452,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "block-stored-policy",
             "policy_action": "block",
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
         }
         if scanner_evidence:
@@ -2547,7 +2496,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "package-block-stored",
             "policy_action": "block",
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
             "scanner_evidence": list(scanner_evidence),
         }
@@ -2756,7 +2705,7 @@ class RuntimeMcpGuardProxy:
                     signals=signals,
                     risk_categories=risk_categories,
                     remember=True,
-                    arguments=_safe_mcp_arguments(params.get("arguments")),
+                    arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
                     additional_scanner_evidence=scanner_evidence,
                     policy_action=policy_action,
                     emit_runtime_evidence=False,
@@ -2801,7 +2750,7 @@ class RuntimeMcpGuardProxy:
             signals=signals,
             risk_categories=risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2810,7 +2759,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": params.get("name"),
             "decision": "timeout" if _is_timeout_response(response) else decision_source,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params,
         }
         if scanner_evidence:
             event["scanner_evidence"] = list(scanner_evidence)
@@ -3272,40 +3221,16 @@ class RuntimeMcpGuardProxy:
         policy_action: str = "require-reapproval",
         scanner_evidence: tuple[dict[str, object], ...] = (),
     ) -> dict[str, Any]:
-        """Build the artifact payload for approval center queueing.
-
-        Includes browser intent metadata when the MCP tool call is a browser
-        automation call (HGBM063-HGBM065).
-        """
-        arguments = params.get("arguments")
-        launch_target, browser_intent_dict = _browser_intent_payload(
+        """Build the artifact payload for approval center queueing."""
+        projection = self._call_projector.project(tool_name, params, artifact)
+        return review_artifact_payload(
+            projection,
             artifact,
-            arguments,
-            default_launch_target=self._launch_target(tool_name, arguments),
+            artifact_hash,
+            signals,
+            policy_action=policy_action,
+            scanner_evidence=scanner_evidence,
         )
-        changed_fields: list[str] = ["runtime_tool_call"]
-
-        if browser_intent_dict is not None:
-            changed_fields.append("runtime_browser_tool_call")
-
-        payload: dict[str, Any] = {
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_hash": artifact_hash,
-            "artifact_type": artifact.artifact_type,
-            "source_scope": artifact.source_scope,
-            "config_path": artifact.config_path,
-            "changed_fields": changed_fields,
-            "policy_action": policy_action,
-            "launch_target": launch_target,
-            "risk_summary": tool_call_risk_summary(artifact, arguments),
-            "risk_signals": list(signals),
-        }
-        if browser_intent_dict is not None:
-            payload["browser_intent"] = browser_intent_dict
-        if scanner_evidence:
-            payload["scanner_evidence"] = list(scanner_evidence)
-        return payload
 
     def _queue_approval_center_response(
         self,
@@ -3327,8 +3252,8 @@ class RuntimeMcpGuardProxy:
                 decision_source="policy-safe-alternative",
                 now=_now(),
                 signals=signals,
-                risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
-                arguments=_safe_mcp_arguments(params.get("arguments")),
+                risk_categories=self._call_projector.project(tool_name, params, artifact).risk_categories,
+                arguments=self._call_projector.project(tool_name, params, artifact).safe_arguments,
                 additional_scanner_evidence=scanner_evidence,
                 policy_action=policy_action,
             )
@@ -3372,7 +3297,7 @@ class RuntimeMcpGuardProxy:
                 "policy_action": policy_action,
                 "approval_requests": [],
                 "prompted": False,
-                "redacted_params": _safe_mcp_params(params),
+                "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
@@ -3408,8 +3333,8 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=signals,
-            risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            risk_categories=self._call_projector.project(tool_name, params, artifact).risk_categories,
+            arguments=self._call_projector.project(tool_name, params, artifact).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -3440,7 +3365,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-approval",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
@@ -3465,11 +3390,8 @@ class RuntimeMcpGuardProxy:
         if policy_action not in {"review", "block", "sandbox-required", "require-reapproval"}:
             return []
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
-        launch_target, browser_intent_dict = _browser_intent_payload(
-            artifact,
-            params.get("arguments"),
-            default_launch_target=self._launch_target(tool_name, params.get("arguments")),
-        )
+        projection = self._call_projector.project(tool_name, params, artifact)
+        launch_target, browser_intent_dict = projection.display_launch_target, projection.browser_intent
         artifact_payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
@@ -3612,13 +3534,38 @@ class RuntimeMcpGuardProxy:
                 "response": response,
             }
         )
+        self._report_relay_server()
 
-    @staticmethod
-    def _launch_target(tool_name: str, arguments: object) -> str:
-        from ..native_context import context_mcp_arguments_projection
+    def _report_relay_server(self) -> None:
+        """Report a newly complete catalog so later sessions can be relayed."""
 
-        _safe, launch_target, _digest = context_mcp_arguments_projection(tool_name, arguments)
-        return launch_target
+        if self._tool_catalog_state != "complete":
+            return
+        try:
+            reported = json.dumps(self._tool_catalog, sort_keys=True, default=repr)
+            identity_hash = self._session_server_identity().identity_hash
+        except Exception:
+            return
+        if reported == self._relay_reported_catalog:
+            return
+        self._relay_reported_catalog = reported
+        self._relay_report = report_mcp_relay_server(
+            guard_home=self.store.guard_home,
+            harness=self.harness,
+            server_name=self.server_name,
+            source_scope=self.source_scope,
+            config_path=self.config_path,
+            server_id=self.server_id,
+            identity_hash=identity_hash,
+            tools=list(self._tool_catalog.values()),
+        )
+
+    def _finish_relay_report(self) -> None:
+        """Give an unsent report a moment before the session exits."""
+
+        report, self._relay_report = self._relay_report, None
+        if report is not None:
+            report.join(timeout=_RELAY_REPORT_EXIT_SECONDS)
 
 
 class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping
 from typing import Any, cast
 from uuid import uuid4
 
@@ -60,37 +59,3 @@ class StoreContinuationMixin:
             new_claim_id=f"claim-{uuid4().hex}",
         )
         return cast(str | None, result["claim_id"])
-
-    def finalize_continuation_attempt(
-        self,
-        *,
-        request_id: str,
-        offer_hash: str,
-        action: str,
-        claim_id: str | None,
-        evidence_id: str,
-        terminal: bool,
-        resume_seed: dict[str, object],
-        resume_update: dict[str, object],
-        operation_update: dict[str, object] | None,
-        events: list[tuple[str, dict[str, object]]],
-        now: str,
-        approval_decision: Mapping[str, object] | None = None,
-    ) -> bool:
-        result = continuation_store_call(
-            self,
-            "store_finalize",
-            request_id=request_id,
-            offer_hash=offer_hash,
-            action=action,
-            claim_id=claim_id,
-            evidence_id=evidence_id,
-            terminal=terminal,
-            resume_seed=resume_seed,
-            resume_update=resume_update,
-            operation_update=operation_update,
-            events=events,
-            now=now,
-            approval_decision=approval_decision,
-        )
-        return cast(bool, result["finalized"])

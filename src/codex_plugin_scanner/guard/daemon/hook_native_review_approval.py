@@ -11,17 +11,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..approval_link_output import native_review_reason
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.actions import normalize_harness_payload
-from .hook_fail_closed import render_accepted_allow, render_pre_tool, render_pre_tool_review
+from .hook_fail_closed import canonical_harness, render_accepted_allow, render_pre_tool, render_pre_tool_review
 from .hook_native_exact_action import native_exact_action, native_review_binding
 from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_package_review import native_package_review_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
+    native_review_matching_block,
     native_review_policy_binding,
 )
 from .hook_native_saved_approval import (
@@ -114,6 +116,29 @@ def pause_native_pre_tool_for_approval(
         return saved
     if custom is not None:
         return custom[1]
+    if native_review_matching_block(
+        store,
+        harness=harness,
+        tool_name=tool_name,
+        artifact_id=_native_review_artifact_id(harness, tool_name),
+        launch_target=launch_target,
+        workspace=workspace,
+        identity=identity,
+    ):
+        blocked = dict(native_result)
+        blocked.update(
+            decision="deny",
+            minimum_action="block",
+            policy_action="block",
+            reason_code="native_review_user_block",
+            reason=(
+                "The user chose Keep blocked for this action. Do not retry it; continue with a permitted alternative."
+            ),
+        )
+        response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
+        response["prompted"] = False
+        response["approval_reuse_status"] = "blocked"
+        return response
     if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,
@@ -163,7 +188,7 @@ def pause_native_pre_tool_for_approval(
     except (OSError, RuntimeError, TypeError, ValueError):
         ask = False
     approval_center_url = _native_review_approval_center_url(store)
-    if not ask:
+    if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
         queued = queue_native_pre_tool_review(
             store,
@@ -184,17 +209,21 @@ def pause_native_pre_tool_for_approval(
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
         else:
             _record_silent_native_review_event(store, queued)
-        blocked = dict(native_result)
-        blocked.update(
-            decision="deny",
-            minimum_action="block",
-            policy_action="block",
-            reason=safe_alternative_reason(
-                str(native_result.get("reason") or "HOL Guard blocked this action."),
-                reason_code=str(native_result.get("reason_code") or "") or "unknown",
-                approval_queued=queued is not None,
-            ),
+        reason = safe_alternative_reason(
+            str(native_result.get("reason") or "HOL Guard blocked this action."),
+            reason_code=str(native_result.get("reason_code") or "") or "unknown",
+            approval_queued=queued is not None,
+            # The queued row is stored with this same binding; without one a
+            # one-time approval cannot match the agent's retry.
+            retry_reuses_approval=identity is not None,
+            exact_action_allowable=exact_token is not None,
         )
+        raw_url = queued.get("approval_url") if queued is not None else None
+        if isinstance(raw_url, str) and raw_url.strip():
+            # The agent passes the link on, so the user can open the queued row.
+            reason = native_review_reason(canonical_harness(harness), reason, raw_url.strip(), guard_home=guard_home)
+        blocked = dict(native_result)
+        blocked.update(decision="deny", minimum_action="block", policy_action="block", reason=reason)
         response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
         response["prompted"] = False
         response["blocked_request_mode"] = "safe-alternative"

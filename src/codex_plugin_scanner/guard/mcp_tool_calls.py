@@ -17,7 +17,6 @@ from .native_approval_proof import (
     ApprovalReuseClaimDisposition,
 )
 from .native_mcp_tool_call_identity import NativeToolCallIdentity, native_tool_call_identity, server_identity_dto
-from .native_mcp_tool_evidence import native_tool_risk_evidence
 from .receipts import build_receipt
 from .runtime.approval_context import (
     current_extension_control_binding_digest,
@@ -281,16 +280,6 @@ def evaluate_tool_call(
         proxy_input=proxy_input,
         proxy_out=proxy_out,
     )
-
-
-def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    """Return Rust-owned Cloud risk categories for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[0]
-
-
-def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    """Return the Rust-owned risk summary for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[2]
 
 
 _INLINE_SOURCES = frozenset({"inline-approved", "inline-denied", "native-approved", "claude-native-approved"})

@@ -12,6 +12,8 @@ typed error code. There is no Python fallback.
 
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import os
 import shutil
@@ -35,6 +37,7 @@ from .native_runtime_resilience import (
 )
 
 _MAX_REQUEST_BYTES = 256 * 1024
+_MAX_POST_TOOL_REQUEST_BYTES = 6 * 1024 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _FEATURE = "codex-tool-output-v1"
 _REQUEST_SCHEMA = "guard-codex-tool-output-request.v1"
@@ -76,6 +79,12 @@ def _anchored(path: str | os.PathLike[str] | None) -> str | None:
     return None if path is None else anchor_to_process_directory(path)
 
 
+def _packed_body(body: dict[str, object]) -> dict[str, object]:
+    raw = json.dumps(body, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    packed = base64.b64encode(gzip.compress(raw, compresslevel=1, mtime=0)).decode("ascii")
+    return {"packed_json_gzip_v1": packed, "decoded_bytes": len(raw)}
+
+
 def codex_tool_output_native(
     kind: str,
     *,
@@ -84,6 +93,7 @@ def codex_tool_output_native(
     cwd: str | os.PathLike[str] | None = None,
     home_dir: str | os.PathLike[str] | None = None,
     exec_context: bool = False,
+    body: dict[str, object] | None = None,
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
 ) -> ToolOutputAnswer:
     """Ask the resident for one Codex tool-output verdict."""
@@ -109,7 +119,9 @@ def codex_tool_output_native(
         return _deny(_UNAVAILABLE)
     try:
         action: dict[str, object] = {"kind": kind}
-        if kind == "post_tool_read_only":
+        if kind == "post_tool_output":
+            action["body"] = _packed_body(body or {})
+        elif kind == "post_tool_read_only":
             action.update({"commands": list(commands or ()), "cwd": _anchored(cwd), "home_dir": _anchored(home_dir)})
         elif kind in {"read_only_inspection", "secret_like_source_name"}:
             action.update({"command": command, "cwd": _anchored(cwd), "home_dir": _anchored(home_dir)})
@@ -129,6 +141,9 @@ def codex_tool_output_native(
         }
     except (OSError, RuntimeError):
         return _deny(_UNAVAILABLE)
+    except (TypeError, ValueError):
+        # Lone surrogates or NaN in the hook payload cannot be encoded.
+        return _deny("native_codex_tool_output_invalid")
     _request_counter += 1
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
@@ -153,7 +168,8 @@ def codex_tool_output_native(
         ).encode("utf-8")
     except (TypeError, ValueError):
         return _deny("native_codex_tool_output_invalid")
-    if len(resident) > _MAX_REQUEST_BYTES or time.monotonic() >= effective_deadline:
+    limit = _MAX_POST_TOOL_REQUEST_BYTES if kind == "post_tool_output" else _MAX_REQUEST_BYTES
+    if len(resident) > limit or time.monotonic() >= effective_deadline:
         return _deny(_UNAVAILABLE)
     output = native_resident_client_request(
         executable=status.identity.path,

@@ -2,13 +2,15 @@
 mod allowances;
 pub(super) use allowances::{
     agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
-    skill_link_resolves_over_home,
+    project_skill_listing_directory, skill_link_resolves_over_home,
 };
 #[path = "hidden_listing.rs"]
 mod hidden_listing;
+#[path = "omp_json_query.rs"]
+mod omp_json_query;
 #[path = "omp_read_targets.rs"]
 mod omp_targets;
-pub(super) use hidden_listing::repository_hidden_directory;
+pub(super) use hidden_listing::{home_hidden_directory, repository_hidden_directory};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
 use allowances::{
@@ -18,7 +20,7 @@ use allowances::{
 };
 pub(super) use omp_targets::{
     bounded_omp_directory_read_target, bounded_omp_file_read_target,
-    bounded_omp_selector_requires_review,
+    bounded_omp_file_selector_target, bounded_omp_selector_requires_review, missing_read_target,
 };
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
@@ -121,7 +123,14 @@ fn bounded_read_target_with_brackets(
     {
         return false;
     }
-    if path.split(['/', '\\']).any(|part| part == "..") {
+    // The kernel resolves `..` physically, against the working directory or
+    // the root, which is what canonicalizing the spelling yields. Only that
+    // proof admits a parent component; every lexical fallback still rejects
+    // it. Windows normalizes a rooted `..` lexically first, so there a drive,
+    // verbatim or root-relative spelling with `..` stays refused.
+    let parent_component = path.split(['/', '\\']).any(|part| part == "..");
+    let lexical_root = !cfg!(unix) && rooted(value.trim());
+    if parent_component && (has_brackets || path.starts_with('~') || lexical_root) {
         return false;
     }
     if path.starts_with('~') && expand_home_read_path(path, home_dir).is_none() {
@@ -137,13 +146,16 @@ fn bounded_read_target_with_brackets(
     {
         std::path::Path::new(&root).join(expanded_path)
     } else {
-        return safe_read_target(path);
+        return !parent_component && safe_read_target(path);
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
         return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true);
+            && (resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true)
+                || package_source::installed_package_source(
+                    &candidate, &canonical, home_dir, cwd,
+                ));
     }
-    if has_brackets {
+    if has_brackets || parent_component {
         return false;
     }
     // An unresolvable absolute or `~` target cannot prove a bounded file;
@@ -152,6 +164,17 @@ fn bounded_read_target_with_brackets(
         return false;
     }
     safe_read_target(path)
+}
+
+/// A drive, verbatim, or root-relative spelling does not resolve against the
+/// working directory.
+fn rooted(value: &str) -> bool {
+    std::path::Path::new(value).components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::Prefix(_) | std::path::Component::RootDir
+        )
+    })
 }
 
 pub(super) fn verified_path_context(home_dir: Option<&str>, cwd: Option<&str>) -> bool {
@@ -203,25 +226,7 @@ pub(super) fn resolved_path_allowed_for_operation(
     verified_temporary: bool,
     read_only: bool,
 ) -> bool {
-    let rendered = canonical.to_string_lossy().replace('\\', "/");
-    let lowered = rendered.to_ascii_lowercase();
-    const ROOTS: [&str; 7] = [
-        "/etc",
-        "/dev",
-        "/proc",
-        "/sys",
-        "/var",
-        "/private/etc",
-        "/private/var",
-    ];
-    if (!verified_temporary
-        && !private_temporary::inside_private_temporary_workspace(canonical, home_dir, cwd)
-        && ROOTS
-            .iter()
-            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
-        || foreign_user_home(canonical, home_dir, cwd)
-        || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || guard_secure_fs::credential_named_path(canonical)
+    if !resolved_location_allowed(canonical, home_dir, cwd, verified_temporary)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
             || guard_safety_doc(canonical, home_dir)
@@ -238,6 +243,35 @@ pub(super) fn resolved_path_allowed_for_operation(
         return false;
     }
     true
+}
+
+/// Every resolved-path screen except the hidden-component one: system roots,
+/// another user's home, sensitive families and credential-named paths.
+pub(super) fn resolved_location_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+) -> bool {
+    let rendered = canonical.to_string_lossy().replace('\\', "/");
+    let lowered = rendered.to_ascii_lowercase();
+    const ROOTS: [&str; 7] = [
+        "/etc",
+        "/dev",
+        "/proc",
+        "/sys",
+        "/var",
+        "/private/etc",
+        "/private/var",
+    ];
+    !((!verified_temporary
+        && !private_temporary::inside_private_temporary_workspace(canonical, home_dir, cwd)
+        && ROOTS
+            .iter()
+            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
+        || foreign_user_home(canonical, home_dir, cwd)
+        || guard_secure_fs::sensitive_path_family(canonical).is_some()
+        || guard_secure_fs::credential_named_path(canonical))
 }
 
 pub(super) fn foreign_user_home(
@@ -308,6 +342,9 @@ pub(super) fn lexical_read_path(value: &str) -> Option<String> {
     normalized.push_str(&parts.join("/"));
     Some(normalized)
 }
+
+#[path = "package_source_reads.rs"]
+mod package_source;
 
 #[cfg(test)]
 #[path = "read_output_tests.rs"]

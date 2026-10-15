@@ -241,6 +241,10 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     assert kwargs["expected_sha"] == SHA
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert result["qualified"] is True and result["independent_verifier"] is True
+    assert set(result["phase_seconds"]) == {
+        "preflight", "source", "wheel", "install", "live_cases", "verify", "cleanup",
+    }
+    assert all(seconds >= 0 for seconds in result["phase_seconds"].values())
     assert result["attempts"][0]["pass"] is True
     # Passing attempts remove their short work root; it stays out of `kept`.
     assert result["attempts"][0]["work_root"] == str((tmp_path / "w" / "1").resolve())

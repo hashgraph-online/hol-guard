@@ -8,7 +8,7 @@ from pathlib import Path
 
 NATIVE_BOUNDED_HOOK_COMMAND = "bounded-hook-bridge"
 NATIVE_BOUNDED_HOOK_FEATURE = "bounded-hook-bridge-v1"
-# Harnesses whose POSIX hook the native runtime answers from the daemon itself.
+# Harnesses whose hook the native runtime answers from the daemon itself.
 _NATIVE_BOUNDED_HOOK_HARNESSES = frozenset(
     {"copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode", "grok"}
 )
@@ -27,6 +27,23 @@ def bounded_python_argv(argv: Sequence[object]) -> list[object]:
     if len(values) > 2 and isinstance(values[0], str) and values[0] and values[1] == NATIVE_BOUNDED_HOOK_COMMAND:
         return values[2:]
     return values
+
+
+def daemon_start_command(
+    python_executable: str, package_root: Path, guard_home: Path, cli_args: Sequence[str]
+) -> list[str]:
+    """The daemon-start argv the native bridge runs when the daemon is unreachable.
+
+    The native bridge runs it only on that failure path, then asks the daemon
+    once more or fails the hook closed; it never runs the Python bridge.
+    """
+    from ..codex_hook_launch_runtime import isolated_daemon_start_command
+
+    args = list(cli_args)
+    home_dir = next((Path(args[i + 1]) for i in range(len(args) - 1) if args[i] == "--home"), None)
+    return list(
+        isolated_daemon_start_command(python_executable, package_root, guard_home.resolve(strict=False), home_dir)
+    )
 
 
 def native_bridge_executable(harness: str) -> Path | None:

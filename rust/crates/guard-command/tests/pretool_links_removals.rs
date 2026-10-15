@@ -128,6 +128,35 @@ fn links_into_the_workspace_or_a_linked_worktree_proceed() {
     }
 }
 
+/// `..` resolves against the physical working directory, so a sibling
+/// worktree spelled relatively is the same link as its absolute spelling.
+#[test]
+fn links_into_a_sibling_worktree_by_relative_parent_proceed() {
+    let home = home();
+    let h = home.display();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        let command = format!("ln -s {h}/main/dashboard/node_modules ../linked/node_modules");
+        assert_eq!(
+            action(&home, harness, &command),
+            "allow",
+            "{harness}: {command}"
+        );
+    }
+    for command in [
+        // Another repository, the home itself, or a name that is not fresh.
+        format!("ln -s {h}/main/dashboard/node_modules ../other/node_modules"),
+        format!("ln -s {h}/main/dashboard/node_modules ../modules-link"),
+        format!("ln -s {h}/main/dashboard/node_modules ../linked/dashboard"),
+        // The leaf must be a plain, visible name.
+        format!("ln -s {h}/main/dashboard/node_modules ../linked/.modules"),
+        format!("ln -s {h}/main/dashboard/node_modules ../linked/.."),
+        format!("ln -s {h}/main/dashboard/node_modules ../linked/."),
+        format!("ln -s {h}/.ssh ../linked/ssh"),
+    ] {
+        assert_ne!(action(&home, "zcode", &command), "allow", "{command}");
+    }
+}
+
 #[test]
 fn removing_workspace_files_proceeds_and_everything_else_is_reviewed() {
     let home = home();

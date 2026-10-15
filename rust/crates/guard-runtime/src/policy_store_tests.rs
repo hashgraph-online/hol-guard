@@ -38,6 +38,8 @@ mod fault_tests;
 mod fixture_tests;
 #[path = "policy_store_migration_tests.rs"]
 mod migration_tests;
+#[path = "policy_store_verify_once_tests.rs"]
+mod verify_once_tests;
 
 use fixture_tests::policy;
 

@@ -9,6 +9,9 @@ use serde_json::{json, Value};
 use std::fs::OpenOptions;
 use std::os::unix::fs::OpenOptionsExt;
 
+#[path = "contained_bun.rs"]
+mod bun;
+
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct Input {
@@ -72,24 +75,25 @@ fn invalid_node(message: &str) -> RestrictedPytestError {
     RestrictedPytestError::new("node_test_restricted_invalid_command", message)
 }
 
-fn nvm_versions_root(home: Option<&Path>) -> Option<PathBuf> {
+/// The request HOME, else the process HOME, else the account home; canonical.
+fn request_home(home: Option<&Path>) -> Option<PathBuf> {
     if let Some(home) = home {
-        return home
-            .canonicalize()
-            .ok()
-            .map(|path| path.join(".nvm/versions/node"));
+        return home.canonicalize().ok();
     }
-    let from_env = std::env::var_os("HOME").and_then(|raw| {
-        let path = PathBuf::from(&raw);
-        if raw.is_empty() || !path.is_absolute() {
-            None
-        } else {
-            path.canonicalize().ok()
-        }
-    });
-    from_env
+    std::env::var_os("HOME")
+        .and_then(|raw| {
+            let path = PathBuf::from(&raw);
+            if raw.is_empty() || !path.is_absolute() {
+                None
+            } else {
+                path.canonicalize().ok()
+            }
+        })
         .or_else(host_home_directory)
-        .map(|home| home.join(".nvm/versions/node"))
+}
+
+fn nvm_versions_root(home: Option<&Path>) -> Option<PathBuf> {
+    request_home(home).map(|home| home.join(".nvm/versions/node"))
 }
 
 fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bool {
@@ -123,9 +127,11 @@ fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bo
                 .file_name()
                 .and_then(OsStr::to_str)
                 .is_some_and(|v| VERSION.is_match(v)));
-    if !trusted {
-        return false;
-    }
+    trusted && native_image(executable)
+}
+
+/// ELF or Mach-O, not a script that would choose its own interpreter.
+fn native_image(executable: &Path) -> bool {
     let mut magic = [0u8; 4];
     let Ok(mut file) = fs::File::open(executable) else {
         return false;
@@ -360,10 +366,11 @@ fn prepare_tsx(
         .canonicalize()
         .ok()
         .filter(|path| path.is_file() && path_is_within(path, &modules));
-    let node = matches!(
-        Path::new(&argv[0]).file_name().and_then(OsStr::to_str),
-        Some("node" | "nodejs")
-    );
+    let name = Path::new(&argv[0]).file_name().and_then(OsStr::to_str);
+    if name == Some("bun") {
+        return bun::prepare_eval(input, argv);
+    }
+    let node = matches!(name, Some("node" | "nodejs"));
     let runtime = if node {
         node_runtime_args(argv)?
     } else {
@@ -408,10 +415,11 @@ fn prepare_inline(input: &Input) -> Result<Value, RestrictedPytestError> {
             "Protected evaluation requires direct inline argv.",
         ));
     }
-    let node = matches!(
-        Path::new(&argv[0]).file_name().and_then(OsStr::to_str),
-        Some("node" | "nodejs")
-    );
+    let name = Path::new(&argv[0]).file_name().and_then(OsStr::to_str);
+    if name == Some("bun") {
+        return bun::prepare_eval(input, &argv);
+    }
+    let node = matches!(name, Some("node" | "nodejs"));
     let runtime = if node {
         node_runtime_args(&argv)?
     } else {

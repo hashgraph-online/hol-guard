@@ -551,8 +551,9 @@ def test_mutable_code_launches_never_reuse_python_side_approval(
         "workspace": workspace,
     }
     first = worker.review_http_payload(**kwargs)
-    request_id = first["approval_request_id"]
-    assert isinstance(request_id, str)
+    assert first["prompted"] is False
+    assert "approval_request_id" not in first
+    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
     assert store.resolve_harness_native_approval_request(
         request_id,
         reason="verified harness Accept",
@@ -560,7 +561,7 @@ def test_mutable_code_launches_never_reuse_python_side_approval(
         expected_harness="cursor",
     )
     second = worker.review_http_payload(**kwargs)
-    assert second["policy_action"] == "review"
+    assert second["policy_action"] == "block"
     assert second.get("approval_reuse_status") != "accepted"
 
 
@@ -592,8 +593,9 @@ def test_environment_and_command_lists_never_reuse_python_side_approval(
         "workspace": workspace,
     }
     first = worker.review_http_payload(**kwargs)
-    request_id = first["approval_request_id"]
-    assert isinstance(request_id, str)
+    assert first["prompted"] is False
+    assert "approval_request_id" not in first
+    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
     assert store.resolve_harness_native_approval_request(
         request_id,
         reason="verified harness Accept",
@@ -601,5 +603,5 @@ def test_environment_and_command_lists_never_reuse_python_side_approval(
         expected_harness="cursor",
     )
     second = worker.review_http_payload(**kwargs)
-    assert second["policy_action"] == "review"
+    assert second["policy_action"] == "block"
     assert second.get("approval_reuse_status") != "accepted"

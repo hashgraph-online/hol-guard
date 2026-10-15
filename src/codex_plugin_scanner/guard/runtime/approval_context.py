@@ -431,24 +431,5 @@ def build_configured_environment_hash(
     return cast(str, result["digest"])
 
 
-def build_configured_header_values_hash(
-    headers: Mapping[str, str] | None,
-    *,
-    configured_keys: Sequence[str] | None = None,
-) -> str:
-    """Hash configured header values without retaining or exposing them."""
-
-    try:
-        result = _context_digest_result(
-            "configured_headers_hash",
-            _configured_values_payload(headers, configured_keys),
-        )
-    except NativeContextDigestUnavailableError:
-        # Deterministic so artifact content hashes don't churn; callers must
-        # reject this sentinel rather than treat it as an exact binding.
-        return f"{_UNBOUND_PREFIX}configured-headers"
-    return cast(str, result["digest"])
-
-
 def _is_sha256_hex(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and _SHA256_HEX_PATTERN.fullmatch(value) is not None

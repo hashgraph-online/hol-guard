@@ -23,8 +23,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from .mdm.network_transport import ManagedNetworkError, managed_urlopen
+from .mdm.network_transport import ManagedNetworkError, managed_urlopen, resolved_network_policy
 from .native_supply_chain_archive import ArchiveFulfilment
+from .native_supply_chain_registry_cache import REGISTRY_CACHE, CacheKey, RawResponse, RegistryCache
 
 EGRESS_REQUIRED_CODE = "supply_chain_egress_required"
 # Resident-side limits (``EGRESS_MAX_*`` in guard-contracts supply_chain_egress.rs).
@@ -105,9 +106,15 @@ class EgressProtocolError(ValueError):
 class EgressExchanger:
     """Performs needs and keeps what the next request must carry."""
 
-    def __init__(self, spool_dir: Path, archives: ArchiveFulfilment) -> None:
+    def __init__(
+        self,
+        spool_dir: Path,
+        archives: ArchiveFulfilment,
+        registry_cache: RegistryCache = REGISTRY_CACHE,
+    ) -> None:
         self.spool_dir = spool_dir
         self.archives = archives
+        self.registry_cache = registry_cache
         self.supplied: list[dict[str, object]] = []
         self._inline_used = 0
         self._spool_count = 0
@@ -133,65 +140,12 @@ class EgressExchanger:
         }
 
     def _http(self, need: Mapping[str, Any]) -> dict[str, object]:
-        url = str(need["url"])
-        if urllib.parse.urlsplit(url).scheme not in {"http", "https"}:
-            return {"kind": "blocked", "code": "egress_scheme_not_allowed"}
-        body = need.get("body")
-        data = body.encode("utf-8") if isinstance(body, str) else None
-        headers = {str(k): str(v) for k, v in dict(need["headers"]).items()}
-        method = str(need["method"])
-        limit = int(need["max_response_bytes"])
-        deadline = time.monotonic() + MAX_EXCHANGE_SECONDS
-        max_redirects = _redirect_budget(method, data, headers, int(need["max_redirects"]))
-        hops = 0
-        while True:
-            request = urllib.request.Request(url, data=data, headers=headers, method=method)
-            try:
-                # Redirects are never followed by the transport: each hop is a fresh
-                # request, so the managed policy validates every destination and the
-                # exact hop limit the resident asked for is enforced here.
-                with managed_urlopen(
-                    request,
-                    timeout=float(need["timeout_seconds"]),
-                    allow_redirects=False,
-                ) as response:
-                    return self._response_outcome(
-                        int(response.status),
-                        response.headers.items(),
-                        _read_bounded(response, limit, deadline),
-                        limit,
-                    )
-            except urllib.error.HTTPError as error:
-                try:
-                    location = error.headers.get("Location") if error.code in _REDIRECT_STATUSES else None
-                    if location is not None and max_redirects > 0:
-                        if hops >= max_redirects:
-                            return {"kind": "error", "message": "too many redirects"}
-                        target = _redirect_target(url, location)
-                        if target is None:
-                            return {"kind": "blocked", "code": "egress_redirect_not_allowed"}
-                        url = target
-                        hops += 1
-                        continue
-                    return self._response_outcome(
-                        int(error.code), error.headers.items(), _read_bounded(error, limit, deadline), limit
-                    )
-                except (TimeoutError, OSError) as read_error:
-                    if isinstance(read_error, TimeoutError):
-                        return {"kind": "timeout"}
-                    return {"kind": "error", "message": type(read_error).__name__}
-                finally:
-                    error.close()
-            except ManagedNetworkError as error:
-                return {"kind": "blocked", "code": str(error)[:128]}
-            except TimeoutError:
-                return {"kind": "timeout"}
-            except urllib.error.URLError as error:
-                if isinstance(error.reason, TimeoutError):
-                    return {"kind": "timeout"}
-                return {"kind": "error", "message": type(error.reason).__name__}
-            except (OSError, ValueError) as error:
-                return {"kind": "error", "message": type(error).__name__}
+        key = _registry_cache_key(need)
+        result = _fetch_raw(need) if key is None else self.registry_cache.fetch(key, lambda: _fetch_raw(need))
+        if isinstance(result, dict):
+            return result
+        status, header_items, body = result
+        return self._response_outcome(status, header_items, body, int(need["max_response_bytes"]))
 
     def _response_outcome(
         self,
@@ -219,6 +173,97 @@ class EgressExchanger:
             handle.write(body)
         outcome["body_file"] = name
         return outcome
+
+
+def _fetch_raw(need: Mapping[str, Any]) -> RawResponse | dict[str, object]:
+    """Perform one HTTP exchange: the final response, or the outcome that replaces it."""
+    url = str(need["url"])
+    if urllib.parse.urlsplit(url).scheme not in {"http", "https"}:
+        return {"kind": "blocked", "code": "egress_scheme_not_allowed"}
+    body = need.get("body")
+    data = body.encode("utf-8") if isinstance(body, str) else None
+    headers = {str(k): str(v) for k, v in dict(need["headers"]).items()}
+    method = str(need["method"])
+    limit = int(need["max_response_bytes"])
+    deadline = time.monotonic() + MAX_EXCHANGE_SECONDS
+    max_redirects = _redirect_budget(method, data, headers, int(need["max_redirects"]))
+    hops = 0
+    while True:
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            # Redirects are never followed by the transport: each hop is a fresh
+            # request, so the managed policy validates every destination and the
+            # exact hop limit the resident asked for is enforced here.
+            with managed_urlopen(
+                request,
+                timeout=float(need["timeout_seconds"]),
+                allow_redirects=False,
+            ) as response:
+                return (
+                    int(response.status),
+                    tuple((str(k), str(v)) for k, v in response.headers.items()),
+                    _read_bounded(response, limit, deadline),
+                )
+        except urllib.error.HTTPError as error:
+            try:
+                location = error.headers.get("Location") if error.code in _REDIRECT_STATUSES else None
+                if location is not None and max_redirects > 0:
+                    if hops >= max_redirects:
+                        return {"kind": "error", "message": "too many redirects"}
+                    target = _redirect_target(url, location)
+                    if target is None:
+                        return {"kind": "blocked", "code": "egress_redirect_not_allowed"}
+                    url = target
+                    hops += 1
+                    continue
+                return (
+                    int(error.code),
+                    tuple((str(k), str(v)) for k, v in error.headers.items()),
+                    _read_bounded(error, limit, deadline),
+                )
+            except (TimeoutError, OSError) as read_error:
+                if isinstance(read_error, TimeoutError):
+                    return {"kind": "timeout"}
+                return {"kind": "error", "message": type(read_error).__name__}
+            finally:
+                error.close()
+        except ManagedNetworkError as error:
+            return {"kind": "blocked", "code": str(error)[:128]}
+        except TimeoutError:
+            return {"kind": "timeout"}
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                return {"kind": "timeout"}
+            return {"kind": "error", "message": type(error.reason).__name__}
+        except (OSError, ValueError) as error:
+            return {"kind": "error", "message": type(error).__name__}
+
+
+def _registry_cache_key(need: Mapping[str, Any]) -> CacheKey | None:
+    """The cache key of a public registry read, or ``None`` when it must not be reused.
+
+    Only a body-less GET of public metadata qualifies: no credential or cookie
+    rides along, and no retry pause was asked for (a pause means the resident
+    wants a new answer, not the one it already has). The managed network
+    policy is part of the key, so a policy change never serves a response the
+    new policy would not have fetched.
+    """
+
+    headers = {str(k): str(v) for k, v in dict(need["headers"]).items()}
+    if (
+        need["class"] != "registry"
+        or str(need["method"]).upper() != "GET"
+        or need.get("body") is not None
+        or float(need["delay_seconds"]) > 0
+        or any(name.lower() in _CREDENTIAL_HEADERS for name in headers)
+    ):
+        return None
+    try:
+        policy, _managed = resolved_network_policy(None)
+    except Exception:
+        return None
+    ordered = tuple(sorted((name.lower(), value) for name, value in headers.items()))
+    return (str(need["url"]), ordered, int(need["max_response_bytes"]), int(need["max_redirects"]), policy)
 
 
 def _read_bounded(stream: Any, limit: int, deadline: float) -> bytes:

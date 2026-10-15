@@ -1072,7 +1072,6 @@ class StorePolicyMixin:
         result. Native failure is terminal — there is no Python fallback.
         """
         evidence = self.policy_lookup_evidence(now=now, local_once_only=local_once_only)
-        current_time = evidence.now
         if evidence.degraded_trust_status is not None:
             return {
                 "decision": None,
@@ -1081,6 +1080,33 @@ class StorePolicyMixin:
                 "authority_revision": _DEGRADED_AUTHORITY_REVISION,
             }
 
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=harness,
+            artifact_id=artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            runtime_exact_match_context=runtime_exact_match_context,
+            consume_one_shot=consume_one_shot,
+        )
+        if local_once_only:
+            request["local_once_only"] = True
+        return cast("PolicyDecisionLookupResult", self.send_policy_decision_lookup(request))
+
+    def policy_decision_lookup_request(
+        self,
+        evidence: PolicyLookupEvidence,
+        *,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        consume_one_shot: bool,
+    ) -> dict[str, object]:
+        """Build the resident request for one lookup against shipped evidence."""
         request: dict[str, object] = {
             "schema": "guard-policy-decision-lookup-request.v1",
             "request_id": f"policy-decision-lookup-{uuid4().hex}",
@@ -1091,7 +1117,7 @@ class StorePolicyMixin:
             "artifact_hash": artifact_hash,
             "workspace": workspace,
             "publisher": publisher,
-            "now": current_time,
+            "now": evidence.now,
             "runtime_exact_match_context": runtime_exact_match_context,
             "consume_one_shot": bool(consume_one_shot),
             "integrity_state": evidence.integrity_state,
@@ -1100,11 +1126,12 @@ class StorePolicyMixin:
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
         }
-        if local_once_only:
-            request["local_once_only"] = True
         if evidence.policy_bundle_decision_identities:
             request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
+        return request
 
+    def send_policy_decision_lookup(self, request: dict[str, object]) -> Any:
+        """Run one ``policy_decision_lookup`` resident request; failure is terminal."""
         response = _resident_request(
             operation="policy_decision_lookup",
             request=request,
@@ -1124,7 +1151,7 @@ class StorePolicyMixin:
             raise ValueError(
                 code if code.startswith("native_policy_decision_lookup_") else f"native_policy_decision_lookup_{code}"
             )
-        return cast("PolicyDecisionLookupResult", response["payload"])
+        return response["payload"]
 
     def policy_lookup_evidence(
         self,

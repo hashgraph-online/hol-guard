@@ -14,66 +14,15 @@ from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_apply import apply_exact_cloud_review
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_exact_cloud_local_once import claim_exact_cloud_local_once_approval_locked
 from tests.guard_exact_cloud_review_support import (
-    add_review_request,
     connected_exact_review_store,
     remote_approval,
-    review_request,
 )
 from tests.test_codex_live_decision import _seed_waiting_request
 
 
 def _workspace_key(value: str) -> str:
     return f"workspace:{sha256(str(Path(value).resolve()).encode('utf-8')).hexdigest()}"
-
-
-def test_exact_cloud_authority_is_invisible_to_generic_lookup_and_request_bound(tmp_path: Path) -> None:
-    store = connected_exact_review_store(tmp_path)
-    request = review_request("exact-provenance-bound")
-    add_review_request(store, request)
-    _ = enable_exact_cloud_review(store)
-    resolution = apply_exact_cloud_review(
-        store,
-        remote_approval=remote_approval(store, request.request_id, receipt_id="exact-provenance-receipt"),
-    )
-    resolved = store.get_approval_request(request.request_id)
-    assert isinstance(resolved, dict)
-    resolved_at = str(resolution.resolved_request["resolved_at"])
-
-    generic = store.resolve_policy_decision_lookup(
-        request.harness,
-        request.artifact_id,
-        artifact_hash=request.artifact_hash,
-        workspace=request.workspace,
-        publisher=request.publisher,
-        now=resolved_at,
-        consume_one_shot=False,
-    )
-    assert generic["decision"] is None
-    assert generic["ignored_local_integrity"] is None
-
-    exact = store.peek_exact_cloud_local_once_approval(request_id=request.request_id, now=resolved_at)
-    assert exact is not None
-    assert exact["authority_kind"] == "exact-cloud"
-    assert exact["request_id"] == request.request_id
-    assert store.claim_approval_reuse_decision(exact, now=resolved_at) is False
-
-    assert store.peek_exact_cloud_local_once_approval(request_id="caller-chosen-request", now=resolved_at) is None
-    key, key_id = store._policy_integrity_secret_material(create=False)  # pyright: ignore[reportPrivateUsage]
-    assert key is not None and key_id is not None
-    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        _ = connection.execute("begin immediate")
-        claimed = claim_exact_cloud_local_once_approval_locked(
-            connection,
-            request_id=request.request_id,
-            expected_decision=exact,
-            now=resolved_at,
-            integrity_key=key,
-            integrity_key_id=key_id,
-        )
-    assert claimed is not None
-    assert store.peek_exact_cloud_local_once_approval(request_id=request.request_id, now=resolved_at) is None
 
 
 def test_new_legacy_local_once_authority_preserves_generic_package_path(tmp_path: Path) -> None:

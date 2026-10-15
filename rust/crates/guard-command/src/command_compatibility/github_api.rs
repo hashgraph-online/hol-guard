@@ -135,7 +135,13 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         }
         if matches!(
             name,
-            "--include" | "--paginate" | "--silent" | "--slurp" | "--verbose" | "-i"
+            "--allow-escape-sequences"
+                | "--include"
+                | "--paginate"
+                | "--silent"
+                | "--slurp"
+                | "--verbose"
+                | "-i"
         ) {
             if attached.is_some() {
                 return None;

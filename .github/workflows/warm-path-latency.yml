@@ -5,6 +5,9 @@ name: Warm-path latency baseline
 # the warm benign Claude PreToolUse hook (process spawn to exit) and a warm
 # non-package MCP tools/call through the installed Codex proxy, alternating
 # targets round by round. It enforces no threshold and gates nothing.
+# It also drives the candidate's Codex proxy argv through the native MCP relay
+# and the Python proxy on one resident, reporting matched warm p95 per call and
+# what fraction of representative calls the resident decides versus defers.
 #
 # Pull requests that touch this lane run a one-round smoke so the lane stays
 # runnable; real baselines are collected with workflow_dispatch.
@@ -15,9 +18,11 @@ on:
       - ".github/workflows/warm-path-latency.yml"
       - "scripts/bench_warm_path_latency.py"
       - "scripts/warm_path_probes.py"
+      - "scripts/warm_path_services.py"
       - "scripts/warm_path_stats.py"
       - "scripts/summarize_warm_path_latency.py"
       - "scripts/ci/build_installed_wheel_at_sha.sh"
+      - "scripts/bench_mcp_relay.py"
   workflow_dispatch:
     inputs:
       baseline_sha:
@@ -168,6 +173,17 @@ jobs:
               print("\n".join(problems[:20]))
               sys.exit(1)
           PY
+      - name: Measure native MCP relay against the Python proxy (candidate)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          source scripts/ci/native-proof-environment.sh
+          python3 scripts/bench_mcp_relay.py --python "$RUNNER_TEMP/src-candidate/.venv/bin/python" \
+            --rounds "$ROUNDS" --warmup 20 --samples "$MCP_SAMPLES" \
+            --json mcp-relay-bench.json --markdown mcp-relay-bench.md
+          cat mcp-relay-bench.md >> "$GITHUB_STEP_SUMMARY"
+          # A broken probe is a measurement problem; latency and deferral rates are never gated here.
+          python3 -c 'import json, sys; d = json.load(open("mcp-relay-bench.json")); sys.exit("error" in d)'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: ${{ !cancelled() }}
         with:
@@ -176,4 +192,6 @@ jobs:
             warm-path-latency.json
             warm-path-summary*.md
             warm-path-summary*.json
+            mcp-relay-bench.json
+            mcp-relay-bench.md
           if-no-files-found: warn

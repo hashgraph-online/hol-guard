@@ -9,7 +9,7 @@ import yaml
 
 from scripts.ci import wait_for_pytest_shards as barrier
 from tests.support.ci_workflow import expand_ci_job_actions
-from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _job, _jobs, _run
+from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _job, _jobs, _pin_shard_count, _run  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -156,4 +156,3 @@ def test_native_prerequisite_alone_does_not_require_an_expanded_coverage_matrix(
     # scales with CI_PYTEST_COVERAGE_SHARDS, so only require that it completed.
     assert len(calls) >= 3
     assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python coverage shards succeeded")
-

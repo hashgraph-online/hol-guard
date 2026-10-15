@@ -208,7 +208,9 @@ def test_containment_receipt_interrupts_where_nothing_routes_it(
     assert judge(_case("quiet", harness), receipt, []) is not None
 
 
-def test_zcode_routed_run_satisfies_an_always_case() -> None:
+def test_a_routed_run_satisfies_an_always_case() -> None:
+    # Z Code and Claude Code route in the hook path and Codex in its bridge.
     routed = {**_QUIET, "reason_code": "native_contained_execution_routed"}
-    assert judge(_case("always", "zcode"), routed, []) is None
-    assert judge(_case("always", "codex"), routed, []) is not None
+    for harness in ("zcode", "claude-code", "codex"):
+        assert judge(_case("always", harness), routed, []) is None
+    assert judge(_case("always", "codex"), _QUIET, []) is not None

@@ -100,6 +100,7 @@ from .codex_remote_control import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
+from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -1725,9 +1726,12 @@ class CodexHarnessAdapter(HarnessAdapter):
             args = tuple(str(value) for value in raw_args if isinstance(value, str))
             if not is_guard_proxy_command(command if isinstance(command, str) else None, args):
                 continue
-            if command == current_interpreter:
+            _, python_args = python_proxy_launch(None, args)
+            launcher, launch_args = mcp_proxy_launch(current_interpreter, python_args)
+            if command == launcher and list(args) == launch_args:
                 continue
-            server_config["command"] = current_interpreter
+            server_config["command"] = launcher
+            server_config["args"] = launch_args
             migrated.append(name)
         return tuple(sorted(migrated))
 

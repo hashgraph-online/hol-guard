@@ -23,10 +23,37 @@ fn workspace_admissible(_cwd: &Path, _home: Option<&Path>) -> Option<std::path::
 pub(crate) const REASON: &str = "native_workspace_containment_required";
 pub(crate) const PROFILE: &str = "workspace-contained-v1";
 
+#[path = "workspace_contained_chmod.rs"]
+mod chmod;
 #[path = "workspace_contained_git.rs"]
 mod git_metadata;
+#[path = "workspace_git_keeps_work.rs"]
+mod keeps_work;
+#[path = "workspace_contained_links.rs"]
+mod links;
 #[path = "workspace_contained_package.rs"]
 mod package;
+#[path = "workspace_contained_reach.rs"]
+mod reach;
+
+pub(super) use reach::{private_temp_expansions_only, rebinds_private_temp};
+#[path = "workspace_contained_removal.rs"]
+mod removal;
+#[path = "workspace_contained_runner.rs"]
+mod runner;
+#[path = "workspace_contained_settings.rs"]
+mod settings;
+#[path = "workspace_contained_sibling.rs"]
+mod sibling;
+
+pub(super) use keeps_work::keeping_arguments;
+pub(super) use settings::carry_settings;
+
+/// Clients whose only purpose is the network the sandbox withholds.
+const NETWORK_CLIENTS: &[&str] = &[
+    "curl", "wget", "nc", "ncat", "netcat", "socat", "ssh", "scp", "sftp", "ftp", "tftp", "telnet",
+    "rsync", "nmap", "aria2c", "http", "https", "xh",
+];
 
 // Privilege and permission changes. This is an exclusion, not an allowlist.
 const PRIVILEGE_DENY: &[&str] = &[
@@ -67,10 +94,8 @@ const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.switch",
     "command.git.unsafe-read",
 ];
-// These change a remote. The sandbox has no network, so containing them would
-// only turn a consent prompt into a silent failure.
+// Remote changes: with no network, containing them only hides a consent prompt.
 const REMOTE_RULES: &[&str] = &["command.git.force-push", "command.git.remote-branch-delete"];
-const SHELL_DESTRUCTION: &str = "command.shell-mutations.destructive-shell";
 const CONTAINABLE_RISKS: &[&str] = &["local_secret_read", "destructive_shell"];
 const EXTENSION_REVIEW: &str = "native_command_extension_review";
 /// What the sandbox executes for one authorized command.
@@ -78,8 +103,7 @@ pub(crate) struct Shape {
     /// Arguments for a trusted `git init`, run before the sandbox starts
     /// because `git init` always rewrites the write-denied `.git/config`.
     pub bootstrap: Option<Vec<String>>,
-    /// Text the sandbox runs before `git init`, which runs only when it
-    /// succeeds, as `&&` requires.
+    /// Text run before `git init`, which runs only if it succeeds (`&&`).
     pub prefix: Option<String>,
     /// Text for `sh -c`; `None` runs the original bytes unchanged.
     pub remainder: Option<String>,
@@ -87,13 +111,24 @@ pub(crate) struct Shape {
     pub init_span: Option<(usize, usize)>,
 }
 
-/// Builtins that change the shell's own state. A segment before `git init`
-/// runs in a separate shell, so its effect would not reach the rest.
-const SHELL_STATE: &[&str] = &[
+/// Shell-state builtins: before `git init` they run in a separate shell.
+pub(super) const SHELL_STATE: &[&str] = &[
     "cd", "pushd", "popd", "export", "unset", "set", "shopt", "source", ".", "alias", "unalias",
     "declare", "typeset", "local", "readonly", "eval", "exec", "umask", "trap", "ulimit", "hash",
     "shift", "read", "getopts", "builtin", "enable", "exit", "return", "function",
 ];
+
+/// A literal directory at or below the workspace, with no parent step.
+fn below(target: &str, workspace: &Path) -> bool {
+    let path = Path::new(target);
+    !target.is_empty()
+        && !target.starts_with(['~', '-'])
+        && !target.contains('$')
+        && path
+            .components()
+            .all(|component| !matches!(component, std::path::Component::ParentDir))
+        && (path.is_relative() || path.starts_with(workspace))
+}
 
 fn branch_name(name: &str) -> bool {
     !name.is_empty()
@@ -105,9 +140,8 @@ fn branch_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
 }
 
-/// The canonical arguments of a `git init` that creates a repository in the
-/// current directory, or None for any other form (template, separate git
-/// directory, another target directory, unknown options).
+/// The canonical arguments of a `git init` creating a repository in the current
+/// directory, or None for any other form (template, git dir, target, unknown options).
 pub(crate) fn init_arguments(arguments: &[String]) -> Option<Vec<String>> {
     let mut result = Vec::new();
     let mut index = 0;
@@ -132,9 +166,8 @@ pub(crate) fn init_arguments(arguments: &[String]) -> Option<Vec<String>> {
     Some(result)
 }
 
-/// Shape checks shared by classification and the launch plan. `original` is
-/// the exact text the caller will run; it is needed only to slice off a
-/// bootstrapped `git init`.
+/// Shape checks shared by classification and the launch plan. `original`,
+/// the exact text to run, is needed only to slice off a bootstrapped `git init`.
 pub(crate) fn command_shape(
     model: &CanonicalCommandV1,
     workspace: &Path,
@@ -148,6 +181,11 @@ pub(crate) fn command_shape(
         return None;
     }
     let mut bootstrap = None;
+    if links::unbounded_linked_writes(model, workspace) {
+        return None;
+    }
+    let linked = super::worktree_writes::linked_worktree_common_dir(workspace).is_some();
+    let temp_fixed = !reach::rebinds_private_temp(&model.normalized_text);
     for (index, segment) in model.segments.iter().enumerate() {
         let executable = segment.executable.as_deref()?;
         if executable.contains('$')
@@ -163,13 +201,31 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
-        if PRIVILEGE_DENY.contains(&name) {
+        // The sandbox has no network, so a network client would only fail,
+        // and it reaches no directory outside the workspace.
+        if NETWORK_CLIENTS.contains(&name)
+            || reach::reaches_outside(segment, name, workspace, temp_fixed)
+            || (matches!(name, "cd" | "pushd")
+                && !matches!(segment.arguments.as_slice(), [target] if below(target, workspace)))
+        {
+            return None;
+        }
+        if PRIVILEGE_DENY.contains(&name)
+            && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
+        {
+            return None;
+        }
+        // A linked worktree keeps its index, refs and objects in the shared
+        // Git directory outside the workspace, which the sandbox cannot
+        // reach, so Git there would only fail. It keeps its review unless
+        // `git_local_writes` proves the write starts no program.
+        if name == "git" && linked {
             return None;
         }
         if name == "git" && git_metadata::writes_denied_metadata(&segment.arguments) {
             return None;
         }
-        if name == "git" && segment.arguments.iter().any(|argument| argument == "init") {
+        if name == "git" && git_metadata::initializes(&segment.arguments) {
             if bootstrap.is_some() || segment.arguments.first().map(String::as_str) != Some("init")
             {
                 return None;
@@ -246,26 +302,27 @@ pub(crate) fn split_at_init(
 fn extensions_contain(
     result: &PreToolResultV1,
     controls: &CompiledNativeCommandControls,
+    model: &CanonicalCommandV1,
     package: bool,
 ) -> bool {
-    // Without the loaded extension program there is no network or risk
-    // evidence, so the command stays at review.
+    // Without the loaded extension program there is no risk evidence: keep review.
     let Some(extensions) = result.command_extensions.as_ref() else {
         return false;
     };
-    extensions.binding.uncertainty_count == 0
+    extensions.binding.uncertainty_count == removal::accepted_uncertainty(extensions, model)
         && extensions.evaluation_error.is_none()
-        // The Node package-firewall permission marks package-manager use, not
-        // a proven risk. A disabled one already blocked before this point.
+        // The Node package-firewall permission marks package-manager use (or a
+        // Bun image evaluating code), not a proven risk; a disabled one blocked.
         && extensions.permission_observations.iter().all(|observation| {
-            package
+            (package || super::restricted_tests::bun_inline_eval(model))
                 && observation.mcp_tool.is_none()
                 && observation.extension_id == package::NODE_PACKAGE_EXTENSION
                 && observation.uncertainty_reasons.is_empty()
         })
         && extensions.observations.iter().all(|observation| {
-            observation.uncertainty_reasons.is_empty()
-                && !UNRECOVERABLE_RULES.contains(&observation.rule_id.as_str())
+            (observation.uncertainty_reasons.is_empty() || removal::accepted(observation, model))
+                && (!UNRECOVERABLE_RULES.contains(&observation.rule_id.as_str())
+                    || keeps_work::keeps_work(observation, model))
                 && !REMOTE_RULES.contains(&observation.rule_id.as_str())
                 && controls
                     .rule_risk_classes(&observation.rule_id)
@@ -277,84 +334,13 @@ fn extensions_contain(
         })
 }
 
-/// Whether a destructive argument names the whole workspace, an ancestor of
-/// it, or every entry at its root. Deleting build output stays contained;
-/// wiping the workspace loses uncommitted work like `git reset --hard`.
-fn broad_target(argument: &str, workspace: &Path) -> bool {
-    use std::path::Component;
-    if argument.starts_with('-') {
-        return false;
-    }
-    if argument.starts_with('~') || argument.contains('$') {
-        return true;
-    }
-    let path = Path::new(argument);
-    let joined = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        workspace.join(path)
-    };
-    let mut normal = std::path::PathBuf::new();
-    for component in joined.components() {
-        match component {
-            Component::ParentDir => {
-                normal.pop();
-            }
-            Component::CurDir => {}
-            other => normal.push(other),
-        }
-    }
-    let root_glob = normal
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| {
-            // Brackets and braces can spell any name, so only a literal
-            // stem or suffix such as `*.pyc` keeps a root glob narrow.
-            name.chars().all(|c| matches!(c, '*' | '.' | '?')) || name.contains(['[', '{', '\\'])
-        });
-    // The volume may be case-insensitive, so `/Users/me/Proj` can name the
-    // workspace `/Users/me/proj`.
-    let fold = |path: &Path| std::path::PathBuf::from(path.to_string_lossy().to_ascii_lowercase());
-    let (normal, workspace) = (fold(&normal), fold(workspace));
-    workspace.starts_with(&normal) || (root_glob && normal.parent() == Some(workspace.as_path()))
-}
-
-fn destroys_workspace(
-    result: &PreToolResultV1,
-    model: &CanonicalCommandV1,
-    workspace: &Path,
-) -> bool {
-    let Some(extensions) = result.command_extensions.as_ref() else {
-        return true;
-    };
-    extensions
-        .observations
-        .iter()
-        .filter(|observation| observation.rule_id == SHELL_DESTRUCTION)
-        .flat_map(|observation| {
-            observation
-                .matcher_evidence
-                .iter()
-                .map(|evidence| evidence.segment_index)
-                .chain(observation.effective_segment_indexes.iter().copied())
-        })
-        .any(|index| {
-            model.segments.get(index).is_none_or(|segment| {
-                segment
-                    .arguments
-                    .iter()
-                    .any(|argument| broad_target(argument, workspace))
-            })
-        })
-}
-
 /// Whether this host runs the workspace sandbox for this harness hook: macOS
 /// Seatbelt, or a Linux bubblewrap that passed the overlay probe.
 pub(super) fn host_eligible(harness: &str, event: &str) -> bool {
     event == "PreToolUse"
         && matches!(
             harness,
-            "omp" | "oh-my-pi" | "zcode" | "claude-code" | "codex"
+            "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex"
         )
         && sandbox_available()
 }
@@ -367,6 +353,11 @@ fn sandbox_available() -> bool {
 #[cfg(not(unix))]
 fn sandbox_available() -> bool {
     false
+}
+
+/// Whether a redirect in `command` names a path outside `workspace`.
+pub(super) fn redirect_leaves(command: &str, workspace: &Path) -> bool {
+    reach::redirect_targets(command).any(|target| reach::outside(target, "", workspace))
 }
 
 /// The workspace the sandbox would confine for this session, if any.
@@ -421,15 +412,42 @@ pub(super) fn convert(
     let (Some(model), Some(controls), Some(cwd)) = (model, controls, context.cwd) else {
         return;
     };
-    if !extensions_contain(result, controls, package)
-        || (package && !package::local_package_work(model))
-    {
+    let projected = super::contained_wrapper::package_dir::as_cd_list(model, context);
+    let (issued, model) = (model, projected.as_ref().map_or(model, |list| &list.model));
+    let command_text = projected
+        .as_ref()
+        .map_or(command_text, |list| Some(list.text.as_str()));
+    // After `cd <sibling root> &&` the sink runs the rest from that root, so
+    // the rest is checked with the root as its workspace and working directory.
+    // One command after a `cd` elsewhere in a sibling runs whole from its root.
+    let sibling = sibling::sibling_run(model, context);
+    let root = match &sibling {
+        Some((root, _)) => root.to_str(),
+        None => Some(cwd),
+    };
+    let Some(root) = root else {
         return;
-    }
-    let Some(workspace) = workspace_admissible(Path::new(cwd), context.home_dir.map(Path::new))
+    };
+    let Some(workspace) = workspace_admissible(Path::new(root), context.home_dir.map(Path::new))
     else {
         return;
     };
+    let rest = sibling.as_ref().and_then(|(_, rest)| rest.as_ref());
+    let shaped = rest.unwrap_or(model);
+    let context = PathContext {
+        cwd: Some(root),
+        ..context
+    };
+    // `npx vite` with vite installed runs `node_modules/.bin/vite`. `npx` and
+    // `bunx` arrive as commands rather than package actions, so a runner is
+    // held to every package check below whichever way it arrived.
+    let runners = runner::installed_tools(shaped, &workspace);
+    let package = package || runners.is_some();
+    if !extensions_contain(result, controls, issued, package)
+        || (package && !package::local_package_work(model, runners.is_some()))
+    {
+        return;
+    }
     // Installs, one-shot executions and lockfile syncs stay with supply-chain
     // admission even when the verb check above missed their spelling.
     if package
@@ -441,7 +459,11 @@ pub(super) fn convert(
                 None,
                 None,
             )
-            .is_some()
+            .is_some_and(|intent| {
+                !runners
+                    .as_deref()
+                    .is_some_and(|tools| runner::intent_only_runs(&intent, tools))
+            })
         })
     {
         return;
@@ -455,11 +477,16 @@ pub(super) fn convert(
             )
         })
         .is_none()
-        || command_shape(model, &workspace, command_text).is_none()
-        || destroys_workspace(result, model, &workspace)
+        || command_shape(shaped, &workspace, command_text.filter(|_| rest.is_none())).is_none()
+        || removal::destroys_workspace(result, issued, &workspace)
+        || removal::loses_work(result, issued, context, execution_environment)
     {
         return;
     }
+    mark_contained(result);
+}
+
+pub(crate) fn mark_contained(result: &mut PreToolResultV1) {
     result.minimum_action = "sandbox-required".into();
     result.policy_action = "sandbox-required".into();
     result.decision = "deny".into();

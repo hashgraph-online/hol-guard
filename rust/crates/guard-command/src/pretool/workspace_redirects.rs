@@ -209,7 +209,18 @@ pub(super) fn contained(
     if !crate::pretool::workspace_contained::host_eligible(harness, event) {
         return None;
     }
-    let projected_text = project(command)?;
+    // A command the bounded-write projection takes runs directly instead: a
+    // single command, or a chain whose only write is its first step's,
+    // followed by plain readers. One it declines, such as a write to
+    // `.tool-versions`, or a chain beside local Git writes, runs here.
+    let stripped = project(command)?;
+    let direct = super::redirect_projection::project(command, context);
+    // A later read of a written file spelled from the root names what the
+    // projection's relative spelling names, so both earn the same floor.
+    let projected_text = match &direct {
+        Some(projection) => projection.relative_reads(stripped.clone(), context.cwd),
+        None => stripped.clone(),
+    };
     let projected_payload =
         super::command_rewrite::payload_with_command(payload, command, &projected_text);
     let projected = super::evaluate_envelope(
@@ -222,11 +233,27 @@ pub(super) fn contained(
         execution_environment,
         false,
     );
-    if projected.reason_code != crate::pretool::workspace_contained::REASON {
+    let workspace = crate::pretool::workspace_contained::admitted_workspace(context)?;
+    // A redirect aimed outside the workspace is not workspace work: the
+    // sandbox would only refuse the write, so it keeps its review.
+    if crate::pretool::workspace_contained::redirect_leaves(command, &workspace) {
         return None;
     }
-    let workspace = crate::pretool::workspace_contained::admitted_workspace(context)?;
-    contained_shape(command, &projected_text, &workspace)?;
+    // A projection that earns a plain allow runs in the sandbox too: the
+    // redirects still need its confinement, and the command needs nothing
+    // the sandbox withholds when it stays offline.
+    let single = direct.is_none();
+    let runs_directly = direct
+        .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
+    let allowed = projected.minimum_action == "allow"
+        && !projected.action.sensitive_target
+        && !runs_directly
+        && stays_offline(&projected_text, single);
+    if projected.reason_code != crate::pretool::workspace_contained::REASON && !allowed {
+        return None;
+    }
+    // The sandbox runs the command as written, so its shape is the stripped text's.
+    contained_shape(command, &stripped, &workspace)?;
     let raw = super::evaluate_envelope(
         harness,
         event,
@@ -237,8 +264,57 @@ pub(super) fn contained(
         execution_environment,
         false,
     );
-    (!raw.action.sensitive_target && raw.reason_code == "native_command_review_required")
-        .then_some(projected)
+    if raw.action.sensitive_target || raw.reason_code != "native_command_review_required" {
+        return None;
+    }
+    let mut projected = projected;
+    if allowed {
+        crate::pretool::workspace_contained::mark_contained(&mut projected);
+    }
+    Some(projected)
+}
+
+/// An allowed command still works in the sandbox when it reaches no
+/// network, unlike GitHub and registry queries or Git remote operations.
+/// A single command counts only when `single` says the bounded-write
+/// projection will not run it directly.
+fn stays_offline(projected: &str, single: bool) -> bool {
+    let Ok(model) = crate::parse_command(&CommandModelRequestV1 {
+        command: projected.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    }) else {
+        return false;
+    };
+    (model.segments.len() > 1 || (single && model.segments.len() == 1))
+        && !model.segments.iter().any(|segment| {
+            let Some(executable) = segment.executable.as_deref() else {
+                return true;
+            };
+            let any = |verbs: &[&str]| {
+                segment
+                    .arguments
+                    .iter()
+                    .any(|argument| verbs.contains(&argument.as_str()))
+            };
+            match crate::pretool::executable_basename(executable) {
+                "gh" | "curl" | "kubectl" => true,
+                "git" => any(&[
+                    "fetch",
+                    "pull",
+                    "push",
+                    "ls-remote",
+                    "clone",
+                    "remote",
+                    "submodule",
+                ]),
+                "npm" | "pnpm" | "yarn" | "bun" => any(&[
+                    "view", "info", "show", "v", "outdated", "search", "ping", "whoami", "audit",
+                ]),
+                _ => false,
+            }
+        })
 }
 
 /// The text of the simple command being written, after the last separator.

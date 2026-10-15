@@ -73,3 +73,55 @@ fn original_portable_contained_argv_vectors() {
     }
     assert!(count >= 80);
 }
+
+#[test]
+fn bun_inline_eval_is_exact_argv_only() {
+    for flag in ["-e", "--eval", "-p", "--print"] {
+        let result = evaluate(
+            "contained_kind",
+            &json!({"command": ["bun", flag, "console.log(1)"]}),
+        )
+        .unwrap();
+        assert_eq!(result["value"]["inline_eval"], true, "{flag} {result}");
+    }
+    for command in [
+        json!(["bun", "-e"]),
+        json!(["bun", "-e", "1", "extra"]),
+        json!(["bun", "--smol", "-e", "1"]),
+        json!(["bun", "run", "-e", "1"]),
+        json!(["bun", "script.ts"]),
+        json!(["bunx", "-e", "1"]),
+        json!(["bun-evil", "-e", "1"]),
+    ] {
+        let result = evaluate("inline_eval", &json!({ "command": command })).unwrap();
+        assert_eq!(result["value"], false, "{command} {result}");
+    }
+}
+
+#[test]
+fn only_a_bare_pnpm_exec_reads_as_vitest() {
+    let kind = evaluate(
+        "contained_kind",
+        &json!({"command": ["pnpm", "exec", "vitest", "run", "a.test.ts"]}),
+    )
+    .unwrap();
+    assert_eq!(kind["value"]["vitest"], true, "{kind}");
+    assert_eq!(kind["value"]["node_tool"], false, "{kind}");
+    let arguments = evaluate(
+        "vitest_arguments",
+        &json!({"command": ["pnpm", "exec", "vitest", "run", "a.test.ts"]}),
+    )
+    .unwrap();
+    assert_eq!(arguments["value"], json!(["run", "a.test.ts"]));
+    for command in [
+        json!(["pnpm", "exec", "-c", "vitest", "run"]),
+        json!(["pnpm", "-r", "exec", "vitest", "run"]),
+        json!(["pnpm", "exec", "--filter", "app", "vitest", "run"]),
+        json!(["pnpm", "exec", "vitest", "watch"]),
+        json!(["pnpm", "dlx", "vitest", "run"]),
+        json!(["pnpm-evil", "exec", "vitest", "run"]),
+    ] {
+        let result = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert!(result.get("value").is_none(), "{command} {result}");
+    }
+}

@@ -91,7 +91,7 @@ fn has_proxy_tail(args: &[String]) -> bool {
 }
 
 /// `is_guard_proxy_command`.
-fn is_guard_proxy(command: Option<&str>, args: &[String]) -> bool {
+pub(crate) fn is_guard_proxy(command: Option<&str>, args: &[String]) -> bool {
     let Some(command) = command else {
         return false;
     };

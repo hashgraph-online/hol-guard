@@ -18,6 +18,9 @@ from typing import Any
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
 POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
+# The resident rejects a request array wider than 4,096 items
+# (MAX_JSON_COLLECTION_ITEMS in strict_json.rs).
+VALUE_METRIC_EVENT_LIMIT = 4_096
 _SIGNAL_PAYLOAD_KEYS = (
     "artifact_id",
     "artifact_name",
@@ -137,9 +140,12 @@ def pain_signal_batch(
 
 
 def value_metrics(events: Sequence[object], now: str) -> tuple[dict[str, dict[str, object]], dict[str, object]]:
-    """Local value metrics and the weekly digest derived from stored events."""
+    """Local value metrics and the weekly digest derived from stored events.
 
-    slim = [_slim_metric_event(event) for event in events]
+    ``events`` is newest first; only the newest ``VALUE_METRIC_EVENT_LIMIT`` are sent.
+    """
+
+    slim = [_slim_metric_event(event) for event in events[:VALUE_METRIC_EVENT_LIMIT]]
     payload = native_runner_authority("value_metrics", {"events": slim, "now": now})
     return _field(payload, "metrics", dict), _field(payload, "weekly_digest", dict)
 

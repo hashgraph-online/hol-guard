@@ -69,6 +69,11 @@ fn approval_error_transport_is_finite() {
     .expect("schema-unsupported error is JSON");
     assert_eq!(unsupported["error"], "native_request_schema_unsupported");
 
+    let lifecycle_event: Value =
+        serde_json::from_slice(&safe_error_response("native_hook_event_unsupported", false))
+            .expect("unsupported hook event error is JSON");
+    assert_eq!(lifecycle_event["error"], "native_hook_event_unsupported");
+
     for code in [
         "native_resident_future_unregistered_code",
         "native_policy_snapshot_future_unregistered_code",
@@ -156,28 +161,22 @@ fn prompt_capability_is_portable_and_containment_matches_dispatch() {
             .any(|feature| feature == "codex-binding-capture-v1"),
         cfg!(unix)
     );
+    assert!(features
+        .iter()
+        .any(|feature| feature == "claude-hook-bridge-v1"));
     assert_eq!(
         features
             .iter()
-            .any(|feature| feature == "claude-hook-bridge-v1"),
+            .any(|feature| feature == "claude-session-start-v1"),
         cfg!(unix)
     );
-    assert_eq!(
-        features
-            .iter()
-            .any(|feature| feature == "codex-hook-bridge-v1"),
-        cfg!(unix)
-    );
-    assert_eq!(
-        features
-            .iter()
-            .any(|feature| feature == "bounded-hook-bridge-v1"),
-        cfg!(unix)
-    );
-    assert_eq!(
-        features
-            .iter()
-            .any(|feature| feature == "cursor-hook-bridge-v1"),
-        cfg!(unix)
-    );
+    assert!(features
+        .iter()
+        .any(|feature| feature == "codex-hook-bridge-v1"));
+    assert!(features
+        .iter()
+        .any(|feature| feature == "bounded-hook-bridge-v1"));
+    assert!(features
+        .iter()
+        .any(|feature| feature == "cursor-hook-bridge-v1"));
 }

@@ -24,11 +24,11 @@ use guard_contracts::{
     PackageAuditProjectionRequestV1, PackageAuthorityDecideRequestV1, PackageContextBuildRequestV1,
     PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PackagePolicyResolveRequestV1,
     PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, ProtectRequestRequestV1, RequestContextRequestV1,
-    RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1,
-    ShimAdminRequestV2, SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1,
-    WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    PolicyIntegrityRowsRequestV1, PromptAnalyzeRequestV1, ProtectRequestRequestV1,
+    RequestContextRequestV1, RunnerAuthorityRequestV1, RuntimeCapabilitiesV1,
+    RuntimeDetectorRunRequestV1, ShimAdminRequestV2, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -61,7 +61,13 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "policy-snapshot-direct-lane-v1".into(),
         crate::hook_direct::HOOK_DIRECT_FEATURE.into(),
         crate::hook_direct::HOOK_DIRECT_CONTAINED_ROUTE_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_PERMISSION_NOTICE_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_SAVED_DECISION_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE.into(),
+        crate::policy_store::policy_store_direct_lane::HOOK_DIRECT_REVIEW_FACTS_FEATURE.into(),
         crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),
+        crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
+        crate::mcp_relay_servers::MCP_RELAY_SERVER_REPORT_FEATURE.into(),
         "native-approval-artifact-v3".into(),
         "native-approval-challenge-v3".into(),
         "native-approval-validation-v3".into(),
@@ -83,6 +89,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-business-policy-retained-floor-v1".into(),
         "native-business-policy-document-compile-v1".into(),
         "native-guard-config-load-v1".into(),
+        "native-guard-config-update-v1".into(),
         "native-policy-effective-v1".into(),
         "native-business-source-codec-v1".into(),
         "native-business-source-anchor-codec-v1".into(),
@@ -113,15 +120,18 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // this path on Windows, where the module is not compiled.
         #[cfg(unix)]
         features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
+        // The native SessionStart lane execs its Python fallback, so it is
+        // compiled and advertised on unix only.
         #[cfg(unix)]
-        features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
-        #[cfg(unix)]
-        features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
-        #[cfg(unix)]
-        features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
-        #[cfg(unix)]
-        features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
+        features.push(crate::claude_session_start::SESSION_START_FEATURE.into());
+        // The relay runs its MCP server in its own process group, so it is
+        // advertised on unix only.
+        features.push(crate::mcp_relay::RELAY_FEATURE.into());
     }
+    features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
         guard_command::native_command_program::packaged_program_digests();
@@ -148,6 +158,11 @@ pub(crate) enum ResidentOperationV1 {
     PolicySnapshotPush(Value),
     HookDirect(crate::hook_direct::HookDirectRequestV1),
     HookDirectEvidenceDrain(crate::hook_direct_evidence::HookDirectEvidenceDrainRequestV1),
+    McpRelayDecide(crate::mcp_relay_decide::McpRelayDecideRequestV1),
+    McpRelayCommit(crate::mcp_relay_pending::McpRelayCommitRequestV1),
+    McpRelayReady(crate::mcp_relay_ready::McpRelayReadyRequestV1),
+    McpRelayClaim(crate::mcp_relay_claims::McpRelayClaimRequestV1),
+    McpRelayServerReport(crate::mcp_relay_servers::McpRelayServerReportRequestV1),
     ApprovalChallenge(ApprovalChallengeRequestV3),
     ApprovalValidate(ApprovalValidateRequestV3),
     ApprovalConsume(ApprovalConsumeRequestV3),
@@ -218,6 +233,7 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalProofDecide(ApprovalProofRequestV1),
     CursorObserverProof(CursorObserverProofRequestV1),
     HookAuthorityState(HookAuthorityStateRequestV1),
+    PolicyIntegrityRows(PolicyIntegrityRowsRequestV1),
     HookDecide(HookDecisionRequestV1),
     DaemonRoute(DaemonRouteRequestV1),
     DaemonHandler(DaemonHandlerRequestV1),
@@ -241,6 +257,7 @@ pub(crate) enum ResidentOperationV1 {
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     CatalogRead(guard_command::catalog_read_model::CatalogReadRequestV1),
+    DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     Health(Value),
     Shutdown(Value),

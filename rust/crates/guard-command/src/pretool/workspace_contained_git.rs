@@ -48,6 +48,15 @@ const CONFIG_WRITES: &[&str] = &[
     "--edit",
 ];
 
+/// Whether the command is `git init`. A message such as `commit -m init` is
+/// not; without a recognizable subcommand any `init` argument counts.
+pub(super) fn initializes(arguments: &[String]) -> bool {
+    match subcommand(arguments) {
+        Some((name, _)) => name == "init",
+        None => arguments.iter().any(|argument| argument == "init"),
+    }
+}
+
 /// The subcommand after Git's global options, and the arguments after it.
 fn subcommand(arguments: &[String]) -> Option<(&str, &[String])> {
     let mut index = 0;

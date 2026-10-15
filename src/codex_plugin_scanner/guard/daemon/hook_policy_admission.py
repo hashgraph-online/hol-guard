@@ -12,11 +12,12 @@ from .hook_managed_install_state import _canonical_managed_harness, _hook_harnes
 
 def _native_policy_not_ready_reason(daemon_server: Any) -> str:
     reason = "HOL Guard could not prepare the native policy safely."
+    retry = "This is usually temporary. Retry this action."
     publisher = getattr(getattr(daemon_server, "hook_worker", None), "policy_snapshot_publisher", None)
     last_error = getattr(publisher, "last_error", None)
     if isinstance(last_error, str) and last_error.strip():
-        return f"{reason} {last_error.strip()}."
-    return reason
+        return f"{reason} {last_error.strip()}. {retry}"
+    return f"{reason} {retry}"
 
 
 def prepare_native_hook_policy(

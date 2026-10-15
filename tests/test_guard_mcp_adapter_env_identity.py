@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok_config import append_mcp_artifacts as append_grok_mcp_artifacts
+from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
@@ -145,15 +145,27 @@ def _secondary_mcp_artifact(
         server["command"] = "node"
 
     if adapter_name == "grok":
-        artifacts = []
-        append_grok_mcp_artifacts(
-            harness="grok",
-            artifacts=artifacts,
-            payload={"mcp_servers": {"value-proof": server}},
-            config_path=Path("/virtual/grok-config.toml"),
-            scope="global",
+        grok_config = root / "home" / ".grok" / "config.toml"
+        grok_config.parent.mkdir(parents=True, exist_ok=True)
+        grok_config.write_text(
+            "\n".join(
+                (
+                    '[mcp_servers."value-proof"]',
+                    *(f"{key} = {json.dumps(value)}" for key, value in server.items() if key != field),
+                    f"{field} = {{ "
+                    + ", ".join(f"{json.dumps(key)} = {json.dumps(value)}" for key, value in configured_items)
+                    + " }",
+                    "",
+                )
+            ),
+            encoding="utf-8",
         )
-        return artifacts[0]
+        with mock.patch.dict(os.environ):
+            os.environ.pop("GROK_HOME", None)
+            detection = GrokHarnessAdapter().detect(
+                HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
+            )
+        return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     if adapter_name == "hermes":
         hermes_config = root / "home" / ".hermes" / "mcp_servers.json"
         hermes_config.parent.mkdir(parents=True, exist_ok=True)

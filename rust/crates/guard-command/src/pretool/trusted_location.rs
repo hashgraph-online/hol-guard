@@ -33,7 +33,7 @@ pub(super) fn trusted_location(path: &Path, home: &Path, cwd: &Path) -> bool {
     true
 }
 
-fn temporary_location(path: &Path) -> bool {
+pub(super) fn temporary_location(path: &Path) -> bool {
     let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
     path.starts_with(std::env::temp_dir())
         || canonical_temp

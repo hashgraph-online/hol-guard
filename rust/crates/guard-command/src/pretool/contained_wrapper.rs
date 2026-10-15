@@ -1,20 +1,43 @@
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
-fn bounded_count(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
-}
+#[path = "package_directory_flags.rs"]
+pub(super) mod package_dir;
 
+#[path = "contained_output_filters.rs"]
+mod output_filters;
+
+/// The package-directory route keeps its single `| tail -N`/`| head -N` filter.
 fn output_filter(segment: &CommandSegmentV1) -> bool {
     segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden
         && segment.pipeline_index == 1
         && matches!(segment.executable.as_deref(), Some("tail" | "head"))
-        && match segment.arguments.as_slice() {
-            [count] => count.strip_prefix('-').is_some_and(bounded_count),
-            [flag, count] => flag == "-n" && bounded_count(count),
-            _ => false,
+        && output_filters::head_tail_arguments(&segment.arguments)
+}
+
+/// How many segments after `core` form the sink's output filter chain: each a
+/// later stage of the same pipeline, joined by a plain `|`. `None` when any
+/// segment after `core` is something else.
+fn filter_chain(model: &CanonicalCommandV1, segments: &[CommandSegmentV1]) -> Option<usize> {
+    let (core, filters) = segments.split_first()?;
+    if filters.len() > output_filters::MAX_FILTERS {
+        return None;
+    }
+    let mut previous = core;
+    for (offset, filter) in filters.iter().enumerate() {
+        if filter.pipeline_index != core.pipeline_index + offset + 1
+            || text(model, previous.span.end, filter.span.start)? != "|"
+            || !output_filters::filter_stage(
+                filter,
+                &text(model, filter.span.start, filter.span.end)?,
+            )
+        {
+            return None;
         }
+        previous = filter;
+    }
+    Some(filters.len())
 }
 
 /// A final `; echo "exit=$?"`: the sink prints the label and status itself.
@@ -81,7 +104,10 @@ fn text(model: &CanonicalCommandV1, start: usize, end: usize) -> Option<String> 
 /// approved root to the same directory, so the run is contained to that
 /// repository exactly as it would be from a session started there.
 #[cfg(unix)]
-fn sibling_project_root(target: &std::path::Path, home: &str) -> Option<std::path::PathBuf> {
+pub(super) fn sibling_project_root(
+    target: &std::path::Path,
+    home: &str,
+) -> Option<std::path::PathBuf> {
     use std::os::unix::fs::MetadataExt;
     let uid = nix::unistd::getuid().as_raw();
     [std::path::Path::new(home), std::path::Path::new("/tmp")]
@@ -99,19 +125,27 @@ fn sibling_project_root(target: &std::path::Path, home: &str) -> Option<std::pat
 }
 
 #[cfg(not(unix))]
-fn sibling_project_root(_target: &std::path::Path, _home: &str) -> Option<std::path::PathBuf> {
+pub(super) fn sibling_project_root(
+    _target: &std::path::Path,
+    _home: &str,
+) -> Option<std::path::PathBuf> {
     None
 }
 
 /// Peel a verified `cd <workspace or sibling repository dir> &&` prefix, a
-/// trailing `2>&1`, a bounded `| tail -N`/`| head -N` filter and a final
-/// `; echo "<label>$?"`, returning the sole core invocation.
+/// trailing `2>&1`, a chain of bounded `| tail -N`/`| head -N` and
+/// standard-input `| grep` filters and a final `; echo "<label>$?"`,
+/// returning the sole core invocation.
 /// Classification only: the execution sink peels the same shape and
 /// re-authorizes the core in the resolved directory before running it.
 pub(super) fn contained_core(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Option<CanonicalCommandV1> {
+    // `bun --cwd <dir> run build` is checked as `cd <dir> && bun run build`.
+    if let Some(projected) = package_dir::as_cd_list(model, context) {
+        return contained_core(&projected.model, context);
+    }
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
     }
@@ -140,19 +174,7 @@ pub(super) fn contained_core(
     if status {
         segments = &segments[..segments.len() - 1];
     }
-    let filtered = segments.len() == start + 2 && output_filter(&segments[start + 1]);
-    if filtered
-        && text(
-            model,
-            segments[start].span.end,
-            segments[start + 1].span.start,
-        )? != "|"
-    {
-        return None;
-    }
-    if segments.len() != start + 1 + usize::from(filtered) {
-        return None;
-    }
+    let filtered = filter_chain(model, segments.get(start..)?)? > 0;
     let mut core = segments[start].clone();
     let merged = core
         .arguments

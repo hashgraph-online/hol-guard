@@ -28,6 +28,7 @@ def prepare_workspace_policy(
     from . import hook_worker as owner
 
     workspace_pending = getattr(worker.policy_snapshot_publisher, "workspace_policy_pending", None)
+    admissible_without_overlay = getattr(worker.policy_snapshot_publisher, "workspace_admissible_without_overlay", None)
     if worker._publish_native_policy:
         register_workspace = getattr(worker.policy_snapshot_publisher, "register_workspace", None)
         if callable(register_workspace):
@@ -44,15 +45,19 @@ def prepare_workspace_policy(
             isinstance(last_error, str) and last_error in owner._TRANSIENT_RESIDENT_PUBLICATION_ERRORS
         )
         no_publication_error = last_error is None or (isinstance(last_error, str) and not last_error.strip())
+        # A file-less subdirectory of a compiled workspace adds no overlay,
+        # so the current ACK already carries its policy. Hooks right after
+        # `cd` into it need not wait for the next publish.
+        covered = callable(admissible_without_overlay) and admissible_without_overlay(workspace)
         if callable(wait_until_ready) and (transient_publication_error or no_publication_error):
             readiness_deadline = now + owner._NATIVE_POLICY_READY_TIMEOUT_SECONDS
             if deadline is not None:
                 readiness_deadline = min(readiness_deadline, deadline)
-            if callable(workspace_pending) and workspace_pending(workspace):
+            if not covered and callable(workspace_pending) and workspace_pending(workspace):
                 _ = wait_until_ready(readiness_deadline, workspace=workspace)
             else:
                 _ = wait_until_ready(readiness_deadline)
-        if callable(workspace_pending) and workspace_pending(workspace):
+        if not covered and callable(workspace_pending) and workspace_pending(workspace):
             # Never admit a new workspace on a snapshot without its overlay.
             return None
     current_snapshot_binding = getattr(worker.policy_snapshot_publisher, "current_snapshot_binding", None)

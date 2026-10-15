@@ -1,8 +1,6 @@
 #![cfg(unix)]
 
-#[allow(dead_code)]
-#[path = "support/git_helper_fixture.rs"]
-mod fixture;
+use crate::git_helper_fixture as fixture;
 
 use fixture::{evaluate_pre_tool_envelope_with_context, git_github_controls, FixtureCleanup};
 use serde_json::json;
@@ -45,9 +43,13 @@ fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
         ),
     ] {
         let result = evaluate(&root, &command);
-        assert_eq!(
-            (result.minimum_action.as_str(), result.reason_code.as_str()),
-            ("review", "native_command_review_required"),
+        // Hosts with the workspace sandbox run the script there instead.
+        assert!(
+            matches!(
+                (result.minimum_action.as_str(), result.reason_code.as_str()),
+                ("review", "native_command_review_required")
+                    | ("sandbox-required", "native_workspace_containment_required")
+            ),
             "{command}: {}",
             result.reason
         );
@@ -67,6 +69,21 @@ fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
         &root,
         &format!("NODE_PATH={} node scripts/report.mjs", modules.display()),
     );
+    // The modules sit inside the workspace, so the sandbox bounds them too.
+    assert!(
+        matches!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("review", "native_command_review_required")
+                | ("sandbox-required", "native_workspace_containment_required")
+        ),
+        "{}",
+        result.reason
+    );
+
+    let result = evaluate(
+        &root,
+        &format!("NODE_PATH={} gh api user", modules.display()),
+    );
     assert_eq!(result.minimum_action, "block", "{}", result.reason);
     assert!(
         result
@@ -79,7 +96,8 @@ fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
 
     // A canonical, existing `node_modules` directory inside the working tree
     // is a dependency tree the project already trusts: the setting is named in
-    // an ordinary review instead of the hard block, and never settles lower.
+    // an ordinary review (or the workspace sandbox) instead of the hard block,
+    // and never settles lower.
     std::fs::create_dir_all(&modules).unwrap();
     let modules = modules.canonicalize().unwrap();
     for command in [
@@ -90,8 +108,11 @@ fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
         ),
     ] {
         let result = evaluate(&root, &command);
-        assert_eq!(
-            result.minimum_action, "review",
+        assert!(
+            matches!(
+                result.minimum_action.as_str(),
+                "review" | "sandbox-required"
+            ),
             "{command}: {}",
             result.reason
         );
@@ -100,7 +121,8 @@ fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
             "{command}"
         );
     }
-    // Other paths and other loader settings keep the block.
+    // Any other plain module path in front of `node` only picks which code
+    // the script loads, so it reaches review or the sandbox, never allow.
     std::fs::create_dir_all(root.join("project/vendor")).unwrap();
     for command in [
         format!(
@@ -116,15 +138,24 @@ fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
             "NODE_PATH={}/../project/node_modules node scripts/report.mjs",
             modules.display()
         ),
-        "NODE_OPTIONS=--require=./hook.js node scripts/report.mjs".to_owned(),
     ] {
         let result = evaluate(&root, &command);
-        assert_eq!(
-            result.minimum_action, "block",
-            "{command}: {}",
+        assert!(
+            matches!(
+                result.minimum_action.as_str(),
+                "review" | "sandbox-required"
+            ),
+            "{command}: {} {}",
+            result.minimum_action,
             result.reason
         );
     }
+    // Loader hooks keep the block.
+    let result = evaluate(
+        &root,
+        "NODE_OPTIONS=--require=./hook.js node scripts/report.mjs",
+    );
+    assert_eq!(result.minimum_action, "block", "{}", result.reason);
 
     for command in [
         "NODE_OPTIONS=--require=./hook.js node scripts/report.mjs",
@@ -189,6 +220,46 @@ fn a_substituted_setting_is_named_with_a_safe_alternative() {
             result.reason.contains("SERVICE_TOKEN")
                 && result.reason.contains("command substitution")
                 && result.reason.contains("run the commands separately"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+#[test]
+fn a_credential_setting_is_named_with_a_safe_alternative() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-credential-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("project/scripts")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::write(root.join("project/scripts/report.ts"), "console.log(1)\n").unwrap();
+    for (command, setting) in [
+        ("REPORT_API_KEY=fixture-value ls", "REPORT_API_KEY"),
+        (
+            "REPORT_API_KEY=fixture-value REPORT_ID=7 bun scripts/report.ts --json",
+            "REPORT_API_KEY",
+        ),
+        (
+            "REPORT_ID=7 SERVICE_TOKEN=fixture-value node scripts/report.ts",
+            "SERVICE_TOKEN",
+        ),
+        ("env SERVICE_TOKEN=fixture-value ls", "SERVICE_TOKEN"),
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_command_extension_evaluation_failed"),
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result.reason.contains(setting)
+                && result.reason.contains("passes a credential")
+                && result.reason.contains("ask the user to run the command")
+                && !result.reason.contains("fixture-value")
+                && !result.reason.contains("hol-guard doctor"),
             "{command}: {}",
             result.reason
         );

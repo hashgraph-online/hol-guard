@@ -5,7 +5,8 @@
 
 use std::path::Path;
 
-use serde_json::Value;
+use guard_contracts::{SkillDirectoryIdentityV1, SkillDirectoryLimitsV1};
+use serde_json::{json, Map, Value};
 
 pub(crate) const ERR_IDENTITY: &str = "native_runner_authority_aibom_skill_identity_invalid";
 
@@ -62,75 +63,75 @@ pub(crate) fn directory_identity(
     native::directory_identity(skill_md, scope_root, version_label)
 }
 
+pub(crate) const LIMITS: SkillDirectoryLimitsV1 = SkillDirectoryLimitsV1 {
+    max_depth: 32,
+    max_entries: 4_096,
+    max_file_bytes: 128 * 1024 * 1024,
+    max_total_bytes: 256 * 1024 * 1024,
+};
+
+/// `skill_directory_identity_metadata`.
+pub(crate) fn identity_metadata(
+    identity: &SkillDirectoryIdentityV1,
+    version_label: &str,
+) -> Result<Map<String, Value>, &'static str> {
+    let complete = identity.status == "complete";
+    let mut envelope = Map::new();
+    envelope.insert("schemaVersion".to_owned(), json!(identity.schema_version));
+    envelope.insert("status".to_owned(), json!(identity.status));
+    envelope.insert("entryCount".to_owned(), json!(identity.entry_count));
+    envelope.insert("totalBytes".to_owned(), json!(identity.total_bytes));
+    envelope.insert("reusable".to_owned(), json!(complete));
+    let mut metadata = Map::new();
+    if let Some(primary) = &identity.primary_content_hash {
+        metadata.insert("content_hash".to_owned(), json!(primary));
+    }
+    let version_hash = match (&identity.directory_hash, complete) {
+        (Some(directory), true) => {
+            envelope.insert("contentHash".to_owned(), json!(directory));
+            metadata.insert("directory_hash".to_owned(), json!(directory));
+            directory.clone()
+        }
+        _ => {
+            let state = identity.incomplete_state_hash.clone().ok_or(ERR_IDENTITY)?;
+            if let Some(reason) = identity.failure_reason {
+                envelope.insert(
+                    "reason".to_owned(),
+                    serde_json::to_value(reason).map_err(|_| ERR_IDENTITY)?,
+                );
+            }
+            envelope.insert("incompleteStateHash".to_owned(), json!(state));
+            state
+        }
+    };
+    metadata.insert("skillDirectoryIdentity".to_owned(), Value::Object(envelope));
+    metadata.insert(
+        "versionInfo".to_owned(),
+        json!({
+            "versionLabel": version_label,
+            "hashBasis": "skill-directory-v1",
+            "contentHash": version_hash,
+            "changedFields": [],
+        }),
+    );
+    Ok(metadata)
+}
+
 #[cfg(unix)]
 mod native {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
     use std::path::Path;
 
-    use guard_contracts::{SkillDirectoryIdentityV1, SkillDirectoryLimitsV1};
+    use guard_contracts::SkillDirectoryIdentityV1;
     use serde_json::{json, Map, Value};
 
-    use super::ERR_IDENTITY;
+    use super::{identity_metadata, ERR_IDENTITY, LIMITS};
     use crate::aibom_artifact::guard_artifact;
     use crate::aibom_paths::py_join;
     use crate::skill_identity_canon::Failure;
     use crate::skill_identity_discovery::{discover_skill_documents, issue_id};
     use crate::skill_identity_inspect::{incomplete_identity, inspect_skill_directory};
-
-    const LIMITS: SkillDirectoryLimitsV1 = SkillDirectoryLimitsV1 {
-        max_depth: 32,
-        max_entries: 4_096,
-        max_file_bytes: 128 * 1024 * 1024,
-        max_total_bytes: 256 * 1024 * 1024,
-    };
-
-    /// `skill_directory_identity_metadata`.
-    fn identity_metadata(
-        identity: &SkillDirectoryIdentityV1,
-        version_label: &str,
-    ) -> Result<Map<String, Value>, &'static str> {
-        let complete = identity.status == "complete";
-        let mut envelope = Map::new();
-        envelope.insert("schemaVersion".to_owned(), json!(identity.schema_version));
-        envelope.insert("status".to_owned(), json!(identity.status));
-        envelope.insert("entryCount".to_owned(), json!(identity.entry_count));
-        envelope.insert("totalBytes".to_owned(), json!(identity.total_bytes));
-        envelope.insert("reusable".to_owned(), json!(complete));
-        let mut metadata = Map::new();
-        if let Some(primary) = &identity.primary_content_hash {
-            metadata.insert("content_hash".to_owned(), json!(primary));
-        }
-        let version_hash = match (&identity.directory_hash, complete) {
-            (Some(directory), true) => {
-                envelope.insert("contentHash".to_owned(), json!(directory));
-                metadata.insert("directory_hash".to_owned(), json!(directory));
-                directory.clone()
-            }
-            _ => {
-                let state = identity.incomplete_state_hash.clone().ok_or(ERR_IDENTITY)?;
-                if let Some(reason) = identity.failure_reason {
-                    envelope.insert(
-                        "reason".to_owned(),
-                        serde_json::to_value(reason).map_err(|_| ERR_IDENTITY)?,
-                    );
-                }
-                envelope.insert("incompleteStateHash".to_owned(), json!(state));
-                state
-            }
-        };
-        metadata.insert("skillDirectoryIdentity".to_owned(), Value::Object(envelope));
-        metadata.insert(
-            "versionInfo".to_owned(),
-            json!({
-                "versionLabel": version_label,
-                "hashBasis": "skill-directory-v1",
-                "contentHash": version_hash,
-                "changedFields": [],
-            }),
-        );
-        Ok(metadata)
-    }
 
     /// The identity of one skill directory: its metadata and completeness.
     pub(super) fn directory_identity(

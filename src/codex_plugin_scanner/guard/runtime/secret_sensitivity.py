@@ -78,7 +78,3 @@ def classify_secret_content(
         },
     )
     return tuple(SecretContentMatch(**item) for item in result)
-
-
-def secret_content_rule_version() -> str:
-    return content_query("content_version", {})

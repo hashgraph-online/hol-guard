@@ -1,6 +1,8 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use guard_runtime_windows_process::{spawn_managed_child, ManagedChild};
@@ -62,7 +64,7 @@ pub(crate) fn supervise_managed(
     state_base: &Path,
     generation: u64,
     expected_digest: &str,
-    _owner_process_id: u32,
+    owner_process_id: u32,
     token: &[u8],
 ) -> Result<(), String> {
     let executable =
@@ -78,13 +80,26 @@ pub(crate) fn supervise_managed(
         OsString::from("--runtime-sha256"),
         OsString::from(expected_digest),
     ];
-    supervise_managed_child(&executable, &arguments, token)
+    let owner = ManagedOwner {
+        state_base,
+        digest: expected_digest,
+        process_id: owner_process_id,
+    };
+    supervise_managed_child(&executable, &arguments, token, &owner)
+}
+
+/// The process and runtime clients that keep a supervised resident alive.
+struct ManagedOwner<'a> {
+    state_base: &'a Path,
+    digest: &'a str,
+    process_id: u32,
 }
 
 fn supervise_managed_child(
     executable: &Path,
     arguments: &[OsString],
     token: &[u8],
+    owner: &ManagedOwner<'_>,
 ) -> Result<(), String> {
     let argument_refs: Vec<&OsStr> = arguments.iter().map(OsString::as_os_str).collect();
     let mut child = spawn_managed_child(executable, &argument_refs)
@@ -101,9 +116,21 @@ fn supervise_managed_child(
         let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
         return Err("native_resident_spawn_auth_failed".to_owned());
     }
+    // Like the Unix supervisor, close the child's stdin once the owner and all
+    // runtime clients are gone instead of holding it until the idle timeout.
+    let child_done = Arc::new(AtomicBool::new(false));
+    let watcher = super::spawn_owner_lease_watcher(
+        executable.to_owned(),
+        owner.state_base,
+        owner.digest,
+        owner.process_id,
+        liveness_writer,
+        Arc::clone(&child_done),
+    );
     let status_result =
         child.wait_success_with_timeout(super::MANAGED_IDLE_TIMEOUT + super::MANAGED_STOP_TIMEOUT);
-    drop(liveness_writer);
+    child_done.store(true, Ordering::Release);
+    let _ = watcher.join();
     let status_success =
         status_result.map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;
     if status_success {
@@ -126,6 +153,8 @@ mod tests {
     const CHILD_MARKER_ENV: &str = "HOL_GUARD_TEST_LIVENESS_CHILD_MARKER";
     const EOF_MARKER_ENV: &str = "HOL_GUARD_TEST_LIVENESS_EOF_MARKER";
     const EOF_STARTED_ENV: &str = "HOL_GUARD_TEST_LIVENESS_EOF_STARTED";
+    const ORPHAN_EOF_MARKER_ENV: &str = "HOL_GUARD_TEST_ORPHAN_EOF_MARKER";
+    const ORPHAN_PARENT_ENV: &str = "HOL_GUARD_TEST_ORPHAN_PARENT";
 
     #[test]
     fn liveness_pipe_remains_open_while_child_runs_and_closes_after_wait() {
@@ -150,7 +179,13 @@ mod tests {
             OsString::from("liveness_pipe_child_probe"),
             OsString::from("--nocapture"),
         ];
-        let result = supervise_managed_child(&executable, &arguments, &[0x5a; 32]);
+        // The test process stays alive, so only the supervisor's wait closes the pipe.
+        let owner = ManagedOwner {
+            state_base: &directory.join("state"),
+            digest: "0",
+            process_id: std::process::id(),
+        };
+        let result = supervise_managed_child(&executable, &arguments, &[0x5a; 32], &owner);
 
         env::remove_var(CHILD_MARKER_ENV);
         env::remove_var(EOF_MARKER_ENV);
@@ -164,6 +199,80 @@ mod tests {
         let _ = fs::remove_file(eof_marker);
         let _ = fs::remove_file(eof_started);
         let _ = fs::remove_dir(directory);
+    }
+
+    #[test]
+    fn liveness_pipe_closes_once_owner_and_clients_are_gone() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock is after the Unix epoch")
+            .as_nanos();
+        let directory = env::temp_dir().join(format!(
+            "guard-runtime-orphan-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create orphan test directory");
+        let eof_marker = directory.join("pipe-closed");
+        env::set_var(ORPHAN_EOF_MARKER_ENV, &eof_marker);
+        env::set_var(ORPHAN_PARENT_ENV, std::process::id().to_string());
+        let mut exited = Command::new("cmd")
+            .args(["/C", "exit"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn short-lived owner");
+        let owner_process_id = exited.id();
+        exited.wait().expect("wait for short-lived owner");
+        // `exited` keeps its process handle open, so the dead owner's process
+        // object stays queryable, as it does while a real parent holds it.
+
+        let executable = env::current_exe().expect("locate test executable");
+        let arguments = [
+            OsString::from("orphan_child_probe"),
+            OsString::from("--nocapture"),
+        ];
+        // The owner has exited and the state base holds no client leases, so the
+        // child must see EOF while it is still running, not after the idle timeout.
+        let owner = ManagedOwner {
+            state_base: &directory.join("missing-state"),
+            digest: "0",
+            process_id: owner_process_id,
+        };
+        let started = Instant::now();
+        let result = supervise_managed_child(&executable, &arguments, &[0x5a; 32], &owner);
+        env::remove_var(ORPHAN_EOF_MARKER_ENV);
+        env::remove_var(ORPHAN_PARENT_ENV);
+
+        assert!(result.is_ok(), "orphaned child did not see its pipe close");
+        assert!(eof_marker.exists(), "orphaned child did not record EOF");
+        assert!(started.elapsed() < Duration::from_secs(10));
+        let _ = fs::remove_file(eof_marker);
+        let _ = fs::remove_dir(directory);
+    }
+
+    #[test]
+    fn orphan_child_probe() {
+        // The environment is process-wide, so this test also runs in the parent
+        // while the variables are set; only the spawned child acts on them.
+        let spawned = env::var(ORPHAN_PARENT_ENV)
+            .is_ok_and(|parent| parent != std::process::id().to_string());
+        let Some(eof_marker) = env::var_os(ORPHAN_EOF_MARKER_ENV).filter(|_| spawned) else {
+            return;
+        };
+        // Fail instead of hanging when the supervisor never closes the pipe.
+        thread::spawn(|| {
+            thread::sleep(Duration::from_secs(15));
+            std::process::exit(3);
+        });
+        let mut auth = [0u8; 65];
+        io::stdin()
+            .read_exact(&mut auth)
+            .expect("read supervisor authentication token");
+        let mut rest = Vec::new();
+        io::stdin()
+            .read_to_end(&mut rest)
+            .expect("read liveness pipe");
+        fs::write(eof_marker, b"closed").expect("write closed marker");
     }
 
     #[test]

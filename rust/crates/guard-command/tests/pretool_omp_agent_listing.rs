@@ -59,9 +59,20 @@ fn listing_the_agent_home_proceeds() {
         "ls -R ~/.agent/".to_owned(),
         format!("ls -la {absolute}"),
         format!("ls -R {absolute}"),
+        "find ~/.agent -maxdepth 4 -name SKILL.md".to_owned(),
+        format!("find {absolute} -type f"),
     ] {
         assert_eq!(shell(&home, &command), "allow", "{command}");
     }
+    // `${HOME}` comes from the shell, and this process's HOME is not the
+    // fixture home, so the operand names some other directory.
+    assert_ne!(
+        shell(
+            &home,
+            "find ${HOME}/.agent -maxdepth 4 -name SKILL.md 2>/dev/null"
+        ),
+        "allow"
+    );
 }
 
 #[test]
@@ -70,6 +81,11 @@ fn recursive_listing_still_screens_agent_home_entries() {
         let home = home();
         write(home.join(".agent").join(entry), "Inert synthetic fixture\n");
         assert_ne!(shell(&home, "ls -R ~/.agent"), "allow", "{entry}");
+        assert_ne!(
+            shell(&home, "find ~/.agent -name SKILL.md"),
+            "allow",
+            "{entry}"
+        );
     }
 }
 
@@ -81,6 +97,9 @@ fn content_searches_and_other_hidden_roots_still_ask() {
         "grep -rl Inert ~/.agent",
         "cat ~/.agent",
         "ls -R ~/elsewhere/.agent",
+        "find ~/.agent -name SKILL.md -exec cat {} +",
+        "find ~/.agent -fprint /tmp/names",
+        "find -L ~/.agent -name SKILL.md",
         "ls ~/.ssh",
         "ls -R ~/.config",
     ] {
@@ -98,4 +117,5 @@ fn linked_agent_home_still_asks() {
     std::os::unix::fs::symlink(real.join("state"), home.join(".agent")).unwrap();
     assert_ne!(shell(&home, "ls ~/.agent"), "allow");
     assert_ne!(shell(&home, "ls -R ~/.agent"), "allow");
+    assert_ne!(shell(&home, "find ~/.agent -name SKILL.md"), "allow");
 }

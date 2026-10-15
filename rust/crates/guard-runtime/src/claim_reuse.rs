@@ -353,16 +353,41 @@ pub fn claim_approval_reuse_decisions_with(
     bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
     consume_local_once: bool,
 ) -> rusqlite::Result<bool> {
+    claim_approval_reuse_decisions_then(
+        connection,
+        decisions,
+        now,
+        evidence,
+        bound,
+        consume_local_once,
+        &mut |_| Ok(Some(())),
+    )
+    .map(|claimed| claimed.is_some())
+}
+
+/// Like [`claim_approval_reuse_decisions_with`], and `after` runs on the
+/// claimed rows inside the same write transaction, before it commits: the
+/// claim commits only when `after` returns `Some`, and `None` or an error
+/// rolls the claim back. `Ok(None)` means nothing was claimed.
+pub fn claim_approval_reuse_decisions_then<T>(
+    connection: &Connection,
+    decisions: &[Value],
+    now: &str,
+    evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
+    consume_local_once: bool,
+    after: &mut dyn FnMut(&Connection) -> rusqlite::Result<Option<T>>,
+) -> rusqlite::Result<Option<T>> {
     let Ok((unique, expected_revision)) = unique_members(decisions) else {
-        return Ok(false);
+        return Ok(None);
     };
     if unique.is_empty() {
-        return Ok(true);
+        return after(connection);
     }
     let mut members: Vec<Member<'_>> = Vec::with_capacity(unique.len());
     for decision in unique {
         let Some(mut disposition) = approval_reuse_claim_disposition(decision) else {
-            return Ok(false);
+            return Ok(None);
         };
         let local_once_member = decision
             .get("approval_id")
@@ -374,21 +399,23 @@ pub fn claim_approval_reuse_decisions_with(
         members.push((decision, disposition));
     }
     connection.execute_batch("BEGIN IMMEDIATE")?;
-    match claim_members(
+    let claimed = claim_members(
         connection,
         &members,
         expected_revision,
         now,
         evidence,
         bound,
-    ) {
-        Ok(true) => {
+    )
+    .and_then(|claimed| if claimed { after(connection) } else { Ok(None) });
+    match claimed {
+        Ok(Some(value)) => {
             connection.execute_batch("COMMIT")?;
-            Ok(true)
+            Ok(Some(value))
         }
-        Ok(false) => {
+        Ok(None) => {
             connection.execute_batch("ROLLBACK")?;
-            Ok(false)
+            Ok(None)
         }
         Err(error) => {
             let _ = connection.execute_batch("ROLLBACK");

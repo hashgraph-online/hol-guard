@@ -83,7 +83,7 @@ pub(crate) fn correlation_id(local_request_id: &str) -> Option<String> {
     ))
 }
 
-fn correlation_shaped(text: &str) -> bool {
+pub(crate) fn correlation_shaped(text: &str) -> bool {
     let Some(rest) = text.strip_prefix("gcr_") else {
         return false;
     };

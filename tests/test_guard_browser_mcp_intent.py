@@ -2,9 +2,23 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from codex_plugin_scanner.guard.mcp_tool_calls import (
+    build_tool_call_artifact,
+)
+from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 from codex_plugin_scanner.guard.runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+
+
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+    tool_name = str(artifact.metadata.get("tool_name"))
+    return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
+
 
 pytestmark = pytest.mark.usefixtures("native_context_digest")
 
@@ -12,14 +26,6 @@ pytestmark = pytest.mark.usefixtures("native_context_digest")
 def _normalized_url(url: str):
     artifact, arguments = _browser_artifact(arguments={"url": url})
     return normalize_browser_mcp_intent(artifact, arguments)
-
-
-from codex_plugin_scanner.guard.mcp_tool_calls import (
-    build_tool_call_artifact,
-    tool_call_risk_categories,
-    tool_call_risk_summary,
-)
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 
 
 def _browser_artifact(
@@ -55,61 +61,61 @@ def _browser_artifact(
 class TestBrowserMcpCurrentBehavior:
     """HGBM005-HGBM007: Current classifier behavior before browser intent changes."""
 
-    def test_navigate_page_with_https_url_records_current_categories(self) -> None:
+    def test_navigate_page_with_https_url_records_current_categories(self, native_context_digest: Path) -> None:
         """HGBM005: After browser intent integration, navigate_page to hol.org
         no longer triggers outbound_network — it gets browser_navigation instead.
         """
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack", "timeout": 30000},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         # Browser navigation suppresses outbound_network
         assert "outbound_network" not in categories
         assert "browser_navigation" in categories
         assert "browser_external_domain" in categories
 
-    def test_non_browser_mcp_with_https_still_triggers_outbound_network(self) -> None:
+    def test_non_browser_mcp_with_https_still_triggers_outbound_network(self, native_context_digest: Path) -> None:
         """HGBM006: Non-browser MCP with URL still returns outbound_network."""
         artifact, arguments = _browser_artifact(
             server_name="slack-mcp",
             tool_name="post_message",
             arguments={"webhook": "https://example.com/webhook"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" in categories
 
-    def test_navigate_page_with_env_path_triggers_secret_access(self) -> None:
+    def test_navigate_page_with_env_path_triggers_secret_access(self, native_context_digest: Path) -> None:
         """HGBM007: navigate_page with .env in path triggers secret_access."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///home/user/.env"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
-    def test_navigate_page_with_npmrc_triggers_secret_access(self) -> None:
+    def test_navigate_page_with_npmrc_triggers_secret_access(self, native_context_digest: Path) -> None:
         """HGBM007: navigate_page with .npmrc path triggers secret_access."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///project/.npmrc"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
-    def test_navigate_page_to_localhost_does_not_trigger_outbound_network(self) -> None:
+    def test_navigate_page_to_localhost_does_not_trigger_outbound_network(self, native_context_digest: Path) -> None:
         """After browser intent integration, localhost navigation gets browser_navigation
         and does not trigger outbound_network."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "http://127.0.0.1:3000/guard"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" not in categories
         assert "browser_navigation" in categories
 
-    def test_navigate_page_risk_summary_is_non_empty(self) -> None:
+    def test_navigate_page_risk_summary_is_non_empty(self, native_context_digest: Path) -> None:
         """HGBM046 prep: current risk summary for browser navigation."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
         )
-        summary = tool_call_risk_summary(artifact, arguments)
+        summary = _projected_call(native_context_digest, artifact, arguments).risk_summary
         assert isinstance(summary, str)
         assert len(summary) > 0
 
@@ -485,81 +491,83 @@ class TestFullIntentNormalization:
 class TestBrowserRiskClassifierIntegration:
     """HGBM033-HGBM048: Browser intent integration into mcp_tool_calls classifier."""
 
-    def test_browser_navigation_excludes_outbound_network(self) -> None:
+    def test_browser_navigation_excludes_outbound_network(self, native_context_digest: Path) -> None:
         """HGBM035: navigate_page with https:// no longer triggers outbound_network."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" not in categories, (
             f"Browser navigation should not trigger outbound_network, got {categories}"
         )
         assert "browser_navigation" in categories
 
-    def test_browser_navigation_to_localhost(self) -> None:
+    def test_browser_navigation_to_localhost(self, native_context_digest: Path) -> None:
         """HGBM037: Localhost navigation has browser_navigation category."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "http://127.0.0.1:3000/guard"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_navigation" in categories
         assert "outbound_network" not in categories
 
-    def test_browser_external_domain_navigation(self) -> None:
+    def test_browser_external_domain_navigation(self, native_context_digest: Path) -> None:
         """HGBM038: Public external domain navigation has browser_external_domain."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://example.com/page"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_navigation" in categories
         assert "browser_external_domain" in categories
 
-    def test_browser_inspection_category(self) -> None:
+    def test_browser_inspection_category(self, native_context_digest: Path) -> None:
         """HGBM034: Screenshot has browser_inspection category."""
         artifact, arguments = _browser_artifact(
             tool_name="take_screenshot",
             arguments={"pageId": "tab1"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_inspection" in categories
 
-    def test_browser_interaction_category(self) -> None:
+    def test_browser_interaction_category(self, native_context_digest: Path) -> None:
         """HGBM039: Click/type has browser_interaction category."""
         artifact, arguments = _browser_artifact(
             tool_name="click",
             arguments={"selector": "#button"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_interaction" in categories
 
-    def test_browser_transfer_category(self) -> None:
+    def test_browser_transfer_category(self, native_context_digest: Path) -> None:
         """HGBM040: Upload/download has browser_transfer category."""
         artifact, arguments = _browser_artifact(
             tool_name="upload_file",
             arguments={"filePath": "/tmp/test.txt"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_transfer" in categories
 
-    def test_browser_privileged_category(self) -> None:
+    def test_browser_privileged_category(self, native_context_digest: Path) -> None:
         """HGBM041: Cookie/storage/CDP/script eval has browser_privileged category."""
         artifact, arguments = _browser_artifact(
             tool_name="read_cookies",
             arguments={},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_privileged" in categories
 
-    def test_browser_sensitive_surface_category(self) -> None:
+    def test_browser_sensitive_surface_category(self, native_context_digest: Path) -> None:
         """HGBM043: Sensitive surface flags produce browser_sensitive_surface."""
         artifact, arguments = _browser_artifact(
             tool_name="evaluate_script",
             arguments={"expression": "document.title"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_sensitive_surface" in categories
 
-    def test_evaluate_script_optional_filepath_schema_is_not_filesystem_access(self) -> None:
+    def test_evaluate_script_optional_filepath_schema_is_not_filesystem_access(
+        self, native_context_digest: Path
+    ) -> None:
         server_identity = build_mcp_server_identity(
             config_path=".mcp.json",
             command="npx",
@@ -582,13 +590,15 @@ class TestBrowserRiskClassifierIntegration:
                 },
             },
         )
-        categories = tool_call_risk_categories(artifact, {"function": "() => document.title"})
+        categories = _projected_call(native_context_digest, artifact, {"function": "() => document.title"}).risk_categories
         assert "filesystem_access" not in categories
         assert "browser_privileged" in categories
-        with_file = tool_call_risk_categories(artifact, {"function": "() => 1", "filePath": "out.json"})
+        with_file = _projected_call(
+            native_context_digest, artifact, {"function": "() => 1", "filePath": "out.json"}
+        ).risk_categories
         assert "filesystem_access" in with_file
 
-    def test_browser_shared_profile_category(self) -> None:
+    def test_browser_shared_profile_category(self, native_context_digest: Path) -> None:
         """HGBM042: Shared/remote-debugging profile produces browser_shared_profile."""
         from codex_plugin_scanner.guard.runtime.mcp_protection import (
             build_mcp_server_identity,
@@ -619,26 +629,26 @@ class TestBrowserRiskClassifierIntegration:
             publisher=artifact.publisher,
             metadata={**artifact.metadata, "server_args": ["--remote-debugging-port=9222"]},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "browser_shared_profile" in categories
 
-    def test_secret_access_overrides_browser_safe_handling(self) -> None:
+    def test_secret_access_overrides_browser_safe_handling(self, native_context_digest: Path) -> None:
         """HGBM044: .env path still triggers secret_access even through browser MCP."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///home/user/.env"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
-    def test_npmrc_overrides_browser_safe_handling(self) -> None:
+    def test_npmrc_overrides_browser_safe_handling(self, native_context_digest: Path) -> None:
         """HGBM044: .npmrc path still triggers secret_access through browser MCP."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "file:///project/.npmrc"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "secret_access" in categories
 
-    def test_non_browser_mcp_still_gets_outbound_network(self) -> None:
+    def test_non_browser_mcp_still_gets_outbound_network(self, native_context_digest: Path) -> None:
         """HGBM036: Non-browser MCP with URL still returns outbound_network."""
         from codex_plugin_scanner.guard.runtime.mcp_protection import (
             build_mcp_server_identity,
@@ -656,35 +666,35 @@ class TestBrowserRiskClassifierIntegration:
             arguments={"webhook": "https://example.com/webhook"},
             server_identity=server_identity,
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         assert "outbound_network" in categories
 
-    def test_browser_risk_summary_is_informative(self) -> None:
+    def test_browser_risk_summary_is_informative(self, native_context_digest: Path) -> None:
         """HGBM046: Browser-specific risk summary."""
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://example.com/page"},
         )
-        summary = tool_call_risk_summary(artifact, arguments)
+        summary = _projected_call(native_context_digest, artifact, arguments).risk_summary
         assert isinstance(summary, str)
         assert len(summary) > 0
 
-    def test_browser_privileged_risk_summary(self) -> None:
+    def test_browser_privileged_risk_summary(self, native_context_digest: Path) -> None:
         """HGBM046: Privileged browser action has informative summary."""
         artifact, arguments = _browser_artifact(
             tool_name="read_cookies",
             arguments={},
         )
-        summary = tool_call_risk_summary(artifact, arguments)
+        summary = _projected_call(native_context_digest, artifact, arguments).risk_summary
         assert isinstance(summary, str)
         assert len(summary) > 0
 
-    def test_category_ordering(self) -> None:
+    def test_category_ordering(self, native_context_digest: Path) -> None:
         """HGBM034: Browser categories are in deterministic order."""
         artifact, arguments = _browser_artifact(
             tool_name="evaluate_script",
             arguments={"expression": "document.cookie"},
         )
-        categories = tool_call_risk_categories(artifact, arguments)
+        categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
         # browser_privileged should come before browser_sensitive_surface
         if "browser_privileged" in categories and "browser_sensitive_surface" in categories:
             assert categories.index("browser_privileged") < categories.index("browser_sensitive_surface")
@@ -696,9 +706,10 @@ class TestBrowserRiskClassifierIntegration:
 class TestProxyBrowserIntentMetadata:
     """HGBM063-HGBM065: Proxy includes browser intent metadata."""
 
-    def test_build_artifact_payload_includes_browser_intent(self) -> None:
+    def test_build_artifact_payload_includes_browser_intent(self, native_context_digest: Path) -> None:
         """HGBM063: _build_artifact_payload includes browser_intent for browser MCP."""
         from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+        from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjector
 
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
@@ -706,10 +717,9 @@ class TestProxyBrowserIntentMetadata:
 
         # Create a minimal proxy-like object to test the payload builder
         class _FakeProxy:
-            _launch_target = staticmethod(lambda tool, args: f"{tool} {args}")
+            _call_projector = McpCallProjector(native_context_digest)
 
-        # Test _build_artifact_payload directly (it's a method but doesn't use self)
-        # We'll call it as an unbound function with a mock
+        # Call the builder unbound: it only needs the call projector
         payload = RuntimeMcpGuardProxy._build_artifact_payload(
             _FakeProxy(),
             artifact=artifact,
@@ -724,9 +734,10 @@ class TestProxyBrowserIntentMetadata:
         assert "runtime_browser_tool_call" in payload["changed_fields"]
         assert "runtime_tool_call" in payload["changed_fields"]
 
-    def test_build_artifact_payload_no_browser_intent_for_non_browser(self) -> None:
+    def test_build_artifact_payload_no_browser_intent_for_non_browser(self, native_context_digest: Path) -> None:
         """HGBM063: Non-browser MCP does not include browser_intent."""
         from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+        from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjector
         from codex_plugin_scanner.guard.runtime.mcp_protection import (
             build_mcp_server_identity,
         )
@@ -745,7 +756,7 @@ class TestProxyBrowserIntentMetadata:
         )
 
         class _FakeProxy:
-            _launch_target = staticmethod(lambda tool, args: f"{tool} {args}")
+            _call_projector = McpCallProjector(native_context_digest)
 
         payload = RuntimeMcpGuardProxy._build_artifact_payload(
             _FakeProxy(),
@@ -758,16 +769,17 @@ class TestProxyBrowserIntentMetadata:
         assert "browser_intent" not in payload
         assert payload["changed_fields"] == ["runtime_tool_call"]
 
-    def test_launch_target_prefers_browser_label(self) -> None:
+    def test_launch_target_prefers_browser_label(self, native_context_digest: Path) -> None:
         """HGBM065: launch_target is safe browser label when browser intent exists."""
         from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+        from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjector
 
         artifact, arguments = _browser_artifact(
             arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
         )
 
         class _FakeProxy:
-            _launch_target = staticmethod(lambda tool, args: f"{tool} {args}")
+            _call_projector = McpCallProjector(native_context_digest)
 
         payload = RuntimeMcpGuardProxy._build_artifact_payload(
             _FakeProxy(),

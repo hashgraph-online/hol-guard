@@ -7,13 +7,34 @@
 
 use super::search_scope_filter::{Override, SearchFilter};
 use super::search_scope_ignore::{
-    is_ignored, load_ignore_file, slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
+    holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
+    slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 const MAX_SCOPE_ENTRIES: usize = 20_000;
+/// A names-only walk checks only entry metadata and links, never contents,
+/// so it may cover an ordinary mid-size repository in full.
+const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
+
+/// Which ignore files a walk honors, matching the host that searches.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Ignores {
+    /// Every reachable entry counts.
+    None,
+    /// ripgrep: repository excludes, `.gitignore`, `.ignore` and `.rgignore`,
+    /// and `.git` itself is skipped.
+    Ripgrep,
+    /// Only `.gitignore` files at or below the search root, inside a
+    /// repository. Ancestor files, repository excludes and a global file rank
+    /// below them and can only hide more, so leaving them out keeps the
+    /// modeled scope at least as wide as the host's. A higher-ranked
+    /// `.ignore` or `.rgignore` could re-include a gitignored file, so any
+    /// such file in reach fails the proof.
+    Gitignore,
+}
 const MAX_SCOPE_DEPTH: usize = 64;
 const MAX_ANCESTORS: usize = 64;
 
@@ -57,7 +78,7 @@ pub(super) fn claude_grep_directory_scope_proven(
         return false;
     };
     !super::read_paths::inside_agent_state_tree(&root, home_dir)
-        && walk_scope(&root, &filter, true).is_ok()
+        && walk_scope(&root, &filter, Ignores::Ripgrep, false, &mut None).is_ok()
 }
 
 /// True when a Claude `Glob` returns only names under a verified directory
@@ -136,9 +157,85 @@ pub(super) fn unfiltered_directory_scope_proven(
         .is_some_and(|root| unfiltered_walk_proven(&root))
 }
 
+/// The first sensitive file an unfiltered content search of `target` would
+/// reach, relative to the searched folder, when that file is why the search
+/// is unproven. Only names are inspected; no candidate file is opened.
+pub(super) fn content_search_blocker(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> Option<PathBuf> {
+    let root = unfiltered_directory_root(target, home_dir, cwd)?;
+    let filter = SearchFilter::from_input(&Map::new())?;
+    let mut blocker = None;
+    walk_scope(&root, &filter, Ignores::None, false, &mut blocker).err()?;
+    blocker.and_then(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
+}
+
 fn unfiltered_walk_proven(root: &Path) -> bool {
     SearchFilter::from_input(&Map::new())
-        .is_some_and(|filter| walk_scope(root, &filter, false).is_ok())
+        .is_some_and(|filter| walk_scope(root, &filter, Ignores::None, false, &mut None).is_ok())
+}
+
+/// Oh My Pi `glob` walks below its fixed prefix and returns names only. Below
+/// a workspace cwd (not the home directory or an ancestor of it), or in a
+/// linked worktree of a repository inside it, that is the listing `find`
+/// already gets; anywhere else no sensitive file may be
+/// reachable below the prefix. Either way no link may lead the walk out of it.
+pub(super) fn omp_glob_scope_proven(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    gitignore: bool,
+) -> bool {
+    let Some(root) = unfiltered_directory_root(target, home_dir, cwd) else {
+        return false;
+    };
+    let workspace = cwd.zip(home_dir).and_then(|(cwd, home)| {
+        let cwd = std::fs::canonicalize(cwd).ok()?;
+        let home = std::fs::canonicalize(home).ok()?;
+        (!home.starts_with(&cwd)).then_some(cwd)
+    });
+    let names_walk = |ignores| {
+        SearchFilter::from_input(&Map::new())
+            .is_some_and(|filter| walk_scope(&root, &filter, ignores, true, &mut None).is_ok())
+    };
+    // A linked worktree of a repository inside the workspace holds the same
+    // checkout, so its names are the workspace's too.
+    let in_workspace = workspace.is_some_and(|cwd| {
+        root.starts_with(&cwd)
+            || super::worktree_writes::linked_worktree_common_dir(&root)
+                .and_then(|common| common.parent().map(Path::to_path_buf))
+                .is_some_and(|checkout| checkout.starts_with(&cwd))
+    });
+    if !in_workspace {
+        return unfiltered_walk_proven(&root) && names_walk(Ignores::None);
+    }
+    // Without ignore rules the walk covers every entry the host can reach,
+    // so it still proves the scope when a `.ignore` file stops the first.
+    gitignore && names_walk(Ignores::Gitignore) || names_walk(Ignores::None)
+}
+
+/// Oh My Pi `grep` variant of [`content_search_scope_proven`]. The host
+/// searches hidden files and, unless `gitignore` is false, skips what the
+/// repository's `.gitignore` files exclude. Only those files narrow the walk,
+/// so a gitignored `.env` stays out of scope while a tracked one fails it.
+pub(super) fn omp_grep_scope_proven(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    gitignore: bool,
+) -> bool {
+    if !gitignore {
+        return content_search_scope_proven(target, home_dir, cwd);
+    }
+    unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
+        (!super::read_paths::inside_agent_state_tree(&root, home_dir)
+            || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
+            && SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+                walk_scope(&root, &filter, Ignores::Gitignore, false, &mut None).is_ok()
+            })
+    })
 }
 
 /// Canonical directory an unfiltered search walks, with `~/` expanded the
@@ -210,7 +307,11 @@ fn verified_directory_root(
     if !super::safe_reads::verified_path_context(home_dir, cwd) {
         return None;
     }
-    if !super::safe_reads::bounded_read_target(target, home_dir, cwd, true) {
+    // A recursive search through `..` reaches a sibling tree whose ignore
+    // rules were never inspected.
+    if target.split(['/', '\\']).any(|part| part == "..")
+        || !super::safe_reads::bounded_read_target(target, home_dir, cwd, true)
+    {
         return None;
     }
     let candidate = if Path::new(target).is_absolute() {
@@ -245,12 +346,6 @@ fn ancestor_custom_rules(root: &Path, tiers: &mut IgnoreTiers) -> Result<(), Sco
         load_custom_rules(directory, tiers)?;
     }
     Ok(())
-}
-
-fn load_custom_rules(directory: &Path, tiers: &mut IgnoreTiers) -> Result<(), ScopeUnproven> {
-    let base = slash_path(directory).ok_or(ScopeUnproven)?;
-    load_ignore_file(&directory.join(".ignore"), &base, &mut tiers.ignore)?;
-    load_ignore_file(&directory.join(".rgignore"), &base, &mut tiers.rgignore)
 }
 
 /// Repository exclude rules and `.gitignore` files from the repository root
@@ -290,18 +385,31 @@ struct PendingDirectory {
     tiers: Rc<IgnoreTiers>,
 }
 
+/// Walks the modeled search scope. With `names`, the walk models a names-only
+/// listing: sensitive names are fine, but every link it walks must resolve
+/// inside `root`. When a sensitive file fails the proof, `blocker` names it.
 fn walk_scope(
     root: &Path,
     filter: &SearchFilter,
-    honor_ignores: bool,
+    ignores: Ignores,
+    names: bool,
+    blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
-    let repository = repository_root(root).filter(|_| honor_ignores);
+    let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
-    if let Some(repository) = &repository {
-        tiers.git = ancestor_git_rules(root, repository)?;
-    }
-    if honor_ignores {
+    if ignores == Ignores::Ripgrep {
+        if let Some(repository) = &repository {
+            tiers.git = ancestor_git_rules(root, repository)?;
+        }
         ancestor_custom_rules(root, &mut tiers)?;
+    }
+    if ignores == Ignores::Gitignore
+        && root
+            .ancestors()
+            .take(MAX_ANCESTORS)
+            .any(holds_custom_ignore_file)
+    {
+        return Err(ScopeUnproven);
     }
     let mut pending = vec![PendingDirectory {
         path: root.to_path_buf(),
@@ -309,6 +417,11 @@ fn walk_scope(
         tiers: Rc::new(tiers),
     }];
     let mut inspected = 0_usize;
+    let entry_limit = if names {
+        MAX_NAME_SCOPE_ENTRIES
+    } else {
+        MAX_SCOPE_ENTRIES
+    };
     while let Some(directory) = pending.pop() {
         if directory.depth > MAX_SCOPE_DEPTH {
             return Err(ScopeUnproven);
@@ -324,7 +437,10 @@ fn walk_scope(
             }
             load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
-        if honor_ignores {
+        if ignores == Ignores::Gitignore && holds_custom_ignore_file(&directory.path) {
+            return Err(ScopeUnproven);
+        }
+        if ignores == Ignores::Ripgrep {
             load_custom_rules(&directory.path, &mut tiers)?;
         }
         let tiers = Rc::new(tiers);
@@ -332,7 +448,7 @@ fn walk_scope(
         for entry in entries {
             let entry = entry.map_err(|_| ScopeUnproven)?;
             inspected += 1;
-            if inspected > MAX_SCOPE_ENTRIES {
+            if inspected > entry_limit {
                 return Err(ScopeUnproven);
             }
             let path = entry.path();
@@ -340,7 +456,7 @@ fn walk_scope(
             let name = name.to_str().ok_or(ScopeUnproven)?;
             // The Claude walk models ripgrep and skips .git. The host-neutral
             // walk has no such model, so it must inspect repository metadata.
-            if name == ".git" && honor_ignores {
+            if name == ".git" && (ignores == Ignores::Ripgrep || names) {
                 continue;
             }
             // Metadata only: never follow links or open a candidate secret.
@@ -349,7 +465,15 @@ fn walk_scope(
                 // Claude's Grep does not follow links. Still refuse a link
                 // whose name or file target is sensitive, in case it would.
                 let target = std::fs::canonicalize(&path).ok();
-                if sensitive_scope_file(&path)
+                let escapes = !target.as_deref().is_some_and(|t| t.starts_with(root));
+                if names {
+                    // A link the ignore rules skip is never walked.
+                    let skipped =
+                        ignores != Ignores::None && link_ignored(&tiers, &path, target.as_deref())?;
+                    if escapes && !skipped {
+                        return Err(ScopeUnproven);
+                    }
+                } else if sensitive_scope_file(&path)
                     || target
                         .as_deref()
                         .is_some_and(|target| target.is_file() && sensitive_scope_file(target))
@@ -367,7 +491,7 @@ fn walk_scope(
                 Override::Searched => true,
                 Override::Undecided => {
                     let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
-                    if honor_ignores && is_ignored(&tiers, &rendered, is_directory)? {
+                    if ignores != Ignores::None && is_ignored(&tiers, &rendered, is_directory)? {
                         continue;
                     }
                     is_directory || filter.type_allows(name)
@@ -379,7 +503,8 @@ fn walk_scope(
                     depth: directory.depth + 1,
                     tiers: Rc::clone(&tiers),
                 });
-            } else if searched && sensitive_scope_file(&path) {
+            } else if searched && !names && sensitive_scope_file(&path) {
+                *blocker = Some(path);
                 return Err(ScopeUnproven);
             }
         }

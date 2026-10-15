@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -42,6 +41,14 @@ fn branch_listing_is_allowed_and_mutation_stays_reviewed() {
         ("", "git branch -a", "allow"),
         ("", "git branch -r", "allow"),
         ("", "git branch -vv", "allow"),
+        ("", "git branch -avv", "allow"),
+        ("", "git branch -avv && kubectl get namespaces", "allow"),
+        ("", "git branch -ad main", "review"),
+        (
+            "",
+            "git branch -avD main && kubectl get namespaces",
+            "review",
+        ),
         ("", "git branch --show-current", "allow"),
         ("", "git branch --list 'feat/*'", "allow"),
         ("", "git --no-pager branch --list", "allow"),
@@ -49,7 +56,7 @@ fn branch_listing_is_allowed_and_mutation_stays_reviewed() {
         ("", "git branch new-feature", "review"),
         ("", "git branch -D main", "review"),
         ("", "git branch -d main", "review"),
-        ("", "git branch -m old new", "review"),
+        ("", "git branch -m old new", "allow"),
         ("", "git branch -c old new", "review"),
         ("", "git branch -f main HEAD", "review"),
         ("", "git branch --set-upstream-to=origin/main", "review"),

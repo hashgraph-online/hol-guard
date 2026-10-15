@@ -386,3 +386,66 @@ fn root_test_modules_mark_a_project_but_not_a_home_or_a_link() {
     let refused = super::validation::resolve_workspace_with_home(&home, Some(&home));
     assert!(refused.is_err());
 }
+
+#[test]
+fn bun_inline_eval_uses_the_node_eval_profile_with_an_installer_image() {
+    let fixture = fixture("guard-bun-eval");
+    let home = fixture.0.join("caller-home");
+    let bun = home.join(".bun/bin/bun");
+    let workspace = fixture.0.join("project");
+    fs::create_dir_all(bun.parent().unwrap()).unwrap();
+    fs::create_dir(&workspace).unwrap();
+    fs::write(workspace.join("package.json"), "{}").unwrap();
+    fs::write(&bun, b"\x7fELFnative-fixture").unwrap();
+    fs::set_permissions(&bun, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut launch = json!({"command":[bun,"-e","console.log(1)"],"workspace":workspace,
+        "cwd":workspace,"home":home,"platform":"darwin","backend_executable":"/usr/bin/true",
+        "search_path":""});
+    let result = evaluate("prepare_inline", &launch);
+    let plan = &result["value"];
+    assert_eq!(plan["profile_version"], "node-eval-readonly-v1", "{plan}");
+    assert_eq!(plan["command"], json!([bun, "-e", "console.log(1)"]));
+    assert_eq!(
+        plan["denied_capabilities"],
+        json!([
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+        ])
+    );
+    launch["command"] = json!([bun, "--print", "1"]);
+    assert_eq!(
+        evaluate("prepare_inline", &launch)["value"]["command"],
+        json!([bun, "--print", "1"])
+    );
+    // Another home's installer, a repository copy, a writable or script image.
+    let invalid = |launch: &Value| {
+        assert_eq!(
+            evaluate("prepare_inline", launch)["reason_code"],
+            "inline_eval_invalid_command",
+            "{launch}"
+        );
+    };
+    let other = fixture.0.join("other-home");
+    fs::create_dir(&other).unwrap();
+    launch["home"] = json!(other);
+    invalid(&launch);
+    launch["home"] = json!(home);
+    let local = workspace.join("bun");
+    fs::copy(&bun, &local).unwrap();
+    launch["command"] = json!([local, "-e", "1"]);
+    invalid(&launch);
+    launch["command"] = json!([bun, "-e", "1"]);
+    fs::set_permissions(&bun, fs::Permissions::from_mode(0o775)).unwrap();
+    invalid(&launch);
+    fs::write(&bun, b"#!/bin/sh\n").unwrap();
+    fs::set_permissions(&bun, fs::Permissions::from_mode(0o755)).unwrap();
+    invalid(&launch);
+    launch["command"] = json!([bun, "run", "-e", "1"]);
+    invalid(&launch);
+}

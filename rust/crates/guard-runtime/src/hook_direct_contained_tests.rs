@@ -1,7 +1,7 @@
 #![cfg(unix)]
 
 use super::request::{cleanup_stale_requests, REQUEST_DIRECTORY_PREFIX, REQUEST_FILE_NAME};
-use super::{route_on, HookDirectDefer, SinkTarget, WORKSPACE_PROFILE};
+use super::{native_shape, route_on, HookDirectDefer, Host, SinkTarget, WORKSPACE_PROFILE};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -37,6 +37,14 @@ fn platform(name: &str) -> fn(&str) -> bool {
         "darwin" => |_| true,
         "linux" => |profile| profile == WORKSPACE_PROFILE,
         _ => |_| false,
+    }
+}
+
+/// A host whose every routed call keeps the daemon's sink.
+fn daemon_sink(platform: fn(&str) -> bool) -> Host {
+    Host {
+        platform,
+        native: |_, _| None,
     }
 }
 
@@ -81,7 +89,7 @@ fn routes_every_vector_as_the_python_router_did() {
             &case["response"],
             case["payload"].as_object().unwrap(),
             &target,
-            platform(case["platform"].as_str().unwrap()),
+            daemon_sink(platform(case["platform"].as_str().unwrap())),
             &temp,
         )
         .unwrap();
@@ -169,25 +177,116 @@ fn the_sink_command_quotes_as_python_shlex_join() {
     }
 }
 
+fn workspace_denial() -> Value {
+    json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": WORKSPACE_PROFILE,
+    })
+}
+
+fn shell_payload(command: &str) -> Map<String, Value> {
+    serde_json::from_value(json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": command },
+    }))
+    .unwrap()
+}
+
 fn route_shell(
     target: &SinkTarget<'_>,
     temp: &Path,
     command: &str,
 ) -> Result<Option<Value>, HookDirectDefer> {
-    let response = json!({
-        "decision": "deny",
-        "policy_action": "sandbox-required",
-        "reason_code": "native_workspace_containment_required",
-        "required_execution_profile": WORKSPACE_PROFILE,
-    });
-    let payload: Map<String, Value> = serde_json::from_value(json!({
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": { "command": command },
-    }))
-    .unwrap();
-    route_on(&response, &payload, target, platform("linux"), temp)
-        .map(|routed| routed.map(|(response, _)| response))
+    route_shell_on(target, temp, command, daemon_sink(platform("linux")))
+}
+
+fn route_shell_on(
+    target: &SinkTarget<'_>,
+    temp: &Path,
+    command: &str,
+    host: Host,
+) -> Result<Option<Value>, HookDirectDefer> {
+    route_on(
+        &workspace_denial(),
+        &shell_payload(command),
+        target,
+        host,
+        temp,
+    )
+    .map(|routed| routed.map(|(response, _)| response))
+}
+
+#[test]
+fn a_native_sink_runs_the_snapshot_through_the_runtime_itself() {
+    let root = scratch("native");
+    let temp = root.join("tmp");
+    let workspace = root.join("work space").to_str().unwrap().to_owned();
+    // The daemon's launcher may be gone: the native sink does not need it.
+    let missing = vec![root.join("gone").to_str().unwrap().to_owned()];
+    let target = SinkTarget {
+        command: &missing,
+        harness: "claude-code",
+        guard_home: "/g",
+        home_dir: "/h",
+        workspace: &workspace,
+    };
+    let host = Host {
+        platform: platform("darwin"),
+        native: |_, _| Some("/opt/guard/guard-runtime".to_owned()),
+    };
+    let routed = route_shell_on(&target, &temp, "pytest -q", host)
+        .unwrap()
+        .unwrap();
+    let sink = routed["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .unwrap();
+    assert!(
+        sink.starts_with("/opt/guard/guard-runtime contained-workspace-sink --harness claude-code --guard-home /g --workspace "),
+        "{sink}"
+    );
+    assert!(sink.ends_with(" --home /h"), "{sink}");
+    let request_file = format!(" --request-file {}/", temp.display());
+    assert!(sink.contains(&request_file), "{sink}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn only_plain_workspace_runs_take_the_native_sink() {
+    let denial = workspace_denial();
+    let input = |command: &str| {
+        shell_payload(command)["tool_input"]
+            .as_object()
+            .unwrap()
+            .clone()
+    };
+    assert!(native_shape(&denial, &input("pytest -q tests")));
+    assert!(native_shape(
+        &denial,
+        &input("npm test && cargo fmt --check")
+    ));
+    for command in [
+        "pytest | tee log",
+        "pytest 2>&1",
+        "pytest; echo $?",
+        "ls ~/work",
+        "  cd sub && pytest",
+        "npm --prefix web test",
+        "git -C sub status",
+    ] {
+        assert!(!native_shape(&denial, &input(command)), "{command}");
+    }
+    let mut moved = input("pytest");
+    moved.insert("cwd".to_owned(), json!("/elsewhere"));
+    assert!(!native_shape(&denial, &moved));
+    let mut publish = denial.clone();
+    publish["reason"] = json!(crate::contained_workspace_sink::PUBLISH_REASON);
+    assert!(!native_shape(&publish, &input("pytest && git push")));
+    let mut other = denial.clone();
+    other["reason_code"] = json!("native_test_containment_required");
+    assert!(!native_shape(&other, &input("pytest")));
 }
 
 #[test]
@@ -219,6 +318,28 @@ fn a_launcher_removed_since_the_publish_defers_and_an_oversized_call_stays_denie
         Err(HookDirectDefer::ContainedRouteFailed)
     );
     assert!(requests(&temp).is_empty());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_zcode_call_runs_the_sink_under_its_own_harness() {
+    let root = scratch("zcode");
+    let temp = root.join("tmp");
+    let workspace = root.join("work space").to_str().unwrap().to_owned();
+    let command = vec![launcher()];
+    let target = SinkTarget {
+        command: &command,
+        harness: "zcode",
+        guard_home: "/g",
+        home_dir: "/h",
+        workspace: &workspace,
+    };
+    let routed = route_shell(&target, &temp, "pytest").unwrap().unwrap();
+    let sink = routed["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .unwrap();
+    assert!(sink.contains(" --harness zcode --guard-home /g "), "{sink}");
+    assert!(sink.ends_with(" --home /h"), "{sink}");
     fs::remove_dir_all(root).unwrap();
 }
 

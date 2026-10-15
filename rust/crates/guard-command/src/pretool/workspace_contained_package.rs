@@ -3,6 +3,14 @@
 //! Scripts, builds, tests and version probes run workspace code the sandbox
 //! bounds. Registry verbs and every other package ecosystem keep their
 //! existing admission.
+//!
+//! Cargo stays out even with a committed `Cargo.lock` and `--locked`. Its
+//! `build.rs` scripts and proc macros run dependency code like npm scripts,
+//! but a Node project keeps its tools and dependencies in `node_modules`
+//! inside the workspace. A rustup toolchain lives in `~/.rustup` and crate
+//! sources in `~/.cargo/registry`, beside `~/.cargo/credentials.toml`, all
+//! outside what the sandbox may read, so a contained `cargo check` cannot
+//! start. Admitting it needs read grants for those trees first.
 use crate::CanonicalCommandV1;
 
 // Node package managers. Their scripts, builds, tests and version probes run
@@ -98,8 +106,13 @@ const REGISTRY_VERBS: &[&str] = &[
 /// Whether every package-manager segment is a Node manager running a local
 /// verb. A registry verb anywhere before `--` keeps the whole command out, so
 /// option spellings that hide the verb from a parser cannot slip one through.
-pub(super) fn local_package_work(model: &CanonicalCommandV1) -> bool {
+/// With `installed_runners`, the caller has proved every package runner starts
+/// an installed project tool, so those segments count as local work.
+pub(super) fn local_package_work(model: &CanonicalCommandV1, installed_runners: bool) -> bool {
     model.segments.iter().all(|segment| {
+        if installed_runners && super::runner::runner_arguments(segment).is_some() {
+            return true;
+        }
         let Some(executable) = segment.executable.as_deref() else {
             return false;
         };
@@ -138,3 +151,7 @@ pub(super) fn local_package_work(model: &CanonicalCommandV1) -> bool {
                 .any(|argument| REGISTRY_VERBS.contains(&argument.to_ascii_lowercase().as_str()))
     })
 }
+
+#[cfg(test)]
+#[path = "workspace_contained_cargo_tests.rs"]
+mod cargo_tests;

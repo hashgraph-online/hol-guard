@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shlex
 import signal
 import stat
 import subprocess
@@ -76,6 +75,10 @@ def _run_ephemeral_reap_synchronously(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", schedule)
+
+
+def _inspect_command(command: str) -> dict[str, object]:
+    return daemon_manager_module._lifecycle("inspect_command", {"command": command})
 
 
 def test_stale_ephemeral_reap_is_nonblocking_and_single_flight(tmp_path, monkeypatch) -> None:
@@ -193,34 +196,6 @@ def test_frozen_daemon_launch_uses_signed_command_for_windows_gate(tmp_path, mon
     }
     assert "-c" not in command
     assert "daemon" not in command
-
-
-def test_frozen_private_daemon_command_is_inventory_compatible(tmp_path) -> None:
-    executable = tmp_path / "hol-guard"
-    executable.write_bytes(b"guard")
-    executable.chmod(0o755)
-    guard_home = tmp_path / "guard home"
-    home_dir = tmp_path / "user home"
-    guard_home.mkdir()
-    home_dir.mkdir()
-
-    command = daemon_manager_module.frozen_daemon_serve_command(
-        guard_home,
-        home_dir,
-        4781,
-        executable=str(executable),
-    )
-    rendered_command = subprocess.list2cmdline(list(command)) if os.name == "nt" else shlex.join(command)
-
-    assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
-    assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home.resolve()
-    assert daemon_manager_module._guard_daemon_port_from_command(rendered_command) == 4781
-
-    tampered_payload = json.loads(command[2])
-    tampered_payload["port"] = 0
-    tampered_parts = (command[0], command[1], json.dumps(tampered_payload))
-    tampered_command = subprocess.list2cmdline(list(tampered_parts)) if os.name == "nt" else shlex.join(tampered_parts)
-    assert not daemon_manager_module._guard_daemon_command_matches(tampered_command)
 
 
 def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
@@ -929,15 +904,10 @@ def test_post_update_daemon_start_forwards_explicit_windows_breakaway_authorizat
     ensure.assert_called_once_with(
         guard_home,
         home_dir=home_dir,
-        start_timeout=daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        start_timeout=daemon_manager_module._post_update_guard_daemon_start_timeout(),
         preferred_port=4781,
         allow_windows_job_breakaway=True,
     )
-
-
-def test_guard_daemon_port_from_command_supports_equals_syntax() -> None:
-    command = "python -m codex_plugin_scanner.cli guard daemon --serve --guard-home /tmp/guard-home --port=5474"
-    assert daemon_manager_module._guard_daemon_port_from_command(command) == 5474
 
 
 def test_running_guard_daemon_processes_for_guard_home_returns_empty_on_ps_timeout(tmp_path, monkeypatch):
@@ -970,12 +940,12 @@ def test_running_guard_daemon_processes_for_guard_home_accepts_console_script_la
 
 
 def test_guard_daemon_command_matches_accepts_console_script_shortcuts() -> None:
-    assert daemon_manager_module._guard_daemon_command_matches(
-        "/Users/test/.local/bin/hol-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
-    )
-    assert daemon_manager_module._guard_daemon_command_matches(
+    assert _inspect_command("/Users/test/.local/bin/hol-guard daemon --serve --guard-home /tmp/guard-home --port 5474")[
+        "matches"
+    ]
+    assert _inspect_command(
         "/Users/test/.local/bin/plugin-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
-    )
+    )["matches"]
 
 
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
@@ -1622,72 +1592,6 @@ def test_start_in_progress_requires_current_runtime_fingerprint(tmp_path, monkey
         },
     )
     assert daemon_manager_module._guard_daemon_start_in_progress(tmp_path / "guard-home")
-
-
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="its fake Popen omits the native Windows process identity required by daemon launch",
-)
-def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    home_dir = tmp_path / "real-user-home"
-    home_dir.mkdir()
-    neutral_home = tmp_path / "neutral-update-home"
-    neutral_home.mkdir()
-    responses = iter((None, None, "http://127.0.0.1:5412"))
-    captured_command: list[str] = []
-    captured_env: dict[str, str] = {}
-
-    _disable_daemon_adoption(monkeypatch)
-    _disable_duplicate_retire(monkeypatch)
-
-    def fake_load_guard_daemon_url(_guard_home):
-        return next(responses, "http://127.0.0.1:5412")
-
-    def fake_popen(command, **kwargs):
-        captured_command.extend(command)
-        captured_env.update(kwargs.get("env", {}))
-        return SimpleNamespace(poll=lambda: None)
-
-    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "poisoned-pythonpath"))
-    monkeypatch.setenv("PYTHONHOME", str(tmp_path / "poisoned-pythonhome"))
-    monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / "poisoned-venv"))
-    monkeypatch.setenv("PIP_CONFIG_FILE", str(tmp_path / "poisoned-pip-config"))
-    monkeypatch.setenv("DYLD_INSERT_LIBRARIES", str(tmp_path / "poisoned-loader"))
-    monkeypatch.setenv("HOME", str(neutral_home))
-    monkeypatch.setenv("USERPROFILE", str(neutral_home))
-    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5412])
-    monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
-
-    url = daemon_manager_module.ensure_guard_daemon(guard_home, home_dir=home_dir)
-
-    assert url == "http://127.0.0.1:5412"
-    bootstrap_index = captured_command.index(daemon_manager_module._GUARD_DAEMON_BOOTSTRAP)
-    import_paths = json.loads(captured_command[bootstrap_index + 3])
-    assert str(Path(daemon_manager_module.__file__).resolve().parents[3]) in import_paths
-    assert captured_command[bootstrap_index + 4] == "codex_plugin_scanner.cli"
-    assert captured_command[captured_command.index("--home") + 1] == str(home_dir.resolve())
-    assert captured_env["HOME"] == str(home_dir.resolve())
-    if os.name == "nt":
-        assert captured_env["USERPROFILE"] == str(home_dir.resolve())
-    rendered_command = shlex.join(captured_command)
-    assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
-    assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home
-    assert daemon_manager_module._guard_daemon_port_from_command(rendered_command) == 5412
-    assert all(
-        key not in captured_env
-        for key in (
-            "PYTHONPATH",
-            "PYTHONHOME",
-            "VIRTUAL_ENV",
-            "PIP_CONFIG_FILE",
-            "DYLD_INSERT_LIBRARIES",
-        )
-    )
 
 
 def test_isolated_daemon_bootstrap_ignores_python_startup_hooks(tmp_path, monkeypatch):

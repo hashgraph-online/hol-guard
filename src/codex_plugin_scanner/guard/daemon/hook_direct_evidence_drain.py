@@ -7,9 +7,12 @@ channel and records them exactly as the daemon path does. After a
 command activity, and the command-line observation; after a reviewed
 ``PostToolUse`` it is the receipt, the binding capture, and the post-tool
 command activity; after a ``UserPromptSubmit`` it is the receipt and the
-binding capture alone. The publisher advertises the drain in the
+binding capture alone. A tool call the native MCP relay decided is recorded
+by ``mcp_relay_evidence_drain`` as the proxy records it. The publisher advertises the drain in the
 direct-lane binding only while it runs, so a resident never answers directly
-for a daemon that would leave the evidence behind.
+for a daemon that would leave the evidence behind. A page from a current
+resident also carries its diagnostic hook counts, which go to
+``hook_direct_counters`` for the daemon log and nowhere else.
 """
 
 from __future__ import annotations
@@ -23,13 +26,31 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from ..native_policy_snapshot_direct_lane import DIRECT_HOOK_EVIDENCE_FEATURE
+from .hook_direct_counters import HookCounterLog
 
 _DRAIN_SCHEMA = "guard-hook-direct-evidence.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
 _DRAIN_TIMEOUT_SECONDS = 2.0
 # Pages per wake-up, so a backlog drains without starving shutdown.
 _MAX_PAGES_PER_WAKE = 8
-_DIRECT_HARNESSES = frozenset({"codex", "claude-code", "cursor"})
+_DIRECT_HARNESSES = frozenset(
+    {
+        "codex",
+        "claude-code",
+        "cursor",
+        "copilot",
+        "kimi",
+        "devin",
+        "zcode",
+        "openclaw",
+        "hermes",
+        "cline",
+        "opencode",
+        "grok",
+        "pi",
+        "omp",
+    }
+)
 _PRE_TOOL_USE = "PreToolUse"
 _POST_TOOL_USE = "PostToolUse"
 _USER_PROMPT_SUBMIT = "UserPromptSubmit"
@@ -55,7 +76,11 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     from .hook_managed_install_state import _hook_harness_is_unmanaged
     from .hook_native_cli_observer import observe_native_pre_tool_cli
     from .hook_worker_native import _record_native_pre_activity
+    from .mcp_relay_evidence_drain import is_mcp_relay_evidence, record_mcp_relay_evidence
 
+    if is_mcp_relay_evidence(record):
+        # A relayed MCP tool call, recorded as the proxy records it.
+        return record_mcp_relay_evidence(host.store, host.guard_home, record)
     if not isinstance(record, Mapping):
         return False
     harness = record.get("harness")
@@ -106,7 +131,9 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     return True
 
 
-def _decode_page(output: bytes | None) -> tuple[list[object], int, tuple[str, int] | None] | None:
+def _decode_page(
+    output: bytes | None, counters: HookCounterLog | None = None
+) -> tuple[list[object], int, tuple[str, int] | None] | None:
     if not output:
         return None
     try:
@@ -121,6 +148,9 @@ def _decode_page(output: bytes | None) -> tuple[list[object], int, tuple[str, in
     epoch = page.get("epoch")
     if not isinstance(records, list) or isinstance(remaining, bool) or not isinstance(remaining, int):
         return None
+    if counters is not None and "counters" in page:
+        # Diagnostics only; a page from an older resident has none.
+        counters.observe_page(epoch, page.get("counters"))
     if through is None:
         return records, remaining, None
     if isinstance(through, bool) or not isinstance(through, int) or through < 1:
@@ -150,6 +180,8 @@ class DirectHookEvidenceDrain:
         self.rejected = 0
         self.failures = 0
         self._ack: tuple[str, int] | None = None
+        counters = getattr(host, "hook_counters", None)
+        self._counters = counters if isinstance(counters, HookCounterLog) else None
 
     def start(self) -> None:
         if self._thread is not None:
@@ -170,6 +202,16 @@ class DirectHookEvidenceDrain:
     def drain_once(self) -> bool:
         """Drain up to a few pages; return whether more records remain."""
 
+        try:
+            return self._drain_pages()
+        finally:
+            # Every poll, so daemon receipts are logged even when no drain
+            # transport is available.
+            if self._counters is not None:
+                with suppress(Exception):
+                    self._counters.maybe_log()
+
+    def _drain_pages(self) -> bool:
         for _ in range(_MAX_PAGES_PER_WAKE):
             page = self._fetch_page()
             if page is None:
@@ -202,6 +244,9 @@ class DirectHookEvidenceDrain:
         payload = json.dumps(
             {
                 "operation": "hook_direct_evidence_drain",
+                # Without a budget the resident client falls back to 750 ms,
+                # shorter than this request's own deadline.
+                "deadline_budget_ms": int(_DRAIN_TIMEOUT_SECONDS * 1_000),
                 "request": request,
             },
             separators=(",", ":"),
@@ -216,7 +261,7 @@ class DirectHookEvidenceDrain:
             )
         except Exception:
             output = None
-        page = _decode_page(output)
+        page = _decode_page(output, self._counters)
         if page is None:
             self.failures += 1
         return page

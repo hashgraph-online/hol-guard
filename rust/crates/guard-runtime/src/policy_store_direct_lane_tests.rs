@@ -249,6 +249,14 @@ fn malformed_binding_rejects_the_push_without_installing_it() {
         json!({"workspaces": [], "inputs": [{"path": "/a", "stat": null}, {"path": "/a", "stat": null}]}),
         json!({"workspaces": [], "inputs": [], "extra": true}),
         json!({"workspaces": [], "inputs": [{"path": "/a", "stat": {"mtime_ns": 1, "size": 1, "ino": 1}}]}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bw+c", "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "", "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc", "integrity_key_id": ""}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc", "integrity_key_id": "a\nb"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "A".repeat(2049), "integrity_key_id": "synthetic:1"}),
+        json!({"workspaces": [], "inputs": [], "integrity_key_b64": "Bwc", "integrity_key_id": "k".repeat(257)}),
     ] {
         assert!(push(&fixture, Some(direct_lane)).is_err());
         assert_eq!(fixture.store.current_generation(), None);
@@ -290,4 +298,66 @@ fn defer_reasons_name_the_daemon_path() {
         DirectLaneDefer::InputChanged.code(),
         "direct_lane_input_changed"
     );
+}
+
+#[test]
+fn the_bound_integrity_key_is_admitted_only_with_a_current_ack() {
+    let fixture = fixture("integrity-key");
+    let mut bound = binding(&fixture, "/work/repo");
+    bound["integrity_key_b64"] = json!("BwcHBw");
+    bound["integrity_key_id"] = json!("synthetic:07070707");
+    push(&fixture, Some(bound)).unwrap();
+    assert_eq!(
+        fixture.store.admit_direct_binding().err(),
+        Some(DirectLaneDefer::AckMissing)
+    );
+    write_current_ack(&fixture);
+    let admitted = fixture.store.admit_direct_binding().unwrap();
+    let key = admitted.integrity_key.as_ref().unwrap();
+    assert_eq!(key.key.as_slice(), &[7, 7, 7, 7]);
+    assert_eq!(key.key_id, "synthetic:07070707");
+
+    // A binding without the key still admits; the hooks that need it defer.
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    write_current_ack(&fixture);
+    assert!(fixture
+        .store
+        .admit_direct_binding()
+        .unwrap()
+        .integrity_key
+        .is_none());
+}
+
+#[test]
+fn review_facts_bind_when_present_and_read_as_absent_otherwise() {
+    let fixture = fixture("review-facts");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    write_current_ack(&fixture);
+    let review = fixture.store.admit_direct_binding().unwrap().review.clone();
+    assert_eq!(review, super::DirectLaneReviewFacts::default());
+
+    let mut bound = binding(&fixture, "/work/repo");
+    bound["blocked_request_mode"] = json!("ask");
+    bound["approval_center_origin"] = json!("http://[::1]:4781");
+    bound["review_oauth_source"] = json!("default");
+    bound["review_host_cwd"] = json!("/work/repo");
+    push(&fixture, Some(bound.clone())).unwrap();
+    let review = fixture.store.admit_direct_binding().unwrap().review.clone();
+    assert_eq!(review.blocked_request_mode.as_deref(), Some("ask"));
+    assert_eq!(
+        review.approval_center_origin.as_deref(),
+        Some("http://[::1]:4781")
+    );
+    assert_eq!(review.review_oauth_source.as_deref(), Some("default"));
+    assert_eq!(review.review_host_cwd.as_deref(), Some("/work/repo"));
+
+    // A fact the resident cannot accept costs only that fact, never the lane.
+    bound["approval_center_origin"] = json!("http://192.168.1.10:4781");
+    bound["blocked_request_mode"] = json!("prompt");
+    push(&fixture, Some(bound)).unwrap();
+    assert!(fixture.store.admit_direct_lane("/work/repo").is_ok());
+    let review = fixture.store.admit_direct_binding().unwrap().review.clone();
+    assert_eq!(review.approval_center_origin, None);
+    assert_eq!(review.blocked_request_mode, None);
+    assert_eq!(review.review_oauth_source.as_deref(), Some("default"));
 }

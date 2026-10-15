@@ -255,3 +255,131 @@ def test_workspace_registered_after_capture_is_not_compiled_into_the_ack(
         assert not publisher._policy_input_changed()
     finally:
         publisher.close()
+
+
+def _subdirectory_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[NativePolicySnapshotPublisher, worker_module.HookWorker, Path]:
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    monkeypatch.setattr(publisher, "start", lambda: None)
+    monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
+    return publisher, worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False), existing
+
+
+def test_file_less_subdirectory_uses_the_current_ack_while_it_publishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, worker, existing = _subdirectory_worker(tmp_path, monkeypatch)
+    nested = existing / "src" / "pkg"
+    nested.mkdir(parents=True)
+    try:
+        binding = publisher.current_snapshot_binding()
+        started = time.monotonic()
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 2.0) == binding
+        assert time.monotonic() - started < 0.5, "A covered subdirectory must not wait for its own publish"
+        assert publisher.workspace_policy_pending(nested), "The next publish still compiles the subdirectory"
+
+        publisher._publish_once()
+        assert not publisher.workspace_policy_pending(nested)
+    finally:
+        publisher.close()
+
+
+def test_file_less_subdirectory_does_not_renew_the_acked_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
+    worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
+    publisher.start()
+    nested = existing / "src" / "pkg"
+    nested.mkdir(parents=True)
+    try:
+        assert publisher.wait_until_ready(time.monotonic() + 5.0, workspace=existing)
+        binding = publisher.current_snapshot_binding()
+        started = time.monotonic()
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 2.0) == binding
+        assert time.monotonic() - started < 0.5
+        assert publisher._renewal_after_generation is None
+        # The publisher thread is live. A queued renewal would replace this ACK.
+        time.sleep(0.6)
+        assert publisher.current_snapshot_binding() == binding
+        assert publisher.workspace_policy_pending(nested)
+    finally:
+        publisher.close()
+
+
+def test_deferred_subdirectory_that_gains_an_overlay_queues_its_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, worker, existing = _subdirectory_worker(tmp_path, monkeypatch)
+    nested = existing / "src"
+    nested.mkdir()
+    try:
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 2.0) is not None
+        publisher._publish_event.clear()
+
+        (nested / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 0.1) is None
+        assert publisher._publish_event.is_set(), "The new overlay must queue its own publish"
+
+        publisher._publish_once()
+        assert not publisher.workspace_policy_pending(nested)
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 0.5) is not None
+    finally:
+        publisher.close()
+
+
+@pytest.mark.parametrize("overlay", [".hol-guard.toml", ".ai-plugin-scanner-guard.toml"])
+def test_subdirectory_with_its_own_overlay_waits_for_its_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overlay: str
+) -> None:
+    publisher, worker, existing = _subdirectory_worker(tmp_path, monkeypatch)
+    nested = existing / "src"
+    nested.mkdir()
+    (nested / overlay).write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+    try:
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 0.1) is None
+        assert not publisher.workspace_admissible_without_overlay(nested)
+    finally:
+        publisher.close()
+
+
+def test_unrelated_file_less_workspace_still_waits_for_its_ack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, worker, _existing = _subdirectory_worker(tmp_path, monkeypatch)
+    sibling = tmp_path / "sibling"
+    sibling.mkdir()
+    try:
+        assert worker.prepare_workspace_policy(sibling, deadline=time.monotonic() + 0.1) is None
+    finally:
+        publisher.close()
+
+
+def test_subdirectory_of_a_pending_workspace_is_not_covered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, worker, _existing = _subdirectory_worker(tmp_path, monkeypatch)
+    parent = tmp_path / "parent"
+    nested = parent / "src"
+    nested.mkdir(parents=True)
+    (parent / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+    try:
+        assert publisher.register_workspace(parent)
+        assert worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 0.1) is None
+    finally:
+        publisher.close()
+
+
+def test_linked_subdirectory_still_waits_for_its_ack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, worker, existing = _subdirectory_worker(tmp_path, monkeypatch)
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    linked = existing / "linked"
+    try:
+        linked.symlink_to(target, target_is_directory=True)
+    except OSError:
+        publisher.close()
+        pytest.skip("symlinks unavailable")
+    try:
+        assert worker.prepare_workspace_policy(linked, deadline=time.monotonic() + 0.1) is None
+        assert worker.prepare_workspace_policy(existing / "linked" / "..", deadline=time.monotonic() + 0.1) is None
+    finally:
+        publisher.close()

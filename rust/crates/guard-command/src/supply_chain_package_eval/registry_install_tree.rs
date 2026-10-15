@@ -1,6 +1,6 @@
-//! Git-free proof for installs on npm releases without `--allow-git`.
+//! Git-free proof for installs that do not refuse git dependencies.
 //!
-//! Before npm 11.9 an install cannot refuse git dependencies, and a git
+//! Without `--allow-git=none`, which only npm 11.9 and later accept, a git
 //! dependency anywhere in the tree is cloned and prepared with a nested
 //! `npm install` even under `--ignore-scripts`. A tree with no git dependency
 //! never takes that path, so `--ignore-scripts` alone keeps package code from

@@ -92,7 +92,7 @@ def _answering(body: dict[str, object], status: int) -> list[str]:
     ]
 
 
-@pytest.mark.skipif(os.name != "posix", reason="the native bounded bridge is POSIX-only")
+@pytest.mark.skipif(os.name != "posix", reason="asserts POSIX paths and hook command syntax")
 def test_plugin_reviews_through_the_native_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     _offer_native(monkeypatch, runtime)

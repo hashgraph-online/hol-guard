@@ -1709,6 +1709,12 @@ fn _semantic_safe_relative(
         "guard-home",
     ];
     if _is_protected_path(rel)
+        || crate::harness_config_names::path_parts_protected(rel.components().filter_map(
+            |component| match component {
+                std::path::Component::Normal(part) => part.to_str(),
+                _ => None,
+            },
+        ))
         || rel.components().any(|component| {
             let part = component.as_os_str().to_string_lossy().to_lowercase();
             part.starts_with(".env") || SEMANTIC_PROTECTED_NAMES.contains(&part.as_str())

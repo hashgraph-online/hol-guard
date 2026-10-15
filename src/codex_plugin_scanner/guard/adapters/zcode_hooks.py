@@ -153,10 +153,6 @@ def emit_zcode_hook_response(
     stream.flush()
 
 
-def zcode_hook_should_block(*, policy_action: str) -> bool:
-    return policy_action in _ZCODE_BLOCKING_ACTIONS
-
-
 def zcode_hook_process_exit(
     *,
     policy_action: str,
@@ -187,5 +183,4 @@ __all__ = [
     "zcode_authority_block_reason",
     "zcode_hook_process_exit",
     "zcode_hook_response_from_guard",
-    "zcode_hook_should_block",
 ]

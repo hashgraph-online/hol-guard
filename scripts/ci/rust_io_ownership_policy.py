@@ -46,6 +46,7 @@ _COMPATIBILITY_PATHS: Final = frozenset(
 _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
+        "src/codex_plugin_scanner/guard/native_developer_inspection_authority.py",
         "src/codex_plugin_scanner/guard/native_restricted_pytest.py",
         # Payload-reference metadata validation; the native edge reads bytes.
         "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
@@ -147,10 +148,14 @@ _TRANSPORT_AUTHORITY_PATHS: Final = frozenset(
     {
         # Strict owner-checked native command-control lock and marker transport.
         "src/codex_plugin_scanner/guard/native_command_control_authority_io.py",
+        # Locates the trusted Windows directory a contained-test request is
+        # handed through; it reads no file content.
+        "src/codex_plugin_scanner/guard/windows_paths.py",
     }
 )
 _TRANSPORT_DECODE_PATHS: Final = frozenset(
     {
+        "src/codex_plugin_scanner/guard/native_developer_inspection_authority.py",
         # Strict DTO decoding of request-bound rich parser replies; semantics are native.
         "src/codex_plugin_scanner/guard/native_rich_command_model.py",
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
@@ -231,8 +236,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident runtime-detector-run response envelope.
         "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
-        # Transports the native environment-secret classifier; no local script reads.
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/environment_secret_dump.py",
         # Decodes the bounded resident runner-authority response envelope and
         # projects typed runner state to it; Rust owns every authority answer.
         "src/codex_plugin_scanner/guard/native_runner_authority.py",
@@ -359,9 +362,7 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_native_search.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",
@@ -369,7 +370,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/package_shim_frozen.py",
         "src/codex_plugin_scanner/guard/package_shim_status.py",
         "src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py",
-        "src/codex_plugin_scanner/guard/runtime/_shell_secret_read_support.py",
         "src/codex_plugin_scanner/guard/runtime/actions.py",
         "src/codex_plugin_scanner/guard/runtime/approval_context.py",
         "src/codex_plugin_scanner/guard/runtime/browser_mcp_intent.py",
@@ -404,25 +404,17 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/package_intent_common.py",
         "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
         "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
-        "src/codex_plugin_scanner/guard/runtime/read_only_git_audit.py",
         "src/codex_plugin_scanner/guard/runtime/routine_local_node.py",
         "src/codex_plugin_scanner/guard/runtime/routine_node_identity.py",
         "src/codex_plugin_scanner/guard/runtime/runner.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/credential_exfiltration.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/interpreter_launch.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/interpreter_observers.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/interpreter_trust.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/local_read_operands.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/request_artifacts.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/sensitive_read_pipeline.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_quote_parsing.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_static_safety.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/tool_action_requests.py",
         "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py",
-        "src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py",
         "src/codex_plugin_scanner/guard/runtime/skill_paths.py",
         "src/codex_plugin_scanner/guard/runtime/supply_chain_bundle_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/typescript_launch_evidence.py",

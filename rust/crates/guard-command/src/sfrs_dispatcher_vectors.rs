@@ -348,6 +348,32 @@ fn host_only_difference(fields: &str) -> bool {
         })
 }
 
+/// The recorded security identity of an upload operand hashes the absolute
+/// scratch path the recorder happened to use. A per-user temp directory
+/// (macOS `/var/folders/<hash>/T`) differs on every machine, so those four
+/// vectors can match only on the recording host. On macOS a mismatch is
+/// tolerated only when it names `marker`, differs in nothing but the security
+/// identity, and stays within `limit` vectors.
+fn root_dependent_identities(failures: Vec<String>, marker: &str, limit: usize) -> Vec<String> {
+    let mut tolerated = 0usize;
+    failures
+        .into_iter()
+        .filter(|failure| {
+            let only_identity = failure.contains(marker)
+                && failure.lines().any(|line| {
+                    line.trim_start().starts_with("differ ")
+                        && host_only_difference(line.trim_start().trim_start_matches("differ "))
+                        && !line.contains("interpreter_executable_identities")
+                });
+            if only_identity && tolerated < limit {
+                tolerated += 1;
+                return false;
+            }
+            true
+        })
+        .collect()
+}
+
 /// Set in the child process that replays the vectors from `proj`.
 const REPLAY_CHILD_ENV: &str = "HOL_GUARD_SFRS_DISPATCHER_REPLAY_CHILD";
 
@@ -445,6 +471,13 @@ fn replay_from_proj() {
         ],
     );
     other_failures.extend(host_failures);
+    // Off macOS `portable_failures` already spent the four-vector budget for
+    // the upload identities; only macOS needs this separate allowance.
+    let other_failures = if cfg!(target_os = "macos") {
+        root_dependent_identities(other_failures, "curl -F f=@", 4)
+    } else {
+        other_failures
+    };
     assert!(
         other_failures.is_empty(),
         "{counts:?}\n{kinds:#?}\n{}",

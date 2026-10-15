@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from .catalog import load_catalog
+from .parallel import qualification_jobs
 from .provider import REASONING_EFFORTS
 
 
@@ -138,7 +139,10 @@ def main() -> int:
     qualify.add_argument("--sha", required=True, help="Full commit of the tested source or test merge")
     qualify.add_argument("--candidate-sha", help="PR head when qualifying its exact two-parent test merge")
     qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-3)")
-    qualify.add_argument("--jobs", type=int, default=4)
+    qualify.add_argument(
+        "--jobs", type=int, default=qualification_jobs(),
+        help="Concurrent isolated cases (default: half the host CPUs, bounded to 1-8)",
+    )
     qualify.add_argument(
         "--host-slots",
         type=int,

@@ -11,9 +11,13 @@
 //! file can whitelist a hidden file such as `.env`, and `rg` searches inside a
 //! directory named on its command line even when that directory is ignored.
 //! So every component between the repository root and the named directory
-//! must be visible and not plainly ignored, and any `.ignore` or `.rgignore`
-//! file, or any negated pattern in a `.gitignore` or the repository's
-//! `info/exclude`, sends the search to review.
+//! must be visible, or a hidden project-metadata directory such as `.github`,
+//! and not plainly ignored, and any `.ignore` or `.rgignore` file sends the
+//! search to review. A negated pattern in a `.gitignore` or the repository's
+//! `info/exclude` is admitted only when it re-includes a literal path, such
+//! as `!.gitkeep` or `!.vscode/settings.json`, whose name is not a secret and
+//! that this walk does not prune; hidden entries with that name are then
+//! screened like any other descendant.
 use super::{tree, ReadContext};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -53,8 +57,9 @@ pub(in crate::pretool) fn rg_sibling_repository_root(
         && super::super::git_routes::repository_below_home(root, context)
         && no_whitelisting_ancestor(&operand, context)
         && match ignored_names(root) {
-            Some(ignored) => {
-                reachable_by_default(root, &operand, &ignored) && walk(root, &operand, &ignored)
+            Some(mut ignored) => {
+                reachable_by_default(root, &operand, &mut ignored)
+                    && walk(root, &operand, &mut ignored)
             }
             None => false,
         }
@@ -63,8 +68,8 @@ pub(in crate::pretool) fn rg_sibling_repository_root(
 /// `rg` searches a named directory even when it is ignored or hidden, and
 /// would then apply no rule this walk prunes by. Each component from the
 /// repository root down to `operand` must be one `rg` reaches on its own, and
-/// each intermediate `.gitignore` must be free of negated patterns.
-fn reachable_by_default(root: &Path, operand: &Path, ignored: &Ignored) -> bool {
+/// each intermediate `.gitignore` may negate only an admitted literal path.
+fn reachable_by_default(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
     let Ok(relative) = operand.strip_prefix(root) else {
         return false;
     };
@@ -76,11 +81,16 @@ fn reachable_by_default(root: &Path, operand: &Path, ignored: &Ignored) -> bool 
         let Some(name) = name.to_str() else {
             return false;
         };
-        if name.starts_with('.') || ignored.prunes(name, index == 0) {
+        // `rg` skips a hidden directory on its own, but searches one named on
+        // its command line. Only a project-metadata name the recursive walk
+        // also admits, such as `.github`, may be named; `.git` never is.
+        let refused_hidden =
+            name.starts_with('.') && !tree::descendant_allowed(&directory.join(name), root, false);
+        if refused_hidden || ignored.prunes(name, index == 0) {
             return false;
         }
         directory.push(name);
-        if directory != operand && optional_ignore_lines(&directory.join(".gitignore")).is_none() {
+        if directory != operand && !ignored.admit_ignore_file(root, &directory) {
             return false;
         }
     }
@@ -112,6 +122,10 @@ fn no_whitelisting_ancestor(operand: &Path, context: ReadContext<'_>) -> bool {
 struct Ignored {
     anywhere: Vec<String>,
     at_root: Vec<String>,
+    /// Final names of the paths negated patterns re-include. `rg` searches
+    /// such an entry even when it is hidden, so the walk screens hidden
+    /// entries with any of these names wherever they appear.
+    whitelisted: Vec<String>,
 }
 
 impl Ignored {
@@ -119,32 +133,83 @@ impl Ignored {
         self.anywhere.iter().any(|ignored| ignored == name)
             || (directly_below_root && self.at_root.iter().any(|ignored| ignored == name))
     }
+
+    fn whitelists(&self, name: &str) -> bool {
+        self.whitelisted
+            .iter()
+            .any(|whitelisted| whitelisted.eq_ignore_ascii_case(name))
+    }
+
+    /// Reads the `.gitignore` in `directory`, if any, and admits its
+    /// negated patterns.
+    fn admit_ignore_file(&mut self, root: &Path, directory: &Path) -> bool {
+        match optional_ignore_lines(&directory.join(".gitignore")) {
+            Some(Some(lines)) => self.admit_negations(root, directory, &lines),
+            Some(None) => true,
+            None => false,
+        }
+    }
+
+    /// Records the negated patterns among `lines`, read from an ignore file
+    /// that applies below `base`. A negation may only re-include a literal
+    /// path whose components this walk never prunes, so a plainly ignored
+    /// directory stays out of `rg`'s reach, and whose name is not a secret
+    /// the descendant screen would refuse.
+    fn admit_negations(&mut self, root: &Path, base: &Path, lines: &[String]) -> bool {
+        for line in lines {
+            let Some(pattern) = line.strip_prefix('!') else {
+                continue;
+            };
+            let pattern = pattern.strip_prefix('/').unwrap_or(pattern);
+            let pattern = pattern.strip_suffix('/').unwrap_or(pattern);
+            let components: Vec<&str> = pattern.split('/').collect();
+            let literal = components.iter().all(|component| plain_name(component));
+            let pruned = components.iter().any(|component| {
+                self.anywhere
+                    .iter()
+                    .chain(&self.at_root)
+                    .any(|ignored| ignored.eq_ignore_ascii_case(component))
+            });
+            let Some(name) = components.last().filter(|_| literal && !pruned) else {
+                return false;
+            };
+            if !tree::descendant_allowed(&base.join(pattern), root, true) {
+                return false;
+            }
+            self.whitelisted.push((*name).to_owned());
+        }
+        true
+    }
+}
+
+/// A name of letters, digits, `_`, `-` and `.` that matches only itself.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
 }
 
 fn ignored_names(root: &Path) -> Option<Ignored> {
     let mut ignored = Ignored {
         anywhere: Vec::new(),
         at_root: Vec::new(),
+        whitelisted: Vec::new(),
     };
+    let mut excludes = Vec::new();
     for git_dir in git_directories(root)? {
-        optional_ignore_lines(&git_dir.join("info/exclude"))?;
+        excludes.extend(optional_ignore_lines(&git_dir.join("info/exclude"))?.unwrap_or_default());
     }
-    let Some(lines) = optional_ignore_lines(&root.join(".gitignore"))? else {
-        return Some(ignored);
-    };
-    for line in lines {
-        let pattern = line.strip_suffix('/').unwrap_or(&line);
+    let lines = optional_ignore_lines(&root.join(".gitignore"))?.unwrap_or_default();
+    for line in &lines {
+        let pattern = line.strip_suffix('/').unwrap_or(line);
         let (anchored, name) = match pattern.strip_prefix('/') {
             Some(name) => (true, name),
             None => (false, pattern),
         };
-        if name.is_empty()
-            || name == "."
-            || name == ".."
-            || !name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
-        {
+        if !plain_name(name) {
             continue;
         }
         if anchored {
@@ -153,7 +218,8 @@ fn ignored_names(root: &Path) -> Option<Ignored> {
             ignored.anywhere.push(name.to_owned());
         }
     }
-    Some(ignored)
+    (ignored.admit_negations(root, root, &excludes) && ignored.admit_negations(root, root, &lines))
+        .then_some(ignored)
 }
 
 /// The git directories whose `info/exclude` `rg` may read: `.git` itself, or
@@ -185,7 +251,7 @@ fn optional_ignore_lines(path: &Path) -> Option<Option<Vec<String>>> {
 }
 
 /// Pattern lines of a bounded regular ignore file, or `None` when the file
-/// cannot be read or negates a pattern.
+/// cannot be read.
 fn ignore_lines(path: &Path) -> Option<Vec<String>> {
     let file = std::fs::File::open(path).ok()?;
     if !file.metadata().ok()?.is_file() {
@@ -204,19 +270,21 @@ fn ignore_lines(path: &Path) -> Option<Vec<String>> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if line.starts_with('!') {
-            return None;
-        }
         lines.push(line.to_owned());
     }
     Some(lines)
 }
 
-fn walk(root: &Path, operand: &Path, ignored: &Ignored) -> bool {
+fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
     let mut pending: Vec<(PathBuf, usize)> = vec![(operand.to_path_buf(), 0)];
     let mut inspected = 0_usize;
     while let Some((directory, depth)) = pending.pop() {
         if depth > MAX_DEPTH {
+            return false;
+        }
+        // The directory's own `.gitignore` applies to its entries, so its
+        // negations are admitted before any entry is screened.
+        if directory != root && !ignored.admit_ignore_file(root, &directory) {
             return false;
         }
         let Ok(entries) = std::fs::read_dir(&directory) else {
@@ -235,15 +303,9 @@ fn walk(root: &Path, operand: &Path, ignored: &Ignored) -> bool {
             if WHITELISTING_FILES.contains(&name) {
                 return false;
             }
-            if name.starts_with('.') {
-                // Hidden entries are skipped by `rg`; nested `.gitignore`
-                // files are read only to rule out a negated pattern.
-                if name == ".gitignore"
-                    && directory != root
-                    && !matches!(optional_ignore_lines(&path), Some(Some(_)))
-                {
-                    return false;
-                }
+            // `rg` skips hidden entries unless a negated pattern re-includes
+            // them; ignore files themselves were read above.
+            if name == ".gitignore" || (name.starts_with('.') && !ignored.whitelists(name)) {
                 continue;
             }
             if ignored.prunes(name, directory == root) {

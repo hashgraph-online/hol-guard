@@ -18,7 +18,7 @@ from typing import Any, cast
 
 from .action_lattice import GuardAction
 from .config import GuardConfig, resolve_risk_action
-from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
+from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_package_authority import _REQUEST_SCHEMA, _RESULT_SCHEMA, _request_id, _resident_request
 
 _APPROVAL_HASH_FEATURE = "package-approval-hash-v1"
@@ -147,30 +147,6 @@ def _transport(
     if not isinstance(payload, dict):
         raise error(f"Native {operation} payload invalid")
     return payload
-
-
-def native_package_current_action(
-    *,
-    artifact: Any,
-    evaluation: Any,
-    config: GuardConfig | None,
-    additional_current_action: object | None = None,
-) -> GuardAction:
-    """Return the resident-composed feed and configuration policy action."""
-
-    request: dict[str, object] = {
-        "kind": "current_action",
-        "artifact": artifact.to_dict(),
-        "evaluation": _evaluation_view(evaluation),
-        "config_policy": package_config_policy_context(artifact=artifact, config=config),
-    }
-    if additional_current_action is not None:
-        request["additional_current_action"] = additional_current_action
-    payload = _transport(request, _resolve_digest_home(config.guard_home if config is not None else None))
-    action = payload.get("current_action")
-    if action not in _GUARD_ACTIONS:
-        raise NativePackageApprovalHashError("Native package approval hash action invalid")
-    return cast(GuardAction, action)
 
 
 def native_package_approval_hash(

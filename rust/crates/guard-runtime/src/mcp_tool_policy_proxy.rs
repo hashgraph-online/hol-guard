@@ -16,7 +16,7 @@ use crate::mcp_proxy_catalog::saved_allow_gate;
 use crate::mcp_proxy_route::route_tool_call;
 use crate::mcp_tool_policy_decision::Decision;
 
-fn facts(decision: &Decision) -> McpToolFactsV1 {
+pub(crate) fn facts(decision: &Decision) -> McpToolFactsV1 {
     McpToolFactsV1 {
         action: decision.action.as_str().to_owned(),
         source: decision.source.clone(),

@@ -199,6 +199,13 @@ pub(super) fn runtime_roots(
         if private.is_some_and(|root| path_is_within(executable, root)) {
             continue;
         }
+        // A venv launcher that links straight to its base interpreter still
+        // needs its own `pyvenv.cfg` and site-packages readable.
+        if let Some(root) = super::venv::launcher_root(executable)
+            .filter(|root| !path_is_within(root, workspace) && !roots.contains(root))
+        {
+            roots.push(root);
+        }
         let aliases = symlink_runtime_roots(executable);
         if !aliases.is_empty() {
             for root in aliases {

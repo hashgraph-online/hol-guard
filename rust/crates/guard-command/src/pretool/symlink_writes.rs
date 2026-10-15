@@ -81,11 +81,15 @@ pub(super) fn safe_symlink_arguments(
 }
 
 /// The canonical parent and file name of a link path that does not exist yet.
+/// `..` may reach a sibling checkout (`../report/node_modules`): the kernel
+/// resolves it against the physical cwd, which canonicalizing the parent
+/// reproduces, and the caller screens that canonical parent.
 fn fresh_link<'a>(link: &'a str, cwd: &Path) -> Option<(PathBuf, &'a str)> {
     let lexical = Path::new(link);
     if lexical
         .components()
-        .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        .any(|component| matches!(component, Component::CurDir))
+        || matches!(link.rsplit('/').next(), Some("." | ".."))
     {
         return None;
     }

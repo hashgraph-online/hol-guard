@@ -13,6 +13,7 @@ from ...version import __version__
 from ..cli.install_commands import list_harness_setup_items
 from ..native_daemon_handler import NativeDaemonHandlerError, native_detection_app_statuses, native_requests_list
 from ..store_approvals import InvalidApprovalCursorError
+from .dashboard_bundle import is_pinned_path, pinned_dashboard_file
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .server_common import _NATIVE_HANDLER_UNAVAILABLE, _is_string_object_dict, _ServerProxy
 from .server_control_health import _HEADLESS_OPERATIONS, _headless_safe_failure_reasons
@@ -247,13 +248,17 @@ class _DashboardSupportRoutes:
         )
 
     def _write_static_asset(self, relative_path: str) -> None:
-        target = (m._STATIC_DIR / relative_path).resolve()
-        if not target.is_file() or m._STATIC_DIR.resolve() not in target.parents:
+        if is_pinned_path(relative_path):
+            body = pinned_dashboard_file(m._STATIC_DIR, relative_path)
+        else:
+            target = (m._STATIC_DIR / relative_path).resolve()
+            in_static_dir = target.is_file() and m._STATIC_DIR.resolve() in target.parents
+            body = target.read_bytes() if in_static_dir else None
+        if body is None:
             self.send_response(404)
             self.end_headers()
             return
-        body = target.read_bytes()
-        content_type, _ = mimetypes.guess_type(str(target))
+        content_type, _ = mimetypes.guess_type(relative_path)
         self.send_response(200)
         self.send_header("Content-Type", content_type or "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
@@ -266,8 +271,8 @@ class _DashboardSupportRoutes:
         self.wfile.write(body)
 
     def _write_dashboard_shell(self) -> None:
-        if m._INDEX_PATH.is_file() and m._ENTRY_PATH.is_file():
-            encoded = m._INDEX_PATH.read_bytes()
+        encoded = pinned_dashboard_file(m._STATIC_DIR, "index.html")
+        if encoded is not None and pinned_dashboard_file(m._STATIC_DIR, "assets/guard-dashboard.js") is not None:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))

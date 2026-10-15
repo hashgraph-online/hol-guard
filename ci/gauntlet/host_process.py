@@ -117,6 +117,10 @@ def realistic_environment(environment: dict[str, str], home: Path) -> dict[str, 
             "PYTHONDONTWRITEBYTECODE": "1",
         }
     )
+    # Developer shells put per-user CLIs such as doctl in ~/.local/bin ahead of the system PATH.
+    local_bin = home / ".local/bin"
+    if "PATH" in environment and local_bin.is_dir():
+        environment["PATH"] = str(local_bin) + os.pathsep + environment["PATH"]
     # Windows resolves DLLs through PATH, so a Windows developer shell carries no loader path.
     if os.name != "nt":
         libraries = home / ".local/lib"

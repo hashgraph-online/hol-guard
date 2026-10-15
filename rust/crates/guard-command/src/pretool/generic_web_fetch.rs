@@ -78,7 +78,7 @@ fn public_dns_host(host: &Host<&str>) -> bool {
         && !name.split('.').any(address_label)
 }
 
-fn plain_public_url(raw: &str) -> bool {
+pub(in crate::pretool) fn plain_public_url(raw: &str) -> bool {
     if raw.len() > MAX_URL_BYTES || raw.trim() != raw {
         return false;
     }

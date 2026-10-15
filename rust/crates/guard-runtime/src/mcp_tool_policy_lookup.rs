@@ -23,7 +23,7 @@ const MAX_CANDIDATES: usize = 8;
 const REVIEW_FLOOR: u8 = 2;
 
 /// Rank of a saved action; an unrecognized action ranks as `block`.
-fn severity(action: Option<&Value>) -> u8 {
+pub(crate) fn severity(action: Option<&Value>) -> u8 {
     match action.and_then(Value::as_str) {
         Some("allow") => 0,
         Some("warn") => 1,
@@ -137,6 +137,7 @@ impl Prober<'_> {
             local_once_integrity_key_b64: input.local_once_integrity_key_b64.clone(),
             local_once_integrity_key_id: input.local_once_integrity_key_id.clone(),
             policy_bundle_decision_identities: input.policy_bundle_decision_identities.clone(),
+            probe_groups: None,
         };
         evaluate_non_consuming(&request, connection).map_err(|_| ERR_LOOKUP)
     }

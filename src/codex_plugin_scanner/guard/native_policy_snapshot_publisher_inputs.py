@@ -37,8 +37,15 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _deferred_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    # The blocked-request mode every config of the last compile agreed on.
+    _compiled_blocked_request_mode: str | None = None
+    # The managed-policy view every config of the last compile agreed on.
+    _compiled_structured_output_view: dict[str, object] | None = None
+    # The MCP relay harness views every config of the last compile agreed on.
+    _compiled_mcp_relay_harnesses: dict[str, object] | None = None
 
     def _current_policy_input_stats(
         self,
@@ -226,6 +233,9 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         """
 
         from .config import load_guard_config
+        from .native_policy_snapshot_direct_lane_mcp_relay import uniform_harness_views
+        from .native_policy_snapshot_direct_lane_review import uniform_blocked_request_mode
+        from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
         from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
@@ -233,9 +243,15 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             if settled_only:
                 selected = selected - self._pending_workspace_paths
             selected_workspaces = tuple(sorted(selected, key=str))
+        # A compile that fails before the view is read binds none.
+        self._compiled_structured_output_view = None
+        self._compiled_mcp_relay_harnesses = None
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
         policy = compose_effective_native_policies(tuple(configs))
+        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
+        self._compiled_structured_output_view = uniform_structured_output_view(configs)
+        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
         except sqlite3.Error as error:

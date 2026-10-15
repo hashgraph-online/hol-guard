@@ -41,9 +41,10 @@ pub(super) fn evaluate(
             PreToolOperationV1::Read,
             matches!(input.get("language")?.as_str()?, "py" | "python")
                 && input.iter().all(|(key, value)| match key.as_str() {
-                    "code" | "language" | "title" => value.is_string(),
-                    "reset" => value.is_boolean(),
-                    "timeout" => value.is_number(),
+                    "code" | "language" => value.is_string(),
+                    "title" => value.is_string() || value.is_null(),
+                    "reset" => value.is_boolean() || value.is_null(),
+                    "timeout" => value.is_number() || value.is_null(),
                     _ => false,
                 })
                 && super::super::pure_expression::python_print_program(code),

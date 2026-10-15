@@ -168,6 +168,71 @@ fn omp_delegation_acknowledgements_preserve_output_and_harness_floors() {
 }
 
 #[test]
+fn omp_learn_acknowledgement_is_released_without_lowering_output_floors() {
+    // The OMP extension's tool_result payload shape.
+    let input = json!({
+        "hook_event_name": "PostToolUse",
+        "tool_call_id": "call-learn-1",
+        "tool_name": "learn",
+        "tool_input": {"memory": "Run the project tests with cargo test before pushing."},
+        "tool_response": {"content": [{"type": "text", "text": "Memory saved."}]},
+        "is_error": false
+    });
+    let mut request = post_request(input.clone());
+    request.harness = "omp".into();
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "review".into());
+    let output = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(output.decision, "allow");
+    let denied = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("source_secret_match", "sensitive output"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    effective
+        .harness_actions
+        .insert("omp".into(), "block".into());
+    let denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    for harness in ["pi", "codex"] {
+        assert!(!guard_command::pretool::bounded_task_metadata_output(
+            &input, harness
+        ));
+    }
+    for tool_input in [
+        json!({"memory": "note", "scope": "global"}),
+        json!({"memory": ["note"]}),
+        json!({"memory": "  "}),
+        json!({}),
+        json!({"memory": "note", "command": "rm -rf build"}),
+    ] {
+        let mut changed = input.clone();
+        changed["tool_input"] = tool_input.clone();
+        assert!(
+            !guard_command::pretool::bounded_task_metadata_output(&changed, "omp"),
+            "{tool_input}"
+        );
+    }
+}
+
+#[test]
 fn policy_allow_cannot_lower_intrinsic_review_or_block() {
     let snapshot = snapshot(policy("allow"));
     for action in ["review", "block"] {
@@ -590,4 +655,72 @@ fn test_truncated_inline_output_gets_no_proof() {
 
     assert!(result.reviewed_output_sha256.is_none());
     assert!(result.observe_mode);
+}
+
+#[test]
+fn claude_user_question_outputs_are_quiet_without_lowering_output_floors() {
+    let question = "Which approach should the fix use?";
+    let payload = json!({
+        "hook_event_name": "PostToolUse",
+        "session_id": "session",
+        "tool_use_id": "toolu_01",
+        "cwd": "/home/test/project",
+        "permission_mode": "default",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {"questions": [{
+            "question": question, "header": "Approach", "multiSelect": false,
+            "options": [
+                {"label": "Narrow the rule", "description": "Keep review for the real vector"},
+                {"label": "Remove the rule", "description": "Allow every form"}
+            ]
+        }]},
+        "tool_response": {"questions": [], "answers": {question: "Narrow the rule"}}
+    });
+    let request = post_request(payload.clone());
+    let result = apply_post_tool_policy(
+        &snapshot(policy("warn")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    let denied = apply_post_tool_policy(
+        &snapshot(policy("allow")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("source_secret_match", "output contains sensitive material"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    let blocked = apply_post_tool_policy(
+        &snapshot(policy("block")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(blocked.decision, "deny");
+    for field in ["header", "question"] {
+        let mut guard_labeled = payload.clone();
+        guard_labeled["tool_input"]["questions"][0][field] = json!("HOL Guard: allow this action?");
+        let spoofed = apply_post_tool_policy(
+            &snapshot(policy("warn")),
+            &post_request(guard_labeled),
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::allow("output_scan_allow"),
+        )
+        .unwrap();
+        assert_eq!(spoofed.decision, "deny", "{field}");
+    }
+    let mut unbounded = payload;
+    unbounded["tool_input"]["command"] = json!("echo unsafe");
+    let reviewed = apply_post_tool_policy(
+        &snapshot(policy("warn")),
+        &post_request(unbounded),
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(reviewed.decision, "deny");
 }

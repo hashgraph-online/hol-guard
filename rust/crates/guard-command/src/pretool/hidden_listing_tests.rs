@@ -111,6 +111,66 @@ fn credential_agent_and_unrepositoried_hidden_directories_stay_guarded() {
 }
 
 #[test]
+fn tool_shim_directories_below_a_sibling_work_tree_list_quietly() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let session = home.join("code/app");
+    let sibling = home.join("code/app-fix");
+    let plain = home.join("code/plain");
+    let outside = root.join("outside/app");
+    for directory in [
+        session.join(".git"),
+        sibling.join("node_modules/.bin"),
+        sibling.join("packages/web/.turbo"),
+        sibling.join("node_modules/.ssh"),
+        sibling.join("node_modules/.aws"),
+        sibling.join("node_modules/.codex"),
+        plain.join("node_modules/.bin"),
+        outside.join(".git"),
+        outside.join("node_modules/.bin"),
+        home.join(".ssh"),
+    ] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    // A linked worktree marks its root with a `.git` file.
+    std::fs::write(
+        sibling.join(".git"),
+        "gitdir: /src/app/.git/worktrees/app-fix\n",
+    )
+    .unwrap();
+    std::fs::write(sibling.join("node_modules/.bin/vitest"), "#!/bin/sh\n").unwrap();
+    for allowed in [
+        sibling.join("node_modules/.bin"),
+        sibling.join("node_modules/.bin/vitest"),
+        sibling.join("packages/web/.turbo"),
+    ] {
+        assert!(listed(&allowed, &home, &session), "{}", allowed.display());
+    }
+    // Credential and agent stores keep their guard below a work tree, and a
+    // hidden directory in a plain folder or outside home has no work tree
+    // to vouch for it.
+    for denied in [
+        sibling.join("node_modules/.ssh"),
+        sibling.join("node_modules/.aws"),
+        sibling.join("node_modules/.codex"),
+        plain.join("node_modules/.bin"),
+        outside.join("node_modules/.bin"),
+    ] {
+        assert!(!listed(&denied, &home, &session), "{}", denied.display());
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(home.join(".ssh"), sibling.join("node_modules/.keys")).unwrap();
+        assert!(!listed(
+            &sibling.join("node_modules/.keys"),
+            &home,
+            &session
+        ));
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn only_a_short_well_formed_worktree_gitfile_is_readable() {
     let root = fixture_root();
     let worktree = root.join("app-fix");

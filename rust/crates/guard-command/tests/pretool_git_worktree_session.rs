@@ -7,9 +7,7 @@
 
 // This session test builds its own execution environment. The shared helper
 // `evaluate_pre_tool_envelope_with_context` stays for the other Git fixtures.
-#[allow(dead_code)]
-#[path = "support/git_helper_fixture.rs"]
-mod fixture;
+use crate::git_helper_fixture as fixture;
 
 use fixture::FixtureCleanup;
 use serde_json::json;
@@ -17,6 +15,16 @@ use std::path::Path;
 
 fn evaluate(
     repository: &Path,
+    command: &str,
+    xdg_config_home: Option<&Path>,
+    no_system: bool,
+) -> guard_contracts::PreToolResultV1 {
+    evaluate_in(repository, repository, command, xdg_config_home, no_system)
+}
+
+fn evaluate_in(
+    repository: &Path,
+    cwd: &Path,
     command: &str,
     xdg_config_home: Option<&Path>,
     no_system: bool,
@@ -54,11 +62,12 @@ fn evaluate(
         None,
         guard_command::pretool::PathContext {
             home_dir: home.to_str(),
-            cwd: repository.to_str(),
+            cwd: cwd.to_str(),
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
             shell_home_matches: false,
+            ripgrep_config_absent: false,
         },
         Some(&context),
     )
@@ -93,10 +102,27 @@ fn system_config_is_plain() -> bool {
         .args(["config", "--system", "--name-only", "--list"])
         .output()
         .unwrap();
+    // A filter driver only runs for paths an attributes file assigns to it.
+    // The fixture tree has none, so only the system attributes file counts.
+    let system_attributes = std::process::Command::new("git")
+        .args(["var", "GIT_ATTR_SYSTEM"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());
+    let filters_inert = system_attributes.is_some_and(|path| {
+        std::fs::read(path).map_or(true, |bytes| {
+            !String::from_utf8_lossy(&bytes)
+                .to_ascii_lowercase()
+                .contains("filter")
+        })
+    });
     String::from_utf8_lossy(&output.stdout).lines().all(|key| {
         let key = key.to_ascii_lowercase();
+        if key.starts_with("filter.") {
+            return filters_inert;
+        }
         ![
-            "filter.",
             "hook.",
             "pager.",
             "include",
@@ -161,9 +187,26 @@ fn worktree_proof_follows_the_session_git_configuration() {
     ));
     assert!(root.join("weekly-report/tracked.txt").is_file());
 
-    // Leaving home, or climbing anywhere but the start, keeps review.
+    // Climbing out of home lands beside it. A fresh leaf directly in the
+    // shared temporary root, where the macOS fixture home sits, is admitted
+    // like any temporary checkout; anywhere else outside home is reviewed.
+    let beside_home = format!(
+        "git worktree add ../../{}-beside -b beside-home",
+        root.file_name().unwrap().to_str().unwrap()
+    );
+    let beside_home = evaluate(&repository, &beside_home, None, true);
+    let home_in_temporary_root = root.parent() == std::fs::canonicalize("/tmp").ok().as_deref();
+    assert_eq!(
+        beside_home.minimum_action == "allow",
+        home_in_temporary_root,
+        "{}",
+        beside_home.reason_code
+    );
+
+    // Leaving home and the temporary directories, or climbing anywhere but
+    // the start, keeps review.
     for command in [
-        "git worktree add ../../outside-home -b outside-home",
+        "git worktree add ../../../outside-home -b outside-home",
         "git worktree add sub/../escape -b escape",
         "git worktree add ./here -b here",
         "git worktree add .. -b parent",
@@ -171,6 +214,13 @@ fn worktree_proof_follows_the_session_git_configuration() {
     ] {
         let result = evaluate(&repository, command, None, true);
         assert_ne!(result.minimum_action, "allow", "{command}");
+        // Only the checkout that would leave home is told about the bound.
+        assert_eq!(
+            result.reason.contains("inside your home directory"),
+            command.contains("outside-home"),
+            "{command}: {}",
+            result.reason
+        );
     }
 
     let xdg = root.join("xdg");
@@ -219,4 +269,184 @@ fn worktree_proof_follows_the_session_git_configuration() {
     } else {
         assert_ne!(with_system.minimum_action, "allow");
     }
+}
+
+fn fixture_repository(label: &str) -> (std::path::PathBuf, FixtureCleanup) {
+    let root_directory = if cfg!(target_os = "macos") {
+        std::path::PathBuf::from("/tmp")
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target")
+    };
+    let root = std::fs::canonicalize(root_directory).unwrap().join(format!(
+        "guard-git-worktree-{label}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let cleanup = FixtureCleanup(root.clone());
+    let repository = root.join("repository");
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(git(&repository, &["init", "--quiet"]));
+    assert!(git(&repository, &["config", "user.name", "Guard Fixture"]));
+    assert!(git(
+        &repository,
+        &["config", "user.email", "guard-fixture@example.invalid"]
+    ));
+    std::fs::write(repository.join("tracked.txt"), "fixture\n").unwrap();
+    assert!(git(&repository, &["add", "tracked.txt"]));
+    assert!(git(&repository, &["commit", "--quiet", "-m", "fixture"]));
+    (repository, cleanup)
+}
+
+fn allowed(repository: &Path, command: &str) -> bool {
+    let result = evaluate(repository, command, None, true);
+    result.minimum_action == "allow" && result.reason_code == "native_exact_safe_worktree_add"
+}
+
+#[test]
+fn worktree_proof_accepts_a_leading_directory_change() {
+    let (repository, _cleanup) = fixture_repository("chdir");
+    let home = repository.parent().unwrap().to_owned();
+    let repo = repository.to_str().unwrap();
+    let from_home = |command: &str| {
+        let result = evaluate_in(&repository, &home, command, None, true);
+        result.minimum_action == "allow" && result.reason_code == "native_exact_safe_worktree_add"
+    };
+    assert!(from_home(&format!(
+        "git -C {repo} worktree add -b fix/one {}/one HEAD",
+        home.display()
+    )));
+    // Relative to the -C directory, `../<home name>` is a fresh leaf in home.
+    // From the cwd (home) it would name home itself, which exists, so the
+    // acceptance proves the -C directory is used.
+    let home_name = home.file_name().unwrap().to_str().unwrap();
+    assert!(from_home(&format!(
+        "git -C {repo} worktree add -b fix/two ../{home_name}"
+    )));
+    assert!(from_home(
+        "git -C repository worktree add -b fix/three ../three"
+    ));
+    for command in [
+        format!("git -C {repo} -C {repo} worktree add -b a ../a"),
+        "git -C '' worktree add -b a ../a".to_owned(),
+        format!("git -C {repo}/missing worktree add -b a ../a"),
+        format!("git -C {repo}/tracked.txt worktree add -b a ../a"),
+        format!("git -C {repo} --git-dir=.git worktree add -b a ../a"),
+        format!("git -C {repo} --work-tree=. worktree add -b a ../a"),
+        format!("git -C {repo} -c core.hooksPath=/x worktree add -b a ../a"),
+        // Above the fixture's parent: neither home nor a temporary directory.
+        format!("git -C {repo} worktree add -b a ../../../outside-home-a"),
+    ] {
+        assert!(!from_home(&command), "{command}");
+    }
+}
+
+#[test]
+fn worktree_proof_allows_inert_global_hooks_path() {
+    let (repository, _cleanup) = fixture_repository("hooks");
+    let home = repository.parent().unwrap().to_owned();
+    let hooks = home.join("hook-manager");
+    std::fs::create_dir_all(&hooks).unwrap();
+    std::fs::write(hooks.join("commit-msg"), "#!/bin/sh\n").unwrap();
+    std::fs::write(hooks.join("helper.sh"), "#!/bin/sh\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        std::fs::set_permissions(
+            hooks.join("commit-msg"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        symlink(hooks.join("helper.sh"), hooks.join("pre-commit")).unwrap();
+    }
+    std::fs::write(
+        home.join(".gitconfig"),
+        format!("[core]\n\thooksPath = {}\n", hooks.display()),
+    )
+    .unwrap();
+    assert!(allowed(&repository, "git worktree add ../h1 -b h1"));
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[core]\n\thooksPath = ~/hook-manager\n",
+    )
+    .unwrap();
+    assert!(allowed(&repository, "git worktree add ../h2 -b h2"));
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[core]\n\thooksPath = hook-manager\n",
+    )
+    .unwrap();
+    assert!(!allowed(&repository, "git worktree add ../h3 -b h3"));
+
+    // A hook Git would run keeps review, including through a symlink name.
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[core]\n\thooksPath = ~/hook-manager\n",
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        symlink(hooks.join("helper.sh"), hooks.join("post-index-change")).unwrap();
+        assert!(!allowed(&repository, "git worktree add ../h4 -b h4"));
+        std::fs::remove_file(hooks.join("post-index-change")).unwrap();
+        assert!(allowed(&repository, "git worktree add ../h5 -b h5"));
+        std::fs::write(hooks.join("post-checkout"), "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(
+            hooks.join("post-checkout"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        assert!(!allowed(&repository, "git worktree add ../h6 -b h6"));
+    }
+
+    // Repository-scope hooksPath stays reviewed.
+    std::fs::write(home.join(".gitconfig"), "").unwrap();
+    assert!(git(
+        &repository,
+        &["config", "core.hooksPath", hooks.to_str().unwrap()]
+    ));
+    assert!(!allowed(&repository, "git worktree add ../h7 -b h7"));
+}
+
+#[test]
+fn worktree_proof_allows_global_filters_only_without_attribute_sources() {
+    let (repository, _cleanup) = fixture_repository("filters");
+    let home = repository.parent().unwrap().to_owned();
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[filter \"lfs\"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n",
+    )
+    .unwrap();
+    assert!(allowed(&repository, "git worktree add ../f1 -b f1"));
+
+    // Global attributes file under the default XDG location.
+    let attributes = home.join(".config/git/attributes");
+    std::fs::create_dir_all(attributes.parent().unwrap()).unwrap();
+    std::fs::write(&attributes, "*.bin filter=lfs\n").unwrap();
+    assert!(!allowed(&repository, "git worktree add ../f2 -b f2"));
+    std::fs::remove_file(&attributes).unwrap();
+    assert!(allowed(&repository, "git worktree add ../f3 -b f3"));
+
+    // info/attributes.
+    let info = repository.join(".git/info");
+    std::fs::create_dir_all(&info).unwrap();
+    std::fs::write(info.join("attributes"), "*.bin filter=lfs\n").unwrap();
+    assert!(!allowed(&repository, "git worktree add ../f4 -b f4"));
+    std::fs::remove_file(info.join("attributes")).unwrap();
+
+    // A .gitattributes in the checked-out reference, not just the worktree.
+    assert!(git(&repository, &["branch", "plain"]));
+    std::fs::write(repository.join(".gitattributes"), "*.bin filter=lfs\n").unwrap();
+    assert!(git(&repository, &["add", ".gitattributes"]));
+    assert!(git(&repository, &["commit", "--quiet", "-m", "attributes"]));
+    assert!(!allowed(&repository, "git worktree add ../f5 -b f5"));
+    // The reference actually checked out decides.
+    assert!(allowed(
+        &repository,
+        "git worktree add ../f6 -b f6 refs/heads/plain"
+    ));
+    assert!(!allowed(&repository, "git worktree add ../f7 -b f7 HEAD"));
 }

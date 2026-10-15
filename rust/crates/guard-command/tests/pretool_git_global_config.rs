@@ -1,8 +1,6 @@
 #![cfg(unix)]
 
-#[allow(dead_code)]
-#[path = "support/git_helper_fixture.rs"]
-mod fixture;
+use crate::git_helper_fixture as fixture;
 
 use fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
 use serde_json::json;
@@ -187,6 +185,8 @@ const ALIAS_SANDBOX: &str = if cfg!(target_os = "macos") {
     "native_command_review_required"
 };
 
+const LOCAL_WRITE: &str = "native_exact_safe_git_local_write";
+
 fn write_global(session: &Session, text: &str) {
     std::fs::write(session.home.join(".gitconfig"), text).unwrap();
 }
@@ -200,28 +200,42 @@ fn assert_reason(session: &Session, command: &str, reason: &str) {
 fn escaped_quote_alias_does_not_block_ordinary_git_operations() {
     let session = session("alias");
     let worktree = session.worktree.display();
+    // `git add` and `git merge` run no alias (Git never routes the commit a
+    // merge writes through `alias.commit`), so the local write proof settles
+    // them behind `-C` as it does after `cd`. The aliased `commit` keeps its
+    // floor.
     let commands = [
         format!("git -C {worktree} add tracked.txt"),
-        format!("git -C {worktree} commit -m x"),
         format!("git -C {worktree} merge --ff-only HEAD"),
     ];
+    let commit = format!("git -C {worktree} commit -m x");
     write_global(
         &session,
         "[alias]\n\tcommit = !bash \\\"/opt/hooks/commit.sh\\\"\n",
     );
+    // On macOS the workspace sandbox takes both before the proof does.
+    let add_reason = if cfg!(target_os = "macos") {
+        ALIAS_SANDBOX
+    } else {
+        LOCAL_WRITE
+    };
     for command in &commands {
-        assert_reason(&session, command, ALIAS_SANDBOX);
+        assert_reason(&session, command, add_reason);
     }
-    // Backticks keep the command at review, with or without escapes.
+    assert_reason(&session, &commit, ALIAS_SANDBOX);
+    // Backticks keep the aliased command at review, with or without escapes.
     write_global(&session, "[alias]\n\tcommit = !bash \\\"`id`\\\"\n");
     for command in &commands {
-        assert_reason(&session, command, "native_command_review_required");
+        assert_reason(&session, command, LOCAL_WRITE);
     }
-    // An unknown escape is ambiguous, so it also stays at review.
+    assert_reason(&session, &commit, "native_command_review_required");
+    // An unknown escape makes the configuration unreadable, so every
+    // command stays at review.
     write_global(&session, "[alias]\n\tcommit = !bash \\q\n");
     for command in &commands {
         assert_reason(&session, command, "native_command_review_required");
     }
+    assert_reason(&session, &commit, "native_command_review_required");
 }
 
 #[test]

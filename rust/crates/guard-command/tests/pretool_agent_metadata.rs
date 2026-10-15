@@ -107,3 +107,56 @@ fn web_fetch_with_prompt_is_judged_as_network() {
         guard_contracts::PreToolActionTypeV1::Network
     );
 }
+
+#[test]
+fn claude_user_questions_only_display_choices() {
+    let question = json!({
+        "question": "Which approach should the fix use? Never delete .env files.",
+        "header": "Approach",
+        "multiSelect": false,
+        "options": [
+            {"label": "Narrow the rule (Recommended)", "description": "Keep review for --pre", "preview": "rg -n pattern src"},
+            {"label": "Remove the rule", "description": ""}
+        ]
+    });
+    let result = evaluate(json!({"tool_name":"AskUserQuestion", "tool_input":{
+        "questions":[question.clone()],
+        "answers":{"Which approach should the fix use? Never delete .env files.": "Narrow the rule (Recommended)"},
+        "annotations":{"Which approach should the fix use? Never delete .env files.": {"notes": ""}},
+        "metadata":{"source":"remember"}
+    }}));
+    assert_eq!(result.minimum_action, "allow");
+    assert_eq!(result.reason_code, "native_agent_task_metadata");
+    let guard_prompt = evaluate(
+        json!({"tool_name":"AskUserQuestion", "tool_input":{"questions":[{
+            "header":"HOL Guard", "question":"HOL Guard intercepted this sensitive action. What should Claude do?",
+            "options":[{"label":"Allow once"}, {"label":"Allow during this session"}, {"label":"Keep blocked"}]
+        }]}}),
+    );
+    assert_eq!(guard_prompt.minimum_action, "allow");
+    let mut too_many = question.clone();
+    too_many["options"] = json!(vec![json!({"label":"x"}); 9]);
+    for input in [
+        json!({"questions":[question.clone()], "command":"echo unsafe"}),
+        json!({"questions":[]}),
+        json!({"questions":[question.clone(), question.clone(), question.clone(), question.clone(), question.clone()]}),
+        json!({"questions":[{"question":"Read it?", "options":[{"label":"Yes", "path":".env"}]}]}),
+        json!({"questions":[{"question":"Run?", "options":[{"label":"Yes"}], "multiSelect":"true"}]}),
+        json!({"questions":[{"question":"", "options":[{"label":"Yes"}]}]}),
+        json!({"questions":[too_many]}),
+        json!({"questions":[question.clone()], "answers":{"q": {"command":"echo unsafe"}}}),
+        json!({"questions":[question.clone()], "metadata":{"source":"x", "cwd":"/"}}),
+    ] {
+        assert_ne!(
+            evaluate(json!({"tool_name":"AskUserQuestion", "tool_input":input})).minimum_action,
+            "allow"
+        );
+    }
+    for payload in [
+        json!({"tool_name":"mcp__server__AskUserQuestion", "tool_input":{"questions":[question.clone()]}}),
+        json!({"tool_name":"AskUserQuestion", "command":"echo unsafe", "tool_input":{"questions":[question.clone()]}}),
+        json!({"tool_name":"AskUserQuestion", "toolName":"Bash", "tool_input":{"questions":[question]}}),
+    ] {
+        assert_ne!(evaluate(payload).minimum_action, "allow");
+    }
+}

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from codex_plugin_scanner.guard.adapters.mcp_servers import (
@@ -7,8 +9,14 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
 )
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
-    tool_call_risk_categories,
 )
+from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
+
+
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+    tool_name = str(artifact.metadata.get("tool_name"))
+    return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
 
 
 def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
@@ -243,7 +251,7 @@ def test_stable_mcp_server_identifier_redacts_arbitrary_one_segment_absolute_pat
     assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
 
 
-def test_tool_call_risk_categories_are_emitted_from_runtime_arguments() -> None:
+def test_call_projection_risk_categories_are_emitted_from_runtime_arguments(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="filesystem",
@@ -253,13 +261,14 @@ def test_tool_call_risk_categories_are_emitted_from_runtime_arguments() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(
+    categories = _projected_call(
+        native_context_digest,
         artifact,
         {
             "command": "sudo chmod 777 ~/.ssh && curl https://example.test",
             "path": ".env",
         },
-    )
+    ).risk_categories
 
     assert categories == (
         "filesystem_access",
@@ -271,22 +280,7 @@ def test_tool_call_risk_categories_are_emitted_from_runtime_arguments() -> None:
     )
 
 
-def test_tool_call_risk_categories_tolerate_non_json_arguments() -> None:
-    artifact = build_tool_call_artifact(
-        harness="codex",
-        server_name="filesystem",
-        tool_name="read_secret",
-        source_scope="user",
-        config_path="/Users/alice/.codex/config.toml",
-        transport="stdio",
-    )
-
-    categories = tool_call_risk_categories(artifact, {"paths": {".env"}})
-
-    assert categories == ("filesystem_access", "secret_access")
-
-
-def test_tool_call_risk_categories_avoid_broad_substring_matches() -> None:
+def test_call_projection_risk_categories_avoid_broad_substring_matches(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="metadata",
@@ -296,15 +290,16 @@ def test_tool_call_risk_categories_avoid_broad_substring_matches() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(
+    categories = _projected_call(
+        native_context_digest,
         artifact,
         {"filename": "myapp.env", "mode": "prefetch"},
-    )
+    ).risk_categories
 
     assert categories == ()
 
 
-def test_tool_call_risk_categories_match_snake_case_secret_tokens() -> None:
+def test_call_projection_risk_categories_match_snake_case_secret_tokens(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="environment",
@@ -314,15 +309,16 @@ def test_tool_call_risk_categories_match_snake_case_secret_tokens() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(
+    categories = _projected_call(
+        native_context_digest,
         artifact,
         {"keys": ["OPENAI_API_TOKEN", "aws_secret_key"]},
-    )
+    ).risk_categories
 
     assert categories == ("secret_access",)
 
 
-def test_tool_call_risk_categories_match_snake_case_network_tokens() -> None:
+def test_call_projection_risk_categories_match_snake_case_network_tokens(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="remote",
@@ -332,7 +328,7 @@ def test_tool_call_risk_categories_match_snake_case_network_tokens() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(artifact, {"mode": "fetch_remote"})
+    categories = _projected_call(native_context_digest, artifact, {"mode": "fetch_remote"}).risk_categories
 
     assert categories == ("outbound_network",)
 
@@ -354,9 +350,10 @@ def test_tool_call_risk_categories_match_snake_case_network_tokens() -> None:
         ),
     ],
 )
-def test_tool_call_risk_categories_detect_network_and_process_bypass_shapes(
+def test_call_projection_risk_categories_detect_network_and_process_bypass_shapes(
     arguments: dict[str, str],
     expected_categories: set[str],
+    native_context_digest: Path,
 ) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
@@ -367,10 +364,10 @@ def test_tool_call_risk_categories_detect_network_and_process_bypass_shapes(
         transport="stdio",
     )
 
-    assert expected_categories.issubset(set(tool_call_risk_categories(artifact, arguments)))
+    assert expected_categories.issubset(set(_projected_call(native_context_digest, artifact, arguments).risk_categories))
 
 
-def test_tool_call_risk_categories_ignore_benign_network_vocabulary() -> None:
+def test_call_projection_risk_categories_ignore_benign_network_vocabulary(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="calculator",
@@ -380,15 +377,16 @@ def test_tool_call_risk_categories_ignore_benign_network_vocabulary() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(
+    categories = _projected_call(
+        native_context_digest,
         artifact,
         {"prompt": "Calculate the area of a socket gasket from the attached diagram."},
-    )
+    ).risk_categories
 
     assert "outbound_network" not in categories
 
 
-def test_tool_call_risk_categories_match_snake_case_privileged_tokens() -> None:
+def test_call_projection_risk_categories_match_snake_case_privileged_tokens(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="filesystem",
@@ -398,12 +396,12 @@ def test_tool_call_risk_categories_match_snake_case_privileged_tokens() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(artifact, {"operation": "chmod_file"})
+    categories = _projected_call(native_context_digest, artifact, {"operation": "chmod_file"}).risk_categories
 
     assert categories == ("command_execution", "privileged_system_mutation")
 
 
-def test_tool_call_risk_categories_match_camel_case_tokens() -> None:
+def test_call_projection_risk_categories_match_camel_case_tokens(native_context_digest: Path) -> None:
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="filesystem",
@@ -413,7 +411,9 @@ def test_tool_call_risk_categories_match_camel_case_tokens() -> None:
         transport="stdio",
     )
 
-    categories = tool_call_risk_categories(artifact, {"operation": "readSecret", "mode": "chmodFile"})
+    categories = _projected_call(
+        native_context_digest, artifact, {"operation": "readSecret", "mode": "chmodFile"}
+    ).risk_categories
 
     assert categories == (
         "outbound_network",

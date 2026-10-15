@@ -66,6 +66,7 @@ set -- python -m ci.gauntlet run --profile full-tasks --full-task-mode "$FT_MODE
   --provider-url "https://relay.gauntlet.test/v1" --model native-luna \
   --provider-identity "$FT_PROVIDER_IDENTITY" --reasoning-effort "$FT_EFFORT" \
   --omp /opt/omp/node_modules/.bin/omp --case "$FT_TASK" --timeout "$FT_TIMEOUT" \
-  --max-inference-rounds "$FT_ROUNDS" --github-owner "$FT_OWNER" --full-task-canary "$FT_CANARY"
+  --max-inference-rounds "$FT_ROUNDS" --github-owner "$FT_OWNER" --full-task-canary "$FT_CANARY" \
+  --full-task-account-home /home/ft
 [ -z "${FT_SEED_REPO:-}" ] || set -- "$@" --full-task-seed-repo "$FT_SEED_REPO"
 exec "$@"

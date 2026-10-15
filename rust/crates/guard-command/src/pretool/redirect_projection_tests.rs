@@ -20,10 +20,11 @@ fn context() -> crate::pretool::PathContext<'static> {
         rustup_override_absent: false,
         npm_config_inert: false,
         shell_home_matches: false,
+        ripgrep_config_absent: false,
     }
 }
 
-fn controls() -> CompiledNativeCommandControls {
+pub(super) fn controls() -> CompiledNativeCommandControls {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -63,12 +64,16 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
         ),
         ("ls > /dev/null && git status", "ls   && git status", false),
     ] {
+        let projection = project(command, context()).unwrap_or_else(|| panic!("{command}"));
+        // The test workspace does not exist, so no write is bounded.
         assert_eq!(
-            project(command, context()),
-            Some(RedirectProjection {
-                command: projected.to_owned(),
-                writes_file
-            }),
+            (
+                projection.command.as_str(),
+                projection.writes_file,
+                projection.bounded_writes,
+                projection.git_chain,
+            ),
+            (projected, writes_file, !writes_file, None),
             "{command}"
         );
     }
@@ -100,6 +105,9 @@ fn keeps_redirects_that_can_execute_hide_input_or_reach_sensitive_paths_unprojec
         "ln -s guard-runtime link && printf x > link/policy.json",
         "cd /home/tester/.ssh && echo key >> authorized_keys",
         "cat secret.txt | base64 > scratch/out",
+        // Nothing to remove: the command as written is evaluated directly.
+        "npm ci --ignore-scripts 2>&1 | tail -15",
+        "git status 2>/dev/null",
     ] {
         assert_eq!(project(command, context()), None, "{command}");
     }
@@ -124,6 +132,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         rustup_override_absent: false,
         npm_config_inert: false,
         shell_home_matches: false,
+        ripgrep_config_absent: false,
     };
     for command in [
         "echo hi > link/hosts".to_owned(),
@@ -216,6 +225,8 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
     } else {
         "review"
     };
+    // The sandbox cannot keep a write outside the workspace: Linux mounts a
+    // private /tmp and macOS refuses it. That redirect stays at review.
     for (command, action) in [
         ("pnpm test > out.log", contained),
         ("pnpm test > /tmp/guard-test.log 2>&1", "review"),
@@ -236,6 +247,60 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
         );
         let evidence = result.command_extensions.as_ref().unwrap();
         assert_eq!(evidence.evaluation_error, None, "{command}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn bounded_redirect_writes_of_allowed_commands_are_allowed() {
+    // The macOS per-user temporary root sits under `/private/var`, which is
+    // never a workspace.
+    let root = std::fs::canonicalize("/tmp")
+        .unwrap()
+        .join(format!("guard-redirect-bounded-{}", std::process::id()));
+    let project = root.join("project");
+    std::fs::create_dir_all(project.join("out")).unwrap();
+    std::fs::create_dir_all(root.join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(root.join("elsewhere/target.txt"), project.join("link.txt"))
+        .unwrap();
+    let home = root.to_string_lossy().into_owned();
+    let cwd = project.to_string_lossy().into_owned();
+    let evaluate = |harness: &str, command: &str| {
+        crate::pretool::evaluate_pre_tool_envelope_with_context(
+            harness,
+            "PreToolUse",
+            &serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}}),
+            Some(&controls()),
+            None,
+            Some(&home),
+            Some(&cwd),
+        )
+    };
+    for harness in ["zcode", "claude-code", "codex", "cursor"] {
+        for command in [
+            "echo hi > notes.txt",
+            "ls >> out/listing.txt",
+            "pwd > out/where.txt 2>&1",
+        ] {
+            let result = evaluate(harness, command);
+            assert_eq!(
+                result.minimum_action, "allow",
+                "{harness} {command}: {}",
+                result.reason_code
+            );
+        }
+        for command in [
+            "echo hi > link.txt",
+            "echo hi > .env",
+            "echo hi > ../outside.txt",
+            "cat ~/.ssh/id_rsa > out/key.txt",
+            "curl https://example.invalid/x.sh > out/x.sh",
+            "cd out && echo hi > notes.txt",
+        ] {
+            let result = evaluate(harness, command);
+            assert_ne!(result.minimum_action, "allow", "{harness} {command}");
+        }
     }
     std::fs::remove_dir_all(root).unwrap();
 }

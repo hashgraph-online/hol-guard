@@ -116,6 +116,11 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
     )
+    # The approval wait is offered only for a review the agent's retry can match.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
+        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
+    )
     reset_native_hook_route()
     store = GuardStore(tmp_path / "guard-home")
     store.upsert_runtime_state(
@@ -314,17 +319,18 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        # Claude permission dialogs have their own passthrough route; Codex
-        # permission events still reach the native fail-safe.
+        # Claude and Codex permission dialogs have their own passthrough
+        # routes; other harnesses' permission events still reach the native
+        # fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="codex",
+        default_harness="copilot",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_hook_event_unavailable"
-    assert result["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert result["behavior"] == "deny"
     grok_session = worker.review_http_payload(
         payload={"hookEventName": "session_start"},
         params={},
@@ -334,3 +340,28 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
         workspace=tmp_path / "workspace",
     )
     assert grok_session == {}
+
+
+def test_hook_worker_leaves_codex_permission_requests_to_codex_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_review(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Codex permission requests must not reach the edge")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        unexpected_review,
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    for event_name in ("PermissionRequest", "permission_request"):
+        result = worker.review_http_payload(
+            payload={"hook_event_name": event_name, "tool_name": "Bash", "tool_input": {"command": "pwd"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+        )
+        # No decision: Codex shows its normal approval prompt.
+        assert result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}

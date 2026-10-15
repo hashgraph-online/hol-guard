@@ -18,9 +18,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_support as support
-from codex_plugin_scanner.guard.cli import commands_support_codex_commands as codex_commands
-from codex_plugin_scanner.guard.cli import commands_support_codex_tool_output as codex_tool_output
-from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as runtime_artifacts
 from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
 
 pytestmark = [
@@ -123,6 +120,11 @@ def _mismatches(corpus: dict[str, object], root: Path, key: str, probe) -> list[
     return failures
 
 
+def _native_flag(kind: str, command: str) -> bool:
+    answer = codex_tool_output_native(kind, command=command)
+    return answer.error_code is not None or answer.allowed
+
+
 def test_read_only_inspection_matches_the_retired_python_vectors(corpus: dict[str, object], tree: Path) -> None:
     failures = _mismatches(
         corpus,
@@ -146,26 +148,7 @@ def test_secret_like_source_names_match_the_retired_python_vectors(corpus: dict[
             ).allowed
         ),
     )
-    contextual = _mismatches(
-        corpus,
-        tree,
-        "sx",
-        lambda command, cwd, home: codex_tool_output._codex_command_targets_secret_like_source_name(
-            command, cwd=cwd, home_dir=home
-        ),
-    )
     assert not plain, plain[:10]
-    assert not contextual, contextual[:10]
-
-
-def test_local_content_reads_match_the_retired_python_vectors(corpus: dict[str, object], tree: Path) -> None:
-    failures = _mismatches(
-        corpus,
-        tree,
-        "full",
-        lambda command, cwd, _home: support._codex_command_may_read_local_content(command, cwd=cwd),
-    )
-    assert not failures, failures[:10]
 
 
 def test_environment_pipelines_and_focused_pytest_match_the_retired_python_vectors(
@@ -175,13 +158,13 @@ def test_environment_pipelines_and_focused_pytest_match_the_retired_python_vecto
         corpus,
         tree,
         "envp",
-        lambda command, _cwd, _home: codex_commands._codex_command_reads_environment_pipeline(command),
+        lambda command, _cwd, _home: _native_flag("reads_environment_pipeline", command),
     )
     pytest_cases = _mismatches(
         corpus,
         tree,
         "pytest",
-        lambda command, _cwd, _home: codex_tool_output._codex_command_is_focused_pytest_verification(command),
+        lambda command, _cwd, _home: codex_tool_output_native("focused_pytest", command=command).allowed,
     )
     assert not environment, environment[:10]
     assert not pytest_cases, pytest_cases[:10]
@@ -195,7 +178,7 @@ def test_git_pathspec_identity_presence_matches_the_retired_python_vectors(
         tree,
         "id",
         lambda command, cwd, _home: (
-            runtime_artifacts._codex_git_pathspec_identity_for_command(command, cwd=cwd) is not None
+            codex_tool_output_native("git_pathspec_identity", command=command, cwd=cwd).value is not None
         ),
     )
     assert not failures, failures[:10]

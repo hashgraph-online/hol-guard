@@ -3,8 +3,7 @@ use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 fn write(path: PathBuf, text: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -68,4 +67,58 @@ fn windows_agent_root_listings_accept_backslash_home_spellings() {
     assert!(!allowed(format!(
         "ls -rec -Force '{home_spelling}\\.agent'"
     )));
+}
+
+#[test]
+fn windows_missing_git_marker_probe_accepts_backslash_home_spellings() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/windows-missing-git-marker")
+        .join(format!(
+            "{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+    let _cleanup = fixture::FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&root).unwrap();
+    let canonical_root = std::fs::canonicalize(&root).unwrap();
+    let spelling = canonical_root.to_str().unwrap();
+    let root = PathBuf::from(spelling.strip_prefix(r"\\?\").unwrap_or(spelling));
+    let home = root.join("home");
+    let project = home.join("project");
+    write(home.join("plain/README.md"), "plain directory\n");
+    write(project.join("README.md"), "project\n");
+    let home_spelling = home.display().to_string();
+    let allowed = |command: String| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash","tool_input":{"command":command}}),
+            None,
+            None,
+            home.to_str(),
+            project.to_str(),
+        )
+        .minimum_action
+            == "allow"
+    };
+    for command in [
+        format!("ls -d '{home_spelling}'/plain/.git; ls '{home_spelling}'/plain"),
+        format!("ls -d '{home_spelling}\\plain\\.git'"),
+    ] {
+        assert!(allowed(command.clone()), "{command}");
+    }
+    for command in [
+        format!("ls -d '{home_spelling}\\plain\\.ssh'"),
+        format!("ls -d '{home_spelling}\\plain\\.git\\config'"),
+        format!("ls -d '{home_spelling}\\plain\\..\\.ssh'"),
+        format!("ls -d '{home_spelling}\\missing\\.aws'"),
+        // A Windows host may run this text in PowerShell or cmd, where
+        // `2>/dev/null` writes to `\dev\null` on the current drive.
+        "ls README.md 2>/dev/null".to_owned(),
+    ] {
+        assert!(!allowed(command.clone()), "{command}");
+    }
 }

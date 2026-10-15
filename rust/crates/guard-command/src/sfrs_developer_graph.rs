@@ -141,7 +141,7 @@ fn is_low_risk_compound_git_inspection(context: &ShellExecutionContext, ctx: &Ct
     ctx.host.compound_git_chain(&converted, context.complete)
 }
 
-fn known_context_effect_graph(
+pub(crate) fn known_context_effect_graph(
     context: ShellExecutionContext,
     observation: DeveloperShellEffect,
 ) -> DeveloperShellEffectGraph {

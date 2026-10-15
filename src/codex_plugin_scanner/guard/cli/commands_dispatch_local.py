@@ -162,7 +162,10 @@ def _run_guard_execute_contained_test_command(
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
     finally:
-        if request_validated and getattr(args, "harness", "omp") in {"zcode", "claude-code", "codex"}:
+        # A validated request is single-use. The sink removes it for every
+        # harness because an OMP or Pi call that moves to the background settles
+        # before its job reads the request, so the extension cannot.
+        if request_validated:
             with suppress(OSError):
                 request_file = Path(args.request_file)
                 request_file.unlink(missing_ok=True)

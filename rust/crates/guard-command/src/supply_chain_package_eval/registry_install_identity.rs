@@ -9,9 +9,10 @@
 //! both flags on a verified npm 11.9 or later, the install only writes
 //! registry package files. A registry name that resolves on the public
 //! registry is then identified well enough to continue without review;
-//! anything that later executes those files is reviewed on its own. Older
-//! releases qualify with `--ignore-scripts` alone once the tree is proven to
-//! hold no git dependency (`registry_install_tree`).
+//! anything that later executes those files is reviewed on its own. Any
+//! npm from 7 on, including 11.9 and later without `--allow-git=none`, also
+//! qualifies with `--ignore-scripts` alone once the tree is proven to hold no
+//! git dependency (`registry_install_tree`).
 
 use super::*;
 
@@ -56,18 +57,18 @@ pub(super) fn script_free_registry_install(
         && git_dependencies_refused(&tokens)
 }
 
-/// The same outcome on an npm without `--allow-git`: scripts are off and
-/// registry metadata proves no git dependency can enter the tree.
-pub(super) fn script_free_older_npm_install(
+/// The same outcome without `--allow-git=none`: scripts are off and registry
+/// metadata proves no git dependency can enter the tree. npm 11.9 and later
+/// clone git dependencies exactly like older releases unless the flag is set,
+/// so the tree proof covers them too.
+pub(super) fn script_free_git_free_tree_install(
     deps: &SupplyChainEvalDeps<'_>,
     artifact: &GuardArtifact,
     workspace_dir: Option<&Path>,
     targets: &[Map<String, Value>],
 ) -> bool {
     let tokens = command_tokens(artifact);
-    if !registry_install_candidate(artifact, workspace_dir)
-        || verified_npm_supports_allow_git(artifact)
-        || !lifecycle_scripts_disabled(&tokens)
+    if !registry_install_candidate(artifact, workspace_dir) || !lifecycle_scripts_disabled(&tokens)
     {
         return false;
     }
@@ -107,8 +108,8 @@ fn target_package_name(target: &Map<String, Value>) -> Option<String> {
 }
 
 /// Whether the same request could qualify once the flags its npm needs are
-/// added: npm 11.9 or later needs both, and an older npm needs
-/// `--ignore-scripts` plus a git-free tree.
+/// added: `--ignore-scripts` plus either a git-free tree or, on npm 11.9 or
+/// later, `--allow-git=none`.
 pub(super) fn registry_install_candidate(
     artifact: &GuardArtifact,
     workspace_dir: Option<&Path>,

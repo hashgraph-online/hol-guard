@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "512"]
 
+mod adapter_inventory;
+#[cfg(all(test, unix))]
+mod adapter_vectors_tests;
 mod aibom_artifact;
 mod aibom_discovery;
 mod aibom_extend;
@@ -12,6 +15,7 @@ mod aibom_skill_rules;
 mod aibom_skills;
 #[cfg(all(test, unix))]
 mod aibom_vectors_tests;
+mod antigravity_detect;
 mod approval;
 mod approval_bulk_eligibility_op;
 mod approval_gate_consumers;
@@ -54,18 +58,14 @@ mod binding_capture_receipt;
 mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
-#[cfg(unix)]
+mod blocked_request_mode;
 mod bounded_hook_bridge;
-#[cfg(unix)]
 mod bounded_hook_bridge_grok;
-#[cfg(unix)]
 mod bounded_hook_bridge_grok_render;
-#[cfg(unix)]
 mod bounded_hook_bridge_grok_script;
-#[cfg(unix)]
 mod bounded_hook_bridge_hermes;
-#[cfg(unix)]
 mod bounded_hook_bridge_render;
+mod browser_open;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -84,24 +84,31 @@ mod claim_reuse_binding;
 #[cfg(test)]
 mod claim_reuse_binding_tests;
 #[cfg(test)]
+mod claim_reuse_then_tests;
+#[cfg(test)]
 mod claim_reuse_vectors_tests;
+mod claude_code_config;
+mod claude_code_detect;
+#[cfg(all(test, unix))]
+mod claude_code_vectors_tests;
 mod claude_guard_question;
-#[cfg(unix)]
 mod claude_hook_bridge;
-#[cfg(unix)]
 mod claude_hook_bridge_auth;
+#[cfg(windows)]
+mod claude_hook_bridge_auth_windows;
 #[cfg(all(test, unix))]
 mod claude_hook_bridge_fixture;
-#[cfg(unix)]
 mod claude_hook_bridge_http;
-#[cfg(unix)]
 mod claude_hook_bridge_http_text;
-#[cfg(unix)]
 mod claude_hook_bridge_render;
-#[cfg(unix)]
 mod claude_hook_bridge_transport;
-#[cfg(unix)]
 mod claude_hook_bridge_url;
+#[cfg(unix)]
+mod claude_session_start;
+#[cfg(unix)]
+mod claude_session_start_contract;
+#[cfg(unix)]
+mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
 mod cloud_action_envelope;
@@ -118,18 +125,15 @@ mod cloud_sync_privacy;
 mod codex_app_server_socket;
 mod codex_detect;
 mod codex_hook_artifacts;
-#[cfg(unix)]
 mod codex_hook_bridge;
-#[cfg(unix)]
 mod codex_hook_bridge_direct;
-#[cfg(unix)]
 mod codex_hook_bridge_transport;
-#[cfg(unix)]
 mod codex_hook_identity;
-#[cfg(unix)]
 mod codex_hook_response;
 mod codex_hooks;
 mod codex_identity;
+#[cfg(all(test, unix))]
+mod codex_post_tool_output_vectors_tests;
 mod codex_proxy;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
@@ -167,6 +171,8 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+#[cfg(unix)]
+mod contained_workspace_sink;
 mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
@@ -179,10 +185,13 @@ mod continuation_lineage;
 mod continuation_metadata;
 mod continuation_store;
 mod contributed_mcp_decision_op;
+mod copilot_detect;
+#[cfg(all(test, unix))]
+mod copilot_vectors_tests;
 mod critical_floor_op;
-#[cfg(unix)]
+mod cursor_detect;
 mod cursor_hook_bridge;
-#[cfg(unix)]
+mod cursor_hook_bridge_response;
 mod cursor_hook_bridge_script;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
@@ -215,13 +224,18 @@ mod data_flow_analyze_op;
 mod decision_authority_op;
 #[cfg(test)]
 mod decision_authority_vectors_tests;
+mod developer_inspection_authority_op;
+mod developer_inspection_host;
+mod devin_detect;
 mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;
 mod direct_tool_managed_bun;
+mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
 mod encrypted_secret_store;
+mod gemini_detect;
 mod git_execution_safety_binary;
 mod git_execution_safety_checks;
 mod git_execution_safety_config;
@@ -234,12 +248,25 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_context_io;
 mod github_workflow_prepare_op;
+mod grok_detect;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
 mod guard_config_load;
 mod guard_config_managed;
+mod guard_config_update;
+mod guard_config_update_coerce;
+mod guard_config_update_harness;
+mod guard_config_update_settings;
+mod guard_config_update_value;
+mod guard_store_advisory_cache;
+#[cfg(test)]
+mod guard_store_advisory_cache_vectors_tests;
+mod guard_store_approval_request;
+mod guard_store_approval_row;
+mod guard_store_approval_write;
 mod guard_store_args;
+mod guard_store_claude_review;
 mod guard_store_clients;
 mod guard_store_cmd_activity;
 mod guard_store_cmd_api;
@@ -258,6 +285,9 @@ mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
 mod guard_store_db;
+mod guard_store_guard_event;
+#[cfg(test)]
+mod guard_store_guard_event_tests;
 mod guard_store_inventory;
 #[cfg(test)]
 mod guard_store_inventory_page_tests;
@@ -265,6 +295,13 @@ mod guard_store_inventory_page_tests;
 mod guard_store_inventory_vectors_tests;
 mod guard_store_json;
 mod guard_store_lineage;
+mod guard_store_local_cli;
+#[cfg(test)]
+mod guard_store_local_cli_grant_vectors_tests;
+mod guard_store_local_cli_grants;
+#[cfg(test)]
+mod guard_store_local_cli_vectors_tests;
+mod guard_store_local_mcp_observation;
 mod guard_store_native_review_consume;
 #[cfg(test)]
 mod guard_store_native_review_consume_tests;
@@ -298,6 +335,7 @@ mod guard_store_receipts_vectors_tests;
 mod guard_store_sessions;
 #[cfg(test)]
 mod guard_store_sessions_vectors_tests;
+mod guard_store_silent_review;
 mod guard_store_state_ops;
 #[cfg(test)]
 mod guard_store_state_ops_vectors_tests;
@@ -340,6 +378,8 @@ mod hook_approval_context;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
+mod hook_bridge_daemon_start;
+mod hook_bridge_fallback;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
@@ -351,12 +391,13 @@ mod hook_decision_native_facts_tests;
 mod hook_decision_op;
 mod hook_decision_settle;
 mod hook_direct;
+mod hook_direct_counters;
 mod hook_direct_evidence;
-#[cfg(unix)]
 mod hook_env_stamp;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+mod kimi_detect;
 mod local_cli_grant_op;
 mod local_cli_identify;
 mod local_mcp_grant_identity;
@@ -379,9 +420,36 @@ mod mcp_proxy_decision_tests;
 mod mcp_proxy_decision_vectors_tests;
 mod mcp_proxy_package;
 mod mcp_proxy_postclaim;
+mod mcp_proxy_projection;
+#[cfg(test)]
+mod mcp_proxy_projection_vectors_tests;
 mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
+mod mcp_relay;
+#[cfg(unix)]
+mod mcp_relay_args;
+#[cfg(unix)]
+mod mcp_relay_authority;
+#[cfg(unix)]
+mod mcp_relay_catalog;
+mod mcp_relay_claims;
+#[cfg(unix)]
+mod mcp_relay_core;
+mod mcp_relay_decide;
+#[cfg(unix)]
+mod mcp_relay_host;
+#[cfg(unix)]
+mod mcp_relay_lane;
+#[cfg(unix)]
+mod mcp_relay_launch;
+#[cfg(unix)]
+mod mcp_relay_order;
+mod mcp_relay_pending;
+mod mcp_relay_ready;
+#[cfg(unix)]
+mod mcp_relay_resident;
+mod mcp_relay_servers;
 mod mcp_runtime_evidence_op;
 mod mcp_sensitive_read;
 #[cfg(test)]
@@ -402,6 +470,7 @@ mod mcp_tool_policy_revalidate;
 mod memory_pattern;
 mod native_exact_action_op;
 mod native_hook_receipt;
+mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
 mod oauth_refresh;
@@ -414,6 +483,12 @@ mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
 mod oneshot;
+mod openclaw_detect;
+#[cfg(all(test, unix))]
+mod openclaw_detect_tests;
+mod openclaw_mcp;
+mod openclaw_skills;
+mod opencode_detect;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
@@ -423,6 +498,10 @@ mod package_evaluation_compose_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_projection_op;
+mod pi_detect;
+mod pi_glob;
+#[cfg(all(test, unix))]
+mod pi_vectors_tests;
 mod policy_bundle_crypto;
 mod policy_bundle_decisions;
 mod policy_bundle_delivery;
@@ -453,8 +532,13 @@ mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
 mod policy_integrity_resolver;
+mod policy_integrity_rows_op;
+mod policy_lookup_groups;
+mod policy_lookup_reuse;
+mod policy_runtime_saved;
 mod policy_snapshot_build;
 mod policy_store;
+mod project_identity;
 mod prompt_analyze_op;
 mod protect_request_op;
 mod pyjson;
@@ -477,6 +561,7 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
 mod rich_command_model_op;
@@ -521,6 +606,8 @@ mod supply_chain_cloud_vectors_tests;
 mod supply_chain_egress;
 mod supply_chain_eval_seams;
 mod totp;
+#[cfg(windows)]
+mod windows_readonly;
 mod workspace_inventory_files;
 mod workspace_inventory_op;
 mod workspace_scan_targets;
@@ -636,6 +723,10 @@ fn main() {
     // wheel ships a single native binary. Dispatch before the panic hook so
     // compiler behavior (including its own exit paths) stays identical.
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(windows)]
+    if windows_readonly::is_command(&arguments) {
+        std::process::exit(windows_readonly::main(&arguments));
+    }
     if guard_command::source_cli::is_command(&arguments) {
         std::process::exit(guard_command::source_cli::main(arguments));
     }

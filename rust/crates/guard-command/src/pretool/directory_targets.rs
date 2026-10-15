@@ -5,6 +5,9 @@
 //! proved only when every backslash in its segment survives the shell, and
 //! only in the exact spelling of its canonical path.
 
+#[path = "directory_targets_sibling.rs"]
+pub(crate) mod sibling;
+
 pub(crate) fn safe_directory_target(target: &str) -> bool {
     // Windows spells an absolute directory with backslash separators. Check
     // a drive-absolute target in its forward-slash form; a backslash anywhere
@@ -70,8 +73,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
 /// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
 /// `..`; any other relative operand needs proof that CDPATH is unset. The
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
-/// check rejects symlinked components. `..` is never proved: the shell
-/// resolves it against its logical `$PWD`, which may name a symlinked
+/// check rejects symlinked components. `..` is proved only into a linked
+/// worktree of the session's repository (see `sibling`): elsewhere the
+/// shell resolves it against its logical `$PWD`, which may name a symlinked
 /// parent the reported cwd does not show. On Windows a `:` can name a
 /// drive-relative path (`C:src`) or an alternate data stream, and Git Bash
 /// resolves a root-relative `/etc` against its own root rather than the
@@ -83,7 +87,7 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     {
         return None;
     }
-    let dotted = value == "." || value.starts_with("./");
+    let dotted = value == "." || value.starts_with("./") || value.starts_with("../");
     if !dotted && !context.cdpath_unset {
         return None;
     }
@@ -95,7 +99,9 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     for component in base.join(value).components() {
         match component {
             std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => return None,
+            std::path::Component::ParentDir => {
+                return sibling::linked_root(value, base);
+            }
             other => joined.push(other),
         }
     }
@@ -337,13 +343,36 @@ impl<'a> super::PathContext<'a> {
         let npm_config_inert = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        npm_selector(name)
+                            && !super::npm_environment::inert_npm_config_name(name)
+                            && !super::npm_environment::trusted_stamped_loader(
+                                environment,
+                                name,
+                                home_dir,
+                                cwd.as_slice(),
+                            )
+                    })
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
+                !value.is_empty()
+                    && npm_selector(&name)
+                    && !super::npm_environment::inert_npm_config_name(&name)
+            }),
+        };
+        // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
+        // `--no-config`, and ignores it only when it is empty. A stamped
+        // environment carries names without values, so any name counts.
+        let ripgrep_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
                     && !environment
                         .environment_names
                         .iter()
-                        .any(|name| npm_selector(name))
+                        .any(|name| name.eq_ignore_ascii_case(RIPGREP_CONFIG_NAME))
             }
-            None => !std::env::vars_os()
-                .any(|(name, value)| !value.is_empty() && npm_selector(&name.to_string_lossy())),
+            None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
         };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
@@ -368,9 +397,12 @@ impl<'a> super::PathContext<'a> {
             rustup_override_absent,
             npm_config_inert,
             shell_home_matches,
+            ripgrep_config_absent,
         }
     }
 }
+
+const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")

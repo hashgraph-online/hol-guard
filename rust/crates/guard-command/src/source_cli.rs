@@ -20,10 +20,30 @@ static EXPORTED_TRUST_MAP: &[u8] =
 static EXPORTED_TRUST_MAP: &[u8] = &[];
 
 #[cfg(not(guard_source_bootstrap))]
-static EXPORTED_BUILD: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/native-command-build.v1.json"));
-#[cfg(guard_source_bootstrap)]
-static EXPORTED_BUILD: &[u8] = &[];
+static EXPORTED_BUILD: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/native-command-build.v1.json.zst"
+));
+
+fn exported_build_bytes() -> &'static [u8] {
+    #[cfg(not(guard_source_bootstrap))]
+    {
+        static DECODED: std::sync::OnceLock<Box<[u8]>> = std::sync::OnceLock::new();
+        DECODED
+            .get_or_init(|| {
+                crate::packaged_blob::decode(
+                    EXPORTED_BUILD,
+                    env!("GUARD_PACKAGED_BUILD_LEN"),
+                    env!("GUARD_PACKAGED_BUILD_SHA256"),
+                )
+            })
+            .as_ref()
+    }
+    #[cfg(guard_source_bootstrap)]
+    {
+        &[]
+    }
+}
 
 /// Offline GitHub CLI classification for test harnesses that evaluate commands
 /// without a resident. Reads `{"args": [...]}` and returns the assessment.
@@ -118,10 +138,19 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
             .map_err(|_| "command_source_trust_output_invalid");
     }
     if arguments == ["export-built"] {
-        let mut output: Value = serde_json::from_slice(EXPORTED_BUILD)
+        let mut output: Value = serde_json::from_slice(exported_build_bytes())
             .map_err(|_| "command_source_build_output_invalid")?;
         output["program"] = serde_json::from_slice(packaged_command_program_bytes())
             .map_err(|_| "command_source_build_output_invalid")?;
+        // The catalog ships inside command-catalog.v1.json; reinsert the same
+        // projection here instead of storing a second copy in the envelope.
+        output["catalog"] = serde_json::from_slice::<Value>(
+            crate::native_command_catalog::embedded_catalog_bytes(),
+        )
+        .map_err(|_| "command_source_build_output_invalid")?
+        .get("catalog")
+        .cloned()
+        .ok_or("command_source_build_output_invalid")?;
         return Ok(output);
     }
     if arguments == ["schema"] {
@@ -227,6 +256,10 @@ mod tests {
                 .collect::<std::collections::BTreeSet<_>>()
         };
         assert_eq!(ids(&output["catalog"]), ids(&program["extensions"]));
+        let catalog: Value =
+            serde_json::from_slice(crate::native_command_catalog::embedded_catalog_bytes())
+                .unwrap();
+        assert_eq!(output["catalog"], catalog["catalog"]);
         assert_eq!(output["catalog_projection_kind"], "complete");
         assert!(!output["descriptors"].as_array().unwrap().is_empty());
     }

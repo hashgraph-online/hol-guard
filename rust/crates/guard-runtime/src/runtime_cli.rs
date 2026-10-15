@@ -3,6 +3,18 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, ..] if command == "restricted-linux-launch" => {
+            let digest = if args.len() == 2 { args[1].as_str() } else { "" };
+            std::process::exit(restricted_linux_launch::launch(digest))
+        }
+        #[cfg(unix)]
+        [command, rest @ ..] if command == contained_workspace_sink::SINK_COMMAND => {
+            std::process::exit(contained_workspace_sink::run(rest))
+        }
+        #[cfg(unix)]
+        [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
+            std::process::exit(contained_workspace_sink::launch(rest))
+        }
         [command] if command == "capabilities" => write_json(&capabilities()),
         [command, flag] if command == "capabilities" && flag == "--json" => {
             write_json(&capabilities())
@@ -18,28 +30,37 @@ pub(super) fn run() -> Result<(), String> {
             write_json(&serde_json::json!({"ok": true, "capabilities": capabilities()}))
         }
         #[cfg(unix)]
+        [command, mode, marker, config]
+            if command == "claude-hook-bridge"
+                && mode == claude_session_start::SESSION_START_MODE
+                && marker == claude_session_start::SESSION_START_MARKER =>
+        {
+            std::process::exit(claude_session_start::run(config))
+        }
         [command, marker, config]
             if command == "claude-hook-bridge" && marker == claude_hook_bridge::BRIDGE_MARKER =>
         {
             claude_hook_bridge::run(config)
         }
-        #[cfg(unix)]
         [command, python_argv @ ..]
             if command == codex_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
-        #[cfg(unix)]
         [command, python_argv @ ..]
             if command == bounded_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(bounded_hook_bridge::run(python_argv))
         }
-        #[cfg(unix)]
         [command, python_argv @ ..]
             if command == cursor_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
+        }
+        [command, python_argv @ ..]
+            if command == mcp_relay::RELAY_COMMAND && python_argv.len() >= 2 =>
+        {
+            std::process::exit(mcp_relay::run(python_argv))
         }
         [command, flag] if command == "hook" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -52,6 +73,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
             let response = guard_config_load::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if guard_config_update::is_command(command) && flag == "--stdin" => {
+            let response = guard_config_update::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {

@@ -82,7 +82,6 @@ from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 from .startup_phase import timed_phase
 
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
-GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
 # Slowest observed cold start on a loaded host.  The resident adds its own
 # margin on top of this floor (the contract field is still named
@@ -1184,13 +1183,6 @@ def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
             json.dumps({"created_at": now, "token": token}, sort_keys=True),
         )
     return token
-
-
-def _guard_daemon_recovery_owner_state(reservation: dict[str, object] | None) -> bool | None:
-    """Return whether a claimed recovery worker is still alive."""
-
-    query = {"reservation": _reservation_facts(reservation)}
-    return cast("bool | None", _lifecycle("recovery_owner_state", query)["state"])
 
 
 def _bind_guard_daemon_recovery_reservation(
@@ -2356,11 +2348,6 @@ def _runtime_state_age_seconds(guard_home: Path) -> float | None:
     return max(0.0, (datetime.now(timezone.utc) - heartbeat).total_seconds())
 
 
-def _guard_home_from_command(command: str) -> Path | None:
-    home = _lifecycle("inspect_command", {"command": command})["guard_home"]
-    return None if home is None else Path(home)
-
-
 def _guard_home_from_command_parts(parts: list[str]) -> Path | None:
     home = _lifecycle("inspect_parts", {"parts": list(parts)})["guard_home"]
     return None if home is None else Path(home)
@@ -2370,15 +2357,6 @@ def _implicit_daemon_guard_home() -> Path:
     from ..config import resolve_guard_home
 
     return resolve_guard_home(None)
-
-
-def _guard_daemon_port_from_command(command: str) -> int | None:
-    port = _lifecycle("inspect_command", {"command": command})["port"]
-    return cast("int | None", port)
-
-
-def _guard_daemon_command_matches(command: str) -> bool:
-    return bool(_lifecycle("inspect_command", {"command": command})["matches"])
 
 
 def _split_process_command(command: str) -> list[str] | None:

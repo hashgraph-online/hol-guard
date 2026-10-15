@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -186,7 +187,15 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
         or any(not isinstance(result[key], str) for key in scalars)
         or any(not isinstance(result[key], list) or not all(isinstance(v, str) for v in result[key]) for key in arrays)
         or result["profile_version"] not in profiles
-        or result["backend"] not in {"macos-seatbelt", "linux-bubblewrap"}
+        or not (
+            result["backend"] in {"macos-seatbelt", "linux-bubblewrap"}
+            # The Windows runner contains only an installed Python interpreter.
+            or (
+                result["backend"] == "windows-appcontainer"
+                and sys.platform == "win32"
+                and result["profile_version"] == "python-eval-readonly-v1"
+            )
+        )
         or not result["command"]
         or not result["allowed_executables"]
     ):

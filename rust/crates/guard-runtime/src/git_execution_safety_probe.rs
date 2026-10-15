@@ -40,6 +40,34 @@ impl ProbeOutput {
     }
 }
 
+/// The branch `git push origin <branch>` sends, given the branch checked out
+/// now. Without a `reference`, `branch` must be that branch or `HEAD`, which
+/// pushes the checked-out branch to the same name. A `reference` of `HEAD`
+/// says the same command first creates `branch` at the checked-out commit and
+/// switches to it (`git switch -c`), so `branch` must not exist yet, locally
+/// or as a known `origin` branch the push would move.
+pub(crate) fn pushed_branch<'a>(
+    prober: &Prober<'_>,
+    current: &'a str,
+    branch: &'a str,
+    reference: Option<&str>,
+) -> Option<&'a str> {
+    match reference {
+        None => (branch == "HEAD" || branch == current).then_some(current),
+        Some("HEAD") if branch != "HEAD" && branch != current => {
+            let absent = |reference: String| {
+                prober
+                    .run(&["rev-parse", "--verify", "--quiet", &reference])
+                    .is_some_and(|found| found.code == Some(1))
+            };
+            (absent(format!("refs/heads/{branch}"))
+                && absent(format!("refs/remotes/origin/{branch}")))
+            .then_some(branch)
+        }
+        Some(_) => None,
+    }
+}
+
 pub(crate) struct Prober<'a> {
     pub(crate) git: &'a Path,
     pub(crate) cwd: &'a Path,

@@ -213,18 +213,6 @@ def claim_github_workflow_authorization(
     )
 
 
-def github_workflow_authorization_evidence(
-    authorization: GitHubWorkflowAuthorization | None,
-    *,
-    command_identity: str,
-) -> tuple[PositiveProof, str] | None:
-    """Return sealed claimed proof only for the exact canonical command."""
-
-    if type(authorization) is not GitHubWorkflowAuthorization:
-        return None
-    return authorization.evidence(command_identity=command_identity)
-
-
 def _framed_sha256(purpose: str, payload: object) -> str:
     return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
 
@@ -232,6 +220,5 @@ def _framed_sha256(purpose: str, payload: object) -> str:
 __all__ = (
     "GitHubWorkflowAuthorization",
     "claim_github_workflow_authorization",
-    "github_workflow_authorization_evidence",
     "issue_github_workflow_capability_binding",
 )

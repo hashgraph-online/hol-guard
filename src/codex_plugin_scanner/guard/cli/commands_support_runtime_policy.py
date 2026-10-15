@@ -24,11 +24,7 @@ from ..native_hook_approval_context import native_hook_approval_context_token, r
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from ..store import (
-    _runtime_scoped_exact_match_key,
-    runtime_tool_action_exact_match_context,
-    runtime_tool_action_portable_match_context,
-)
+from ..store import runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -269,148 +265,78 @@ def _is_cloud_inbox_url(value: str) -> bool:
     parsed = urllib.parse.urlparse(value)
     return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
 
-def _runtime_stored_policy_decision(
+def _runtime_saved_policy_probe(
+    *,
+    harness: str,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    workspace: str | None,
+    memory: bool,
+) -> dict[str, object]:
+    """Describe one saved-decision probe for the resident runtime lookup."""
+
+    probe: dict[str, object] = {
+        "harness": harness,
+        "artifact_id": artifact.artifact_id,
+        "artifact_hash": artifact_hash,
+        "workspace": workspace,
+        "publisher": artifact.publisher,
+        "exact_match_context": _runtime_artifact_exact_match_context(artifact),
+        "risk_scoped": bool(_runtime_artifact_risk_classes(artifact)),
+    }
+    if memory:
+        probe["memory"] = {
+            "command": artifact.command,
+            "artifact_type": artifact.artifact_type,
+            "artifact_name": artifact.name,
+        }
+    return probe
+
+
+def _runtime_saved_policy_decision(
     *,
     store: GuardStore,
     harness: str,
     artifact: GuardArtifact,
-    artifact_id: str,
     artifact_hash: str,
     workspace: str | None,
-    decision_lookup: Mapping[str, object] | None = None,
-    consume_one_shot: bool = True,
-) -> Mapping[str, object] | None:
-    """Return a matching saved decision without conflating it with current policy.
+    legacy_artifact_hash: str,
+    legacy_workspace: str | None,
+    alias_harness: str,
+    alias_artifact: GuardArtifact | None,
+    alias_artifact_hash: str | None,
+    alias_workspace: str | None,
+) -> tuple[Mapping[str, object], Mapping[str, object] | None]:
+    """Return the saved-decision lookup and the decision this artifact may use.
 
-    Runtime launch paths pass ``consume_one_shot=False`` and claim an accepted
-    approval only after recomputing all current policy and scanner inputs.  The
-    consuming default preserves the compatibility contract for older direct
-    callers that use this helper outside the authoritative runtime path.
+    The resident composes the current-hash and legacy-hash lookups (a legacy
+    decision wins only when strictly more severe, so a new exact allow never
+    hides a retained pre-v1 block) and falls back to the Claude alias. Nothing
+    is consumed: the runtime claims an accepted approval only after recomputing
+    all current policy and scanner inputs.
     """
 
     from ..native_context import bind_context_digest_home
 
     bind_context_digest_home(getattr(store, "guard_home", None))
-    runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
-    ignored_local_integrity: Mapping[str, object] | None = None
-    if isinstance(decision_lookup, Mapping):
-        raw_decision = decision_lookup.get("decision")
-        decision = raw_decision if isinstance(raw_decision, Mapping) else None
-        raw_ignored_local_integrity = decision_lookup.get("ignored_local_integrity")
-        ignored_local_integrity = (
-            raw_ignored_local_integrity if isinstance(raw_ignored_local_integrity, Mapping) else None
-        )
-    else:
-        if consume_one_shot:
-            decision = store.resolve_policy_decision(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=artifact.publisher,
-                runtime_exact_match_context=runtime_exact_match_context,
-            )
-        else:
-            decision = store.resolve_policy_decision(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=artifact.publisher,
-                runtime_exact_match_context=runtime_exact_match_context,
-                consume_one_shot=False,
-            )
-    if decision is None and runtime_exact_match_context is not None and ignored_local_integrity is None:
-        if consume_one_shot:
-            legacy_decision = store.resolve_policy_decision(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=artifact.publisher,
-            )
-        else:
-            legacy_decision = store.resolve_policy_decision(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=artifact.publisher,
-                consume_one_shot=False,
-            )
-        if _optional_string((legacy_decision or {}).get("scope")) in {"harness", "global"}:
-            decision = legacy_decision
-    if decision is None:
-        return None
-    action = _optional_string(decision.get("action"))
-    if action is None:
-        return None
-    scope = _optional_string(decision.get("scope"))
-    if action == "allow" and approval_context_tokens_validation_reason(
-        decision.get("artifact_hash"),
-        artifact_hash,
-    ) is None:
-        # A valid v1 token already binds the exact request context. Broad
-        # scopes are selectors only; they must not discard that exact token.
-        return decision
-    if (
-        action in {"allow", "warn", "review"}
-        and scope in {"workspace", "publisher", "harness", "global"}
-        and _runtime_artifact_risk_classes(artifact)
-    ):
-        decision_artifact_id = _optional_string(decision.get("artifact_id"))
-        if scope == "workspace":
-            decision_artifact_hash = _optional_string(decision.get("artifact_hash"))
-            if decision_artifact_id == artifact_id and (
-                decision_artifact_hash is None or decision_artifact_hash == artifact_hash
-            ):
-                return decision
-            return None
-        if scope in {"harness", "global"}:
-            decision_artifact_hash = _optional_string(decision.get("artifact_hash"))
-            exact_match_keys = {
-                key
-                for key in (
-                    _runtime_scoped_exact_match_key(artifact_id),
-                    _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context),
-                    _runtime_scoped_exact_match_key(
-                        artifact_id,
-                        runtime_tool_action_portable_match_context(runtime_exact_match_context),
-                    ),
-                )
-                if key is not None
-            }
-            if not exact_match_keys:
-                return decision if decision_artifact_id is not None else None
-            return decision if decision_artifact_hash in exact_match_keys else None
-        return None
-    return decision
-
-
-def _runtime_stored_policy_action(
-    *,
-    store: GuardStore,
-    harness: str,
-    artifact: GuardArtifact,
-    artifact_id: str,
-    artifact_hash: str,
-    workspace: str | None,
-    decision_lookup: Mapping[str, object] | None = None,
-    consume_one_shot: bool = True,
-) -> str | None:
-    """Compatibility projection for callers that only need the saved action."""
-
-    decision = _runtime_stored_policy_decision(
-        store=store,
+    current = _runtime_saved_policy_probe(
         harness=harness,
         artifact=artifact,
-        artifact_id=artifact_id,
         artifact_hash=artifact_hash,
         workspace=workspace,
-        decision_lookup=decision_lookup,
-        consume_one_shot=consume_one_shot,
+        memory=True,
     )
-    return _optional_string(decision.get("action")) if decision is not None else None
+    legacy = {**current, "artifact_hash": legacy_artifact_hash, "workspace": legacy_workspace}
+    alias = None
+    if alias_artifact is not None and alias_artifact_hash is not None:
+        alias = _runtime_saved_policy_probe(
+            harness=alias_harness,
+            artifact=alias_artifact,
+            artifact_hash=alias_artifact_hash,
+            workspace=alias_workspace,
+            memory=False,
+        )
+    return store.resolve_runtime_saved_decision(current, legacy, alias)
 
 
 def _runtime_saved_allow_validation_reason(
@@ -795,7 +721,7 @@ __all__ = [
     "_native_hook_reason_for_harness", "_runtime_action_data_flow_signals",
     "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
     "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
-    "_runtime_detector_registry_payload", "_runtime_stored_policy_action", "_strip_cloud_inbox_urls",
+    "_runtime_detector_registry_payload", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",
     "_terminalize_runtime_action_copy",
 ]

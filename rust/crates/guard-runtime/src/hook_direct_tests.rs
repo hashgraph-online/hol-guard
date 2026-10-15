@@ -1,6 +1,7 @@
 use super::{
-    direct_event, evaluate, expanduser, normalized_workspace, normpath, post_tool_answer,
+    cursor, direct_event, evaluate, expanduser, normalized_workspace, normpath, post_tool_answer,
     pre_tool_answer, prompt_answer, workspace_candidate, HookDirectDefer, HookDirectRequestV1,
+    REPAIRABLE_BLOCK_REASON,
 };
 use crate::policy_store::policy_store_direct_lane::tests::{
     allowing_fixture, binding, fixture, push, write_current_ack, Fixture,
@@ -107,19 +108,6 @@ fn workspace_strings_normalize_like_the_daemon() {
     }
     assert_eq!(normpath("///work//repo"), Ok("/work/repo".to_owned()));
     assert_eq!(expanduser("~", HOME), Ok(HOME.to_owned()));
-}
-
-#[test]
-fn temporary_roots_defer_instead_of_falling_through() {
-    assert_eq!(
-        normalized_workspace(Some("/tmp"), HOME),
-        Err(HookDirectDefer::WorkspaceInvalid)
-    );
-    let temporary = std::env::temp_dir();
-    assert_eq!(
-        normalized_workspace(temporary.to_str(), HOME),
-        Err(HookDirectDefer::WorkspaceInvalid)
-    );
 }
 
 #[test]
@@ -362,9 +350,14 @@ fn request_shapes_the_daemon_must_handle_defer() {
         deferred(&run(&lane, reference)),
         "direct_hook_payload_unsupported"
     );
-    let mut stop = allowed_payload(&lane);
-    stop["hook_event_name"] = json!("Stop");
-    assert_eq!(deferred(&run(&lane, stop)), "direct_hook_event_unsupported");
+    // Codex PermissionRequest is the no-decision passthrough. A harness
+    // without that passthrough still defers, and the command is not judged.
+    let mut permission = allowed_payload(&lane);
+    permission["hook_event_name"] = json!("PermissionRequest");
+    assert_eq!(
+        deferred(&run_as(&lane, "copilot", Some(HOME), permission)),
+        "direct_hook_event_unsupported"
+    );
     let mut environment = allowed_payload(&lane);
     environment["guard_execution_environment"] = json!("PATH=/bin");
     assert_eq!(
@@ -393,7 +386,7 @@ fn request_shapes_the_daemon_must_handle_defer() {
 fn other_harnesses_and_homes_defer() {
     let lane = lane("harness", json!({}));
     let mut request = HookDirectRequestV1 {
-        harness: "opencode".to_owned(),
+        harness: "gemini".to_owned(),
         guard_home: lane.fixture.root.to_str().unwrap().to_owned(),
         home_dir: Some(HOME.to_owned()),
         workspace: None,
@@ -610,18 +603,12 @@ fn a_command_the_policy_warns_on_is_answered() {
 }
 
 #[test]
-fn a_cursor_pre_tool_use_is_answered_only_when_its_client_allows_it() {
+fn a_cursor_pre_tool_use_is_answered_only_as_its_client_renders_it() {
     let cursor = lane("cursor", json!({}));
     let result = run_as(&cursor, "cursor", Some(HOME), allowed_payload(&cursor));
     assert_eq!(result["outcome"], "answer", "{result}");
     assert_eq!(result["edge"]["harness_response"]["policy_action"], "warn");
     assert_eq!(drain(&cursor, None)["records"][0]["harness"], "cursor");
-    let mut post = allowed_payload(&cursor);
-    post["hook_event_name"] = json!("PostToolUse");
-    assert_eq!(
-        deferred(&run_as(&cursor, "cursor", Some(HOME), post)),
-        "direct_hook_event_unsupported"
-    );
     let sensitive_read = |lane: &Lane| {
         json!({
             "hook_event_name": "PreToolUse",
@@ -639,8 +626,9 @@ fn a_cursor_pre_tool_use_is_answered_only_when_its_client_allows_it() {
         )),
         "direct_hook_not_allow"
     );
-    // Watch lets the call run, so the Cursor client allows whatever the
-    // edge would have stopped.
+    // A review the binding cannot queue still takes the daemon path, as any
+    // harness's does. Watch lets the call run, so the Cursor client allows
+    // whatever the edge would have stopped.
     let watch = lane(
         "cursor-watch",
         json!({ "harness_postures": { "cursor": "watch" } }),
@@ -648,6 +636,65 @@ fn a_cursor_pre_tool_use_is_answered_only_when_its_client_allows_it() {
     let result = run_as(&watch, "cursor", Some(HOME), sensitive_read(&watch));
     assert_eq!(result["outcome"], "answer", "{result}");
     assert_eq!(result["edge"]["harness_response"]["policy_action"], "warn");
+}
+
+#[test]
+fn a_cursor_verdict_is_answered_only_as_the_daemon_returns_it() {
+    let cursor_edge = |decision: &str, minimum_action: &str, code: Value, rendered: &str| {
+        serde_json::to_vec(&json!({
+            "schema": "guard-hook-edge-result.v2",
+            "event_name": "PreToolUse",
+            "result": {
+                "decision": decision,
+                "minimum_action": minimum_action,
+                "reason_code": code,
+            },
+            "harness_response": { "policy_action": rendered },
+        }))
+        .unwrap()
+    };
+    let answered = |decision, minimum_action, code, rendered, recording_only| {
+        cursor::answer(
+            &cursor_edge(decision, minimum_action, code, rendered),
+            recording_only,
+        )
+        .is_ok()
+    };
+    let repairable = json!(REPAIRABLE_BLOCK_REASON);
+    for (decision, minimum_action, rendered) in [
+        ("allow", "allow", "allow"),
+        ("allow", "warn", "warn"),
+        ("deny", "block", "block"),
+        ("block", "block", "block"),
+        ("deny", "sandbox-required", "block"),
+        ("deny", "sandbox-required", "sandbox-required"),
+    ] {
+        assert!(
+            answered(decision, minimum_action, json!(null), rendered, false),
+            "{decision} {minimum_action} {rendered}"
+        );
+    }
+    // The daemon repairs an authority block and pauses a review, and the
+    // client renders only what the edge rendered.
+    for (decision, minimum_action, code, rendered) in [
+        ("deny", "block", repairable.clone(), "block"),
+        ("deny", "review", json!(null), "block"),
+        ("deny", "require-reapproval", json!(null), "block"),
+        ("allow", "block", json!(null), "block"),
+        ("deny", "warn", json!(null), "block"),
+        ("deny", "block", json!(null), "review"),
+        ("deny", "block", json!(null), "allow"),
+        ("allow", "allow", json!(null), "block"),
+    ] {
+        assert!(
+            !answered(decision, minimum_action, code, rendered, false),
+            "{decision} {minimum_action} {rendered}"
+        );
+    }
+    // Watch answers whatever the edge let run, and nothing it stopped.
+    assert!(answered("deny", "block", json!(null), "warn", true));
+    assert!(answered("deny", "block", repairable, "allow", true));
+    assert!(!answered("deny", "block", json!(null), "block", true));
 }
 
 /// The next evidence page, after acknowledging `acked`, a page drained before.
@@ -715,10 +762,44 @@ fn an_answer_queues_the_evidence_the_daemon_records() {
 #[test]
 fn a_deferred_hook_queues_no_evidence() {
     let lane = lane("deferred-evidence", json!({}));
-    let mut stop = allowed_payload(&lane);
-    stop["hook_event_name"] = json!("Stop");
-    deferred(&run(&lane, stop));
+    let mut permission = allowed_payload(&lane);
+    permission["hook_event_name"] = json!("PermissionRequest");
+    // Copilot has no passthrough, so this stays a defer and records nothing.
+    deferred(&run_as(&lane, "copilot", Some(HOME), permission));
     assert_eq!(drain(&lane, None)["records"], json!([]));
+}
+
+#[test]
+fn a_bounded_harness_hook_is_answered_as_codex_is() {
+    let answered = allowing_lane("bounded", json!({}));
+    let result = run_as(&answered, "kimi", Some(HOME), allowed_payload(&answered));
+    assert_eq!(result["outcome"], "answer", "{result}");
+    let page = drain(&answered, None);
+    let record = &page["records"][0];
+    assert_eq!(record["harness"], "kimi");
+    assert_eq!(
+        record["harness_response"],
+        result["edge"]["harness_response"]
+    );
+    // A ZCode allow passes the daemon's containment step unchanged.
+    let zcode = allowing_lane("bounded-zcode", json!({}));
+    let result = run_as(&zcode, "zcode", Some(HOME), allowed_payload(&zcode));
+    assert_eq!(result["outcome"], "answer", "{result}");
+    let page = drain(&zcode, None);
+    assert_eq!(page["records"][0]["harness"], "zcode");
+    assert_eq!(
+        page["records"][0]["harness_response"],
+        result["edge"]["harness_response"]
+    );
+    let grok = allowing_lane("bounded-grok", json!({}));
+    let result = run_as(&grok, "grok", Some(HOME), allowed_payload(&grok));
+    assert_eq!(result["outcome"], "answer", "{result}");
+    let page = drain(&grok, None);
+    assert_eq!(page["records"][0]["harness"], "grok");
+    assert_eq!(
+        page["records"][0]["harness_response"],
+        result["edge"]["harness_response"]
+    );
 }
 
 #[test]
@@ -849,27 +930,41 @@ fn a_prompt_answer_needs_its_receipt() {
 }
 
 #[test]
-fn only_a_prompt_the_daemon_restyles_waits_for_its_notice() {
+fn only_a_prompt_the_daemon_restyles_carries_its_notice() {
     let reviewed = |action: &str| {
         serde_json::to_vec(&json!({
             "schema": "guard-hook-edge-result.v2",
             "event_name": "UserPromptSubmit",
-            "result": { "decision": "allow", "minimum_action": action },
-            "harness_response": {},
+            "result": {
+                "decision": "block",
+                "minimum_action": action,
+                "reason": "Synthetic prompt reason",
+            },
+            "harness_response": { "hookSpecificOutput": { "hookEventName": "UserPromptSubmit" } },
             "receipt": { "decision_id": "d" },
         }))
         .unwrap()
     };
     for action in ["require-reapproval", "block", "sandbox-required"] {
-        assert_eq!(
-            prompt_answer(&reviewed(action), true),
-            Err(HookDirectDefer::PromptNotice),
+        let noticed = prompt_answer(&reviewed(action), true).unwrap();
+        assert!(
+            noticed["harness_response"]["systemMessage"].is_string(),
+            "{action}: {noticed}"
+        );
+        let plain = prompt_answer(&reviewed(action), false).unwrap();
+        assert!(
+            plain["harness_response"].get("systemMessage").is_none(),
             "{action}"
         );
-        assert!(prompt_answer(&reviewed(action), false).is_ok(), "{action}");
     }
+    let briefed = prompt_answer(&reviewed("require-reapproval"), true).unwrap();
+    assert!(briefed["harness_response"]["hookSpecificOutput"]["additionalContext"].is_string());
     for action in ["allow", "warn", "review", ""] {
-        assert!(prompt_answer(&reviewed(action), true).is_ok(), "{action}");
+        let answered = prompt_answer(&reviewed(action), true).unwrap();
+        assert!(
+            answered["harness_response"].get("systemMessage").is_none(),
+            "{action}"
+        );
     }
 }
 
@@ -918,3 +1013,15 @@ fn a_claude_code_prompt_without_a_notice_is_answered_in_either_posture() {
         assert_eq!(page["records"][0]["harness"], "claude-code", "{label}");
     }
 }
+
+#[path = "hook_direct_lifecycle_tests.rs"]
+mod lifecycle;
+
+#[path = "hook_direct_counters_evaluate_tests.rs"]
+mod counters;
+
+#[path = "hook_direct_pi_tests.rs"]
+mod pi_lane;
+
+#[path = "hook_direct_cursor_tests.rs"]
+mod cursor_observer;

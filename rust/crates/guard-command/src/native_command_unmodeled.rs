@@ -121,11 +121,15 @@ impl CompiledNativeCommandControls {
         command: &CanonicalCommandV1,
         deadline: Option<Instant>,
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> Result<(NativeCommandObservationBatchV1, Option<&'static str>), &'static str> {
-        match self
-            .program
-            .observe_with_context(command, &self.active_extensions, deadline, context)
-        {
+        match self.program.observe_in(
+            command,
+            &self.active_extensions,
+            deadline,
+            context,
+            environment,
+        ) {
             Err(error) if UNMODELED_ERRORS.contains(&error) => self
                 .unmodeled_floor(command)
                 .map(|floor| (NativeCommandObservationBatchV1::default(), Some(floor)))
@@ -411,14 +415,78 @@ fn joined_quotes(text: &str) -> String {
 /// Whether a command position holds an expansion, glob or `.` source, which
 /// can run a program whose name appears nowhere in the text.
 fn synthesizes_program(literal: &str) -> bool {
-    command_words(literal)
-        .filter(|word| !is_assignment(word))
-        .any(|word| {
-            !matches!(
-                word,
-                "for" | "case" | "select" | "in" | "done" | "fi" | "esac" | "[" | "[["
-            ) && (word == "." || word.contains(['$', '*', '?', '[']))
+    let masked = mask_double_quoted_separators(literal);
+    let mut words = command_words(&masked).filter(|word| !is_assignment(word));
+    words.any(|word| {
+        !matches!(
+            word,
+            "for" | "case" | "select" | "in" | "done" | "fi" | "esac" | "[" | "[["
+        ) && (word == "." || word.contains(['$', '*', '?', '[']))
+    })
+}
+
+/// The text with command separators inside double quotes made ordinary, so a
+/// quoted regex such as `"^@@|^[+-]"` stays one argument instead of starting
+/// a fake command word. Expansion characters stay in place, so `"$cmd"` in a
+/// command position is still seen, and a quoted span holding a command
+/// substitution is left untouched because its commands still run. That
+/// includes `$(...)`, backticks, and Bash's `${ cmd; }` / `${| cmd; }` form.
+fn mask_double_quoted_separators(literal: &str) -> String {
+    let mut out = String::with_capacity(literal.len());
+    let mut span: Option<String> = None;
+    let mut escaped = false;
+    for character in literal.chars() {
+        let Some(quoted) = span.as_mut() else {
+            out.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                span = Some(String::new());
+            }
+            continue;
+        };
+        if escaped {
+            escaped = false;
+        } else if character == '\\' {
+            escaped = true;
+        } else if character == '"' {
+            out.push_str(&mask_span(quoted));
+            out.push(character);
+            span = None;
+            continue;
+        }
+        quoted.push(character);
+    }
+    if let Some(quoted) = span {
+        out.push_str(&quoted);
+    }
+    out
+}
+
+fn span_runs_a_command(quoted: &str) -> bool {
+    quoted.contains("$(")
+        || quoted.contains('`')
+        || quoted.match_indices("${").any(|(at, _)| {
+            quoted[at + 2..]
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_whitespace() || character == '|')
         })
+}
+
+fn mask_span(quoted: &str) -> String {
+    if span_runs_a_command(quoted) {
+        return quoted.to_owned();
+    }
+    quoted
+        .chars()
+        .map(|character| match character {
+            ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' => 'x',
+            other => other,
+        })
+        .collect()
 }
 
 /// The leading assignments and first word of each simple command, after

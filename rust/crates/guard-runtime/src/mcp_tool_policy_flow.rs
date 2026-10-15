@@ -21,9 +21,12 @@ use serde_json::{json, Map, Value};
 use crate::approval_proof_op::{claim_disposition, fresh_tool_approval, Disposition};
 use crate::mcp_tool_policy_composio::{provider_floor_blocks, requires_action_review};
 use crate::mcp_tool_policy_decision::{with_reuse, Current, Decision};
-use crate::mcp_tool_policy_extension::extension_decision;
 use crate::mcp_tool_policy_grants::{browser_intent, exact_match_context, grant_selectors};
 use crate::mcp_tool_policy_lookup::policy_lookup;
+
+#[path = "mcp_tool_policy_memo.rs"]
+mod memo;
+pub(crate) use memo::PassMemo;
 
 pub(crate) const ERR_OBSERVATION: &str = "native_mcp_tool_policy_decide_observation_invalid";
 const ERR_ACTION: &str = "native_mcp_tool_policy_decide_action_invalid";
@@ -62,6 +65,8 @@ pub(crate) struct Ctx<'a> {
     pub(crate) observations: &'a [McpToolPolicyObservationV1],
     /// Evidence to read the saved policy in-process for the initial pass.
     pub(crate) lookup: Option<&'a McpPolicyLookupInputV1>,
+    /// What this call's passes over one subject share (`PassMemo`).
+    pub(crate) memo: Option<&'a PassMemo<'a>>,
 }
 
 impl Ctx<'_> {
@@ -205,7 +210,7 @@ fn apply_temporary_grant(
     let local_decision;
     let granted = match &subject.extension {
         Some(extension) => {
-            local_decision = extension_decision(extension, original.as_str());
+            local_decision = memo::extension(ctx.memo, subject, extension, original.as_str());
             &local_decision
         }
         None => ctx.ask(json!({
@@ -396,7 +401,7 @@ pub(crate) fn evaluate_pass(
     claim: bool,
 ) -> Flow<Pass> {
     let intent = browser_intent(subject)?;
-    let current = evaluate_current(subject)?;
+    let current = memo::current(ctx.memo, subject)?;
     let current = apply_temporary_grant(ctx, phase, subject, intent.as_ref(), current)?;
     let command = subject.artifact.command.as_deref().unwrap_or("");
     let composio = requires_action_review(command);

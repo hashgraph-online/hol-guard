@@ -71,6 +71,8 @@ pub struct Isolation {
     pub inherited_files: Vec<File>,
     #[cfg(windows)]
     pub app_container: Option<windows::AppContainer>,
+    #[cfg(windows)]
+    pub job_limits: Option<guard_runtime_windows_process::ResourceLimits>,
 }
 
 /// Inspection and launch use this same opened file and directory, never a
@@ -238,6 +240,8 @@ pub fn process_ceiling(additional: u64) -> io::Result<u64> {
     unix::process_ceiling(additional)
 }
 
+#[cfg(windows)]
+pub use windows::readonly::{run_readonly_snapshot, ReadonlySnapshotRun};
 #[cfg(windows)]
 pub use windows::AppContainer;
 

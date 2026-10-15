@@ -321,7 +321,7 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
 
 #[test]
 fn admission_rejects_tampered_unknown_and_invalid_nodes() {
-    let mut value: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+    let mut value: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
     value["semantic_profile"] = "unqualified-unicode".into();
     let bytes = serde_json::to_vec(&value).unwrap();
     assert_eq!(
@@ -421,7 +421,7 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         .permission_observations
         .iter()
         .any(|item| item.permission_id == "command.github.permission.read-remote"));
-    for command in ["git cat-file -p HEAD", "docker compose ps"] {
+    for command in ["git cat-file --batch-check", "docker compose ps"] {
         let result = decision(command, &unrestricted);
         assert_eq!(result.minimum_action, "review", "{command}");
         assert!(!result.explicitly_benign, "{command}");

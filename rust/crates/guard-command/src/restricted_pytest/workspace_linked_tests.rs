@@ -69,6 +69,8 @@ fn the_overlay_pattern_admits_only_shared_stores_and_admin_files() {
         "packed-refs",
         "worktrees/wt/index",
         "worktrees/wt/HEAD",
+        "worktrees/wt/AUTO_MERGE.lock",
+        "worktrees/wt/MERGE_HEAD.lock",
         "worktrees/wt/logs",
         "worktrees/wt/logs/HEAD",
     ] {
@@ -84,6 +86,7 @@ fn the_overlay_pattern_admits_only_shared_stores_and_admin_files() {
         "worktrees/wt/commondir",
         "worktrees/wt/config.worktree",
         "worktrees/wt/index/x",
+        "worktrees/wt/AUTO_MERGE.lock/x",
         "worktrees/other/HEAD",
     ] {
         assert!(!only.is_match(&format!("/r/main/.git/{path}")), "{path}");

@@ -15,6 +15,7 @@ use serde_json::Value;
 use crate::mcp_sensitive_read::{
     McpSensitiveReadContextQueryV1, McpSensitiveReadHintQueryV1, McpSensitiveReadReuseQueryV1,
 };
+use crate::mcp_tool_evidence::McpToolRiskInputV1;
 
 pub const MCP_PROXY_DECISION_REQUEST_SCHEMA: &str = "guard-mcp-proxy-decision-request.v1";
 pub const MCP_PROXY_DECISION_RESULT_SCHEMA: &str = "guard-mcp-proxy-decision-result.v1";
@@ -242,6 +243,20 @@ pub struct McpPackageReasonSignalsQueryV1 {
     pub reasons: Vec<Value>,
 }
 
+/// Everything the proxy shows and binds for one `tools/call`: masked
+/// arguments and params, the launch target, the browser intent and the risk
+/// evidence, in one round trip.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpCallProjectionQueryV1 {
+    pub tool_name: String,
+    /// The request `params` exactly as received.
+    pub params: Value,
+    /// The call's artifact and arguments; `null` when the proxy has no
+    /// artifact yet, which skips the browser intent and risk evidence.
+    pub risk: Option<McpToolRiskInputV1>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "check", rename_all = "snake_case")]
 pub enum McpProxyQueryV1 {
@@ -260,6 +275,7 @@ pub enum McpProxyQueryV1 {
     SensitiveReadHint(McpSensitiveReadHintQueryV1),
     ExternalArchiveBind(McpExternalArchiveBindQueryV1),
     PackageReasonSignals(McpPackageReasonSignalsQueryV1),
+    CallProjection(McpCallProjectionQueryV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

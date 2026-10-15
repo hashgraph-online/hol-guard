@@ -28,6 +28,7 @@ from . import qualify_setup
 from .fixtures import create_numbered_dir
 from .parallel import terminate_as_exit
 from .source_identity import SHA
+from .timing import PhaseTimings
 
 REPO = Path(__file__).resolve().parents[2]
 REAP_SECONDS = 150.0
@@ -286,6 +287,7 @@ def main(args: Any) -> int:
     if os.name == "nt":
         raise ValueError("qualify requires a POSIX host")
     started = time.monotonic()
+    timings = PhaseTimings()
     sha = args.sha
     if SHA.fullmatch(sha) is None:
         raise ValueError("--sha must be a full 40-character commit")
@@ -325,9 +327,11 @@ def main(args: Any) -> int:
     try:
         with terminate_as_exit():
             qualify_setup.private_dir(args.cache_root, tighten=qualify_setup.driver_owned(args.cache_root))
-            info = qualify_setup.preflight(REPO)
+            with timings.measure("preflight"):
+                info = qualify_setup.preflight(REPO)
             progress(f"preflight independent_verifier={info['independent_verifier']}")
-            qualify_setup.ensure_commit(REPO, sha)
+            with timings.measure("source"):
+                qualify_setup.ensure_commit(REPO, sha)
             if args.sdk_root is not None:
                 sdk_info = {
                     "root": str(args.sdk_root),
@@ -339,14 +343,17 @@ def main(args: Any) -> int:
                     ).get("version"),
                 }
             else:
-                sdk_info = qualify_setup.ensure_sdk(args.cache_root, REPO, sha, run_root / "logs" / "setup.log")
+                with timings.measure("sdk"):
+                    sdk_info = qualify_setup.ensure_sdk(args.cache_root, REPO, sha, run_root / "logs" / "setup.log")
             progress(f"sdk {sdk_info['omp_version']} {sdk_info['lock_sha256'][:12]}")
-            wheel_info = qualify_setup.ensure_wheel(
-                args.cache_root, REPO, sha, run_root, wheel=args.wheel, release_profile=args.release_profile_wheel
-            )
+            with timings.measure("wheel"):
+                wheel_info = qualify_setup.ensure_wheel(
+                    args.cache_root, REPO, sha, run_root, wheel=args.wheel, release_profile=args.release_profile_wheel
+                )
             progress(f"wheel {wheel_info['sha256'][:12]} cached={wheel_info['cached']} profile={wheel_info['profile']}")
             candidate = run_root / "candidate"
-            candidate = prepare_candidate(REPO, sha, run_root, Path(wheel_info["path"]))
+            with timings.measure("install"):
+                candidate = prepare_candidate(REPO, sha, run_root, Path(wheel_info["path"]))
             progress("candidate installed")
             for k in range(1, args.attempts + 1):
                 evidence = run_root / "evidence" / f"attempt-{k}"
@@ -374,7 +381,8 @@ def main(args: Any) -> int:
                 )
                 progress(f"attempt {k} starting")
                 t0 = time.monotonic()
-                rc = run_attempt(argv, cwd=candidate, env=env, log=run_root / "logs" / f"attempt-{k}.log")
+                with timings.measure("live_cases"):
+                    rc = run_attempt(argv, cwd=candidate, env=env, log=run_root / "logs" / f"attempt-{k}.log")
                 record = summarize_attempt(k, evidence, rc, time.monotonic() - t0, _read_summary(evidence))
                 record["work_root"] = str(work)
                 attempts.append(record)
@@ -385,11 +393,12 @@ def main(args: Any) -> int:
                     try:
                         from .verify import verify_report
 
-                        verify_result = verify_report(
-                            evidence,
-                            expected_sha=args.candidate_sha or sha,
-                            source_root=candidate,
-                        )
+                        with timings.measure("verify"):
+                            verify_result = verify_report(
+                                evidence,
+                                expected_sha=args.candidate_sha or sha,
+                                source_root=candidate,
+                            )
                     except ValueError as exc:
                         record["verify_error"] = str(exc)
                     qualified = (
@@ -407,14 +416,16 @@ def main(args: Any) -> int:
         cleanup: list[str] = []
         if candidate is not None:
             try:
-                removed = _remove_candidate(REPO, candidate)
+                with timings.measure("cleanup"):
+                    removed = _remove_candidate(REPO, candidate)
             except Exception:
                 removed = False
             cleanup.append("candidate-worktree-removed" if removed else "candidate-worktree-kept")
         for record in attempts:
             work = Path(record["work_root"])
             if record.get("pass") and not args.keep_work and work.exists():
-                shutil.rmtree(work, ignore_errors=True)
+                with timings.measure("cleanup"):
+                    shutil.rmtree(work, ignore_errors=True)
                 cleanup.append(f"work-{record['attempt']}-removed")
         kept = sorted(str(path) for path in run_root.iterdir())
         kept.extend(str(Path(record["work_root"])) for record in attempts if Path(record["work_root"]).exists())
@@ -442,6 +453,7 @@ def main(args: Any) -> int:
             "unverified_known_gaps": None if verify_result or not attempts else attempts[-1].get("known_gaps"),
             "verify": verify_result,
             "elapsed_seconds": round(time.monotonic() - started, 3),
+            "phase_seconds": timings.report(),
             "cleanup": cleanup,
             "kept": kept,
             "run_root": str(run_root),

@@ -22,7 +22,8 @@ const CHALLENGE_LABEL: &str = "daemon identity challenge";
 const HOOK_DEADLINE: &str = "daemon hook response exceeded the hook deadline";
 const INTEGER_LIMIT: &str = "Exceeds the limit (4300 digits) for integer string conversion";
 const RECURSION_LIMIT: &str = "maximum recursion depth exceeded while decoding a JSON document";
-const OVERLOAD_MARKERS: [&str; 5] = ["capacity", "overload", "too_many", "too many", "busy"];
+pub(crate) const OVERLOAD_MARKERS: [&str; 5] =
+    ["capacity", "overload", "too_many", "too many", "busy"];
 
 /// A daemon exchange failure, in the three shapes the Python bridge
 /// classifies: an HTTP status, a `ValueError` (the daemon or its state
@@ -320,6 +321,6 @@ pub(crate) fn authenticated_claude_hook_response(
     Ok(text)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_transport_tests.rs"]
 mod tests;

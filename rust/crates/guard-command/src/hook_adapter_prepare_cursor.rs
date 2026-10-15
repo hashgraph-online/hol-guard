@@ -96,6 +96,21 @@ fn infer_cursor_event(payload: &OMap) -> OMap {
     normalized
 }
 
+/// The event the Cursor client names its answer for:
+/// `str(inferred.get("hook_event_name") or inferred.get("hookEventName") or
+/// "preToolUse")` over `_infer_cursor_hook_event_name`. `None` when that
+/// name is not text.
+pub fn cursor_client_event(payload: &OMap) -> Option<String> {
+    let inferred = infer_cursor_event(payload);
+    match first_truthy(
+        inferred.get("hook_event_name"),
+        inferred.get("hookEventName"),
+    ) {
+        Some(value) if value.truthy() => value.as_str().map(str::to_owned),
+        _ => Some("preToolUse".to_owned()),
+    }
+}
+
 fn cursor_file_payload(
     normalized: &mut OMap,
     tool: &str,

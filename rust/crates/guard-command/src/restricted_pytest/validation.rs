@@ -183,10 +183,13 @@ pub(super) fn resolve_pytest_executable(
     let launch_executable = locate_executable(&command[0], cwd, search_path)?;
     let executable = resolve_executable(&command[0], cwd, search_path)?;
     let launched_from_workspace = path_is_within_lexically(&launch_executable, workspace);
-    if !launched_from_workspace && !path_is_within_any(&executable, &TRUSTED_EXECUTABLE_ROOTS) {
+    if !launched_from_workspace
+        && !path_is_within_any(&executable, &TRUSTED_EXECUTABLE_ROOTS)
+        && venv::external_root(&launch_executable, &executable, workspace).is_none()
+    {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
-            "Restricted pytest executable must be inside the workspace or a trusted system installation root.",
+            "Contained executable must be inside the workspace, a trusted system installation root, or a virtual environment of a trusted Python runtime.",
         ));
     }
     if PYTEST_EXECUTABLE_NAMES.contains(command_name.as_str())

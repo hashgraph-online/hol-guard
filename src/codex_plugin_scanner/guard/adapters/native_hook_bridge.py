@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -11,11 +10,11 @@ def native_hook_bridge_executable(feature: str) -> Path | None:
     """The validated native runtime when it advertises ``feature``.
 
     A native hook bridge lets the harness start the compiled runtime instead
-    of a Python interpreter for each hook call. Windows and frozen builds keep
-    their Python launchers.
+    of a Python interpreter for each hook call. Frozen builds keep their
+    Python launchers.
     """
 
-    if os.name == "nt" or getattr(sys, "frozen", False):
+    if getattr(sys, "frozen", False):
         return None
     from ..native_runtime import native_runtime_status
 

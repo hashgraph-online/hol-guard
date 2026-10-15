@@ -17,8 +17,19 @@ from .native_policy_snapshot_constants import (
 from .native_policy_snapshot_direct_lane import (
     contained_sink_command,
     direct_lane_binding,
+    direct_lane_integrity_key,
     local_cli_block_rules_present,
     with_direct_hook_state,
+)
+from .native_policy_snapshot_direct_lane_review import (
+    recheckable_review_facts,
+    review_facts_bound,
+    with_review_facts,
+)
+from .native_policy_snapshot_direct_lane_saved import refresh_integrity_state, with_saved_decision_state
+from .native_policy_snapshot_direct_lane_structured import (
+    bound_structured_output_view,
+    with_structured_output_view,
 )
 from .native_policy_snapshot_harness_postures import (
     HARNESS_POSTURES_BINDING_KEY,
@@ -80,6 +91,10 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._policy_input_changed():
                     publisher._republish_preserving_watch()
                 publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
+                publisher._recheck_direct_lane_review_facts()
+                publisher._recheck_direct_lane_structured_output()
+                publisher._recheck_direct_lane_mcp_relay()
+                publisher._recheck_direct_lane_saved_state()
             with publisher._condition:
                 if publisher._closed:
                     return
@@ -127,6 +142,63 @@ class NativePolicySnapshotPublicationMixin:
             if should_publish:
                 publisher._publish_once(renew_after_generation=renewal_after_generation)
 
+    def _recheck_direct_lane_review_facts(self) -> None:
+        """Rebind the lane once a review fact no policy input covers moves.
+
+        Config files carry the blocked-request mode and are watched inputs,
+        and the store's source never changes. The approval center origin lives
+        in the daemon's runtime state row and the working directory in this
+        process, so they are compared here. A change closes the direct lane
+        and queues a republish that keeps the daemon's own ACK.
+        """
+
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        bound = publisher._direct_lane_review_facts
+        if bound is None or publisher._direct_lane_ack_target is None:
+            return
+        current = recheckable_review_facts(publisher.store)
+        if current is None or current == bound:
+            return
+        # A lane published before the daemon recorded where it listens binds
+        # no origin, so learning it moves nothing; the next publish binds it.
+        if bound[0] is None and current[1] == bound[1]:
+            return
+        publisher._rebind_direct_lane()
+
+    def _recheck_direct_lane_structured_output(self) -> None:
+        """Rebind the lane once the managed-policy view it carries moves.
+
+        Each reconcile compiles the configs again. A managed policy outside
+        the watched files, such as one in the Windows registry, changes the
+        view without changing an input, so it is compared here.
+        """
+
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        bound = publisher._direct_lane_structured_output
+        if bound is None or publisher._direct_lane_ack_target is None:
+            return
+        if publisher._compiled_structured_output_view == bound:
+            return
+        publisher._rebind_direct_lane()
+
+    def _rebind_direct_lane(self) -> None:
+        """Close the direct lane and queue a republish under the daemon's ACK."""
+
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        publisher._close_direct_lane_ack()
+        with publisher._condition:
+            publisher._direct_lane_review_facts = None
+            publisher._direct_lane_structured_output = None
+            publisher._direct_lane_mcp_relay = None
+            snapshot = publisher._snapshot
+            generation = snapshot.get("generation") if snapshot is not None else None
+            if publisher._closed or not publisher._acked or not isinstance(generation, int) or generation <= 0:
+                return
+            publisher._renewal_after_generation = generation
+            publisher._retry_not_before_monotonic = publisher._monotonic_clock()
+            publisher._failure_count = 0
+        publisher._publish_event.set()
+
     def _record_error(self, error: str) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         safe = error.strip().lower()
@@ -167,18 +239,17 @@ class NativePolicySnapshotPublicationMixin:
             # A cold verified read may itself migrate authenticated catalog
             # state and close the mutation barrier. Recapture once before IPC;
             # accepting its previous epoch would also hide concurrent changes.
-            for _ in range(2):
+            for attempt in range(2):
                 with publisher._condition:
                     publish_epoch = publisher._epoch
-                    # Compile exactly this set. A workspace registered later
-                    # stays pending for the next publish; compiling its overlay
-                    # now would make the ACKed digest disagree with the
-                    # settled-only reconcile and withdraw readiness home-wide.
+                    # Compile exactly this set. A later workspace stays pending:
+                    # compiling its overlay now would make the ACKed digest disagree
+                    # with the settled-only reconcile and withdraw readiness home-wide.
                     compiled_workspaces = frozenset(publisher._workspace_paths)
-                # Observe inputs before compiling: a change after this point
-                # leaves the resident with a stat mismatch, never a stale pass.
-                # The binding is optional, so an observation failure only
-                # keeps the lane closed; publication reports its own errors.
+                refresh_integrity_state(publisher.store)
+                # Observe inputs before compiling: a later change leaves the resident
+                # a stat mismatch, never a stale pass. The binding is optional, so an
+                # observation failure only keeps the lane closed.
                 try:
                     direct_lane = direct_lane_binding(
                         inputs=publisher._current_policy_input_stats(),
@@ -195,6 +266,11 @@ class NativePolicySnapshotPublicationMixin:
                 context = publisher._publication_context(workspaces=compiled_workspaces)
                 if context is None:
                     return
+                # The context may mint the integrity key, which moves the state
+                # without a database write. Recapture so inputs follow the state.
+                if attempt == 0 and refresh_integrity_state(publisher.store):
+                    context = None
+                    continue
                 with publisher._condition:
                     if publisher._closed:
                         return
@@ -213,7 +289,21 @@ class NativePolicySnapshotPublicationMixin:
                 local_cli_block_rules=local_cli_block_rules,
                 evidence_drain=publisher.direct_evidence_bound(resident_features),
                 contained_sink_command=contained_sink_command(resident_features),
+                integrity_key=direct_lane_integrity_key(publisher.store, resident_features),
             )
+            direct_lane = with_saved_decision_state(direct_lane, store=publisher.store, features=resident_features)
+            direct_lane = with_review_facts(
+                direct_lane,
+                store=publisher.store,
+                features=resident_features,
+                blocked_request_mode=publisher._compiled_blocked_request_mode,
+            )
+            direct_lane = with_structured_output_view(
+                direct_lane,
+                features=resident_features,
+                view=publisher._compiled_structured_output_view,
+            )
+            direct_lane = publisher._with_mcp_relay_view(direct_lane, resident_features)
             resident_fingerprint_before = publisher._current_input_fingerprint()[1]
             try:
                 business_source = publisher._compiled_business_source()
@@ -265,9 +355,8 @@ class NativePolicySnapshotPublicationMixin:
             with hold_command_control_authority_lock(publisher.guard_home, shared=True):
                 source_matches = publisher._compiled_business_source() == business_source
                 with publisher._condition:
-                    # A mutation may have invalidated the barrier while this
-                    # request was in flight. Do not let an older ACK make that
-                    # newer policy appear ready.
+                    # A mutation may have invalidated the barrier in flight; an
+                    # older ACK must not make that newer policy appear ready.
                     if publisher._closed or publisher._epoch != publish_epoch:
                         return
                     if not source_matches:
@@ -289,9 +378,8 @@ class NativePolicySnapshotPublicationMixin:
                             resident_fingerprint, resident_generation
                         )
                     ):
-                        # Hook reviews touch resident generation files while this
-                        # publish is in flight. Watch still matches the resident
-                        # that acknowledged the snapshot; do not drop it and pause.
+                        # Hook reviews touch resident generation files in flight; Watch
+                        # still matches the resident that ACKed, so do not drop it.
                         resident_fingerprint_confirmed = resident_fingerprint
                     if resident_fingerprint_confirmed is None:
                         publisher._acked = False
@@ -329,6 +417,15 @@ class NativePolicySnapshotPublicationMixin:
                     publisher._acked = True
                     if publisher._harness_postures == bound_postures:
                         publisher._direct_lane_local_cli_revision = local_cli_revision
+                        publisher._direct_lane_review_facts = (
+                            (direct_lane.get("approval_center_origin"), direct_lane.get("review_host_cwd"))
+                            if isinstance(direct_lane, Mapping) and review_facts_bound(resident_features)
+                            else None
+                        )
+                        publisher._direct_lane_structured_output = bound_structured_output_view(
+                            direct_lane, resident_features
+                        )
+                        publisher._bind_relay_and_saved_state(direct_lane, resident_features)
                         evidence_drain = isinstance(direct_lane, Mapping) and direct_lane.get("evidence_drain") is True
                         publisher._publish_direct_lane_ack(snapshot, evidence_drain=evidence_drain)
                     else:

@@ -4,31 +4,31 @@
 //! <config>`. When `<script>` is the client this module was ported from
 //! (see [`crate::bounded_hook_bridge_grok_script`]), the bridge does what the
 //! client's `main` does: read the hook, ask the daemon, wait for a pending
-//! approval and write Grok's answer.
+//! approval and write Grok's answer. A live resident that answers the hook
+//! exactly as the daemon would is asked first, and its answer is rendered
+//! as the daemon's would be; a prompt always goes to the daemon.
 //!
-//! Before the daemon is contacted, anything the bridge cannot answer exactly
-//! as the client would runs the client unchanged, with the hook it already
-//! read. Once the daemon has been asked, the bridge never hands the hook to
-//! Python: every failure writes the client's fail-closed answer, so the
-//! daemon is never asked twice.
+//! A hook the bridge cannot read, and a home with no daemon to ask, get the
+//! client's own fail-closed answer, and so does every failure once the
+//! daemon has been asked. Python runs only when the client's configuration
+//! cannot be read.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use crate::bounded_hook_bridge::{
-    read_hook_input, run_python, write_stdout, Input, MAX_HOOK_INPUT_BYTES,
-};
+use crate::bounded_hook_bridge::{read_hook_input, write_stdout, Input, MAX_HOOK_INPUT_BYTES};
 use crate::bounded_hook_bridge_grok_render::{
     approval_request_ids, approval_wait_seconds, dump_object, event_labels_are_ascii, event_name,
-    failure_stdout, is_observe_event, json_object, pretool_event_conflict, quote_component,
-    rewrite_decision, to_native, WAITING_ACTIONS,
+    failure_stdout, failure_stdout_for, is_observe_event, json_object, pretool_event_conflict,
+    quote_component, rewrite_decision, to_native, WAITING_ACTIONS,
 };
-use crate::bounded_hook_bridge_grok_script::{invocation, read_ported_script, Invocation};
+use crate::bounded_hook_bridge_grok_script::{invocation, read_client_constants, Invocation};
 use crate::bounded_hook_bridge_render::member;
 use crate::claude_hook_bridge_auth::{private_file_raw, LOOPBACK_HOSTS};
 use crate::claude_hook_bridge_http::{LoopbackConnection, MAX_DAEMON_RESPONSE_BYTES};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
+use crate::codex_hook_bridge_direct::grok_direct_answer;
 use crate::hook_env_stamp::{current_environment, dumps, set_member, stamp_hook_input_text, Stamp};
 use crate::pyjson::PyVal;
 
@@ -45,6 +45,9 @@ const PRETOOL_EVENT: &str = "PreToolUse";
 const HOOK_DEADLINE: &str = "daemon hook deadline exhausted";
 const POLL_SECONDS: f64 = 1.0;
 const POLL_INTERVAL_SECONDS: f64 = 0.2;
+const OVERSIZE_REASON: &str =
+    "HOL Guard blocked this action because hook input exceeded the safe size limit.";
+const CONFLICT_REASON: &str = "HOL Guard blocked this action because hook event labels conflict.";
 
 /// Seconds left before `deadline`, never negative.
 fn seconds_left(deadline: Instant) -> f64 {
@@ -82,8 +85,6 @@ struct Daemon {
 pub(crate) enum Route {
     /// Write `stdout` and exit with `exit_code`.
     Respond { stdout: String, exit_code: i32 },
-    /// Run the client with the hook; the daemon was not asked.
-    Delegate,
 }
 
 /// The client's state after `_configure_grok_invocation`.
@@ -100,6 +101,16 @@ impl Client {
     fn fail(prefix: &str) -> Route {
         Route::Respond {
             stdout: failure_stdout(prefix),
+            exit_code: 0,
+        }
+    }
+
+    /// `_fail(prefix, reason=reason)`, answered as PreToolUse when the
+    /// hook's labels conflict, as `_fail` does.
+    fn refuse(prefix: &str, reason: &str) -> Route {
+        let conflict = json_object(prefix).is_some_and(|payload| pretool_event_conflict(&payload));
+        Route::Respond {
+            stdout: failure_stdout_for(if conflict { "{}" } else { prefix }, reason),
             exit_code: 0,
         }
     }
@@ -303,27 +314,52 @@ impl Client {
         (rewritten, if allowed { 0 } else { exit_code })
     }
 
-    /// `main` after the hook was read: the client's answer, or
-    /// [`Route::Delegate`] while the client would still answer differently.
+    /// The resident's answer for a hook it reviews as the daemon would, asked
+    /// within half the daemon's timeout so a slow resident leaves the daemon
+    /// time to answer. A prompt keeps the daemon path.
+    fn direct_answer(&self, event: &str, text: &str, timeout: f64) -> Option<String> {
+        if event == PROMPT_EVENT {
+            return None;
+        }
+        let deadline = capped(Instant::now(), timeout * 0.5, self.deadline);
+        grok_direct_answer(
+            &self.guard_home,
+            &self.invocation.home,
+            event,
+            text,
+            deadline,
+        )
+    }
+
+    /// `main` after the hook was read: the client's answer.
     pub(crate) fn route(&self, raw: &[u8]) -> Route {
         if raw.len() > MAX_HOOK_INPUT_BYTES {
-            return Route::Delegate;
+            // `_HookInputError.prefix`: the first bytes, decoded leniently.
+            let prefix = String::from_utf8_lossy(&raw[..MAX_HOOK_INPUT_BYTES]);
+            return Self::refuse(&prefix, OVERSIZE_REASON);
         }
         let body = raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw);
         let Ok(prefix) = std::str::from_utf8(body) else {
-            return Route::Delegate;
+            // Undecodable input is `_fail("{}")`.
+            return Self::fail("{}");
         };
         let Some(original) = json_object(prefix) else {
-            return Route::Delegate;
+            return Self::fail(prefix);
         };
-        if !event_labels_are_ascii(&original) || pretool_event_conflict(&original) {
-            return Route::Delegate;
+        if pretool_event_conflict(&original) {
+            return Self::refuse(prefix, CONFLICT_REASON);
+        }
+        // Labels outside ASCII are never Grok's own, and this bridge cannot
+        // read them as Python's `str.strip` would: they are refused as a
+        // PreToolUse.
+        if !event_labels_are_ascii(&original) {
+            return Self::fail("{}");
         }
         let Stamp::Text(mut text) = stamp_hook_input_text(prefix, &current_environment()) else {
-            return Route::Delegate;
+            return Self::fail(prefix);
         };
         let Some(mut payload) = json_object(&text) else {
-            return Route::Delegate;
+            return Self::fail(prefix);
         };
         // `_grok_invocation_payload`.
         if let Some(workspace) = &self.invocation.workspace {
@@ -342,7 +378,7 @@ impl Client {
             return Self::fail(prefix);
         }
         let Some(daemon) = self.daemon_auth() else {
-            return Route::Delegate;
+            return Self::fail(prefix);
         };
         let cap = if event == PROMPT_EVENT { 10.0 } else { 5.0 };
         let mut timeout = (self.timeout_seconds * 0.5)
@@ -368,7 +404,16 @@ impl Client {
                 return Self::fail(prefix);
             }
         }
-        let answer = self.http_json(&daemon, HOOK_PATH, Some(text.as_bytes()), timeout);
+        let answer = match self.direct_answer(&event, &text, timeout) {
+            Some(answer) => json_object(&answer),
+            None => {
+                timeout = timeout.min(seconds_left(self.deadline));
+                if timeout <= 0.0 {
+                    return Self::fail(prefix);
+                }
+                self.http_json(&daemon, HOOK_PATH, Some(text.as_bytes()), timeout)
+            }
+        };
         let Some((native, exit_code)) = answer.and_then(|response| to_native(&response, &event))
         else {
             return Self::fail(prefix);
@@ -383,19 +428,34 @@ impl Client {
     }
 }
 
-/// `_fail(prefix)` for a hook the client could not run: a PreToolUse label
-/// conflict answers as PreToolUse, like the client's conflict refusal.
-fn fail_closed(raw: &[u8]) -> i32 {
-    let body = raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw);
-    let prefix = std::str::from_utf8(body).unwrap_or("{}");
-    let conflict = json_object(prefix).is_some_and(|payload| pretool_event_conflict(&payload));
-    write_stdout(&failure_stdout(if conflict { "{}" } else { prefix }));
+/// How long a hook whose client this bridge cannot read waits for its input.
+const UNREADABLE_CLIENT_INPUT: Duration = Duration::from_secs(5);
+
+/// `_fail("{}")`: the answer when the hook could not be read at all.
+fn fail_closed() -> i32 {
+    write_stdout(&failure_stdout("{}"));
     0
+}
+
+/// The failure answer for a hook whose client this bridge cannot read,
+/// rendered for the hook's own event so an observer stays non-blocking.
+/// Input `route` would answer as a PreToolUse still fails as one.
+fn client_unreadable_stdout(raw: &[u8]) -> String {
+    let body = raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw);
+    let text = std::str::from_utf8(body)
+        .ok()
+        .filter(|_| raw.len() <= MAX_HOOK_INPUT_BYTES)
+        .filter(|text| {
+            json_object(text).is_some_and(|payload| {
+                !pretool_event_conflict(&payload) && event_labels_are_ascii(&payload)
+            })
+        });
+    failure_stdout(text.unwrap_or("{}"))
 }
 
 /// Answer one Grok hook. `python_argv` is `[python, "-I", script, config]`.
 pub(crate) fn run(python_argv: &[String], started: Instant) -> i32 {
-    let client = read_ported_script(Path::new(&python_argv[2])).and_then(|constants| {
+    let client = read_client_constants(Path::new(&python_argv[2])).and_then(|constants| {
         let invocation = invocation(&python_argv[3], &constants.guard_home)?;
         let budget = Duration::try_from_secs_f64(constants.timeout_seconds).ok()?;
         Some(Client {
@@ -406,22 +466,26 @@ pub(crate) fn run(python_argv: &[String], started: Instant) -> i32 {
         })
     });
     let Some(client) = client else {
-        return run_python(python_argv, None, started.elapsed(), false)
-            .unwrap_or_else(|| fail_closed(b"{}"));
+        // No install writes a client this bridge cannot read, so the hook
+        // fails closed rather than running Python.
+        let Input::Read(raw) = read_hook_input(started + UNREADABLE_CLIENT_INPUT) else {
+            return fail_closed();
+        };
+        write_stdout(&client_unreadable_stdout(&raw));
+        return 0;
     };
     let Input::Read(raw) = read_hook_input(client.deadline) else {
-        return fail_closed(b"{}");
+        return fail_closed();
     };
-    match client.route(&raw) {
-        Route::Respond { stdout, exit_code } => {
-            write_stdout(&stdout);
-            exit_code
-        }
-        Route::Delegate => run_python(python_argv, Some(&raw), started.elapsed(), false)
-            .unwrap_or_else(|| fail_closed(&raw)),
-    }
+    let Route::Respond { stdout, exit_code } = client.route(&raw);
+    write_stdout(&stdout);
+    exit_code
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_grok_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "bounded_hook_bridge_grok_client_tests.rs"]
+mod client_tests;

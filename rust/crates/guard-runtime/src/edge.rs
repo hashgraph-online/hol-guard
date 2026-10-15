@@ -294,6 +294,7 @@ fn evaluate_validated_envelope(
                     rustup_override_absent: false,
                     npm_config_inert: false,
                     shell_home_matches: false,
+                    ripgrep_config_absent: false,
                 },
                 Some(
                     envelope

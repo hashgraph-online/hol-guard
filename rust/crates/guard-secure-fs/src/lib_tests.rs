@@ -417,3 +417,31 @@ fn hidden_empty_marker_files_are_bounded_to_work_trees() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn project_dotfiles_are_benign_only_as_the_final_component() {
+    for allowed in [
+        ".gitignore",
+        "src/.gitignore",
+        ".editorconfig",
+        "/home/u/project/.dockerignore",
+        ".github/workflows/.gitignore",
+    ] {
+        assert!(hidden_read_parts_allowed(Path::new(allowed)), "{allowed}");
+    }
+    for denied in [
+        ".gitignore/x",
+        ".editorconfig/.gitignore",
+        ".git/config",
+        ".git/hooks/pre-commit",
+        ".git/info/exclude",
+        ".git/.gitignore",
+        ".git-credentials",
+        ".gitattributes",
+        ".npmrc",
+        ".envrc",
+        ".pre-commit-config.yaml",
+    ] {
+        assert!(!hidden_read_parts_allowed(Path::new(denied)), "{denied}");
+    }
+}

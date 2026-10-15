@@ -1,0 +1,225 @@
+{
+  "daemon_url": "http://127.0.0.1:43123",
+  "daemon_hook_command": [
+    "/opt/hol guard/bin/hol-guard-runtime",
+    "claude-hook-bridge",
+    "HOL_GUARD_CLAUDE_DAEMON_HOOK"
+  ],
+  "bridge_config": {
+    "state_path": "/home/雪 user/.hol-guard/daemon-state.json",
+    "fallback_command": [
+      "/opt/hol guard/bin/python3",
+      "-c",
+      "print('guard hook')",
+      "guard",
+      "hook",
+      "--guard-home=/home/雪 user/.hol-guard"
+    ],
+    "query": "guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22",
+    "recovery_command": [
+      "/opt/hol guard/bin/python3",
+      "-I",
+      "-c",
+      "start('\\\\x')",
+      "/home/雪 user/.hol-guard"
+    ]
+  },
+  "seed_hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/true",
+            "args": [],
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "/old/python",
+            "args": [
+              "-c",
+              "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+              "{}"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/true",
+            "args": [],
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/old/python",
+            "args": [
+              "-c",
+              "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+              "{}"
+            ],
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "/usr/bin/true",
+            "args": [],
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/old/python",
+            "args": [
+              "-c",
+              "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+              "{}"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "settings": {
+    "model": "fixture",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/usr/bin/true",
+              "args": [],
+              "timeout": 3
+            },
+            {
+              "type": "command",
+              "command": "/opt/hol guard/bin/hol-guard-runtime",
+              "args": [
+                "claude-hook-bridge",
+                "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+                "{\"state_path\":\"/home/雪 user/.hol-guard/daemon-state.json\",\"fallback_daemon_url\":\"http://127.0.0.1:43123\",\"fallback_command\":[\"/opt/hol guard/bin/python3\",\"-c\",\"print('guard hook')\",\"guard\",\"hook\",\"--guard-home=/home/雪 user/.hol-guard\"],\"query\":\"guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22\",\"recovery_command\":[\"/opt/hol guard/bin/python3\",\"-I\",\"-c\",\"start('\\\\\\\\x')\",\"/home/雪 user/.hol-guard\"]}"
+              ],
+              "timeout": 30,
+              "statusMessage": "HOL Guard is checking this tool use"
+            }
+          ]
+        }
+      ],
+      "SessionStart": [
+        {
+          "matcher": "startup",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/usr/bin/true",
+              "args": [],
+              "timeout": 3
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/usr/bin/true",
+              "args": [],
+              "timeout": 3
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/opt/hol guard/bin/hol-guard-runtime",
+              "args": [
+                "claude-hook-bridge",
+                "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+                "{\"state_path\":\"/home/雪 user/.hol-guard/daemon-state.json\",\"fallback_daemon_url\":\"http://127.0.0.1:43123\",\"fallback_command\":[\"/opt/hol guard/bin/python3\",\"-c\",\"print('guard hook')\",\"guard\",\"hook\",\"--guard-home=/home/雪 user/.hol-guard\"],\"query\":\"guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22\",\"recovery_command\":[\"/opt/hol guard/bin/python3\",\"-I\",\"-c\",\"start('\\\\\\\\x')\",\"/home/雪 user/.hol-guard\"]}"
+              ],
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "PermissionRequest": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/opt/hol guard/bin/hol-guard-runtime",
+              "args": [
+                "claude-hook-bridge",
+                "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+                "{\"state_path\":\"/home/雪 user/.hol-guard/daemon-state.json\",\"fallback_daemon_url\":\"http://127.0.0.1:43123\",\"fallback_command\":[\"/opt/hol guard/bin/python3\",\"-c\",\"print('guard hook')\",\"guard\",\"hook\",\"--guard-home=/home/雪 user/.hol-guard\"],\"query\":\"guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22\",\"recovery_command\":[\"/opt/hol guard/bin/python3\",\"-I\",\"-c\",\"start('\\\\\\\\x')\",\"/home/雪 user/.hol-guard\"]}"
+              ],
+              "timeout": 10,
+              "statusMessage": "HOL Guard is reviewing this approval prompt"
+            }
+          ],
+          "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        }
+      ],
+      "PostToolUse": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/opt/hol guard/bin/hol-guard-runtime",
+              "args": [
+                "claude-hook-bridge",
+                "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+                "{\"state_path\":\"/home/雪 user/.hol-guard/daemon-state.json\",\"fallback_daemon_url\":\"http://127.0.0.1:43123\",\"fallback_command\":[\"/opt/hol guard/bin/python3\",\"-c\",\"print('guard hook')\",\"guard\",\"hook\",\"--guard-home=/home/雪 user/.hol-guard\"],\"query\":\"guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22\",\"recovery_command\":[\"/opt/hol guard/bin/python3\",\"-I\",\"-c\",\"start('\\\\\\\\x')\",\"/home/雪 user/.hol-guard\"]}"
+              ],
+              "timeout": 30
+            }
+          ],
+          "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+        }
+      ],
+      "Notification": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/opt/hol guard/bin/hol-guard-runtime",
+              "args": [
+                "claude-hook-bridge",
+                "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+                "{\"state_path\":\"/home/雪 user/.hol-guard/daemon-state.json\",\"fallback_daemon_url\":\"http://127.0.0.1:43123\",\"fallback_command\":[\"/opt/hol guard/bin/python3\",\"-c\",\"print('guard hook')\",\"guard\",\"hook\",\"--guard-home=/home/雪 user/.hol-guard\"],\"query\":\"guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22\",\"recovery_command\":[\"/opt/hol guard/bin/python3\",\"-I\",\"-c\",\"start('\\\\\\\\x')\",\"/home/雪 user/.hol-guard\"]}"
+              ],
+              "timeout": 10
+            }
+          ],
+          "matcher": "permission_prompt"
+        }
+      ]
+    }
+  }
+}

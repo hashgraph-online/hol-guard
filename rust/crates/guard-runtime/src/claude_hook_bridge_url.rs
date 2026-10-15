@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::claude_hook_bridge_auth::LOOPBACK_HOSTS;
 use crate::claude_hook_bridge_transport::py_repr;
 use crate::daemon_policy_authority::load_authenticated_daemon_state;
+#[cfg(not(windows))]
 use crate::oci_path::resolve_lenient;
 
 const STATE_FILE_NAME: &str = "daemon-state.json";
@@ -92,7 +93,49 @@ fn state_parent(path: &Path) -> &Path {
 }
 
 fn resolved_text(path: &Path) -> String {
-    resolve_lenient(&path.to_string_lossy())
+    resolve_absolute(&path.to_string_lossy())
+}
+
+/// `str(Path(path).resolve())` for an absolute path: CPython's POSIX
+/// `realpath` walk on Unix.
+#[cfg(not(windows))]
+pub(crate) fn resolve_absolute(path: &str) -> String {
+    resolve_lenient(path)
+}
+
+/// `str(Path(path).resolve())` for an absolute path on Windows: `ntpath`
+/// normalizes the path, resolves the longest existing prefix to its final
+/// name, keeps the rest lexically, and drops the `\\?\` prefix.
+#[cfg(windows)]
+pub(crate) fn resolve_absolute(path: &str) -> String {
+    let Ok(absolute) = std::path::absolute(path) else {
+        return path.to_owned();
+    };
+    let mut existing = absolute.as_path();
+    let mut rest = Vec::new();
+    loop {
+        if let Ok(canonical) = std::fs::canonicalize(existing) {
+            let mut resolved = PathBuf::from(strip_verbatim(&canonical.to_string_lossy()));
+            resolved.extend(rest.iter().rev());
+            return resolved.to_string_lossy().into_owned();
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_owned());
+                existing = parent;
+            }
+            _ => return absolute.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn strip_verbatim(path: &str) -> String {
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(path).to_owned()
+    }
 }
 
 /// `state_path_for_query`: the state path, bound to the query's Guard home.
@@ -105,7 +148,9 @@ pub(crate) fn state_path_for_query(raw: &str, query: &str) -> Result<PathBuf, St
     if home.contains('\0') {
         return Err("daemon hook query contains an invalid Guard home".to_owned());
     }
-    if !home.starts_with('/') || resolved_text(state_parent(&path)) != resolve_lenient(home) {
+    if !Path::new(home).is_absolute()
+        || resolved_text(state_parent(&path)) != resolve_absolute(home)
+    {
         return Err("daemon state path does not match the hook Guard home".to_owned());
     }
     Ok(path)
@@ -240,5 +285,57 @@ pub(crate) fn endpoint_query(query: &str) -> String {
     match cleaned.split_once('#') {
         Some((before, _)) => before.to_owned(),
         None => cleaned,
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    fn guard_home(label: &str) -> PathBuf {
+        let home = std::env::temp_dir().join(format!("hol-bridge-{label}-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        home
+    }
+
+    #[test]
+    fn drive_guard_home_binds_its_own_state_path() {
+        let home = guard_home("binds");
+        let state = home.join(STATE_FILE_NAME);
+        let query = format!("guard-home={}", home.display()).replace('\\', "%5C");
+        assert_eq!(
+            state_path_for_query(&state.to_string_lossy(), &query),
+            Ok(state.clone())
+        );
+        let forward = home.to_string_lossy().replace('\\', "/");
+        assert_eq!(
+            state_path_for_query(&state.to_string_lossy(), &format!("guard-home={forward}")),
+            Ok(state)
+        );
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn resolve_absolute_matches_python_resolve() {
+        let home = guard_home("resolve");
+        let resolved = resolve_absolute(&home.to_string_lossy());
+        assert!(!resolved.starts_with(r"\\?\"), "{resolved}");
+        assert!(Path::new(&resolved).is_absolute(), "{resolved}");
+        assert_eq!(
+            resolve_absolute(&format!("{}\\missing\\..\\next", home.display())),
+            format!("{resolved}\\next")
+        );
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn another_guard_home_does_not_bind_the_state_path() {
+        let home = guard_home("other");
+        let state = home.join(STATE_FILE_NAME);
+        assert_eq!(
+            state_path_for_query(&state.to_string_lossy(), "guard-home=C:%5Cother-home"),
+            Err("daemon state path does not match the hook Guard home".to_owned())
+        );
+        let _ = std::fs::remove_dir_all(home);
     }
 }

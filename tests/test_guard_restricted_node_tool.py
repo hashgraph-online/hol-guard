@@ -169,6 +169,24 @@ def test_build_outputs_cannot_grant_source_or_host_writes(tmp_path, name):
         tool.validate_build_output_root(tmp_path / name, workspace=tmp_path)
 
 
+def test_a_package_below_the_workspace_builds_into_its_own_dist(tmp_path):
+    app = tmp_path / "apps" / "dashboard"
+    app.mkdir(parents=True)
+    (app / "package.json").write_text("{}")
+    tool.validate_build_output_root(app / "dist", workspace=tmp_path)
+    for directory in (tmp_path / "apps", tmp_path / ".github" / "app", app / "node_modules" / "vite"):
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "package.json").write_text("{}")
+    (tmp_path / "apps" / "package.json").unlink()
+    for parent in (tmp_path / "apps", tmp_path / ".github" / "app", app / "node_modules" / "vite", app / "src"):
+        with pytest.raises(RestrictedPytestError):
+            tool.validate_build_output_root(parent / "dist", workspace=tmp_path)
+    linked = tmp_path / "linked"
+    linked.symlink_to(app)
+    with pytest.raises(RestrictedPytestError):
+        tool.validate_build_output_root(linked / "dist", workspace=tmp_path)
+
+
 @pytest.mark.parametrize("kind", ["symlink", "hardlink", "credential"])
 def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
     output = tmp_path / "dist"
@@ -200,7 +218,8 @@ def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tm
     monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
     monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
     plan = tool.prepare_restricted_node_tool(["node", spelling, "build"], workspace=project)
-    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build", "--configLoader", "runner")
+    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build")
+    assert plan.output_roots == (project / "dist", project / "node_modules/.vite-temp")
 
 
 @pytest.mark.parametrize(

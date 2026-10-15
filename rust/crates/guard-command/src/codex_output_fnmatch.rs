@@ -80,7 +80,7 @@ fn token_matches(token: &Token, c: char) -> bool {
 }
 
 /// `fnmatch.fnmatchcase(name, pattern)`.
-pub(crate) fn fnmatchcase(name: &str, pattern: &str) -> bool {
+pub fn fnmatchcase(name: &str, pattern: &str) -> bool {
     let name: Vec<char> = name.chars().collect();
     let pattern: Vec<char> = pattern.chars().collect();
     let tokens = tokenize(&pattern);

@@ -1,4 +1,7 @@
-use super::{inert_line, list_arguments, npmrc_inert, plain_registry_spec, view_arguments};
+use super::{
+    cache_list_arguments, inert_line, list_arguments, npmrc_inert, plain_registry_spec,
+    view_arguments,
+};
 
 fn arguments(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
@@ -55,6 +58,31 @@ fn list_takes_display_flags_and_package_names() {
         "../outside",
     ] {
         assert!(!list_arguments(&arguments(text)), "{text}");
+    }
+}
+
+#[test]
+fn cache_takes_only_ls_with_package_names() {
+    for text in ["ls", "ls zod", "ls zod@3.23.8 @types/node"] {
+        assert!(cache_list_arguments(&arguments(text)), "{text}");
+    }
+    for text in [
+        "",
+        "add zod",
+        "clean --force",
+        "clean",
+        "verify",
+        "npx ls",
+        "ls --cache /tmp/x",
+        "ls --cache=/tmp/x",
+        "ls --registry=https://registry.example.test/",
+        "ls --prefix=/tmp",
+        "ls --userconfig=/tmp/npmrc",
+        "ls --globalconfig=/tmp/npmrc",
+        "ls -C /tmp",
+        "ls ./local",
+    ] {
+        assert!(!cache_list_arguments(&arguments(text)), "{text}");
     }
 }
 

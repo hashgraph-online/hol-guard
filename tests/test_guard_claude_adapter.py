@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -596,22 +597,21 @@ def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
     assert root_instruction.metadata.get("instructionRole") == "claude_md"
 
 
-def test_claude_detect_tolerates_unreadable_markdown_artifacts(monkeypatch, tmp_path):
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0,
+    reason="needs POSIX permissions that deny the reader",
+)
+def test_claude_detect_tolerates_unreadable_markdown_artifacts(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     skill_path = context.workspace_dir / ".claude" / "skills" / "review" / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
     skill_path.write_text("---\nname: review\ndescription: Review skill\n---\n", encoding="utf-8")
-    original_read_bytes = Path.read_bytes
-
-    def _guarded_read_bytes(path: Path) -> bytes:
-        if path == skill_path:
-            raise OSError("permission denied")
-        return original_read_bytes(path)
-
-    monkeypatch.setattr(Path, "read_bytes", _guarded_read_bytes)
-
-    detection = adapter.detect(context)
+    skill_path.chmod(0o000)
+    try:
+        detection = adapter.detect(context)
+    finally:
+        skill_path.chmod(0o644)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert "claude-code:project:skill:review" in artifacts

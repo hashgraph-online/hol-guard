@@ -1130,6 +1130,7 @@ const API_OPTIONS_WITH_VALUES: &[&str] = &[
     "-p",
 ];
 const API_BOOLEAN_OPTIONS: &[&str] = &[
+    "--allow-escape-sequences",
     "--include",
     "--paginate",
     "--silent",
@@ -1678,18 +1679,9 @@ fn routine_review_thread_arguments_are_static(args: &[String]) -> bool {
     field_names.iter().filter(|n| n.as_str() == "query").count() == 1 && field_names.len() <= 2
 }
 
-/// A `--jq` filter that only walks down the resolution's own response,
-/// `.data.resolveReviewThread.thread.isResolved` or a prefix of it, and so
-/// cannot call `env`, `input` or any other builtin or project other data.
-fn jq_is_plain_path(filter: &str) -> bool {
-    let steps: Vec<&str> = filter.split('.').collect();
-    steps.first() == Some(&"")
-        && (2..=5).contains(&steps.len())
-        && steps[1..]
-            .iter()
-            .zip(["data", "resolveReviewThread", "thread", "id|isResolved"])
-            .all(|(step, expected)| expected.split('|').any(|name| name == *step))
-}
+#[path = "github_review_thread_jq.rs"]
+mod review_thread_jq;
+use review_thread_jq::jq_is_plain_path;
 
 // ---------------------------------------------------------------------------
 // github_graphql_capabilities.py
@@ -1743,7 +1735,7 @@ fn routine_review_thread_literal_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r#"\A\s*mutation\s*\{{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"PRRT_[A-Za-z0-9_-]{{8,}}"\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
+            r#"\A\s*mutation\s*\{{\s*(?:un)?resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"PRRT_[A-Za-z0-9_-]{{8,}}"\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
         ))
         .unwrap()
     })
@@ -1752,7 +1744,7 @@ fn routine_review_thread_variable_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r#"\A\s*mutation\s*\(\s*\$(?P<declared>[_A-Za-z][_0-9A-Za-z]*)\s*:\s*ID!\s*\)\s*\{{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*\$(?P<used>[_A-Za-z][_0-9A-Za-z]*)\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
+            r#"\A\s*mutation\s*\(\s*\$(?P<declared>[_A-Za-z][_0-9A-Za-z]*)\s*:\s*ID!\s*\)\s*\{{\s*(?:un)?resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*\$(?P<used>[_A-Za-z][_0-9A-Za-z]*)\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
         ))
         .unwrap()
     })

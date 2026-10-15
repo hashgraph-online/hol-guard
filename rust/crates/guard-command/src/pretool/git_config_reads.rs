@@ -10,6 +10,9 @@
 use std::process::Command;
 use std::time::Instant;
 
+#[path = "git_config_writes.rs"]
+pub(crate) mod writes;
+
 const LIST_LIMIT: u64 = 262_144;
 const FLAGS: &[&str] = &[
     "--local",

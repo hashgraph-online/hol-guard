@@ -8,8 +8,9 @@
 //! plus `display`/`log`, `const`/`let` bindings,
 //! `Promise.all`, `JSON.stringify`, `.text` and `.length`. Every extracted call is then
 //! evaluated as the equivalent standalone tool; any non-allow reviews the
-//! whole program. Everything else, including comments, templates with
-//! interpolation, operators, other identifiers and other languages, is
+//! whole program, except a bridged `bash` call that would run under Guard
+//! containment on its own, since the bridge re-hooks it. Everything else,
+//! including comments, templates with interpolation, operators, other identifiers and other languages, is
 //! rejected rather than interpreted. A `py` program may only be whole lines of
 //! the Python prelude's `read(literal_path)`, optionally inside `print` or
 //! `display`.
@@ -97,9 +98,12 @@ pub(super) fn evaluate(
     let language = input.get("language")?.as_str()?;
     if !matches!(language, "js" | "py")
         || !input.iter().all(|(key, value)| match key.as_str() {
-            "code" | "language" | "title" => value.is_string(),
-            "reset" => value.is_boolean(),
-            "timeout" => value.is_number(),
+            "code" | "language" => value.is_string(),
+            // Codex-style code mode sends `null` for an optional field the
+            // model left unset; it means the default, like an absent key.
+            "title" => value.is_string() || value.is_null(),
+            "reset" => value.is_boolean() || value.is_null(),
+            "timeout" => value.is_number() || value.is_null(),
             _ => false,
         })
     {
@@ -125,7 +129,9 @@ pub(super) fn evaluate(
             context.execution_environment,
             true,
         );
-        if result.minimum_action != "allow" || result.action.sensitive_target {
+        if result.action.sensitive_target
+            || (result.minimum_action != "allow" && !contained_bash(call, &result))
+        {
             return None;
         }
     }
@@ -138,6 +144,19 @@ pub(super) fn evaluate(
         generic_action(context.harness, context.event, action_type, operation, true, false),
         "allow",
         "native_omp_eval_bounded_tools",
-        "The Rust authority parsed this eval as literal Oh My Pi tool calls and proved each one allowed on its own.",
+        "The Rust authority parsed this eval as literal Oh My Pi tool calls and proved each one allowed, or contained, on its own.",
     ))
+}
+
+/// Whether a bridged `bash` call needs only the containment its standalone
+/// form would get. OMP wraps every tool the eval bridge reaches in its
+/// extension gate, so the bridged call raises its own `tool_call` hook and
+/// Guard contains it, or refuses to start it, exactly as when the agent
+/// calls `bash` directly. Anything that would be reviewed standalone, or a
+/// verdict with no containment profile, keeps the whole program reviewed.
+fn contained_bash(call: &Call, result: &PreToolResultV1) -> bool {
+    call.tool == "bash"
+        && result.minimum_action == "sandbox-required"
+        && result.policy_action == "sandbox-required"
+        && crate::hook_responses::contained_execution_profile(&result.reason_code).is_some()
 }

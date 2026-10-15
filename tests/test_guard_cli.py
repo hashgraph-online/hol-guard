@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -1839,19 +1840,17 @@ args = ["workspace-skill.js"]
             custom_config_dir / "plugins" / "shared.mjs"
         )
 
-    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.geteuid() == 0,
+        reason="file modes do not block reads here",
+    )
+    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(workspace_dir / "opencode.json", {})
-        _write_text(workspace_dir / ".opencode" / "plugins" / "broken.mjs", "export default {};\n")
-        original_read_bytes = Path.read_bytes
-
-        def _patched_read_bytes(path: Path) -> bytes:
-            if path.name == "broken.mjs":
-                raise OSError("Permission denied")
-            return original_read_bytes(path)
-
-        monkeypatch.setattr(Path, "read_bytes", _patched_read_bytes)
+        broken = workspace_dir / ".opencode" / "plugins" / "broken.mjs"
+        _write_text(broken, "export default {};\n")
+        broken.chmod(0o000)
 
         rc = main(
             [

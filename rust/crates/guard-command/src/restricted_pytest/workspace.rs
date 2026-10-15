@@ -1,10 +1,10 @@
 //! Native launch plan for `workspace-contained-v1`.
 use super::workspace_linked::admissible_checkout;
 use super::*;
-use crate::pretool::generic::workspace_redirects;
+use crate::pretool::generic::{chain_literals, contained_publish, workspace_redirects};
 use crate::pretool::workspace_git_config::{linked_git_dirs, workspace_write_denials};
 use crate::pretool::workspace_git_environment::GitVariables;
-use crate::pretool::{command_shape, WORKSPACE_PROFILE};
+use crate::pretool::{command_shape, Shape, WORKSPACE_PROFILE};
 use crate::{parse_command, CommandModelRequestV1};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -23,6 +23,9 @@ struct Input {
     home: Option<PathBuf>,
     /// The caller's exported Git configuration variables, by value.
     git_environment: BTreeMap<String, String>,
+    /// The receipt runs the checks contained and the trailing Git steps after
+    /// them, outside the sandbox, once Guard proves those steps again.
+    publish_suffix: bool,
 }
 
 fn invalid(message: &str) -> RestrictedPytestError {
@@ -35,6 +38,35 @@ pub(crate) fn workspace_admissible(cwd: &Path, home: Option<&Path>) -> Option<Pa
     let resolved = cwd.canonicalize().ok()?;
     (resolved.is_dir() && !workspace_is_broad_or_sensitive_for_home(&resolved, home))
         .then_some(resolved)
+}
+
+/// The sandbox shape for the exact `text` about to run, or `None` when the
+/// workspace sandbox cannot bound it. Literal-path redirects are classified
+/// without them, and chained `$NAME` uses as the literal assigned earlier in
+/// the chain; the raw text still runs, so such a shape must run it whole.
+pub(crate) fn exact_shape(text: &str, workspace: &Path) -> Option<Shape> {
+    match chain_literals::substitute(text) {
+        Some(substituted) => literal_shape(&substituted, workspace).filter(|shape| {
+            shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none()
+        }),
+        None => literal_shape(text, workspace),
+    }
+}
+
+fn literal_shape(text: &str, workspace: &Path) -> Option<Shape> {
+    match workspace_redirects::project(text) {
+        Some(projected) => workspace_redirects::contained_shape(text, &projected, workspace),
+        None => {
+            let model = parse_command(&CommandModelRequestV1 {
+                command: text.to_owned(),
+                dialect: "posix".into(),
+                transport: "shell_string".into(),
+                extraction_provenance: "pre-tool-generic".into(),
+            })
+            .ok()?;
+            command_shape(&model, workspace, Some(text))
+        }
+    }
 }
 
 fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
@@ -67,24 +99,22 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
             "The workspace sandbox runs only from the workspace root.",
         ));
     }
-    // Re-derive the decision from the exact bytes about to run. Literal-path
-    // redirects are classified without them; the raw text still runs.
-    let shape = match workspace_redirects::project(&input.text) {
-        Some(projected) => {
-            workspace_redirects::contained_shape(&input.text, &projected, &workspace)
-        }
-        None => {
-            let model = parse_command(&CommandModelRequestV1 {
-                command: input.text.clone(),
-                dialect: "posix".into(),
-                transport: "shell_string".into(),
-                extraction_provenance: "pre-tool-generic".into(),
-            })
-            .map_err(|_| invalid("The command could not be parsed."))?;
-            command_shape(&model, &workspace, Some(&input.text))
-        }
-    }
-    .ok_or_else(|| invalid("The command is not eligible for the workspace sandbox."))?;
+    // Re-derive the decision from the exact bytes about to run.
+    let (contained, native_suffix) = if input.publish_suffix {
+        let (checks, publish) = contained_publish::split(&input.text)
+            .ok_or_else(|| invalid("The command does not split into checks and Git steps."))?;
+        (checks, Some(publish))
+    } else {
+        (input.text.clone(), None)
+    };
+    let shape = exact_shape(&contained, &workspace)
+        .filter(|shape| {
+            native_suffix.is_none()
+                || (shape.bootstrap.is_none()
+                    && shape.prefix.is_none()
+                    && shape.remainder.is_none())
+        })
+        .ok_or_else(|| invalid("The command is not eligible for the workspace sandbox."))?;
     let variables: GitVariables = input
         .git_environment
         .iter()
@@ -92,10 +122,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         .collect();
     let write_denials = workspace_write_denials(&workspace, input.home.as_deref(), &variables)
         .ok_or_else(|| invalid("The repository configuration is not eligible."))?;
-    let text = shape
-        .remainder
-        .clone()
-        .unwrap_or_else(|| input.text.clone());
+    let text = shape.remainder.clone().unwrap_or(contained);
     let (exec_roots, sandbox_path) =
         workspace_exec_roots(&input.search_path, input.home.as_deref(), &workspace);
     // A linked worktree's index, HEAD and objects live in the main checkout's
@@ -127,6 +154,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         "sandbox_path": sandbox_path,
         "bootstrap_git": shape.bootstrap,
         "prefix_command": shape.prefix,
+        "native_suffix": native_suffix,
         "denied_capabilities": [
             "network", "host-home-read", "host-secret-environment", "docker-socket",
             "workspace-credential-read", "git-execution-config-write", "privileged-operation"

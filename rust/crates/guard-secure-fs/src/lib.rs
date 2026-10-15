@@ -11,15 +11,16 @@ use thiserror::Error;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
+mod credential_path;
 mod secure_open;
 mod source_path;
 
+pub use credential_path::credential_named_path;
 use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{
-    classify_scannable_source_path, classify_source_path, credential_named_path,
-    credential_path_markers, hidden_empty_work_tree_file, hidden_read_parts_allowed,
-    is_source_code_extension, sensitive_external_filename, sensitive_path_family, source_like,
-    EXTERNAL_SENSITIVE_PARTS,
+    classify_scannable_source_path, classify_source_path, credential_path_markers,
+    hidden_empty_work_tree_file, hidden_read_parts_allowed, is_source_code_extension,
+    sensitive_external_filename, sensitive_path_family, source_like, EXTERNAL_SENSITIVE_PARTS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

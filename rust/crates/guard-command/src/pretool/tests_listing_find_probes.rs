@@ -188,9 +188,13 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
         write(&tree, file);
     }
     assert!(allowed_in(&fixture, ws, "grep -rln needle walk"));
+    // A feature directory named with a singular credential word is not a
+    // store; a directory that names stored secrets is.
     write(&tree, "secret-sandbox-x/notes.md");
+    assert!(allowed_in(&fixture, ws, "grep -rln needle walk"));
+    write(&tree, "prod-secrets/notes.md");
     assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
-    std::fs::remove_file(tree.join("secret-sandbox-x/notes.md")).unwrap();
+    std::fs::remove_dir_all(tree.join("prod-secrets")).unwrap();
     write(&tree, ".env");
     assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
     std::fs::remove_file(tree.join(".env")).unwrap();
@@ -281,7 +285,6 @@ fn version_probes_admit_lone_flags_and_keep_npx_review() {
         "node script.mjs",
         "npm test",
         "docker version",
-        "kubectl version",
         "yarn --version",
         "pnpm --version",
         "/usr/local/bin/uv --version",

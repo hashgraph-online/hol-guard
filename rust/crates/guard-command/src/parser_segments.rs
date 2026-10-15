@@ -138,6 +138,16 @@ pub(super) fn split_execution_segments(
     if quote != Quote::None || escaped {
         return Err("malformed_shell_quoting");
     }
+    // `ls;` is `ls`: one `;` or newline may end the command. A dangling `&&`,
+    // `||` or `|` still continues it, and `ls; ;` still fails.
+    let terminated = segment_start > 0
+        && matches!(chars[segment_start - 1], ';' | '\n')
+        && chars[segment_start..]
+            .iter()
+            .all(|value| value.is_whitespace());
+    if terminated && !segments.is_empty() {
+        return Ok(segments);
+    }
     push_segment(
         &chars,
         segment_start,

@@ -21,7 +21,8 @@ use guard_secure_fs::read_stable;
 use serde_json::{Map, Value};
 
 pub(crate) const HOME_CONFIG_FILENAME: &str = "config.toml";
-const WORKSPACE_CONFIG_FILENAMES: [&str; 2] = [".ai-plugin-scanner-guard.toml", ".hol-guard.toml"];
+pub(crate) const WORKSPACE_CONFIG_FILENAMES: [&str; 2] =
+    [".ai-plugin-scanner-guard.toml", ".hol-guard.toml"];
 const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 pub(crate) const DEFAULT_SECURITY_LEVEL: &str = "balanced";
 pub(crate) const VALID_SECURITY_LEVELS: [&str; 6] = [

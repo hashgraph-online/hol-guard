@@ -28,7 +28,7 @@ pub mod cursor_shell_command;
 pub mod policy_document;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
 pub use codex_output_env::{Ctx, GitCheck, GitProbe, GitRun, InspectionHost};
-mod codex_output_fnmatch;
+pub mod codex_output_fnmatch;
 mod codex_output_fs;
 mod codex_output_git_conditions;
 mod codex_output_git_config;
@@ -37,6 +37,10 @@ mod codex_output_identity;
 mod codex_output_inspection;
 mod codex_output_inspection_flow;
 mod codex_output_pathspecs;
+mod codex_output_post_tool;
+mod codex_output_post_tool_copy;
+mod codex_output_post_tool_skips;
+mod codex_output_post_tool_sources;
 mod codex_output_py;
 mod codex_output_search;
 mod codex_output_shlex;
@@ -96,6 +100,7 @@ pub mod github_workflow_approval_record;
 pub mod github_workflow_authorization;
 pub mod github_workflow_descriptor;
 pub mod github_workflow_operations;
+mod harness_config_names;
 mod home_path_text;
 pub mod homebrew_intent;
 pub mod jsonc;
@@ -132,6 +137,8 @@ pub mod package_intent_common;
 pub mod package_intent_parser;
 pub mod package_manager_command;
 pub mod package_manifest_diff;
+#[cfg(not(guard_source_bootstrap))]
+mod packaged_blob;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;
@@ -141,9 +148,11 @@ mod powershell_floors;
 mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
+mod read_only_fanout;
 pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
+pub mod developer_inspection_authority;
 pub mod environment_secret_dump;
 pub mod pretool;
 mod runtime_read_paths;
@@ -547,9 +556,29 @@ fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalComma
                 "transparent_wrapper_not_yet_supported",
             ));
         }
-        if executable
+        let read_only_xargs = executable
             .as_deref()
-            .is_some_and(|value| is_nested_command_executor(value, &arguments))
+            .is_some_and(|value| executable_basename(value) == "xargs")
+            && environment_names.is_empty()
+            && wrapper_chain.is_empty()
+            && segments.last().is_some_and(|previous| {
+                let context = format!("top:{}", raw_segment.group_index);
+                read_only_fanout::xargs_follows_find(
+                    previous,
+                    raw_segment.pipeline_index,
+                    &context,
+                    &arguments,
+                ) || read_only_fanout::xargs_follows_object_names(
+                    previous,
+                    raw_segment.pipeline_index,
+                    &context,
+                    &arguments,
+                )
+            });
+        if !read_only_xargs
+            && executable
+                .as_deref()
+                .is_some_and(|value| is_nested_command_executor(value, &arguments))
         {
             return Ok(uncertain(
                 request,
@@ -654,6 +683,7 @@ pub mod contained_argv;
 pub mod contained_execution;
 #[cfg(unix)]
 pub mod contained_runner;
+pub mod credential_patterns;
 pub mod data_flow_rules;
 pub mod decisions;
 pub mod detectors;

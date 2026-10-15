@@ -44,6 +44,7 @@ from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as a
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
+from .hook_direct_counters import HookCounterLog
 from .hook_request_parsing import (
     runtime_hook_event_name,
 )
@@ -76,12 +77,17 @@ _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0
 # Session setup uses this bounded window before any timed runtime hook starts.
 WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS = _NATIVE_POLICY_READY_TIMEOUT_SECONDS
+# The publisher retries these on its own: another writer re-committed the
+# command-control authority, or a late renewal let the snapshot expire. A hook
+# waits for that fresh ACK within its deadline instead of failing at once.
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {
         "native_policy_snapshot_resident_changed",
         "native_resident_restart_budget_busy",
         "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
         "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
     }
 )
 
@@ -111,6 +117,7 @@ class HookWorker(HookWorkerNativeMixin):
         from .hook_metrics import HookMetricsRecorder
 
         self.metrics = HookMetricsRecorder()
+        self.hook_counters = HookCounterLog()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         # Resolve adapter modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy
@@ -132,12 +139,6 @@ class HookWorker(HookWorkerNativeMixin):
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
-
-    @property
-    def last_native_decision_receipt(self) -> dict[str, object] | None:
-        """Return the receipt produced by the most recent native review."""
-
-        return self._last_native_decision_receipt
 
     def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)
@@ -280,6 +281,12 @@ class HookWorker(HookWorkerNativeMixin):
             from .claude_permission_request import claude_permission_request_response
 
             return claude_permission_request_response(self.store, payload)
+        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "codex":
+            # Codex asks this only for an escalation of a call its PreToolUse
+            # hook, with the same matcher, already sent to Guard. A deny here
+            # would refuse every approval Codex asks for, so the decision
+            # stays with Codex's own approval prompt.
+            return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
         # Send even unknown or malformed event labels to Rust. The edge
         # returns no semantic result for unsupported events, which this
         # method turns into a deterministic deny/fail-safe response.

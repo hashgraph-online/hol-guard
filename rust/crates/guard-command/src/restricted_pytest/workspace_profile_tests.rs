@@ -68,6 +68,55 @@ fn protected_paths_are_denied_for_writes() {
 }
 
 #[test]
+fn harness_configuration_is_denied_for_writes_at_any_depth() {
+    let patterns = workspace_profile::protected_patterns(Path::new("/w/proj")).unwrap();
+    let denied = |path: &str| {
+        patterns
+            .iter()
+            .any(|p| Regex::new(p).unwrap().is_match(path))
+    };
+    for path in [
+        "/w/proj/.zcode",
+        "/w/proj/.zcode/x",
+        "/w/proj/.copilot/a",
+        "/w/proj/.clinerules",
+        "/w/proj/.clinerules/rules/a.md",
+        "/w/proj/.opencode/plugins/x.ts",
+        "/w/proj/.opencode/plugin/x.ts",
+        "/w/proj/pkg/.OpenCode/plugins/x.ts",
+        "/w/proj/.gemini/settings.json",
+        "/w/proj/.kiro/hooks/a.json",
+        "/w/proj/.roo/mcp.json",
+        "/w/proj/.windsurf/rules/a.md",
+        "/w/proj/.continue/config.yaml",
+        "/w/proj/.pi/extensions/a.ts",
+        "/w/proj/.omp/hooks/a.ts",
+        "/w/proj/.agents/skills/x/SKILL.md",
+        "/w/proj/.husky/pre-commit",
+        "/w/proj/GEMINI.md",
+        "/w/proj/opencode.json",
+        "/w/proj/.github/copilot-instructions.md",
+        "/w/proj/.github/instructions/a.md",
+        "/w/proj/.github/prompts/a.md",
+        "/w/proj/.github/hooks/a.json",
+    ] {
+        assert!(denied(path), "{path}");
+    }
+    for path in [
+        "/w/proj/src/.zcode-notes.ts",
+        "/w/proj/dist/index.js",
+        "/w/proj/node_modules/.cache/x",
+        "/w/proj/tests/hooks/a.test.ts",
+        "/w/proj/.github/dependabot.yml",
+        "/w/proj/.github/ISSUE_TEMPLATE/bug.md",
+        "/w/proj/.vscode-test/x",
+        "/w/other/.zcode/x",
+    ] {
+        assert!(!denied(path), "{path}");
+    }
+}
+
+#[test]
 fn composed_profile_orders_denials_last_and_covers_credentials() {
     let mut value = input("/w/proj");
     value.write_denials = vec![PathBuf::from("/w/proj/tools/hook")];
@@ -100,6 +149,31 @@ fn composed_profile_orders_denials_last_and_covers_credentials() {
         .position(|line| line.starts_with("(deny file-write* (regex"))
         .unwrap();
     assert!(allow < git);
+}
+
+#[test]
+fn only_the_user_database_mach_service_is_reachable() {
+    let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
+    let lookups: Vec<&str> = profile
+        .lines()
+        .filter(|line| line.contains("mach-lookup") || line.contains("global-name"))
+        .collect();
+    assert_eq!(
+        lookups,
+        ["(allow mach-lookup (global-name \"com.apple.system.opendirectoryd.libinfo\"))"]
+    );
+    for service in [
+        "opendirectoryd.api",
+        "SecurityServer",
+        "securityd",
+        "secd",
+        "keychain",
+        "authd",
+        "(allow mach-lookup)",
+        "global-name-prefix",
+    ] {
+        assert!(!profile.contains(service), "{service}");
+    }
 }
 
 #[test]
@@ -249,6 +323,24 @@ fn reopened_reflog_cannot_become_a_bare_repository() {
 }
 
 #[test]
+fn directories_above_the_workspace_can_be_listed_but_not_read() {
+    let profile = workspace_profile::compose(&input("/w/team/proj"), &[], &[]).unwrap();
+    let listing = profile
+        .lines()
+        .find(|line| line.starts_with("(allow file-read-data"))
+        .unwrap();
+    assert_eq!(
+        listing,
+        "(allow file-read-data (literal \"/w/team\") (literal \"/w\") (literal \"/\"))"
+    );
+    assert!(!profile.contains("(subpath \"/w/team\")"));
+    assert!(!profile.contains("(subpath \"/w\")"));
+    // The credential denials still come after the listing grant.
+    let at = |needle: &str| profile.find(needle).unwrap();
+    assert!(at("(allow file-read-data") < at("(deny file-read* file-write* (regex"));
+}
+
+#[test]
 fn system_links_and_toolchain_config_stay_readable() {
     let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
     let metadata = profile
@@ -322,4 +414,49 @@ fn a_linked_worktree_writes_only_shared_stores_and_its_admin_entry() {
         admin: PathBuf::from("/w/main/.git/proj"),
     });
     assert!(workspace_profile::compose(&value, &[], &[]).is_err());
+}
+
+#[test]
+fn every_profile_string_fits_seatbelts_literal_limit() {
+    // `sandbox-exec` fails with "Error reading string" once one literal
+    // reaches about 1,023 bytes. The first is a typical macOS temporary
+    // workspace; the second needs escaping in every protected pattern.
+    let quoted = format!("/private/tmp/{}/workspace", "\"".repeat(150));
+    for workspace in [
+        "/private/var/folders/x1/abcdefghijklmnopqrstuvwx0000gn/T/guard-work/fix-failing-node-test/workspace",
+        quoted.as_str(),
+    ] {
+        let mut value = input(workspace);
+        value.write_denials = vec![PathBuf::from(format!("{workspace}/tools/hook"))];
+        let profile = workspace_profile::compose(&value, &[], &[]).unwrap();
+        assert!(
+            longest_literal(&profile) <= 1000,
+            "longest Seatbelt literal for {workspace} is {} bytes",
+            longest_literal(&profile)
+        );
+    }
+}
+
+/// Bytes in the longest string literal of `profile`, escapes included.
+fn longest_literal(profile: &str) -> usize {
+    let (mut literal, mut quoted, mut escaped, mut longest) = (0usize, false, false, 0usize);
+    for byte in profile.bytes() {
+        if !quoted {
+            if byte == b'"' {
+                (quoted, literal) = (true, 0);
+            }
+            continue;
+        }
+        literal += 1;
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == b'"' {
+            quoted = false;
+            longest = longest.max(literal - 1);
+        }
+    }
+    assert!(!quoted);
+    longest
 }

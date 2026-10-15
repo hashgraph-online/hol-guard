@@ -9,9 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._commands_shared import _CLAUDE_GUARD_APPROVAL_HEADER, _CLAUDE_GUARD_APPROVAL_OPTIONS, _now
     from .commands_support_hook_state import (
-        _load_claude_pending_permission_index,
         _load_single_claude_pending_permission,
-        _load_verified_claude_pending_permission,
         _remove_claude_pending_permission,
     )
     from .commands_support_permission_store import _persist_claude_native_permission_policy
@@ -29,56 +27,6 @@ from ..action_lattice import most_restrictive_guard_action, normalize_guard_acti
 from ..native_claude_guard_question import ClaudeGuardQuestionVerdict, claude_guard_question_verdict
 from ._commands_shared import *
 from .commands_parser_helpers import *
-
-
-def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[str, object]) -> int:
-    session_id = _optional_string(payload.get("session_id"))
-    if session_id is None:
-        return 0
-    pending_keys = _load_claude_pending_permission_index(store, session_id=session_id)
-    processed_keys: list[str] = []
-    denied = 0
-    for pending_key in pending_keys:
-        pending = _load_verified_claude_pending_permission(
-            store,
-            session_id=session_id,
-            pending_key=pending_key,
-        )
-        if pending is None:
-            continue
-        if pending.get("permission_prompt_seen") is not True:
-            continue
-        artifact_id = _optional_string(pending.get("artifact_id"))
-        artifact_hash_value = _optional_string(pending.get("artifact_hash"))
-        if artifact_id is None or artifact_hash_value is None:
-            continue
-        reason = _optional_string(pending.get("reason")) or "Denied in Claude's native approval prompt."
-        artifact_type = _optional_string(pending.get("artifact_type"))
-        config_path = _optional_string(pending.get("config_path"))
-        source_scope = _optional_string(pending.get("source_scope"))
-        raw_command_text = _optional_string(pending.get("raw_command_text"))
-        pending_wrapper_chain = pending.get("wrapper_chain")
-        wrapper_chain = pending_wrapper_chain if isinstance(pending_wrapper_chain, list) else None
-        saved_policy = _persist_claude_native_permission_policy(
-            store=store,
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash_value,
-            artifact_type=artifact_type,
-            config_path=config_path,
-            source_scope=source_scope,
-            raw_command_text=raw_command_text,
-            wrapper_chain=wrapper_chain,
-            action="block",
-            reason=f"Denied in Claude native approval prompt. {reason}",
-            now=_now(),
-        )
-        if not saved_policy:
-            continue
-        processed_keys.append(pending_key)
-        denied += 1
-    for pending_key in processed_keys:
-        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
-    return denied
 
 
 def _claude_guard_approval_question_message(notice: dict[str, object] | None) -> str:
@@ -386,6 +334,5 @@ __all__ = [
     "_is_claude_permission_prompt_notification",
     "_is_claude_permission_request",
     "_persist_claude_guard_question_decision",
-    "_persist_claude_pending_permission_denials",
     "_resolve_claude_permission_request_policy_action",
 ]

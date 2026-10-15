@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -71,6 +70,17 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             "git diff --no-ext-diff --no-textconv",
             "deny",
         ),
+        // A read that starts no helper does not need the probe in a chain.
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nlog = false\n",
+            "git log --oneline -1 && git rev-parse HEAD",
+            "allow",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n",
+            "git rev-parse HEAD; git log --oneline -1",
+            "deny",
+        ),
     ] {
         std::fs::write(&config, settings).unwrap();
         for harness in ["omp", "zcode"] {
@@ -118,6 +128,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
             Some(&context),
         );
@@ -149,6 +160,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
             Some(&caller),
         );
@@ -195,6 +207,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
             Some(&caller),
         );
@@ -257,6 +270,7 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
             Some(context),
         );
@@ -320,6 +334,7 @@ fn piped_git_output_never_starts_a_configured_pager() {
                 rustup_override_absent: false,
                 npm_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
             },
             Some(&context),
         );

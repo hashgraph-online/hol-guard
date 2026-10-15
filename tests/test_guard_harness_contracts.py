@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.contracts import (
-    HARNESS_CONTRACTS,
-    HarnessProtectionContract,
-    contract_for,
-    harness_contracts_table,
-)
+from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, HarnessProtectionContract, contract_for
 
 
 class TestHarnessProtectionContract:
@@ -155,25 +150,6 @@ class TestInstallAliases:
         c = contract_for("antigravity")
         assert c is not None
         assert "antigravity" in c.install_aliases
-
-
-class TestHarnessContractsTable:
-    def test_returns_markdown(self) -> None:
-        table = harness_contracts_table()
-        assert "| Harness |" in table
-        assert "codex" in table
-        assert "claude-code" in table
-
-    def test_all_harnesses_in_table(self) -> None:
-        table = harness_contracts_table()
-        for c in HARNESS_CONTRACTS:
-            assert c.harness in table
-
-    def test_columns_present(self) -> None:
-        table = harness_contracts_table()
-        assert "Native Approval" in table
-        assert "Browser Fallback" in table
-        assert "Resume" in table
 
 
 class TestContractAliasesMatchAdapter:

@@ -5,15 +5,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ._commands_shared import _guard_risk_action_key
-
-
 import argparse
 
-from ._commands_shared import *
+from ...argparse_utils import FriendlyArgumentParser
+from ..config_constants import VALID_GUARD_ACTIONS, VALID_SECURITY_LEVELS
+from .commands_parser_constants import _guard_risk_action_key
 from .commands_parser_helpers import *
 
 def _configure_guard_policy_parsers(

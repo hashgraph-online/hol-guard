@@ -13,7 +13,9 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
+from ..windows_paths import trusted_windows_local_temp
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
+from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
@@ -52,6 +54,8 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
     """Read one bounded private adapter snapshot, without following its leaf."""
+    if os.name == "nt":
+        return _read_windows_request(path, expected_sha256, workspace=workspace)
     if (
         os.name != "posix"
         or path.name != "request.json"
@@ -79,8 +83,55 @@ def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: 
             ):
                 raise _reject()
             raw = stream.read(_MAX_REQUEST_BYTES + 1)
-        if len(raw) > _MAX_REQUEST_BYTES or hashlib.sha256(raw).hexdigest() != expected_sha256:
+        return _decode_request(raw, expected_sha256, workspace=workspace)
+    except (OSError, ValueError, RuntimeError, RecursionError) as error:
+        if isinstance(error, RestrictedPytestError):
+            raise
+        raise _reject() from error
+
+
+def _read_windows_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
+    """Windows has no owner-mode bits; the snapshot must sit directly in this
+    user's temporary directory, reached without links or junctions. The
+    directory comes from the profile, not TEMP, which the hook that wrote the
+    snapshot and the shell that runs this sink may set differently."""
+    if (
+        path.name != "request.json"
+        or not path.parent.name.startswith("hol-guard-contained-test-")
+        or not path.is_absolute()
+        or len(expected_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in expected_sha256)
+    ):
+        raise _reject()
+    try:
+        temporary = trusted_windows_local_temp()
+        if os.path.normcase(path.parent.parent) != os.path.normcase(temporary):
             raise _reject()
+        for candidate, regular in ((path.parent, False), (path, True)):
+            metadata = os.lstat(candidate)
+            if (
+                getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+                or (stat.S_ISREG(metadata.st_mode) if regular else stat.S_ISDIR(metadata.st_mode)) is not True
+            ):
+                raise _reject()
+        if metadata.st_nlink != 1 or metadata.st_size > _MAX_REQUEST_BYTES:
+            raise _reject()
+        with open(path, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+                raise _reject()
+            raw = stream.read(_MAX_REQUEST_BYTES + 1)
+        return _decode_request(raw, expected_sha256, workspace=workspace)
+    except (OSError, ValueError, RuntimeError, RecursionError) as error:
+        if isinstance(error, RestrictedPytestError):
+            raise
+        raise _reject() from error
+
+
+def _decode_request(raw: bytes, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
+    if len(raw) > _MAX_REQUEST_BYTES or hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise _reject()
+    try:
         value = json.loads(raw, object_pairs_hook=_unique_object)
         if (
             not isinstance(value, dict)
@@ -219,6 +270,47 @@ def run_authorized_contained_test(
         raise _reject()
     if cwd is None:
         cwd = workspace
+    if "cwd" in tool_input:
+        # Oh My Pi runs the command in its `cwd` argument. The call as issued
+        # must carry the receipt; the explicit `cd` form is then authorized
+        # and run by the wrapper path below.
+        receipt = authorize(payload)
+        if not _contained_receipt(receipt):
+            raise _reject()
+        if receipt_matches(receipt):
+            # The `cd` form is judged from the session folder and can lose
+            # the workspace sandbox native authority chose inside `cwd` (a
+            # setting such as `REPORT_DIR=... vitest` in a linked worktree).
+            # Ask again rooted at that directory and, when the answer is the
+            # same sandbox, run the command as issued there.
+            # Only a directory the `cd` form could also root the sandbox at
+            # is asked about: inside the workspace, or a sibling repository's
+            # own root. Any other `cwd` keeps the directory change below.
+            root, rooted = as_run_root(payload, workspace=workspace, home=home_dir)
+            bounded = _path_is_within(root, workspace.resolve(strict=True)) or (
+                sibling_project_root(root, home=home_dir) == root
+            )
+            first = authorize(rooted) if bounded else None
+            if receipt_matches(first) and isinstance(first, Mapping):
+                return run_workspace_contained(
+                    rooted,
+                    workspace=root,
+                    cwd=root,
+                    authorize=authorize,
+                    first_receipt=first,
+                    home_dir=home_dir,
+                    timeout_seconds=timeout_seconds,
+                    merge_stderr=merge_stderr,
+                )
+        return run_authorized_contained_test(
+            as_directory_change(payload, workspace=workspace, home=home_dir),
+            workspace=workspace,
+            authorize=authorize,
+            timeout_seconds=timeout_seconds,
+            cwd=cwd,
+            home_dir=home_dir,
+            merge_stderr=merge_stderr,
+        )
 
     def run_workspace(receipt: object) -> int | None:
         """Run in the workspace sandbox when Rust issued that profile, else None."""
@@ -238,7 +330,7 @@ def run_authorized_contained_test(
     try:
         peeled = peel_contained_wrapper(tool_input["command"], workspace=workspace, home=home_dir, cwd=cwd)
     except (OSError, RuntimeError, ValueError) as error:
-        # Pipelines and lists the wrapper cannot peel (`| grep`, `&&`) still
+        # Pipelines and lists the wrapper cannot peel (`| sort`, `&&`) still
         # run as issued when Rust chose the workspace sandbox for them.
         exit_code = run_workspace(authorize(payload))
         if exit_code is None:
@@ -247,7 +339,8 @@ def run_authorized_contained_test(
     if peeled is not None:
         # The wrapped original must carry the receipt; the core is then
         # re-authorized in its resolved directory by the recursive call.
-        if not _contained_receipt(authorize(payload)):
+        receipt = authorize(payload)
+        if not _contained_receipt(receipt):
             raise _reject()
         core, directory, output = peeled
         if not _path_is_within(directory, workspace.resolve(strict=True)):
@@ -255,6 +348,19 @@ def run_authorized_contained_test(
             if sibling is None:
                 raise _reject()
             workspace = sibling
+        if directory != workspace.resolve(strict=True) and receipt_matches(receipt) and isinstance(receipt, Mapping):
+            # The workspace sandbox starts only at its root, where Rust
+            # classified the whole text, so the `cd` runs inside it as issued.
+            return run_workspace_contained(
+                payload,
+                workspace=workspace,
+                cwd=workspace,
+                authorize=authorize,
+                first_receipt=receipt,
+                home_dir=home_dir,
+                timeout_seconds=timeout_seconds,
+                merge_stderr=merge_stderr,
+            )
         with bounded_output(output):
             exit_code = run_authorized_contained_test(
                 {**payload, "cwd": str(directory), "tool_input": {**tool_input, "command": core}},
@@ -339,7 +445,9 @@ def run_authorized_contained_test(
         return exit_code
     if inline_plan is not None:
         profile = inline_plan.profile_version
-        if profile == "node-eval-readonly-v1":
+        if profile == "node-eval-readonly-v1" and Path(command[0]).name == "bun":
+            reason = "native_bun_eval_readonly_containment_required"
+        elif profile == "node-eval-readonly-v1":
             reason = "native_node_eval_readonly_containment_required"
         else:
             reason = "native_python_eval_readonly_containment_required"
@@ -388,14 +496,26 @@ def run_authorized_contained_test(
     def authorize_capability(argv: tuple[str, ...]) -> None:
         capability = {**payload, "tool_input": {**tool_input, "command": shlex.join(argv)}}
         # The approved workspace root stays in scope so a subdirectory cannot shed its denies.
-        contexts = (workspace, cwd, *((vitest_plan.cwd,) if vitest_plan is not None else ()))
+        build = node_tool_plan is not None and node_tool_plan.profile_version == NODE_BUILD_OUTPUT_PROFILE_VERSION
+        transform_plan = vitest_plan or (node_tool_plan if build else None)
+        contexts = (workspace, cwd, *((transform_plan.cwd,) if transform_plan is not None else ()))
         for directory in dict.fromkeys(contexts):
             response = authorize({**capability, "cwd": str(directory)})
             if (
                 not isinstance(response, Mapping)
                 or not (
                     (response.get("decision") == "allow" and response.get("policy_action") == "allow")
-                    or (vitest_plan is not None and required(response))
+                    # Native classifies the transform image as a read-only
+                    # Vitest capability; it runs inside the Vitest run's or the
+                    # Vite build's own profile.
+                    or (
+                        transform_plan is not None
+                        and required(
+                            response,
+                            expected_reason="native_vitest_readonly_containment_required",
+                            expected_profile=VITEST_READ_ONLY_PROFILE_VERSION,
+                        )
+                    )
                 )
                 or response.get("observe_mode") is True
             ):

@@ -53,6 +53,15 @@ def test_unused_nullable_task_output_schema_matches_actual_host_input() -> None:
     assert calls[0]["args"]["tasks"] == [task]
 
 
+def test_omitted_task_agent_matches_the_schema_default_on_the_host() -> None:
+    model = {"name": "lookup", "task": "Read README.md"}
+    calls, errors = reconcile(task_events(model, {**model, "agent": "task"}))
+    assert not errors
+    assert calls[0]["args"]["tasks"] == [{**model, "agent": "task"}]
+    for host in ({**model, "agent": "scout"}, {**model, "agent": "task", "tools": ["bash"]}):
+        assert "model-host-arguments-mismatch" in reconcile(task_events(model, host))[1]
+
+
 def test_task_normalization_keeps_every_meaningful_argument_change_visible() -> None:
     task = {"agent": "scout", "name": "lookup", "task": "Read README.md", "tools": []}
     variants = [

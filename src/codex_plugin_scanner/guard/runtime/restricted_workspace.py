@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -23,6 +25,20 @@ from .restricted_pytest_sandbox import _restricted_environment, _run_backend_pro
 
 WORKSPACE_REASON = "native_workspace_containment_required"
 WORKSPACE_PROFILE = "workspace-contained-v1"
+# The reason Rust gives a chain whose checks run contained and whose trailing
+# Git steps run after them, once proven again. It must match Rust exactly.
+WORKSPACE_PUBLISH_REASON = (
+    "HOL Guard runs the checks in this command in a protected workspace sandbox "
+    "(no network, no home access), then runs the Git steps that follow once it "
+    "proves them again."
+)
+# Appended when a contained run fails after printing a denied operation.
+WORKSPACE_WRITE_DENIAL_NOTE = (
+    "This run hit a denied operation (EPERM or EROFS). HOL Guard runs this command in a "
+    "workspace sandbox: the workspace and $TMPDIR are writable, except a few protected paths "
+    "such as Git configuration, and there is no network or home access. Keep files the command "
+    "writes inside the workspace or $TMPDIR and run it again."
+)
 _PLAN_FIELDS = frozenset(
     {
         "profile_version",
@@ -41,6 +57,7 @@ _PLAN_FIELDS = frozenset(
         "sandbox_path",
         "bootstrap_git",
         "prefix_command",
+        "native_suffix",
         "denied_capabilities",
     }
 )
@@ -72,11 +89,29 @@ def _reject(message: str) -> RestrictedPytestError:
     return RestrictedPytestError(PYTEST_INVALID_COMMAND_REASON_CODE, message)
 
 
-def _validated_plan(plan: object, command: str, workspace: Path) -> dict[str, object]:
+def _checks(command: str, suffix: object) -> str | None:
+    """The checks that `command` runs before `&& suffix`, as Rust split it."""
+    body = command.strip()
+    if not isinstance(suffix, str) or not suffix or not body.endswith(suffix):
+        return None
+    head = body[: len(body) - len(suffix)].rstrip()
+    if not head.endswith("&&"):
+        return None
+    return head[:-2].rstrip() or None
+
+
+def _validated_plan(plan: object, command: str, workspace: Path, *, publish: bool = False) -> dict[str, object]:
     if not isinstance(plan, dict) or set(plan) != _PLAN_FIELDS or plan["profile_version"] != WORKSPACE_PROFILE:
         raise _reject("Invalid workspace sandbox plan.")
     argv = plan["command"]
     prefix = plan["prefix_command"]
+    if publish:
+        checks = _checks(command, plan["native_suffix"])
+        if checks is None or prefix is not None or plan["bootstrap_git"] is not None:
+            raise _reject("The workspace sandbox plan does not match the authorized command.")
+        command = checks
+    elif plan["native_suffix"] is not None:
+        raise _reject("The workspace sandbox plan does not match the authorized command.")
     if (
         plan["backend"] != _host_backend()
         or not isinstance(argv, list)
@@ -193,6 +228,7 @@ def run_workspace_contained(
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise _reject("Invalid workspace sandbox request.")
     command = tool_input["command"]
+    publish = first_receipt.get("reason") == WORKSPACE_PUBLISH_REASON
     if cwd.resolve(strict=True) != workspace.resolve(strict=True):
         raise _reject("The workspace sandbox runs only from the workspace root.")
     plan = _validated_plan(
@@ -210,17 +246,21 @@ def run_workspace_contained(
                     for name, value in os.environ.items()
                     if name.startswith("GIT_CONFIG") or name == "XDG_CONFIG_HOME"
                 },
+                "publish_suffix": publish,
             },
             dict,
         ),
         command,
         workspace,
+        publish=publish,
     )
     # A second receipt taken after planning must still bind the same evidence.
     second = authorize(payload)
     if not receipt_matches(second) or not isinstance(second, Mapping):
         raise _reject("Guard could not re-authorize this workspace sandbox execution.")
-    if second.get("command_binding_digest") != first_receipt.get("command_binding_digest"):
+    if second.get("command_binding_digest") != first_receipt.get("command_binding_digest") or (
+        (second.get("reason") == WORKSPACE_PUBLISH_REASON) != publish
+    ):
         raise _reject("The command evidence changed before launch.")
     sandbox_command = plan["command"]
     prefix = plan["prefix_command"]
@@ -291,6 +331,7 @@ def run_workspace_contained(
                 timeout_seconds=timeout_seconds,
                 cwd=cwd,
                 merge_stderr=merge_stderr,
+                write_denial_note=WORKSPACE_WRITE_DENIAL_NOTE,
             )
 
         if isinstance(prefix, str):
@@ -302,7 +343,87 @@ def run_workspace_contained(
             _bootstrap_init(plan["bootstrap_git"], workspace=workspace, private_root=private_root)
             if not sandbox_argv[2]:
                 return 0
-        return contained(sandbox_argv)
+        exit_code = contained(sandbox_argv)
+    suffix = plan["native_suffix"]
+    if exit_code != 0 or not isinstance(suffix, str):
+        return exit_code
+    return _run_publish_steps(
+        payload,
+        suffix,
+        workspace=workspace,
+        authorize=authorize,
+        timeout_seconds=timeout_seconds,
+        merge_stderr=merge_stderr,
+    )
+
+
+def _run_publish_steps(
+    payload: dict[str, object],
+    suffix: str,
+    *,
+    workspace: Path,
+    authorize: Callable[[dict[str, object]], object],
+    timeout_seconds: int,
+    merge_stderr: bool,
+) -> int:
+    """Run the Git steps after the contained checks, once Guard proves them again.
+
+    The checks may have changed the repository, so the steps are judged on
+    their own now rather than trusting the verdict taken before the checks ran.
+    They run outside the sandbox because a push needs the network and the
+    user's own credentials.
+    """
+    tool_input = payload["tool_input"]
+    if not isinstance(tool_input, dict):
+        raise _reject("Invalid workspace sandbox request.")
+    response = authorize({**payload, "tool_input": {**tool_input, "command": suffix}})
+    if (
+        not isinstance(response, Mapping)
+        or response.get("decision") != "allow"
+        or response.get("policy_action") != "allow"
+        or response.get("observe_mode") is True
+    ):
+        raise _reject("Guard could not prove the Git steps again after the checks ran; they did not run.")
+    sys.stdout.flush()
+    sys.stderr.flush()
+    process = subprocess.Popen(
+        ["/bin/sh", "-c", suffix],
+        cwd=workspace,
+        env={**os.environ, "PATH": _outside_search_path(os.environ.get("PATH", ""), workspace)},
+        stdin=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT if merge_stderr else None,
+        start_new_session=True,
+    )
+    try:
+        return_code = process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as error:
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        raise RestrictedPytestError(
+            "pytest_restricted_timeout",
+            f"The Git steps exceeded their {timeout_seconds}-second execution deadline.",
+            exit_code=124,
+        ) from error
+    return return_code if return_code >= 0 else 128 + abs(return_code)
+
+
+def _outside_search_path(search_path: str, workspace: Path) -> str:
+    """`search_path` without entries the contained checks could have written.
+
+    The checks could plant a `git` or `gh` in a relative or workspace entry,
+    which the Git steps would then run unsandboxed, as the sandbox's own
+    PATH filter anticipates.
+    """
+    root = workspace.resolve()
+    kept: list[str] = []
+    for entry in search_path.split(os.pathsep):
+        if not os.path.isabs(entry):
+            continue
+        resolved = Path(entry).resolve()
+        if resolved != root and not resolved.is_relative_to(root):
+            kept.append(entry)
+    return os.pathsep.join(kept)
 
 
 def _remove_overlay(root: Path) -> None:
@@ -359,6 +480,7 @@ def _run_overlay(
             timeout_seconds=timeout_seconds,
             cwd=workspace,
             merge_stderr=merge_stderr,
+            write_denial_note=WORKSPACE_WRITE_DENIAL_NOTE,
         )
         restricted_native(
             "apply_workspace_overlay",

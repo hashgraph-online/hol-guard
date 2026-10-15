@@ -24,8 +24,24 @@ impl NativeCommandProgram {
         deadline: Option<Instant>,
         context: crate::pretool::PathContext<'_>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
-        let compatibility = crate::command_compatibility::compatibility_observations_with_context(
-            command, deadline, context,
+        self.observe_in(command, active_extensions, deadline, context, None)
+    }
+
+    /// [`Self::observe_with_context`] with the execution environment the
+    /// command inherits, for proofs that run a metadata probe.
+    pub(crate) fn observe_in(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        let compatibility = crate::command_compatibility::compatibility_observations_in(
+            command,
+            deadline,
+            context,
+            environment,
         )?;
         let mut batch = self.observe_declarative(command, active_extensions, deadline)?;
         for mut matched in compatibility.rule_matches {

@@ -240,6 +240,32 @@ def test_other_platforms_and_missing_guard_home_pass_through(tmp_path, monkeypat
     )
 
 
+def test_linux_routes_the_workspace_sandbox(tmp_path, monkeypatch):
+    capable(monkeypatch, "codex-cli 0.162.1")
+    monkeypatch.setattr(sys, "platform", "linux")
+    native = {
+        **receipt(),
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    }
+    result = route.route_codex_containment(
+        native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
+    )
+    shaped = codex_hook_response(result, event_name="PreToolUse")
+    assert shaped["hookSpecificOutput"]["permissionDecision"] == "allow"
+    argv = shlex.split(shaped["hookSpecificOutput"]["updatedInput"]["command"])
+    Path(argv[argv.index("--request-file") + 1]).unlink()
+
+
+def test_linux_walks_proc_to_the_launching_codex(monkeypatch):
+    executables = {"/proc/40/exe": "/usr/bin/bash", "/proc/30/exe": "/opt/codex/bin/codex"}
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(route.os, "getppid", lambda: 40)
+    monkeypatch.setattr(route.os, "readlink", lambda path: executables[path])
+    monkeypatch.setattr(route.Path, "read_text", lambda self, **_kwargs: "40 (sh (x) y) S 30 1 1")
+    assert route.launching_codex_executable() == Path("/opt/codex/bin/codex")
+
+
 def test_codex_response_drops_allow_without_updated_input():
     shaped = codex_hook_response(
         {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}},

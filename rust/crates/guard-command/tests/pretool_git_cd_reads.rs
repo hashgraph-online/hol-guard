@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -207,4 +206,135 @@ fn relative_dash_c_after_cd_resolves_against_the_destination() {
     );
     let result = decide(&space, &space.root, &command);
     assert_ne!(result.decision, "allow", "{command}");
+}
+
+#[test]
+fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
+    let (space, _cleanup) = workspace("prefix");
+    let root = space.root.to_str().unwrap();
+    let repository = space.repository.to_str().unwrap();
+    for command in [
+        format!("ls {root} && cd {repository} && git status"),
+        format!("ls {root} && cd {repository} && git remote -v"),
+        format!(
+            "ls {root} && echo \"---\" && cd {repository} && git status && echo \"---\" \
+             && git remote -v && echo \"---\" && git log --oneline -5"
+        ),
+        format!("pwd && cd {repository} && git log -1 --format=%h | head -1"),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+#[test]
+fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
+    let (space, _cleanup) = workspace("prefix-deny");
+    let root = space.root.to_str().unwrap();
+    let home = space.home.to_str().unwrap();
+    let repository = space.repository.to_str().unwrap();
+    std::fs::create_dir_all(space.home.join(".ssh")).unwrap();
+    std::fs::write(space.home.join(".ssh/id_ed25519"), "fixture\n").unwrap();
+    for command in [
+        format!("cat {home}/.ssh/id_ed25519 && cd {repository} && git status"),
+        format!("touch {root}/marker && cd {repository} && git status"),
+        format!("ls {root} && cd {repository} && rm -rf app"),
+        format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
+        format!("ls {root}; cd {repository} && git status"),
+        format!("ls {root} || cd {repository} && git status"),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_ne!(
+            result.reason_code, "native_exact_safe_command",
+            "{command}: {}",
+            result.decision
+        );
+    }
+}
+
+/// Local Git reads before the `cd` write nothing the reads after it could
+/// pick up, so the floor judges the command from the `cd` onward.
+#[test]
+fn proven_git_reads_before_a_cd_into_a_sibling_repository_are_allowed() {
+    let (space, _cleanup) = workspace("git-prefix");
+    let other = space.root.join("other");
+    git(&space.root, &["init", "--quiet", other.to_str().unwrap()]);
+    std::fs::write(other.join("notes.txt"), "other\n").unwrap();
+    git(&other, &["add", "-A"]);
+    git(&other, &["commit", "--quiet", "-m", "other"]);
+    let other = other.to_str().unwrap();
+    for command in [
+        format!(
+            "git log --oneline -5 && git status --short | head -20 && echo \"=== other ===\" \
+             && cd {other} && git log --oneline -5 && git status --short | head"
+        ),
+        format!("git status && cd {other} && git log -1"),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    for command in [
+        format!("git checkout -b scratch && cd {other} && git log -1"),
+        format!("git config core.hooksPath hooks && cd {other} && git log -1"),
+        format!("git commit --allow-empty -m wip && cd {other} && git log -1"),
+        format!("git -c core.pager=less log -1 && cd {other} && git log -1"),
+        format!("git status; cd {other} && git log -1"),
+        format!("git status && cd {other} && git config core.fsmonitor true && git status"),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+#[test]
+fn remote_url_reads_are_read_only() {
+    let (space, _cleanup) = workspace("remote-url");
+    let repository = space.repository.to_str().unwrap();
+    git(
+        &space.repository,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/fixture.git",
+        ],
+    );
+    for command in [
+        "git remote get-url origin".to_owned(),
+        "git remote get-url --push origin".to_owned(),
+        "git remote get-url --all origin".to_owned(),
+        format!(
+            "pwd && git -C {repository} status --short --branch \
+             && git -C {repository} remote get-url origin \
+             && git -C {repository} remote get-url --push origin"
+        ),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    for command in [
+        "git remote get-url",
+        "git remote get-url --push",
+        "git remote get-url --delete origin",
+        "git remote set-url origin https://example.invalid/other.git",
+        "git remote add other https://example.invalid/other.git",
+        "git remote prune origin",
+        "git remote update",
+        "git remote show origin",
+    ] {
+        let result = decide(&space, &space.repository, command);
+        assert_ne!(result.decision, "allow", "{command}");
+    }
 }

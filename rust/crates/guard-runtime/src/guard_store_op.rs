@@ -6,7 +6,7 @@
 //!
 //! Process-local concerns (the storage-access lock, wake notification,
 //! permission repair, fatal-store recovery, wall-clock timestamps) stay with
-//! the Python caller, which passes every timestamp in the request.
+//! the caller, which passes every timestamp in the request.
 
 use std::time::Duration;
 
@@ -19,7 +19,10 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
 
 use super::context_digest_json::write_canonical_json_with_limit;
+use crate::guard_store_advisory_cache as advisory_cache;
+use crate::guard_store_approval_write::add_native_review_approval_request;
 use crate::guard_store_args::Args;
+use crate::guard_store_claude_review::add_claude_native_review_approval_request;
 use crate::guard_store_clients as clients;
 use crate::guard_store_cmd_activity as activity;
 use crate::guard_store_cmd_api as api;
@@ -30,6 +33,9 @@ use crate::guard_store_cmd_privacy as privacy;
 use crate::guard_store_connect as connect;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
+use crate::guard_store_local_cli as local_cli;
+use crate::guard_store_local_cli_grants as local_cli_grants;
+use crate::guard_store_local_mcp_observation as local_mcp;
 use crate::guard_store_native_review_consume as native_review_consume;
 use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
@@ -46,6 +52,7 @@ use crate::guard_store_receipt_reads as receipt_reads;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 use crate::guard_store_receipt_writes as receipt_writes;
 use crate::guard_store_sessions as sessions;
+use crate::guard_store_silent_review::add_silent_native_review_approval_request;
 use crate::guard_store_state_ops as state_ops;
 use crate::guard_store_storage_maintenance as storage_maintenance;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
@@ -85,7 +92,7 @@ pub(crate) fn evaluate_guard_store_request(
     })
 }
 
-fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> {
+pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> {
     let invalid = |code| Err(StoreError::Invalid(code));
     if request.schema != GUARD_STORE_REQUEST_SCHEMA {
         return invalid("native_guard_store_schema_mismatch");
@@ -274,7 +281,12 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "count_receipts"
         | "artifact_latest_diff"
         | "oauth_sources_list"
-        | "policy_source_contexts" => Kind::Read,
+        | "read_local_cli_grant"
+        | "read_local_cli_command_catalog"
+        | "read_local_cli_command_states"
+        | "list_cached_advisories"
+        | "policy_source_contexts"
+        | "matching_native_review_block" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -284,6 +296,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "workflow_capability_plan" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
+        | "add_native_review_approval_request"
+        | "add_silent_native_review_approval_request"
+        | "add_claude_native_review_approval_request"
         | "refresh_review_event_outbox_binding_for_identity"
         | "refresh_review_event_outbox_binding"
         | "reassign_quarantined_review_events"
@@ -327,7 +342,14 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_analytics"
         | "reconcile_receipt_events"
         | "maintain_storage"
-        | "managed_keyring_reconcile" => Kind::Write,
+        | "managed_keyring_reconcile"
+        | "record_local_cli_observation"
+        | "forget_local_cli_observation"
+        | "local_cli_replay_allowed"
+        | "prune_inactive_local_cli_observations"
+        | "cache_advisories" => Kind::Write,
+        "find_local_mcp_observation" => Kind::Read,
+        "ensure_local_mcp_observation" => Kind::Write,
         _ if connect::is_state_read(method) => Kind::Read,
         _ if connect::handles(method) => Kind::Write,
         _ => return None,
@@ -424,9 +446,32 @@ fn dispatch(
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
         "observed_mcp_tool_actions" => observed_mcp::observed_mcp_tool_actions(connection),
+        "read_local_cli_grant" => local_cli_grants::read_grant(connection, args),
+        "read_local_cli_command_catalog" => {
+            local_cli_grants::read_command_catalog(connection, args)
+        }
+        "read_local_cli_command_states" => local_cli_grants::read_command_states(connection, args),
+        "cache_advisories" => advisory_cache::cache(connection, args),
+        "list_cached_advisories" => advisory_cache::list(connection, args),
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
+        "matching_native_review_block" => native_review_consume::matching_block(connection, args),
+        "add_native_review_approval_request" => {
+            add_native_review_approval_request(connection, source, args)
+        }
+        "add_silent_native_review_approval_request" => {
+            add_silent_native_review_approval_request(connection, source, args)
+        }
+        "add_claude_native_review_approval_request" => {
+            add_claude_native_review_approval_request(connection, source, args)
+        }
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
+        "record_local_cli_observation" => local_cli::record_observation(connection, args),
+        "forget_local_cli_observation" => local_cli::forget_observation(connection, args),
+        "local_cli_replay_allowed" => local_cli::replay_allowed_op(connection, args),
+        "prune_inactive_local_cli_observations" => local_cli::prune_inactive(connection, args),
+        "find_local_mcp_observation" => local_mcp::find_observation(connection, args),
+        "ensure_local_mcp_observation" => local_mcp::ensure_observation(connection, args),
         "upsert_guard_session" => sessions::upsert_session(connection, args),
         "get_guard_session" => sessions::get_session(connection, args),
         "list_guard_sessions" => sessions::list_sessions(connection, args),

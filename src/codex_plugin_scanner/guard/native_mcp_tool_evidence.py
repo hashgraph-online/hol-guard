@@ -1,13 +1,14 @@
 """Typed client for the native MCP tool-evidence owner; no Python evaluator.
 
-Rust owns two projections of an MCP tool call: the risk signals and summary
-text (including browser scope, argument, schema, and target-redaction checks),
-and the portal firewall evidence for ``mcp_server`` and ``tool_call``
-artifacts. Python ships artifact/argument DTOs, binds the answer to the
-request by ``request_id`` and canonical ``request_sha256``, and renders it.
-Any transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
-(never another exception type); nothing here ever recomputes a signal,
-summary, or fingerprint locally, and a failure is never an empty result.
+Rust owns the portal firewall evidence for ``mcp_server`` and ``tool_call``
+artifacts. Python ships the artifact DTO, binds the answer to the request by
+``request_id`` and canonical ``request_sha256``, and renders it. Any
+transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
+(never another exception type); nothing here ever recomputes a fingerprint
+locally, and a failure is never an empty result.
+
+``risk_input`` builds the risk DTO the MCP proxy sends with its
+``call_projection`` check, which renders the risk signals and summary.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from typing import Any
 
 from .models import GuardArtifact
 from .native_context import (
-    _MCP_RISK_CATEGORIES,
     _canonical_request_sha256,
     _native_error,
     _native_runtime_status_memo,
@@ -67,7 +67,7 @@ def risk_input(
     risk_categories: tuple[str, ...] | None = None,
     summary_code: str | None = None,
 ) -> dict[str, object]:
-    """Transport-only DTO for the ``risk`` subop."""
+    """Transport-only risk DTO for the proxy's ``call_projection`` check."""
     return {
         "artifact": json_safe_copy(
             {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)}
@@ -133,7 +133,6 @@ def native_mcp_tool_evidence_request(
         "request_id": uuid.uuid4().hex,
         "subop": subop,
         "guard_home": str(guard_home),
-        "risk": payload if subop == "risk" else None,
         "firewall": payload if subop == "firewall" else None,
     }
     status = _native_runtime_status_memo()
@@ -224,45 +223,11 @@ def native_mcp_tool_evidence_request(
     return verified
 
 
-def _string_list(value: object) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise NativeMcpToolEvidenceError(_INVALID_RESULT)
-    return value
-
-
-def _validated_risk_payload(payload: dict[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    categories = _string_list(payload.get("risk_categories"))
-    signals = _string_list(payload.get("signals"))
-    summary = payload.get("summary")
-    if (
-        not isinstance(summary, str)
-        or len(signals) != len(categories)
-        or any(category not in _MCP_RISK_CATEGORIES for category in categories)
-    ):
-        raise NativeMcpToolEvidenceError(_INVALID_RESULT)
-    return tuple(categories), tuple(signals), summary
-
-
 def _validated_firewall_payload(payload: dict[str, Any]) -> dict[str, object] | None:
     patch = payload.get("metadata_patch")
     if "metadata_patch" not in payload or not (patch is None or isinstance(patch, dict)):
         raise NativeMcpToolEvidenceError(_INVALID_RESULT)
     return patch
-
-
-def native_tool_risk_evidence(
-    artifact: GuardArtifact,
-    arguments: object,
-    *,
-    risk_categories: tuple[str, ...] | None = None,
-    summary_code: str | None = None,
-) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """Return native ``(risk_categories, signals, summary)`` for one tool call."""
-    return native_mcp_tool_evidence_request(
-        "risk",
-        risk_input(artifact, arguments, risk_categories=risk_categories, summary_code=summary_code),
-        validate=_validated_risk_payload,
-    )
 
 
 def native_firewall_metadata_patch(artifact: GuardArtifact) -> dict[str, object] | None:

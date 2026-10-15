@@ -322,12 +322,6 @@ def native_benign_file_read(tool_name: object, arguments: object, *, cwd: Path |
     return _bool(_ask("benign_file_read", {"tool_name": tool_name, "arguments": arguments}, cwd=cwd, home_dir=home_dir))
 
 
-def native_benign_tool_action(tool_name: object, arguments: object, *, cwd: Path | None, home_dir: Path | None) -> bool:
-    return _bool(
-        _ask("benign_tool_action", {"tool_name": tool_name, "arguments": arguments}, cwd=cwd, home_dir=home_dir)
-    )
-
-
 def native_read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None) -> bool:
     return _bool(
         _ask(

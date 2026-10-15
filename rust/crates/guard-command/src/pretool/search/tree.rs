@@ -10,12 +10,16 @@
 //! so framework route directories such as `[slug]` are fine. A hidden entry
 //! must be on a short benign list, because recursion would otherwise reach
 //! `.env`, `.ssh` or `.git`. A credential-named file is refused unless it is
-//! source code, matching `credential_named_path`; the name is judged on the
+//! source code, matching `credential_named_path`, or test data below a
+//! test-data directory inside the walk; the name is judged on the
 //! path below the walk root so a credential-named ancestor of the operand does
 //! not poison it, but a credential-named directory inside the tree still
 //! blocks its non-source files.
-use super::{glob_matches, ReadContext};
+use super::ReadContext;
+use glob_expand::expand_glob_matches;
 use std::path::{Path, PathBuf};
+#[path = "glob_expand.rs"]
+mod glob_expand;
 
 const MAX_WALK_ENTRIES: usize = 10_000;
 const MAX_WALK_DEPTH: usize = 64;
@@ -102,6 +106,11 @@ fn safe_walk_target(
     excluded_directories: &[&str],
     git_metadata: bool,
 ) -> bool {
+    // A recursive walk through `..` reaches a sibling tree whose ignore rules
+    // were never inspected; only the sibling-repository proof admits that.
+    if parent_component(value) {
+        return false;
+    }
     if !super::super::safe_reads::bounded_read_target(value, context.home_dir, context.cwd, true) {
         return false;
     }
@@ -156,11 +165,29 @@ pub(in crate::pretool) fn safe_glob_operand(
 /// directory must clear the quoted-literal screens. A class that could match
 /// a leading dot under `dotglob`, including through a range, does not qualify,
 /// nor does syntax this matcher would close at the wrong `]`.
-pub(in crate::pretool) fn safe_unmatched_bracket_operand(
+///
+/// A `*` or `?` operand qualifies when the strict expansion proves that it
+/// matches nothing under any shell option: the program then receives either
+/// the literal word, which names no file, or no operand under `nullglob`. So
+/// `ls ~/code/app/vite.config.*` probes for an optional file.
+pub(in crate::pretool) fn safe_unmatched_glob_operand(
     value: &str,
     context: ReadContext<'_>,
     recursive: bool,
 ) -> bool {
+    if !value.contains('[') {
+        // Only the last component may be a pattern, inside a real directory.
+        let directory = value
+            .rsplit_once('/')
+            .map_or(".", |(directory, _)| directory);
+        let directory = if directory.is_empty() { "/" } else { directory };
+        return !directory.contains(['*', '?'])
+            && expanded_operand(directory, context)
+                .and_then(|path| std::fs::symlink_metadata(path).ok())
+                .is_some_and(|metadata| metadata.is_dir())
+            && glob_expand::expand_glob_matches_strict(value, context)
+                .is_some_and(|matches| matches.is_empty());
+    }
     !value.contains(['*', '?', '!'])
         && !super::glob_class::bracket_fallback_unsafe(value)
         && expand_glob_matches(value, context).is_some_and(|matches| matches.is_empty())
@@ -248,10 +275,77 @@ pub(super) fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> boo
         .unwrap_or_default()
         .to_ascii_lowercase();
     !SECRET_EXTENSIONS.contains(&extension.as_str())
-        && !guard_secure_fs::credential_named_path(relative)
+        && (!guard_secure_fs::credential_named_path(relative)
+            || path
+                .strip_prefix(root)
+                .is_ok_and(|relative| synthetic_fixture(root, relative)))
+}
+
+/// Directories that hold a project's test data.
+const FIXTURE_DIRECTORIES: &[&str] = &[
+    "testdata",
+    "test-data",
+    "test_data",
+    "fixtures",
+    "fixture",
+    "__fixtures__",
+    "tests",
+    "test",
+    "__tests__",
+];
+
+/// Test trees name their vectors for what they exercise
+/// (`testdata/secrets_cli/vectors.json`, `tests/fixtures/tokens.json`), so a
+/// credential name at or below a test-data directory inside the walk marks
+/// data a test reads, not a store. A test directory inside a credential
+/// directory (`secrets/tests/prod.json`), or a walk rooted in one, is still a
+/// store. Key containers, hidden names and the sensitive families (`.env`,
+/// `*.key`, `.npmrc`) are refused before this is asked.
+fn synthetic_fixture(root: &Path, relative: &Path) -> bool {
+    let Some(parent) = relative.parent() else {
+        return false;
+    };
+    let mut above = root.to_path_buf();
+    for part in parent.components() {
+        let std::path::Component::Normal(name) = part else {
+            return false;
+        };
+        if name
+            .to_str()
+            .is_some_and(|name| FIXTURE_DIRECTORIES.contains(&name.to_ascii_lowercase().as_str()))
+        {
+            // Every directory above the test directory is checked as a
+            // directory, below a neutral entry name.
+            return !guard_secure_fs::credential_named_path(&above.join("entry"));
+        }
+        above.push(name);
+    }
+    false
 }
 
 pub(super) fn walk(
+    root: PathBuf,
+    excluded_files: &[&str],
+    excluded_directories: &[&str],
+    git_metadata: bool,
+) -> bool {
+    super::walk_memo::memoized(
+        &root,
+        excluded_files,
+        excluded_directories,
+        git_metadata,
+        || {
+            walk_uncached(
+                root.clone(),
+                excluded_files,
+                excluded_directories,
+                git_metadata,
+            )
+        },
+    )
+}
+
+fn walk_uncached(
     root: PathBuf,
     excluded_files: &[&str],
     excluded_directories: &[&str],
@@ -306,160 +400,11 @@ pub(super) fn walk(
     true
 }
 
-/// Expand a relative glob below the cwd. `None` when any step is ambiguous:
-/// absolute or `~` operands, dot components, `..`, links to directories, no
-/// match, or too many matches.
-///
-/// A component made only of `*` (such as `**`) is expanded as the union of
-/// what shells do with it: zero or more nested directories with `globstar`,
-/// and a single `*` without it. A wildcard before the last component only
-/// descends into directories, as the shell does.
+/// [`glob_expand::expand_glob_matches`] with at least one match.
 fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
     expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
 }
 
-/// [`expand_glob`] that reports a pattern matching nothing as an empty list,
-/// so a caller can tell it apart from an unsafe match.
-fn expand_glob_matches(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
-    if value.is_empty()
-        || value.len() > 4096
-        || value.contains(HAZARDS)
-        || value.contains(['{', '}', '#', '^', '(', ')'])
-        || value.starts_with(['/', '~', '-'])
-        || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
-    {
-        return None;
-    }
-    let base = real_allowed_directory(&home_relative(context.cwd?, context.home_dir)?, context)?;
-    let components: Vec<&str> = value
-        .split('/')
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect();
-    let mut current = vec![base];
-    let mut inspected = 0_usize;
-    for (index, component) in components.iter().enumerate() {
-        if *component == ".." || component.starts_with('.') {
-            return None;
-        }
-        let last = index + 1 == components.len();
-        let is_pattern = component.contains(['*', '?', '[']);
-        let mut next = Vec::new();
-        for directory in &current {
-            if !is_pattern {
-                // The shell keeps only literal continuations that exist.
-                let path = directory.join(component);
-                let exists = std::fs::symlink_metadata(&path).is_ok();
-                if (last && exists) || traversable(&path)? {
-                    next.push(path);
-                }
-                continue;
-            }
-            if !last && component.len() > 1 && component.bytes().all(|byte| byte == b'*') {
-                nested_directories(directory, &mut next, &mut inspected)?;
-                continue;
-            }
-            for entry in std::fs::read_dir(directory).ok()? {
-                inspected += 1;
-                if inspected > MAX_GLOB_ENTRIES {
-                    return None;
-                }
-                let name = entry.ok()?.file_name();
-                let name = name.to_str()?;
-                if name.starts_with('.') || !glob_matches(component.as_bytes(), name.as_bytes()) {
-                    continue;
-                }
-                let path = directory.join(name);
-                if last || traversable(&path)? {
-                    next.push(path);
-                }
-            }
-        }
-        if next.len() > MAX_GLOB_MATCHES {
-            return None;
-        }
-        current = next;
-    }
-    let root = home_relative(context.cwd?, context.home_dir)?;
-    let mut matches = Vec::new();
-    for path in current {
-        let metadata = std::fs::symlink_metadata(&path).ok()?;
-        if !(metadata.is_dir() || metadata.is_file()) {
-            return None;
-        }
-        // Each intermediate component must be a real directory, never a link.
-        let mut ancestor = path.parent();
-        while let Some(parent) =
-            ancestor.filter(|parent| parent.starts_with(&root) && *parent != root)
-        {
-            if !std::fs::symlink_metadata(parent).ok()?.is_dir() {
-                return None;
-            }
-            ancestor = parent.parent();
-        }
-        let relative = path.strip_prefix(&root).ok()?;
-        if guard_secure_fs::sensitive_path_family(&path).is_some()
-            || guard_secure_fs::credential_named_path(relative)
-            || (metadata.is_file()
-                && path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| {
-                        SECRET_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-                    }))
-            || !super::super::read_paths::resolved_path_allowed(
-                &std::fs::canonicalize(&path).ok()?,
-                context.home_dir,
-                context.cwd,
-            )
-        {
-            return None;
-        }
-        matches.push(path);
-    }
-    Some(matches)
-}
-
-/// Whether the shell continues below this path: `Some(true)` for a real
-/// directory, `Some(false)` for anything it skips, `None` for a link to a
-/// directory, which a shell without `globstar` would follow.
-fn traversable(path: &Path) -> Option<bool> {
-    let Ok(metadata) = std::fs::symlink_metadata(path) else {
-        return Some(false);
-    };
-    if metadata.file_type().is_symlink() {
-        return std::fs::metadata(path)
-            .map_or(Some(false), |target| (!target.is_dir()).then_some(false));
-    }
-    Some(metadata.is_dir())
-}
-
-/// `directory` and every non-hidden real directory below it.
-fn nested_directories(
-    directory: &Path,
-    found: &mut Vec<PathBuf>,
-    inspected: &mut usize,
-) -> Option<()> {
-    let mut pending = vec![(directory.to_path_buf(), 0_usize)];
-    while let Some((path, depth)) = pending.pop() {
-        if depth > MAX_WALK_DEPTH || found.len() >= MAX_GLOB_MATCHES {
-            return None;
-        }
-        for entry in std::fs::read_dir(&path).ok()? {
-            *inspected += 1;
-            if *inspected > MAX_GLOB_ENTRIES {
-                return None;
-            }
-            let entry = entry.ok()?;
-            let name = entry.file_name();
-            if name.to_str()?.starts_with('.') {
-                continue;
-            }
-            let child = entry.path();
-            if traversable(&child)? {
-                pending.push((child, depth + 1));
-            }
-        }
-        found.push(path);
-    }
-    Some(())
+fn parent_component(value: &str) -> bool {
+    value.split(['/', '\\']).any(|part| part == "..")
 }

@@ -76,14 +76,6 @@ def test_unavailable_posttool_observation_preserves_explicit_decision(harness: s
     assert payload["hookSpecificOutput"]["permissionDecision"] == ("deny" if explicit_block else "allow")
 
 
-def test_grok_should_block_respects_guard_event_contract() -> None:
-    from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_should_block
-
-    assert grok_hook_should_block(policy_action="block", event_name="UserPromptSubmit") is True
-    assert grok_hook_should_block(policy_action="block", event_name="PreToolUse") is True
-    assert grok_hook_should_block(policy_action="allow", event_name="PreToolUse") is False
-
-
 def test_grok_bridge_rewrites_daemon_review_after_wait(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

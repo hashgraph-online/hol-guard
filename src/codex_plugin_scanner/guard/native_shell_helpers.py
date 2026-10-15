@@ -170,6 +170,13 @@ def call(action: str, command: str, **fields: Any) -> Any:
         offset = following
 
 
+def kubernetes_secret_read_source(command: str | None) -> str | None:
+    """Return the Kubernetes secret source a command reads, or None."""
+    if not isinstance(command, str) or not command.strip():
+        return None
+    return cast("str | None", call("kubernetes_secret_read_source", command))
+
+
 def _valid(action: str, value: Any) -> bool:
     if action == "option_advance":
         return value is None or (type(value) is int and value >= 0)
@@ -199,6 +206,8 @@ def _valid(action: str, value: Any) -> bool:
         )
     if action in {"masked_bodies", "masked_complete"}:
         return type(value) is str
+    if action == "kubernetes_secret_read_source":
+        return value is None or (type(value) is str and bool(value))
     if action in {"trusted_path", "top_level", "matches_subcommands", "flags_all", "long_flag"}:
         return type(value) is bool
     if action in {"segments", "redirects", "pipe_segments"}:

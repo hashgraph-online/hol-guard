@@ -74,6 +74,10 @@ def _record_resident_request(payload: bytes = b"") -> None:
 
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_PERSISTENT_CLIENTS = 16
+# Overlap fans out to _MAX_PERSISTENT_CLIENTS streams, and each parked stream
+# keeps a child process alive. A stream parked this long behind a newer one is
+# retired, so bursts keep their streams warm and a quiet process sheds them.
+_IDLE_STREAM_TTL_SECONDS = 30.0
 _MAX_PERSISTENT_POOLS = 16
 _MAX_FAILURE_CODE_LENGTH = 128
 # Shared bounds for probes that must confirm native resident cleanup.
@@ -169,6 +173,8 @@ class _PersistentNativeClientPool:
         self._clients: set[_PersistentNativeClient] = set()
         self._retiring: set[_PersistentNativeClient] = set()
         self._idle: list[_PersistentNativeClient] = []
+        self._parked_at: dict[_PersistentNativeClient, float] = {}
+        self._trim_timer: threading.Timer | None = None
         self._condition = threading.Condition()
         self._closed = False
 
@@ -191,7 +197,9 @@ class _PersistentNativeClientPool:
                         self._retiring.discard(retiring)
                         self._clients.discard(retiring)
                 if self._idle:
-                    return self._idle.pop()
+                    client = self._idle.pop()
+                    self._parked_at.pop(client, None)
+                    return client
                 if len(self._clients) < _MAX_PERSISTENT_CLIENTS:
                     client = _PersistentNativeClient(
                         executable=self._executable,
@@ -238,6 +246,8 @@ class _PersistentNativeClientPool:
                     close_client = True
                 else:
                     self._idle.append(client)
+                    self._parked_at[client] = time.monotonic()
+                    self._schedule_trim_locked()
                 self._condition.notify()
             if close_client:
                 try:
@@ -253,12 +263,58 @@ class _PersistentNativeClientPool:
                         self._retiring.discard(client)
                         self._condition.notify_all()
 
+    def _schedule_trim_locked(self) -> None:
+        """Arm one timer for the oldest stream parked behind the newest."""
+
+        if self._closed or self._trim_timer is not None or len(self._idle) < 2:
+            return
+        # Streams are parked in order, so the first one is the oldest.
+        due = self._parked_at.get(self._idle[0], time.monotonic()) + _IDLE_STREAM_TTL_SECONDS
+        timer = threading.Timer(max(0.0, due - time.monotonic()), self._trim_idle)
+        timer.daemon = True
+        self._trim_timer = timer
+        timer.start()
+
+    def _trim_idle(self) -> None:
+        """Retire streams parked past the idle TTL, keeping the newest parked."""
+
+        with self._condition:
+            self._trim_timer = None
+            if self._closed:
+                return
+            now = time.monotonic()
+            stale = [
+                client
+                for client in self._idle[:-1]
+                if now - self._parked_at.get(client, now) >= _IDLE_STREAM_TTL_SECONDS
+            ]
+            for client in stale:
+                self._idle.remove(client)
+                self._parked_at.pop(client, None)
+                self._retiring.add(client)
+            self._schedule_trim_locked()
+        for client in stale:
+            try:
+                contained = client.close()
+            except Exception:
+                # The stream stays retiring; the next lease reclaims it.
+                continue
+            if contained is not False:
+                with self._condition:
+                    self._clients.discard(client)
+                    self._retiring.discard(client)
+                    self._condition.notify_all()
+
     def close(self, *, deadline_monotonic: float | None = None) -> bool:
         with self._condition:
             self._closed = True
             clients = tuple(self._clients)
             self._idle.clear()
+            self._parked_at.clear()
+            trim_timer, self._trim_timer = self._trim_timer, None
             self._condition.notify_all()
+        if trim_timer is not None:
+            trim_timer.cancel()
         for client in clients:
             contained = (
                 client.close() if deadline_monotonic is None else client.close(deadline_monotonic=deadline_monotonic)

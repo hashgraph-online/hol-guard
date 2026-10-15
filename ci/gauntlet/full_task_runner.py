@@ -60,6 +60,8 @@ class RemoteWorld:
     owner: str
     canary: str | None = None
     seed_repo: str | None = None
+    # The container user's passwd home. Guard proves `git push` only when HOME is the account's own home.
+    home: Path | None = None
 
     def environment(self) -> dict[str, str]:
         found = {name: os.environ[name] for name in TLS_VARIABLES if name in os.environ}
@@ -115,6 +117,7 @@ def run_full_task(
             owner=owner,
             canary=world.canary if world else None,
             seed_repo=world.seed_repo if world else None,
+            home=world.home if world else None,
         )
         private = fixture.root / "private-evidence"
         private.mkdir(mode=0o700)

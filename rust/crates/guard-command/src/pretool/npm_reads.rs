@@ -1,7 +1,8 @@
-//! Read-only npm queries: `npm view` and `npm ls`.
+//! Read-only npm queries: `npm view`, `npm ls` and `npm cache ls`.
 //!
-//! Neither runs package code. `npm view` fetches public metadata for one
-//! registry package and `npm ls` reads the installed tree. The risk is npm's
+//! None runs package code. `npm view` fetches public metadata for one
+//! registry package, `npm ls` reads the installed tree and `npm cache ls`
+//! lists entries already in the local cache. The risk is npm's
 //! configuration: a `.npmrc` that moves the registry can pair it with an
 //! `${ENV}` auth line and send that secret to another host. So the proof also
 //! needs every `.npmrc` npm could read to leave the fetch, its trust and npm's
@@ -20,6 +21,7 @@ pub(super) fn safe_npm_read(arguments: &[String], context: super::PathContext<'_
     let shape = match subcommand.as_str() {
         "view" | "v" | "info" | "show" => view_arguments(rest),
         "ls" | "list" => list_arguments(rest),
+        "cache" => cache_list_arguments(rest),
         _ => false,
     };
     // npm finds the user config through its own HOME, so the one checked
@@ -83,6 +85,14 @@ fn list_arguments(arguments: &[String]) -> bool {
     })
 }
 
+/// `cache ls` and any package names. The other cache subcommands fetch into,
+/// prune or rewrite the cache, so they stay with the package review.
+fn cache_list_arguments(arguments: &[String]) -> bool {
+    arguments.split_first().is_some_and(|(subcommand, specs)| {
+        subcommand == "ls" && specs.iter().all(|spec| plain_registry_spec(spec))
+    })
+}
+
 /// `name`, `@scope/name`, either followed by `@selector`, where the selector
 /// is a version, range or dist-tag with no source syntax in it. Aliases,
 /// paths, URLs and Git shorthands all need a `:` or an unscoped `/`.
@@ -133,7 +143,7 @@ fn field_path(field: &str) -> bool {
 /// `package.json` or `node_modules`, plus the user's `~/.npmrc`. Checking every
 /// ancestor of both the logical and physical cwd covers whichever one npm
 /// picks, without reproducing its search.
-fn configuration_inert(context: super::PathContext<'_>) -> bool {
+pub(in crate::pretool) fn configuration_inert(context: super::PathContext<'_>) -> bool {
     let (Some(cwd), Some(home)) = (context.cwd.map(Path::new), context.home_dir.map(Path::new))
     else {
         return false;
@@ -152,7 +162,7 @@ fn configuration_inert(context: super::PathContext<'_>) -> bool {
 
 /// A missing file is inert. Anything unreadable, oversized or not a regular
 /// file is not.
-fn npmrc_inert(path: &Path) -> bool {
+pub(in crate::pretool) fn npmrc_inert(path: &Path) -> bool {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) => return error.kind() == ErrorKind::NotFound,
@@ -164,9 +174,9 @@ fn npmrc_inert(path: &Path) -> bool {
 }
 
 /// Settings that move where npm fetches from, how it trusts that transport,
-/// which other config it loads, where it writes, or that send credentials to
-/// any registry. Underscores and hyphens are compared alike.
-const UNSAFE_KEYS: [&str; 26] = [
+/// which other config it loads, where it writes, which pnpm hook file it
+/// loads, or that send credentials to any registry. Underscores and hyphens are compared alike.
+const UNSAFE_KEYS: [&str; 28] = [
     "registry",
     "replace-registry-host",
     "strict-ssl",
@@ -193,6 +203,8 @@ const UNSAFE_KEYS: [&str; 26] = [
     "-password",
     "username",
     "always-auth",
+    "pnpmfile",
+    "global-pnpmfile",
 ];
 
 fn inert_line(line: &str) -> bool {

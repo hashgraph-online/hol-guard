@@ -60,6 +60,7 @@ Protection model meanings:
 | `command.cdn` | Reviews distribution, VPC origin, key-value-store, profile, and endpoint deletion through supported cloud CLIs. | 1 | Built in |
 | `command.cloud.aws` | Reviews a validated AWS CLI operation matrix for permanent resource deletion and service termination across identity, compute, data, delivery, and control-plane services. | 1 | Built in |
 | `command.cloud.azure` | Reviews a validated Azure CLI operation matrix for permanent resource deletion across subscription, identity, network, compute, application, data, messaging, and AI services. | 1 | Built in |
+| `command.cloud.digitalocean` | Reviews destructive, disruptive, access-changing, credential-exposing and remote-execution doctl operations, while Guard's read proof keeps ordinary doctl list and get reads quiet. | 6 | Built in |
 | `command.cloud.gcp` | Reviews a validated gcloud operation matrix for permanent resource deletion across stable and supported release tracks. | 1 | Built in |
 | `command.dns.aws` | Reviews AWS Route 53 hosted-zone, record, health-check, traffic-policy, DNSSEC, and Resolver deletions. | 6 | Built in |
 | `command.dns.azure` | Reviews Azure public DNS, private DNS, virtual-network link, and DNS resolver deletion through Azure CLI. | 6 | Built in |

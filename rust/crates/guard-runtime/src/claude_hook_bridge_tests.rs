@@ -89,25 +89,38 @@ fn refused_authentication_denies_without_fallback() {
 }
 
 #[test]
-fn unavailable_daemon_falls_back_to_the_local_hook() {
+fn unavailable_daemon_is_denied_without_the_local_hook() {
     let (home, daemon) = home_with_daemon(
         "fallback",
         vec![Exchange::Hook(503, "unavailable".to_owned())],
     );
     let config = config_for(&home, fallback_printing(FALLBACK_ALLOW), Vec::new());
-    assert_eq!(respond(&config, PRE_TOOL_USE), FALLBACK_ALLOW);
+    assert_eq!(
+        degraded_reason(&respond(&config, PRE_TOOL_USE)),
+        "HOL Guard could not complete native review \
+         (daemon returned HTTP 503: unavailable) and denied this action."
+    );
     daemon.join().unwrap();
 }
 
 #[test]
-fn missing_state_reports_the_failed_fallback() {
+fn overloaded_daemon_is_denied_without_the_local_hook() {
+    let (home, daemon) = home_with_daemon("overload", vec![Exchange::Hook(429, "busy".to_owned())]);
+    let config = config_for(&home, fallback_printing(FALLBACK_ALLOW), shell("exit 0"));
+    let reason = degraded_reason(&respond(&config, PRE_TOOL_USE));
+    assert!(reason.contains("HTTP 429"), "{reason}");
+    assert_eq!(daemon.join().unwrap().len(), 1);
+}
+
+#[test]
+fn missing_state_is_denied_without_the_local_hook() {
     let home = GuardHome::new("missing");
     std::fs::remove_file(home.home.join("daemon-discovery-key")).unwrap();
     let config = config_for(&home, fallback_exiting(3), Vec::new());
     assert_eq!(
         degraded_reason(&respond(&config, PRE_TOOL_USE)),
         "HOL Guard could not complete native review \
-         (daemon state is unavailable; fallback exited 3) and denied this action."
+         (daemon state is unavailable) and denied this action."
     );
 }
 
@@ -130,7 +143,7 @@ fn non_http_fallback_url_is_a_control_plane_failure() {
 }
 
 #[test]
-fn query_for_another_home_goes_to_the_fallback() {
+fn query_for_another_home_is_refused_without_the_fallback() {
     let home = GuardHome::new("mismatch");
     let mut config: serde_json::Value =
         serde_json::from_str(&config_for(&home, fallback_exiting(3), Vec::new())).unwrap();
@@ -138,7 +151,7 @@ fn query_for_another_home_goes_to_the_fallback() {
     assert_eq!(
         degraded_reason(&respond(&config.to_string(), PRE_TOOL_USE)),
         "HOL Guard could not complete native review (daemon state path does not \
-         match the hook Guard home; fallback exited 3) and denied this action."
+         match the hook Guard home) and denied this action."
     );
 }
 
@@ -173,10 +186,8 @@ fn failed_recovery_retry_is_reported() {
         reason.contains("; daemon recovery retry failed: "),
         "{reason}"
     );
-    assert!(
-        reason.ends_with("; fallback exited 3) and denied this action."),
-        "{reason}"
-    );
+    assert!(reason.ends_with(") and denied this action."), "{reason}");
+    assert!(!reason.contains("fallback"), "{reason}");
 }
 
 #[test]
@@ -206,7 +217,6 @@ fn recovered_daemon_answers_the_retry() {
 fn config_requires_string_fields_and_a_fallback() {
     let valid = r#"{"state_path":"/h/daemon-state.json","fallback_daemon_url":"http://127.0.0.1:1","query":"guard-home=%2Fh","fallback_command":["guard"]}"#;
     let config = parse_config(valid).unwrap();
-    assert_eq!(config.fallback_command, ["guard"]);
     assert!(config.recovery_command.is_empty());
     for invalid in [
         "[]",

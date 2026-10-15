@@ -198,6 +198,9 @@
     {"case_id":"compatibility-191","command":"printf \"%s\" hello","expected_rules":[],"expected_permissions":[],"uncertain_rules":[],"behavior":"bounded-native","python_capabilities":null},
     {"case_id":"compatibility-192","command":"printenv PATH","expected_rules":[],"expected_permissions":[],"uncertain_rules":[],"behavior":"bounded-native","python_capabilities":null},
     {"case_id":"compatibility-193","command":"docker --version","expected_rules":[],"expected_permissions":[],"uncertain_rules":[],"behavior":"bounded-native","python_capabilities":null},
-    {"case_id":"compatibility-194","command":"gh api repos/owner/repo -F title=@body.md","expected_rules":["command.github.unknown"],"expected_permissions":[],"uncertain_rules":["command.github.unknown"],"behavior":"unsupported-admission","python_capabilities":null}
+    {"case_id":"compatibility-194","command":"gh api repos/owner/repo -F title=@body.md","expected_rules":["command.github.unknown"],"expected_permissions":[],"uncertain_rules":["command.github.unknown"],"behavior":"unsupported-admission","python_capabilities":null},
+    {"case_id":"compatibility-195","command":"printenv PATH HOME","expected_rules":[],"expected_permissions":[],"uncertain_rules":[],"behavior":"bounded-native","python_capabilities":null},
+    {"case_id":"compatibility-196","command":"printenv PATH DATABASE_URL","expected_rules":["command.shell-mutations.process-environment-secret-read"],"expected_permissions":[],"uncertain_rules":["command.shell-mutations.process-environment-secret-read"],"behavior":"context-proof-required","python_capabilities":null},
+    {"case_id":"compatibility-197","command":"printenv HOME GITHUB_TOKEN","expected_rules":["command.shell-mutations.process-environment-secret-read"],"expected_permissions":[],"uncertain_rules":[],"behavior":"bounded-native","python_capabilities":null}
   ]
 }

@@ -741,8 +741,6 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
         ("gh run list -aRgithub.com/OWNER/REPO --help", 1),
         ("gh pr view 1 -wRRowner/repo --help", 1),
         ("gh run list -aRRowner/repo --help", 1),
-        ("gh -Rowner/repo pr view 17", 1),
-        ("gh -Rgithub.com/Owner/Repo pr view 17", 1),
     ),
 )
 @pytest.mark.usefixtures("native_hook_force")
@@ -753,6 +751,33 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
     command: str,
     pending_approvals: int,
 ) -> None:
+    response, store = _bridge_github_read(tmp_path, monkeypatch, capsys, command)
+    _assert_bridge_denied(response)
+    assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
+
+
+@pytest.mark.parametrize("command", ("gh -Rowner/repo pr view 17", "gh -Rgithub.com/Owner/Repo pr view 17"))
+@pytest.mark.usefixtures("native_hook_force")
+def test_bridge_real_daemon_allows_attached_repository_reads_on_github(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+) -> None:
+    """A top-level `-Rowner/repo` names a github.com repository, so the read keeps its allow baseline."""
+    response, store = _bridge_github_read(tmp_path, monkeypatch, capsys, command)
+    hook_output = response.get("hookSpecificOutput")
+    assert isinstance(hook_output, dict)
+    assert "permissionDecision" not in hook_output, response
+    assert store.list_approval_requests(limit=None) == [], response
+
+
+def _bridge_github_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+) -> tuple[dict[str, object], GuardStore]:
     guard_home = tmp_path / "guard-home"
     session_workspace = tmp_path / "projects"
     session_workspace.mkdir()
@@ -783,9 +808,7 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
         daemon.stop()
 
     assert exit_code == 0
-    response = json.loads(capsys.readouterr().out)
-    _assert_bridge_denied(response)
-    assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
+    return json.loads(capsys.readouterr().out), store
 
 
 @pytest.mark.parametrize(

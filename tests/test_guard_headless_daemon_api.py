@@ -2745,7 +2745,8 @@ def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_p
         "2026-07-17T00:00:00Z",
         remote_write_authorized=True,
     )
-    store.set_cloud_exceptions(
+    store.set_sync_payload(
+        "cloud_exceptions",
         [
             {
                 "id": "stale-receipt-sync-allow",

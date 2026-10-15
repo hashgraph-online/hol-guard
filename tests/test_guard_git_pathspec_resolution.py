@@ -10,15 +10,18 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _codex_git_pathspec_identity_for_command,
-    _codex_post_tool_output_artifact,
-)
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
+from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 # Windows rejects ASCII newlines in filenames; keep an unusual Unicode separator
 # there while POSIX continues to exercise Git's NUL-delimited newline handling.
 _LINE_BREAK_FILENAME = "line\u2028break.py" if os.name == "nt" else "line\nbreak.py"
+
+
+def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
+    answer = codex_tool_output_native("git_pathspec_identity", command=command_text, cwd=cwd)
+    return None if answer.error_code is not None else answer.value
 
 
 def _write(path: Path, text: str) -> None:

@@ -246,6 +246,10 @@ jobs:
       (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
     needs: [authorize-release, resolve-alpha-version]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -455,6 +459,16 @@ jobs:
                 fi
                 if jq -e --arg candidate "$RELEASE_VERSION" 'index($candidate) == null' <<< "$PYPI_VERSIONS" >/dev/null; then
                   REPAIR_ARGS+=(--deferred-pypi)
+                fi
+                if [[ "${REPAIR_ARGS[0]}" == "--asset-names-file" ]]; then
+                  # A run that stopped after upload (for example on a companion project's
+                  # quota) leaves the release complete but never records it as published.
+                  PUBLISHED_RECORDS=$(gh api --paginate \
+                    "repos/$GITHUB_REPOSITORY/commits/v${RELEASE_VERSION}/statuses?per_page=100" \
+                    --jq ".[] | select(.context == \"hol-guard / published ${RELEASE_VERSION}\" and .state == \"success\") | .id")
+                  if [[ -z "$PUBLISHED_RECORDS" ]]; then
+                    REPAIR_ARGS+=(--publication-unrecorded)
+                  fi
                 fi
                 if ! uv run --no-sync python scripts/stable_release_asset_repair.py \
                   --requested "$RELEASE_VERSION" \
@@ -754,7 +768,7 @@ jobs:
       )
     needs: [build, precompile-native]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
     strategy:
@@ -1978,6 +1992,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
@@ -2007,6 +2022,59 @@ jobs:
           mkdir dist-hol-guard dist-plugin-scanner
           cp "${guard_files[@]}" dist-hol-guard/
           cp "${scanner_files[@]}" dist-plugin-scanner/
+      - name: Reuse plugin-scanner files from the original publication
+        # Scanner files are not attached to the GitHub release and a rebuild is not
+        # guaranteed to be byte-identical. When an earlier run of this release already
+        # uploaded plugin-scanner, finish with that run's exact files.
+        working-directory: ${{ runner.temp }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKSPACE: ${{ github.workspace }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          status=$(curl -sS --max-time 30 --retry 3 -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/plugin-scanner/${VERSION}/json")
+          if [[ "$status" == "404" ]]; then
+            echo "plugin-scanner ${VERSION} is not on PyPI; publishing this run's build."
+            exit 0
+          fi
+          if [[ "$status" != "200" ]]; then
+            echo "Could not inspect plugin-scanner ${VERSION} on PyPI (HTTP ${status})" >&2
+            exit 1
+          fi
+          origin_dir=$(mktemp -d)
+          gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" --dir "$origin_dir" \
+            --pattern "hol-guard-v${VERSION}.intoto.jsonl"
+          bundle="$origin_dir/hol-guard-v${VERSION}.intoto.jsonl"
+          [[ "$(wc -l < "$bundle")" == "1" ]]
+          invocation=$(jq -r '.dsseEnvelope.payload' "$bundle" | base64 -d | jq -r '.predicate.runDetails.metadata.invocationId')
+          run_pattern="^https://github\.com/${GITHUB_REPOSITORY}/actions/runs/([1-9][0-9]*)/attempts/[1-9][0-9]*$"
+          if ! [[ "$invocation" =~ $run_pattern ]]; then
+            echo "Release provenance does not name a publication run" >&2
+            exit 1
+          fi
+          origin_run="${BASH_REMATCH[1]}"
+          gh run download "$origin_run" --repo "$GITHUB_REPOSITORY" --dir "$origin_dir/files" \
+            --name distributions-native --name distribution-sha256-native
+          mv "$origin_dir/files/distributions-native" "$origin_dir/files/dist"
+          (cd "$origin_dir/files" && sha256sum --check distribution-sha256-native/distribution-sha256-native.txt)
+          # The Guard files here are the attested release copies, so an exact match
+          # binds the downloaded run to this release.
+          shopt -s nullglob
+          guard_files=("$WORKSPACE"/dist-hol-guard/hol_guard-*)
+          [[ "${#guard_files[@]}" -ge "6" ]]
+          for current in "${guard_files[@]}"; do
+            original="$origin_dir/files/dist/$(basename "$current")"
+            if [[ ! -f "$original" ]] || ! cmp -s "$current" "$original"; then
+              echo "Publication run ${origin_run} does not match the attested $(basename "$current")" >&2
+              exit 1
+            fi
+          done
+          origin_scanner_files=("$origin_dir"/files/dist/plugin_scanner-*)
+          [[ "${#origin_scanner_files[@]}" == "2" ]]
+          rm -f "$WORKSPACE"/dist-plugin-scanner/*
+          cp "${origin_scanner_files[@]}" "$WORKSPACE/dist-plugin-scanner/"
+          echo "Reusing plugin-scanner files from publication run ${origin_run}." >> "$GITHUB_STEP_SUMMARY"
       - name: Validate native Guard release set
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
@@ -2017,17 +2085,19 @@ jobs:
       - name: Stage wheels-only PyPI upload
         id: pypi_stage
         # The sdist stays on the GitHub release; pip never installs it because the pure wheel matches every platform,
-        # and leaving it off PyPI keeps each release well inside the project storage quota.
+        # and leaving it off PyPI keeps each release of both projects well inside the project storage quota.
         run: |
           set -euo pipefail
-          mkdir pypi-hol-guard
+          mkdir pypi-hol-guard pypi-plugin-scanner
           if [[ -f scripts/release_artifact_sets.py ]] && grep -q -- '--wheels-only' scripts/verify_release_registry.py; then
             cp dist-hol-guard/*.whl pypi-hol-guard/
+            cp dist-plugin-scanner/*.whl pypi-plugin-scanner/
             echo "wheels_only_flag=--wheels-only" >> "$GITHUB_OUTPUT"
             echo "artifact_set=wheels" >> "$GITHUB_OUTPUT"
           else
             # Repair runs check out the release source; sources that predate wheels-only verification keep the sdist.
             cp dist-hol-guard/*.whl dist-hol-guard/*.tar.gz pypi-hol-guard/
+            cp dist-plugin-scanner/*.whl dist-plugin-scanner/*.tar.gz pypi-plugin-scanner/
             echo "wheels_only_flag=" >> "$GITHUB_OUTPUT"
             echo "artifact_set=full" >> "$GITHUB_OUTPUT"
           fi
@@ -2082,7 +2152,8 @@ jobs:
             verify-release --registry pypi --project hol-guard --version "$VERSION" --dist-dir dist-hol-guard \
             ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"})
           scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            verify-release --registry pypi --project plugin-scanner --version "$VERSION" --dist-dir dist-plugin-scanner)
+            verify-release --registry pypi --project plugin-scanner --version "$VERSION" --dist-dir dist-plugin-scanner \
+            ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"})
           guard_status=$(jq -r '.status' <<< "$guard_result")
           scanner_status=$(jq -r '.status' <<< "$scanner_result")
           [[ "$guard_status" == "absent" || "$guard_status" == "exact" ]]
@@ -2125,9 +2196,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.plugin_scanner_upload == 'true'
         with:
-          packages-dir: dist-plugin-scanner/
+          packages-dir: pypi-plugin-scanner/
       - name: Remove generated upload attestations
-        run: rm -f pypi-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
+        run: rm -f pypi-hol-guard/*.publish.attestation pypi-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         if: steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'
         env:
@@ -2146,7 +2217,8 @@ jobs:
             fi
             if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
-              --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
+              --dist-dir dist-plugin-scanner ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"} \
+              --download-dir verified-pypi-plugin-scanner); then
               exit 1
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
@@ -2720,6 +2792,7 @@ jobs:
             exit 1
           fi
           gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f release_channel=alpha -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f release_channel=alpha -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
 
   publish-container:
     name: Publish container image

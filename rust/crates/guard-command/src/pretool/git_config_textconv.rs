@@ -15,7 +15,12 @@ pub(super) fn may_run(operation: &str, options: &[&str]) -> bool {
         "diff" | "show" => {
             !(options.iter().any(|option| summary_format(option)) && options.iter().all(known))
         }
-        "branch" | "hash-object" | "config" => false,
+        // grep honors textconv only with --textconv, which its read proof
+        // refuses.
+        "branch" | "hash-object" | "config" | "grep" => false,
+        // Only the plain object-read forms, which never convert, reach the probe.
+        // Reference listings and commit walks print names and object ids only.
+        "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" => false,
         _ => true,
     }
 }

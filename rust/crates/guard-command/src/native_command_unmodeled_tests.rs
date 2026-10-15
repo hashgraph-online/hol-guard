@@ -15,11 +15,11 @@ const GITHUB_PERMISSIONS: &[&str] = &[
 
 /// Ordinary review work the canonical parser cannot model exactly.
 const UNMODELED_GITHUB: &[&str] = &[
-    "for id in PRRT_kwDOexample1234 PRRT_kwDOexample5678; do gh api graphql -f query='mutation($t: ID!) { resolveReviewThread(input: { threadId: $t }) { thread { isResolved } } }' -f t=\"$id\"; done",
+    "for id in PRRT_kwDOexample*; do gh api graphql -f query='mutation($t: ID!) { resolveReviewThread(input: { threadId: $t }) { thread { isResolved } } }' -f t=\"$id\"; done",
     "gh pr comment 12 --body-file - <<'EOF'\nFixed in the latest push.\nEOF",
     // Program names in comment text are data, not commands.
     "gh pr comment 12 --body-file - <<'EOF'\nUpdated the build script and env handling.\nEOF",
-    "for n in 12 13; do gh pr comment $n --body \"Fixed the node script's env handling.\"; done",
+    "for n in 1*; do gh pr comment $n --body \"Fixed the node script's env handling.\"; done",
 ];
 
 fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeCommandControls {
@@ -97,11 +97,39 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
 }
 
 #[test]
+fn quoted_regex_alternation_does_not_synthesize_a_program() {
+    let controls = controls(github("enabled", None), false);
+    let command = "diff -u a/README.md b/README.md | grep -E \"^@@|^[+-]\" | grep -vE \"^(\\+\\+\\+|---)\" | sed -n '190,260p'; echo \"=== other files ===\"; for f in a b; do echo \"--- $f\"; diff a/$f b/$f | head -8; done";
+    let (action, reason) = decision(&controls, command);
+    assert_eq!(action, "review", "{reason}");
+    assert_ne!(reason, "native_command_extension_evaluation_failed");
+    // A quoted expansion in command position still synthesizes a program.
+    assert_eq!(
+        decision(&controls, "for f in a b; do \"$f|x\" y; done").1,
+        "native_command_extension_evaluation_failed"
+    );
+    // So does a command substitution inside double quotes.
+    assert_eq!(
+        decision(&controls, "for f in a b; do echo \"$(x | $f)\"; done").1,
+        "native_command_extension_evaluation_failed"
+    );
+    // Bash 5.3 runs `${ cmd; }` and `${| cmd; }` inside double quotes too.
+    assert_eq!(
+        decision(&controls, "for f in a b; do echo \"${ $f; }\"; done").1,
+        "native_command_extension_evaluation_failed"
+    );
+    assert_eq!(
+        decision(&controls, "for f in a b; do echo \"${| $f; }\"; done").1,
+        "native_command_extension_evaluation_failed"
+    );
+}
+
+#[test]
 fn unmodeled_commands_take_the_strongest_floor_of_their_possible_owners() {
     let controls = controls(serde_json::json!([]), false);
     // A named program brings its extension's strongest rule floor.
     assert_eq!(
-        decision(&controls, "for d in disk2 disk3; do diskutil info $d; done"),
+        decision(&controls, "for d in disk*; do diskutil info $d; done"),
         (
             "block".to_owned(),
             "native_command_extension_uncertain".to_owned()
@@ -110,8 +138,13 @@ fn unmodeled_commands_take_the_strongest_floor_of_their_possible_owners() {
     // An interpreter could reach any extension, so all of them are consulted.
     assert_eq!(decision(&controls, "sh -c 'gh pr view 12'").0, "block");
     assert_eq!(
-        decision(&controls, "for f in a b; do echo $f; done").0,
+        decision(&controls, "for f in *; do echo $f; done").0,
         "review"
+    );
+    // A loop over literal words is proven as its unrolled command list.
+    assert_eq!(
+        decision(&controls, "for f in a b; do echo $f; done").0,
+        "allow"
     );
 }
 
@@ -124,10 +157,15 @@ fn a_disabled_extension_naming_the_program_still_blocks_unmodeled_commands() {
     for command in UNMODELED_GITHUB {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
     }
+    // A loop over literal words is judged as its unrolled commands, which
+    // resolve review threads under their own enabled permission.
+    let literal = "for id in PRRT_kwDOexample1234 PRRT_kwDOexample5678; do gh api graphql -f query='mutation($t: ID!) { resolveReviewThread(input: { threadId: $t }) { thread { isResolved } } }' -f t=\"$id\"; done";
+    let unrolled = "gh api graphql -f query='mutation($t: ID!) { resolveReviewThread(input: { threadId: $t }) { thread { isResolved } } }' -f t=\"PRRT_kwDOexample1234\"; gh api graphql -f query='mutation($t: ID!) { resolveReviewThread(input: { threadId: $t }) { thread { isResolved } } }' -f t=\"PRRT_kwDOexample5678\"";
+    assert_eq!(decision(&controls, literal), decision(&controls, unrolled));
     // Quoting or a path does not hide the program name.
     for command in [
-        "for x in a; do g\"\"h pr view 12; done",
-        "for x in a; do /usr/local/bin/gh pr view 12; done",
+        "for x in *; do g\"\"h pr view 12; done",
+        "for x in *; do /usr/local/bin/gh pr view 12; done",
     ] {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
     }
@@ -145,7 +183,13 @@ fn a_disabled_extension_for_another_program_does_not_block_unmodeled_commands() 
     }
     // An interpreter can assemble any program, so it stays blocked while any
     // extension is disabled, and the disabled program itself is still named.
-    for command in ["sh -c 'gh pr view 12'", "for x in a; do docker ps; done"] {
+    // A docker listing the native proof admits is blocked as well.
+    for command in [
+        "sh -c 'gh pr view 12'",
+        "for x in a; do docker ps; done",
+        "docker ps",
+        "docker ps --format '{{.Names}}' | head -5",
+    ] {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
     }
 }
@@ -278,7 +322,7 @@ fn build_commands_behind_command_time_or_plain_env_are_not_evaluation_failures()
         "env LD_PRELOAD=./x.so vite build",
         "GIT_SSH_COMMAND=./x git fetch",
         "env GIT_SSH_COMMAND=./x git fetch",
-        "NODE_PATH=./evil node build.js",
+        "NODE_PATH=./evil gh api user",
         "RUSTFLAGS='-C linker=./x' cargo build",
         "GOFLAGS=-toolexec=./x go build",
         "CC=./x npm run build",
@@ -295,6 +339,16 @@ fn build_commands_behind_command_time_or_plain_env_are_not_evaluation_failures()
         "BASH_ENV=./x.sh npm run build",
     ] {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
+    }
+    // A search path in front of its own toolchain only picks which workspace
+    // code runs, so a human reviews it instead of the agent dropping it.
+    for command in [
+        "PYTHONPATH=src pytest -q",
+        "PYTHONPATH=src python -m pytest",
+        "JAVA_HOME=/opt/jdk-21 ./gradlew build",
+        "NODE_PATH=./lib node build.js",
+    ] {
+        assert_eq!(decision(&controls, command).0, "review", "{command}");
     }
     // An ordinary application variable cannot load code, so the command keeps
     // the decision of its unprefixed form.

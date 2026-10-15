@@ -191,16 +191,28 @@ pub fn handle_file_id(file: &std::fs::File) -> io::Result<FileId> {
 /// shares only reads, so no writer can change the bytes while it is open.
 /// Callers compare `handle_file_id` with the file they inspected.
 pub fn open_bound_regular_file(canonical_path: &Path) -> io::Result<std::fs::File> {
-    open_bound_file(canonical_path, true)
+    open_bound_file(canonical_path, true, FILE_SHARE_READ)
+}
+
+/// Like `open_bound_regular_file`, but the handle also shares delete, so a
+/// writer can still replace the file with a rename while it is open. The
+/// handle keeps reading the bytes it opened, because a rename never changes
+/// the contents of an open file, and writers stay excluded.
+pub fn open_bound_replaceable_file(canonical_path: &Path) -> io::Result<std::fs::File> {
+    open_bound_file(canonical_path, true, FILE_SHARE_READ | FILE_SHARE_DELETE)
 }
 
 /// Pin executable bytes without write/delete sharing. System executables may
 /// have legitimate WinSxS hardlinks; every link refers to the same locked file.
 pub fn open_bound_executable_file(canonical_path: &Path) -> io::Result<std::fs::File> {
-    open_bound_file(canonical_path, false)
+    open_bound_file(canonical_path, false, FILE_SHARE_READ)
 }
 
-fn open_bound_file(canonical_path: &Path, single_link: bool) -> io::Result<std::fs::File> {
+fn open_bound_file(
+    canonical_path: &Path,
+    single_link: bool,
+    leaf_share: DWORD,
+) -> io::Result<std::fs::File> {
     let mut components = canonical_path.components().peekable();
     let mut current = PathBuf::new();
     let mut ancestors = Vec::new();
@@ -211,7 +223,7 @@ fn open_bound_file(canonical_path: &Path, single_link: bool) -> io::Result<std::
             Component::Normal(name) => {
                 current.push(name);
                 if components.peek().is_none() {
-                    let file = open_leaf(&current, single_link);
+                    let file = open_leaf(&current, single_link, leaf_share);
                     drop(ancestors);
                     return file;
                 }
@@ -233,13 +245,8 @@ fn open_bound_file(canonical_path: &Path, single_link: bool) -> io::Result<std::
     ))
 }
 
-fn open_leaf(path: &Path, single_link: bool) -> io::Result<std::fs::File> {
-    let entry = open_raw_with_flags(
-        path,
-        FILE_SHARE_READ,
-        GENERIC_READ,
-        FILE_FLAG_OPEN_REPARSE_POINT,
-    )?;
+fn open_leaf(path: &Path, single_link: bool, share: DWORD) -> io::Result<std::fs::File> {
+    let entry = open_raw_with_flags(path, share, GENERIC_READ, FILE_FLAG_OPEN_REPARSE_POINT)?;
     let info = checked_info(&entry, false)?;
     if info.links == 0 || (single_link && info.links != 1) {
         return Err(changed("opened file has more than one directory entry"));
@@ -248,9 +255,9 @@ fn open_leaf(path: &Path, single_link: bool) -> io::Result<std::fs::File> {
         return Ok(entry);
     }
     // A cloud placeholder's bytes are served by its filter, so reopen it
-    // without FILE_FLAG_OPEN_REPARSE_POINT. The entry handle denies delete
-    // sharing, so the second open reaches the same file.
-    let content = open_raw_with_flags(path, FILE_SHARE_READ, GENERIC_READ, 0)?;
+    // without FILE_FLAG_OPEN_REPARSE_POINT. The file IDs must match, so a
+    // replacement between the two opens is refused.
+    let content = open_raw_with_flags(path, share, GENERIC_READ, 0)?;
     if handle_info(&content)?.id != info.id {
         return Err(changed("reopened placeholder is a different file"));
     }

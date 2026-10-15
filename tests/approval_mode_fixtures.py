@@ -4,8 +4,21 @@ from __future__ import annotations
 
 import inspect
 from functools import wraps
+from pathlib import Path
 
 import pytest
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    import tomli as tomllib  # type: ignore[no-redef]
+
+
+def _read_toml(path: Path) -> dict[str, object]:
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
 
 
 @pytest.fixture
@@ -23,7 +36,6 @@ def approval_questionnaire_mode(monkeypatch: pytest.MonkeyPatch, tmp_path) -> No
             kwargs["blocked_request_mode"] = "ask"
         original_init(self, *args, **kwargs)
 
-    original_read = config._read_toml
     original_load = config.load_native_guard_config
 
     @wraps(original_load)
@@ -34,7 +46,7 @@ def approval_questionnaire_mode(monkeypatch: pytest.MonkeyPatch, tmp_path) -> No
         paths = [guard_home / "config.toml"]
         if workspace is not None:
             paths.extend(workspace / name for name in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
-        if not any("blocked_request_mode" in original_read(path) for path in paths):
+        if not any("blocked_request_mode" in _read_toml(path) for path in paths):
             loaded["blocked_request_mode"] = "ask"
         return loaded
 
@@ -49,9 +61,10 @@ def approval_questionnaire_mode(monkeypatch: pytest.MonkeyPatch, tmp_path) -> No
         # preference in their temporary home rather than relying on monkeypatch.
         if guard_home.resolve().is_relative_to(tmp_path.resolve()):
             path = guard_home / "config.toml"
-            payload = original_read(path)
-            if "blocked_request_mode" not in payload:
-                config._write_guard_config(path, {**payload, "blocked_request_mode": "ask"})
+            if "blocked_request_mode" not in _read_toml(path):
+                existing = path.read_text(encoding="utf-8") if path.exists() else ""
+                guard_home.mkdir(parents=True, exist_ok=True)
+                path.write_text('blocked_request_mode = "ask"\n' + existing, encoding="utf-8")
         original_store_init(self, guard_home, *args, **kwargs)
 
     monkeypatch.setattr(GuardStore, "__init__", store_with_questionnaire)

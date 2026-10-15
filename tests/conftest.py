@@ -111,6 +111,26 @@ def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pyt
 
 
 @pytest.fixture(autouse=True)
+def _python_mcp_proxy_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install MCP proxies with the Python launcher argv unless a test opts in.
+
+    Most install and refresh tests pin the Python proxy entry. Relay tests
+    select the native relay by setting or clearing ``HOL_GUARD_MCP_RELAY``.
+    """
+
+    # Subprocess installers copy os.environ, so the pin is an environment value.
+    monkeypatch.setenv("HOL_GUARD_MCP_RELAY", "python")
+
+
+@pytest.fixture(autouse=True)
+def _reset_registry_cache() -> None:
+    """A registry document one test cached must not answer another test."""
+    from codex_plugin_scanner.guard.native_supply_chain_registry_cache import REGISTRY_CACHE
+
+    REGISTRY_CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_aibom_mcp_native_backoff() -> None:
     """One outage's MCP-enrichment backoff must not leak into the next test."""
 

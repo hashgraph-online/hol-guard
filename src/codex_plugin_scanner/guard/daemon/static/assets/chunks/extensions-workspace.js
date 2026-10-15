@@ -1,4 +1,4 @@
-import { bg as fetchLocalCliApi, r as reactExports, bh as fetchExtensionCatalog, bi as normalizeExtensionCatalogSummary, bj as normalizeExtensionPermission, bk as ExtensionControlProtocolError, bl as ExtensionControlApiError, bm as normalizeExtensionCatalogItem, bn as guardApiCacheScope, bo as fetchExtensionCatalogV2Api, bp as localPermissionDraftState, bq as setLocalPermissionDraftState, br as newExtensionPolicyDraftIdentity, bs as extensionPolicyDraftIsDirty, bt as setLocalPermissionDraftStates, bu as buildExtensionPolicyDraftMutation, bv as previewExtensionMutation, bw as isCurrentExtensionPolicyDraft, bx as applyExtensionMutation, by as fetchEffectiveExtensionControls, bz as fetchExtensionControlHistory, j as jsxRuntimeExports, F as HiMiniSparkles, s as HiMiniCheckCircle, bA as HiMiniNoSymbol, ay as HiMiniLockClosed, R as HiMiniExclamationTriangle, aG as isApprovalProofSubmitDisabled, I as HiMiniXMark, aF as ApprovalProofFieldInputs, bB as useResolvedApprovalGate, aE as HiMiniArrowPath, y as HiMiniShieldCheck, bC as HiMiniInformationCircle, aH as buildApprovalProofCredentials, bD as GenIcon, T as HiMiniBolt, bE as HiMiniGlobeAlt, bF as HiMiniCube, M as HiMiniCloud, bG as HiMiniServerStack, b as HiMiniCommandLine, bH as HiMiniFolder, bI as FaWindows, bJ as FaAws, c as HiMiniChevronRight, K as HiMiniChevronDown, bK as approvalProofRecentlySatisfied, bL as isBulkApproveGateReady, bM as HiMiniArrowLeft, bN as HiMiniPlus, bO as startGuardCloudConnect, bP as HiMiniArrowTopRightOnSquare, bQ as fetchExtensionControlApi, ao as HiMiniClipboardDocumentCheck, ap as HiMiniClipboard, ar as ApprovalProofModal, bR as guardAwareHref, b0 as HiMiniMagnifyingGlass, aA as HiMiniAdjustmentsHorizontal, bS as HiMiniCheck, a$ as WorkspacePageHeader, bT as acknowledgeDegradedExtensionControlAuthority, bU as recoverExtensionControlAuthority } from "../guard-dashboard.js";
+import { bj as fetchLocalCliApi, r as reactExports, bk as fetchExtensionCatalog, bl as normalizeExtensionCatalogSummary, bm as normalizeExtensionPermission, bn as ExtensionControlProtocolError, bo as ExtensionControlApiError, bp as normalizeExtensionCatalogItem, bq as guardApiCacheScope, br as fetchExtensionCatalogV2Api, bs as localPermissionDraftState, bt as setLocalPermissionDraftState, bu as newExtensionPolicyDraftIdentity, bv as extensionPolicyDraftIsDirty, bw as setLocalPermissionDraftStates, bx as buildExtensionPolicyDraftMutation, by as previewExtensionMutation, bz as isCurrentExtensionPolicyDraft, bA as applyExtensionMutation, bB as fetchEffectiveExtensionControls, bC as fetchExtensionControlHistory, j as jsxRuntimeExports, F as HiMiniSparkles, s as HiMiniCheckCircle, bD as HiMiniNoSymbol, ay as HiMiniLockClosed, R as HiMiniExclamationTriangle, aG as isApprovalProofSubmitDisabled, I as HiMiniXMark, aF as ApprovalProofFieldInputs, bE as useResolvedApprovalGate, aE as HiMiniArrowPath, y as HiMiniShieldCheck, bF as HiMiniInformationCircle, aH as buildApprovalProofCredentials, bG as GenIcon, T as HiMiniBolt, bH as HiMiniGlobeAlt, bI as HiMiniCube, M as HiMiniCloud, bJ as HiMiniServerStack, b as HiMiniCommandLine, bK as HiMiniFolder, bL as FaWindows, bM as FaAws, c as HiMiniChevronRight, K as HiMiniChevronDown, bN as approvalProofRecentlySatisfied, bO as isBulkApproveGateReady, bP as HiMiniArrowLeft, bQ as HiMiniPlus, bR as startGuardCloudConnect, bS as HiMiniArrowTopRightOnSquare, bT as fetchExtensionControlApi, ap as HiMiniClipboardDocumentCheck, aq as HiMiniClipboard, as as ApprovalProofModal, b2 as guardAwareHref, b0 as HiMiniMagnifyingGlass, aA as HiMiniAdjustmentsHorizontal, bU as HiMiniCheck, a$ as WorkspacePageHeader, bV as fetchExtensionDiscoveryApi, bW as acknowledgeDegradedExtensionControlAuthority, bX as recoverExtensionControlAuthority } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -3500,13 +3500,11 @@ function ProtectionStatusHero(props) {
   const safe = props.status.tone === "safe";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-status-heading", className: "guard-status-bar", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-status-bar-icon", "data-tone": props.status.tone, "aria-hidden": "true", children: safe ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-4" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Local protection" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 flex flex-wrap items-baseline gap-x-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-status-heading", className: "text-sm font-semibold text-brand-dark", children: props.status.title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-5 text-brand-dark/70", children: props.status.summary })
-      ] })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline gap-x-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/60", children: "Local protection" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-status-heading", className: "text-sm font-semibold text-brand-dark", children: props.status.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-5 text-brand-dark/70", children: props.status.summary })
+    ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ProtectionStatusAction,
       {
@@ -3534,7 +3532,7 @@ function ProtectionStatusAction(props) {
     );
   }
   if (props.safe) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800", children: [
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex shrink-0 items-center gap-1.5 self-center text-xs font-semibold text-emerald-800", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "size-3.5" }),
       "No action required"
     ] });
@@ -6739,7 +6737,7 @@ const DEFAULT_TERMINAL_COMMANDS = {
   recover_authority: "hol-guard command controls recover-authority"
 };
 const GATE_SETUP_SUFFIX = " Enable Ask for proof and set an Approval password in Settings > Approval gate, then return here.";
-function authorityNoticeView(health, approvalGateReady, terminalCommands) {
+function authorityNoticeView(health, approvalGateReady, terminalCommands, approvalConfigured) {
   const commands = terminalCommands ?? DEFAULT_TERMINAL_COMMANDS;
   const terminalName = terminalCommands?.shell === "powershell" ? "PowerShell" : "your terminal";
   switch (health) {
@@ -6807,10 +6805,10 @@ function authorityNoticeView(health, approvalGateReady, terminalCommands) {
       if (!approvalGateReady) {
         return {
           tone: "info",
-          title: "Set up local approval before enrollment",
-          body: "Extension controls require this device's local approval gate. Guard Cloud sign-in and account MFA are separate and do not enable this gate. In Settings > Approval gate, enable Ask for proof on allow decisions and set an Approval password, then return here to enroll. Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown.",
+          title: approvalConfigured ? "Local approval is off" : "Set up local approval",
+          body: approvalConfigured ? "Enable local approval to change extension permissions. Your password stays on this device; Guard Cloud is not required." : "Choose a password to protect changes to extension permissions. It stays on this device; Guard Cloud is not required.",
           action: { kind: "configure-approval" },
-          actionLabel: "Set up approval",
+          actionLabel: "Open approval settings",
           actionDetail: null,
           command: "",
           commandLabel: "",
@@ -6820,8 +6818,8 @@ function authorityNoticeView(health, approvalGateReady, terminalCommands) {
       }
       return {
         tone: "info",
-        title: "Finish setting up protection",
-        body: "Command protection settings are not enrolled on this device yet. One command in your terminal creates this device's trusted settings. Local command checking already runs without them.",
+        title: "Finish extension setup",
+        body: "Run this command to save this device's trusted extension settings. Guard is already checking commands locally.",
         action: { kind: "none" },
         actionLabel: null,
         actionDetail: null,
@@ -6835,7 +6833,7 @@ function authorityNoticeView(health, approvalGateReady, terminalCommands) {
 function ProtectionAuthorityNotice(props) {
   const health = props.effective.health;
   const approvalGateReady = props.approvalGate === null ? null : props.approvalGate.configured && props.approvalGate.enabled;
-  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands);
+  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands, props.approvalGate?.configured === true);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [copyState, setCopyState] = reactExports.useState("idle");
@@ -6912,7 +6910,7 @@ function ProtectionAuthorityNotice(props) {
               ]
             }
           ) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
+          view.action.kind !== "configure-approval" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
@@ -6924,7 +6922,7 @@ function ProtectionAuthorityNotice(props) {
               className: "inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60",
               children: checkPending ? "Checking…" : "Check again"
             }
-          )
+          ) : null
         ] }),
         props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
         checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
@@ -6972,6 +6970,335 @@ function ProtectionAuthorityNotice(props) {
         }
       }
     ) : null
+  ] });
+}
+const GUARD_DISCOVERY_CLOUD_ORIGIN = "https://hol.org";
+const GUARD_DISCOVERY_ADVERTISE_PATH = "/guard/extensions/advertise?source=guard_local&intent=extension-promotion";
+const MIN_ORGANIC_ROWS_BEFORE_IN_FEED = 8;
+function parseDiscoveryProjection(value) {
+  if (typeof value !== "object" || value === null) return null;
+  const record2 = value;
+  const snapshot = record2.snapshot;
+  if (typeof record2.remainingLeaseMs !== "number" || typeof record2.policyAllowed !== "boolean") return null;
+  if (typeof snapshot !== "object" || snapshot === null) return null;
+  if (snapshot.state !== "ready" && snapshot.state !== "unavailable") return null;
+  if (!Array.isArray(snapshot.placements)) return null;
+  for (const placement of snapshot.placements) {
+    const candidate = placement;
+    if (typeof candidate.publicPlacementId !== "string" || typeof candidate.extensionId !== "string" || candidate.product !== "always" && candidate.product !== "time_slot" && candidate.product !== "sponsored" || typeof candidate.endsAt !== "string" || typeof candidate.creativeVersion !== "string" || typeof candidate.creative?.headline !== "string" || typeof candidate.creative?.body !== "string") {
+      return null;
+    }
+  }
+  return {
+    snapshot: {
+      schemaVersion: String(snapshot.schemaVersion ?? ""),
+      snapshotId: String(snapshot.snapshotId ?? ""),
+      state: snapshot.state,
+      enabled: snapshot.enabled === true,
+      reasonCode: typeof snapshot.reasonCode === "string" ? snapshot.reasonCode : null,
+      generatedAt: String(snapshot.generatedAt ?? ""),
+      leaseExpiresAt: String(snapshot.leaseExpiresAt ?? ""),
+      placements: snapshot.placements,
+      offers: Array.isArray(snapshot.offers) ? snapshot.offers : []
+    },
+    remainingLeaseMs: record2.remainingLeaseMs,
+    policyAllowed: record2.policyAllowed
+  };
+}
+function advertiseUrl(placement, extensionId) {
+  const url = new URL(GUARD_DISCOVERY_CLOUD_ORIGIN + GUARD_DISCOVERY_ADVERTISE_PATH);
+  url.searchParams.set("placement", placement);
+  return url.toString();
+}
+function joinDiscoveryPlacements(placements, catalogExtensions, nowMs) {
+  const catalogById = new Map(catalogExtensions.map((extension) => [extension.extension_id, extension]));
+  const featured = [];
+  const sponsored = [];
+  for (const placement of placements) {
+    if (Date.parse(placement.endsAt) <= nowMs) continue;
+    const catalog = catalogById.get(placement.extensionId);
+    if (!catalog) continue;
+    if (placement.product === "sponsored") {
+      if (!sponsored.some((entry) => entry.placement.extensionId === placement.extensionId)) {
+        sponsored.push({ placement, catalog });
+      }
+    } else if (!featured.some((entry) => entry.placement.extensionId === placement.extensionId)) {
+      featured.push({ placement, catalog });
+    }
+  }
+  return { featured, sponsored };
+}
+function chooseStableCard(entries, currentId, visitSeed) {
+  if (entries.length === 0) return null;
+  const current = entries.find((entry) => entry.placement.publicPlacementId === currentId);
+  if (current) return current;
+  const index = Math.floor(visitSeed * entries.length) % entries.length;
+  return entries[index];
+}
+function chooseSponsoredCard(entries, currentId, visitSeed, featuredExtensionId) {
+  const candidates = entries.filter((entry) => entry.placement.extensionId !== featuredExtensionId);
+  return chooseStableCard(candidates, currentId, visitSeed);
+}
+function shouldShowPurchasePrompt(input) {
+  return input.status === "ready" && input.joined.featured.length === 0 && input.joined.sponsored.length === 0 && input.sponsoredOffer?.availability === "open" && input.organicCount >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED;
+}
+function sponsoredCardLabel(featured) {
+  return featured ? "Sponsored · Featured" : "Sponsored";
+}
+const DISCOVERY_REFRESH_MS = 1e4;
+function SponsoredCard(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "article",
+    {
+      "data-testid": props.featured ? "discovery-featured-card" : "discovery-sponsored-card",
+      "data-sponsored-placement-id": props.placement.publicPlacementId,
+      className: "flex items-start gap-3 rounded-2xl border border-brand-blue/15 bg-white px-4 py-3",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-blue/10 text-sm font-bold text-brand-blue", children: props.catalog.name.slice(0, 1).toUpperCase() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "truncate text-sm font-semibold text-brand-dark", children: props.catalog.name }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600", "data-sponsored-label": true, children: sponsoredCardLabel(props.featured) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 line-clamp-2 text-sm leading-5 text-brand-dark/70", children: props.placement.creative.body }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/45", children: "Paid placement. Your protection settings are unchanged." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "guard-extensions-chip shrink-0",
+            onClick: () => props.onOpen(props.catalog),
+            children: "View extension"
+          }
+        )
+      ]
+    }
+  );
+}
+function OrganicRow(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      className: "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
+      onClick: () => props.onOpen(props.extension),
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-medium text-brand-dark", children: props.extension.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/55", children: props.extension.extension_id })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "text-brand-dark/30", children: "›" })
+      ]
+    }
+  );
+}
+function ExtensionsDiscover(props) {
+  const [status, setStatus] = reactExports.useState("loading");
+  const [projection, setProjection] = reactExports.useState(null);
+  const [visitSeed] = reactExports.useState(() => Math.random());
+  const selectedFeatured = reactExports.useRef(null);
+  const selectedSponsored = reactExports.useRef(null);
+  const requestGeneration = reactExports.useRef(0);
+  const fetchRef = reactExports.useRef(props.fetchPlacements);
+  fetchRef.current = props.fetchPlacements;
+  const load = reactExports.useCallback(async () => {
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
+    const current = () => generation === requestGeneration.current;
+    try {
+      const response = await fetchRef.current();
+      if (!current()) return;
+      if (response.status === 403) {
+        setStatus("opt-out");
+        return;
+      }
+      if (response.status === 501 || response.status === 503 || response.status === 429) {
+        const body = await response.json().catch(() => null);
+        if (!current()) return;
+        const code = body && typeof body.error === "string" ? body.error : null;
+        setStatus(code === "rate_limited" || response.status === 429 ? "rate-limited" : "unavailable");
+        setProjection(null);
+        return;
+      }
+      if (!response.ok) {
+        setStatus("unavailable");
+        setProjection(null);
+        return;
+      }
+      const parsed = parseDiscoveryProjection(await response.json().catch(() => null));
+      if (!current()) return;
+      if (!parsed) {
+        setStatus("unavailable");
+        setProjection(null);
+        return;
+      }
+      if (!parsed.policyAllowed) {
+        setStatus("opt-out");
+        setProjection(null);
+        return;
+      }
+      if (parsed.snapshot.state !== "ready" || !parsed.snapshot.enabled) {
+        setStatus("unavailable");
+        setProjection(null);
+        return;
+      }
+      setProjection(parsed);
+      setStatus("ready");
+    } catch {
+      if (!current()) return;
+      setStatus("offline");
+      setProjection(null);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    if (!props.active) return;
+    let stopped = false;
+    let timer = 0;
+    const tick = () => {
+      if (stopped || document.hidden) return;
+      void load();
+    };
+    const onVisibility = () => {
+      if (!document.hidden) tick();
+    };
+    tick();
+    timer = window.setInterval(tick, DISCOVERY_REFRESH_MS);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      requestGeneration.current += 1;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [props.active, load]);
+  const joined = reactExports.useMemo(
+    () => joinDiscoveryPlacements(
+      status === "ready" && projection ? projection.snapshot.placements : [],
+      props.catalogExtensions,
+      Date.now()
+    ),
+    [projection, props.catalogExtensions, status]
+  );
+  const featured = reactExports.useMemo(
+    () => chooseStableCard(joined.featured, selectedFeatured.current, visitSeed),
+    [joined.featured, visitSeed]
+  );
+  reactExports.useEffect(() => {
+    selectedFeatured.current = featured ? featured.placement.publicPlacementId : null;
+  }, [featured]);
+  const sponsored = reactExports.useMemo(() => {
+    if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return null;
+    return chooseSponsoredCard(
+      joined.sponsored,
+      selectedSponsored.current,
+      visitSeed,
+      featured?.placement.extensionId ?? null
+    );
+  }, [featured, joined.sponsored, props.catalogExtensions.length, visitSeed]);
+  reactExports.useEffect(() => {
+    if (props.catalogExtensions.length < MIN_ORGANIC_ROWS_BEFORE_IN_FEED) return;
+    selectedSponsored.current = sponsored ? sponsored.placement.publicPlacementId : null;
+  }, [props.catalogExtensions.length, sponsored]);
+  const sponsoredOffer = projection?.snapshot.offers.find(
+    (offer) => offer.product === "sponsored"
+  ) ?? null;
+  const showPurchasePrompt = shouldShowPurchasePrompt({
+    status,
+    joined,
+    sponsoredOffer,
+    organicCount: props.catalogExtensions.length
+  });
+  const organicRows = props.catalogExtensions;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "extensions-discover", "aria-label": "Discover extensions", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/60", children: "Online discovery. Sponsored placements do not change protection." }),
+    featured ? /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "mt-4", "aria-label": "Featured discovery", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SponsoredCard,
+      {
+        placement: featured.placement,
+        catalog: featured.catalog,
+        featured: true,
+        onOpen: props.onOpenExtension
+      }
+    ) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 space-y-1", children: organicRows.slice(0, MIN_ORGANIC_ROWS_BEFORE_IN_FEED).map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(OrganicRow, { extension, onOpen: props.onOpenExtension }, extension.extension_id)) }),
+    sponsored ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SponsoredCard,
+      {
+        placement: sponsored.placement,
+        catalog: sponsored.catalog,
+        featured: false,
+        onOpen: props.onOpenExtension
+      }
+    ) }) : showPurchasePrompt ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "aside",
+      {
+        "data-testid": "discovery-purchase-prompt",
+        className: "mt-2 rounded-2xl border border-dashed border-brand-blue/25 bg-brand-blue/[0.03] px-4 py-3",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "This discovery space is available." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/60", children: "Promote a verified extension you own to reach developers exploring extensions here and on hol.org. The checkout shows the live server quote before any payment." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "a",
+            {
+              className: "guard-extensions-chip mt-2 inline-flex",
+              href: advertiseUrl("extensions_feed"),
+              target: "_blank",
+              rel: "noopener noreferrer",
+              referrerPolicy: "no-referrer",
+              children: "Sponsor this placement"
+            }
+          )
+        ]
+      }
+    ) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 space-y-1", children: organicRows.slice(MIN_ORGANIC_ROWS_BEFORE_IN_FEED).map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(OrganicRow, { extension, onOpen: props.onOpenExtension }, extension.extension_id)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DiscoveryStatusRow, { status, sponsoredAvailability: sponsoredOffer?.availability ?? null })
+  ] });
+}
+function DiscoveryStatusRow(props) {
+  if (props.status === "ready") {
+    if (props.sponsoredAvailability === "sold_out") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-6 text-xs text-brand-dark/45", "data-testid": "discovery-status-sold-out", children: [
+        "Sponsored inventory is currently full.",
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            className: "font-semibold text-brand-blue hover:underline",
+            href: advertiseUrl("extensions_header"),
+            target: "_blank",
+            rel: "noopener noreferrer",
+            referrerPolicy: "no-referrer",
+            children: "View availability and other placements"
+          }
+        ),
+        " ",
+        "on hol.org for open windows and products."
+      ] });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-6 text-xs text-brand-dark/45", "data-testid": "discovery-status-ready", role: "status", children: "Sponsored placements, when present, are labeled and never change protection." });
+  }
+  if (props.status === "opt-out") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-6 text-xs text-brand-dark/45", "data-testid": "discovery-status-optout", children: "Sponsored discovery is turned off for this device. Extension management is unaffected." });
+  }
+  if (props.status === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-6 text-xs text-brand-dark/45", role: "status", children: "Checking discovery availability…" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-6 text-xs text-brand-dark/45", "data-testid": `discovery-status-${props.status}`, children: [
+    "Sponsored placements are not available right now.",
+    " ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        className: "font-semibold text-brand-blue hover:underline",
+        href: advertiseUrl("extensions_header"),
+        target: "_blank",
+        rel: "noopener noreferrer",
+        referrerPolicy: "no-referrer",
+        children: "About sponsorships"
+      }
+    )
   ] });
 }
 const digest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -7462,7 +7789,7 @@ function CustomExtensionRow(props) {
 }
 function CustomExtensionEmptyState(props) {
   let title = "No custom extensions yet.";
-  let detail = "Add a tool you run yourself, or connect an MCP server. Guard also detects connectors from your host apps automatically.";
+  let detail = "Add a tool you run yourself or connect an MCP server. Connectors in your host apps appear here automatically.";
   if (props.search) {
     title = "No custom extensions match this search.";
     detail = "No connectors or custom tools match this search.";
@@ -7474,7 +7801,7 @@ function CustomExtensionEmptyState(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
-      className: "mt-4 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6",
+      className: "mt-4 rounded-2xl border border-dashed border-[rgba(63,65,116,0.2)] px-4 py-5",
       "data-testid": props.filteredOut ? "custom-extensions-filter-empty" : "custom-extensions-empty",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: title }),
@@ -7541,17 +7868,19 @@ function CustomExtensionsSection(props) {
   const visibleNeedsReview = grouped ? visible.filter(customExtensionNeedsReview) : visible;
   const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
   const unit = added.length === 1 ? "extension" : "extensions";
+  const firstRun = all.length === 0 && search === "" && !filteredOut;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "custom-extensions-heading", "data-testid": "custom-extensions-section", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm text-slate-500", children: "Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end", children: [
+      firstRun ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
         "Add custom extension"
       ] })
     ] }),
+    props.discoveryControl ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: props.discoveryControl }) : null,
     searchable ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block w-full max-w-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search custom extensions" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
@@ -8426,12 +8755,18 @@ function CatalogExtensionRow(props) {
   );
 }
 function ConnectorDiscoveryControl(props) {
-  if (props.discovering) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "px-1 text-xs text-brand-dark/60", children: "Checking host connections…" });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "max-w-56 truncate text-xs text-brand-dark/60", title: props.error, children: props.error }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip", onClick: props.onRetry, children: props.error ? "Check for connectors again" : "Check host connections" })
+  const message = props.discovering ? props.showProgress ? "Checking host connections…" : "" : props.error ?? "";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { "aria-live": "polite", "aria-atomic": "true", className: "text-sm text-brand-dark/70", children: message }),
+    props.discovering ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        className: "inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-brand-blue hover:text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+        onClick: props.onRetry,
+        children: props.error ? "Check for connectors again" : "Check host connections"
+      }
+    )
   ] });
 }
 function CatalogFilterEmpty(props) {
@@ -8442,6 +8777,7 @@ function CatalogFilterEmpty(props) {
   ] });
 }
 function ExtensionsOverview(props) {
+  const [workspaceView, setWorkspaceView] = reactExports.useState("manage");
   const [query, setQuery] = reactExports.useState("");
   const discoveryStarted = reactExports.useRef(false);
   const reloadConnections = reactExports.useRef(props.onReloadConnections);
@@ -8559,41 +8895,67 @@ function ExtensionsOverview(props) {
       {
         eyebrow: "On this device",
         title: PROTECTION_TERMS.pageTitle,
-        description: "Choose an Extension to review its permissions and effective protection."
+        description: "Choose an Extension to review its permissions and effective protection.",
+        tabs: [
+          { value: "manage", label: "Manage" },
+          { value: "discover", label: "Discover" }
+        ],
+        activeTab: workspaceView,
+        onTabChange: setWorkspaceView,
+        actions: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            className: "guard-extensions-chip",
+            "data-testid": "sponsor-extension-action",
+            href: "https://hol.org/guard/extensions/advertise?source=guard_local&intent=extension-promotion&placement=extensions_header",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            referrerPolicy: "no-referrer",
+            children: "Sponsor an extension"
+          }
+        )
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ProtectionStatusHero,
-        {
-          status: props.status,
-          onPrimaryAction: props.status.primaryAction === "review-lockdown" ? props.onPrimaryStatusAction : void 0
-        }
-      ),
-      props.recoveryStatus && !props.healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: props.recoveryStatus }) : null
-    ] }),
-    props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
-    props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
-    props.localCliNotice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: props.localCliNotice }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
+    workspaceView === "discover" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", "data-testid": "extensions-discover-panel", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionsDiscover,
       {
-        ref: filterToolbarRef,
-        "data-testid": "catalog-filters",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          PatternSearchConsole,
+        active: props.active && workspaceView === "discover",
+        catalogExtensions: visibleCatalog,
+        onOpenExtension: props.onOpenExtension,
+        fetchPlacements: () => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements")
+      }
+    ) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "extensions-manage-panel", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ProtectionStatusHero,
           {
-            catalog: visibleCatalog,
-            readModel: props.readModel,
-            effective: props.effective,
-            active: props.active,
-            query,
-            onQueryChange: setQuery,
-            onRefresh: props.onRefresh,
-            onOpenExtension: props.onOpenExtension,
-            actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: handleAddCustom }) : null,
-            toolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
+            status: props.status,
+            onPrimaryAction: props.status.primaryAction === "review-lockdown" ? props.onPrimaryStatusAction : void 0
+          }
+        ),
+        props.recoveryStatus && !props.healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: props.recoveryStatus }) : null
+      ] }),
+      props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
+      props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
+      props.localCliNotice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: props.localCliNotice }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          ref: filterToolbarRef,
+          "data-testid": "catalog-filters",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            PatternSearchConsole,
+            {
+              catalog: visibleCatalog,
+              readModel: props.readModel,
+              effective: props.effective,
+              active: props.active,
+              query,
+              onQueryChange: setQuery,
+              onRefresh: props.onRefresh,
+              onOpenExtension: props.onOpenExtension,
+              actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: handleAddCustom }) : null,
+              toolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsx(
                 CatalogFilterTrigger,
                 {
                   open: filterPanelOpen,
@@ -8603,64 +8965,65 @@ function ExtensionsOverview(props) {
                   onToggle: () => setFilterPanelOpen((open) => !open)
                 }
               ),
-              props.active ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-                ConnectorDiscoveryControl,
+              subtoolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                CatalogFilterBar,
                 {
-                  discovering,
-                  error: [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null,
-                  onRetry: () => setDiscoveryAttempt((attempt) => attempt + 1)
+                  catalog: props.catalogExtensions,
+                  filters,
+                  onChange: setFilters,
+                  open: filterPanelOpen,
+                  onOpenChange: setFilterPanelOpen,
+                  panelId: filterPanelId,
+                  onAfterClear: () => filterTriggerRef.current?.focus()
                 }
-              ) : null
-            ] }),
-            subtoolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              CatalogFilterBar,
-              {
-                catalog: props.catalogExtensions,
-                filters,
-                onChange: setFilters,
-                open: filterPanelOpen,
-                onOpenChange: setFilterPanelOpen,
-                panelId: filterPanelId,
-                onAfterClear: () => filterTriggerRef.current?.focus()
-              }
-            )
-          }
-        )
-      }
-    ),
-    searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CustomExtensionsSection,
-        {
-          items: addedCustomItems,
-          onOpen: props.onOpenLocalCli,
-          seededItems: addedCustomItems.filter((item) => item.seeded === true),
-          onSetUp: props.onAddCustom,
-          onAdd: handleAddCustom,
-          discovering,
-          filteredOut: customItemsFilteredOut,
-          onClearFilters: handleClearFilters
+              )
+            }
+          )
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(LocalSkillsWorkspace, {}),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CodexHostConnectors, { inventory: props.hostInventory }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) }) })
-        ] }),
-        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CatalogExtensionRow,
+      searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CustomExtensionsSection,
           {
-            extension,
-            effective: props.effective,
-            onOpen: props.onOpenExtension
-          },
-          extension.extension_id
-        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
+            items: addedCustomItems,
+            onOpen: props.onOpenLocalCli,
+            seededItems: addedCustomItems.filter((item) => item.seeded === true),
+            onSetUp: props.onAddCustom,
+            onAdd: handleAddCustom,
+            discovering,
+            filteredOut: customItemsFilteredOut,
+            onClearFilters: handleClearFilters,
+            discoveryControl: props.active ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ConnectorDiscoveryControl,
+              {
+                discovering,
+                showProgress: addedCustomItems.length > 0 || customItemsFilteredOut,
+                error: [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null,
+                onRetry: () => setDiscoveryAttempt((attempt) => attempt + 1)
+              }
+            ) : null
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) }) })
+          ] }),
+          visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            CatalogExtensionRow,
+            {
+              extension,
+              effective: props.effective,
+              onOpen: props.onOpenExtension
+            },
+            extension.extension_id
+          )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CodexHostConnectors, { inventory: props.hostInventory }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LocalSkillsWorkspace, {})
       ] })
     ] })
   ] });
@@ -9043,7 +9406,7 @@ function ProtectionCenterWorkspace(props) {
     if (protectionResult.status === "rejected") throw protectionResult.reason;
   }, [refreshApprovalGate, refreshProtection, recoveryCommand, recoveryTerminal]);
   const handleOpenApprovalSettings = reactExports.useCallback(() => {
-    props.onNavigate("/settings?section=approval");
+    props.onNavigate("/settings?section=approval&returnTo=extensions");
   }, [props.onNavigate]);
   const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";
   reactExports.useEffect(() => {

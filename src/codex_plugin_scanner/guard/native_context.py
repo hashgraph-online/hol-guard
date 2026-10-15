@@ -55,19 +55,11 @@ _RESULT_OPTIONAL_KEYS = {
     "token",
     "digest",
     "validation_reason",
-    "environment_values",
     "package_context",
     "mcp_server_identity",
     "mcp_tool_identity",
-    "package_launcher",
-    "mcp_descriptor",
     "browser_mcp",
-    "mcp_tool_risk",
-    "mcp_tool_policy",
     "mcp_launch_environment",
-    "mcp_launch_target",
-    "mcp_safe_arguments",
-    "mcp_serialized_arguments",
     "mcp_redacted_value",
     "runtime_identity",
     "runtime_identity_match",
@@ -968,35 +960,6 @@ def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
     return browser
 
 
-def context_mcp_arguments_projection(tool_name: str, arguments: object) -> tuple[object, str, str]:
-    """`_safe_mcp_arguments` + `_mcp_arguments_digest` + `_launch_target`, one op.
-
-    Returns ``(safe_arguments, launch_target, digest)``. ``arguments`` may be
-    any JSON value; ``None`` means the JSON-RPC params carried no ``arguments``
-    key. Unencodable/non-JSON material fails at the transport boundary, the
-    same rejection the JSON-RPC layer already applied.
-    """
-    fields = json.loads(json.dumps({"tool_name": tool_name, "arguments": arguments}))
-    result = native_context_digest(
-        "mcp_arguments_projection",
-        fields,
-        guard_home=_resolve_digest_home(None),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        raise _unavailable("native_mcp_arguments_projection_unavailable")
-    launch_target = result.get("mcp_launch_target")
-    serialized = result.get("mcp_serialized_arguments")
-    digest = result.get("digest")
-    if (
-        "mcp_safe_arguments" not in result
-        or not isinstance(launch_target, str)
-        or not isinstance(serialized, str)
-        or not isinstance(digest, str)
-    ):
-        raise _unavailable("native_mcp_arguments_projection_unavailable")
-    return result["mcp_safe_arguments"], launch_target, digest
-
-
 def context_mcp_redact_json(value: object) -> object:
     """stdio `_redact_json` parity for recorded MCP traffic; terminal on failure."""
     fields = json.loads(json.dumps({"material": value}))
@@ -1015,7 +978,6 @@ __all__ = [
     "bound_context_digest_home",
     "context_browser_mcp",
     "context_digest_guard_home",
-    "context_mcp_arguments_projection",
     "context_mcp_identity",
     "context_mcp_redact_json",
     "context_mcp_tool_catalog_fingerprint",

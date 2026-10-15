@@ -924,11 +924,14 @@ def test_discovery_artifact_cannot_authorize_unbound_permission_layers(tmp_path:
             ("command.github.permission.merge-remote",),
             "require-reapproval",
         ),
+        # An explicit force-remote Allow is the user's decision for this exact
+        # extension permission, so it takes precedence over the native block.
         (
             "gh repo sync example/project --force",
             ("command.github.permission.force-remote",),
-            "block",
+            "allow",
         ),
+        ("gh repo sync example/project --force", (), "block"),
         (
             "sh -c 'gh pr merge 5115 --repo example/project --squash --auto'",
             ("command.github.permission.merge-remote",),

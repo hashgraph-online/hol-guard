@@ -36,19 +36,40 @@ const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
 #[cfg(not(guard_source_bootstrap))]
-static EMBEDDED_PROGRAM: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/native-command-program.v1.json"));
-// Only the host build dependency has no packaged default. It compiles supplied
-// sources; attempts to evaluate a default fail closed through normal admission.
+static EMBEDDED_PROGRAM: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/native-command-program.v1.json.zst"
+));
+/// SHA-256 hex of the exact packaged program bytes (with trailing newline).
+#[cfg(not(guard_source_bootstrap))]
+pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = env!("GUARD_PACKAGED_PROGRAM_SHA256");
 #[cfg(guard_source_bootstrap)]
-static EMBEDDED_PROGRAM: &[u8] = &[];
+pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = "";
 
 /// The exact program admitted by the runtime, also used for rule attestation.
 // One shared allocation and accessor keep multi-megabyte data out of caller
 // codegen units. Constant propagation otherwise emits redundant binary copies.
+// Only the host build dependency has no packaged default. It compiles supplied
+// sources; attempts to evaluate a default fail closed through normal admission.
 #[inline(never)]
 pub fn packaged_command_program_bytes() -> &'static [u8] {
-    EMBEDDED_PROGRAM
+    #[cfg(not(guard_source_bootstrap))]
+    {
+        static DECODED: OnceLock<Box<[u8]>> = OnceLock::new();
+        DECODED
+            .get_or_init(|| {
+                crate::packaged_blob::decode(
+                    EMBEDDED_PROGRAM,
+                    env!("GUARD_PACKAGED_PROGRAM_LEN"),
+                    env!("GUARD_PACKAGED_PROGRAM_SHA256"),
+                )
+            })
+            .as_ref()
+    }
+    #[cfg(guard_source_bootstrap)]
+    {
+        &[]
+    }
 }
 
 #[path = "native_command_program_admission.rs"]

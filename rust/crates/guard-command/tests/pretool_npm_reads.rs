@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -37,6 +36,7 @@ fn decide(
             rustup_override_absent: false,
             npm_config_inert: false,
             shell_home_matches: false,
+            ripgrep_config_absent: false,
         },
         Some(&environment),
     )
@@ -84,6 +84,10 @@ fn registry_and_tree_reads_continue_unless_configuration_moves_npm() {
         (&plain, "npm view zod@latest dist-tags.latest"),
         (&plain, "npm ls"),
         (&plain, "npm ls zod --depth=0"),
+        (&plain, "npm cache ls"),
+        (&plain, "npm cache ls zod"),
+        (&plain, "npm cache ls zod 2>&1 | head -10"),
+        (&plain, "npm cache ls zod 2>/dev/null | head"),
         (&clean, "npm view zod version"),
     ] {
         assert_eq!(
@@ -106,8 +110,13 @@ fn registry_and_tree_reads_continue_unless_configuration_moves_npm() {
         (&plain, "npm ls -g"),
         (&plain, "npm install zod"),
         (&plain, "npm config get cache"),
+        (&plain, "npm cache add zod"),
+        (&plain, "npm cache clean --force"),
+        (&plain, "npm cache verify"),
+        (&plain, "npm cache ls --cache /tmp/x"),
+        (&plain, "npm --registry=https://x cache ls"),
+        (&moved, "npm cache ls zod"),
         (&plain, "touch notes.txt && npm view zod version"),
-        (&plain, "npm view zod version > out.txt"),
     ] {
         assert_ne!(
             decide(&[], Some(&home), command, &home, cwd),
@@ -122,11 +131,13 @@ fn registry_and_tree_reads_continue_unless_configuration_moves_npm() {
         "NODE_OPTIONS",
         "NODE_TLS_REJECT_UNAUTHORIZED",
     ] {
-        assert_ne!(
-            decide(&[name], Some(&home), "npm view zod version", &home, &plain),
-            "allow",
-            "{name}"
-        );
+        for command in ["npm view zod version", "npm cache ls zod"] {
+            assert_ne!(
+                decide(&[name], Some(&home), command, &home, &plain),
+                "allow",
+                "{name}: {command}"
+            );
+        }
     }
     // An added CA, as for a company's TLS-inspecting proxy, leaves the
     // registry where it was.

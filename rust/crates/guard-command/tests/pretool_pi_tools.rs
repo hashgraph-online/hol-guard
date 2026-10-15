@@ -155,3 +155,46 @@ fn omp_only_tools_stay_reviewed_for_pi() {
     // Other harnesses keep their prior review for these tool names.
     assert!(!allowed(&run(&f, "codex", "ls", json!({"path": "."}))));
 }
+
+#[test]
+fn omp_learn_stays_reviewed_before_it_runs() {
+    // guard-runtime releases a `learn` result after execution because this
+    // review means a person approved the call. Revisit that before allowing it here.
+    let f = fixture("omp-learn");
+    let result = run(
+        &f,
+        "omp",
+        "learn",
+        json!({"memory": "Run the project tests with cargo test before pushing."}),
+    );
+    assert_eq!(result.minimum_action, "review");
+    assert_eq!(result.reason_code, "native_pre_tool_unknown_review");
+}
+
+#[test]
+fn eval_code_that_is_not_a_constant_points_to_the_bash_tool() {
+    let f = fixture("omp-eval-subprocess");
+    let code = "const { spawnSync } = await import('node:child_process'); \
+                display(spawnSync('bun', ['scripts/report.ts']).status);";
+    for harness in ["omp", "pi"] {
+        let result = run(&f, harness, "eval", json!({"code": code, "language": "js"}));
+        assert_eq!(result.minimum_action, "review", "{harness}");
+        assert_eq!(
+            result.reason_code, "native_pre_tool_unknown_review",
+            "{harness}"
+        );
+        assert!(
+            result.reason.contains("bash tool"),
+            "{harness}: {}",
+            result.reason
+        );
+    }
+    // Other tools Guard cannot check keep the general reason.
+    let result = run(
+        &f,
+        "omp",
+        "learn",
+        json!({"memory": "Run the project tests before pushing."}),
+    );
+    assert!(!result.reason.contains("eval"), "{}", result.reason);
+}

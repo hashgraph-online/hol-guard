@@ -8,15 +8,22 @@
 //!
 //! - the publisher's ACK file still names this generation and digest, with an
 //!   unexpired lease (the publisher unlinks it whenever it withdraws its ACK);
-//! - the request workspace was settled by this snapshot;
+//! - the request workspace was settled by this snapshot, or, for a hook, is a
+//!   file-less canonical subdirectory of one
+//!   (`policy_store_direct_lane_subdirectory.rs`);
 //! - every watched non-database input still has the stat identity the
 //!   publisher observed before compiling.
 //!
 //! Any failure defers to the daemon path, which is unchanged.
 
 use super::*;
-use guard_policy_snapshot::{DirectLaneBindingV1, DirectLaneInputV1, DirectLaneStatV1};
+use base64ct::{Base64UrlUnpadded, Encoding};
+use guard_policy_snapshot::{
+    DirectLaneBindingV1, DirectLaneEnvironmentV1, DirectLaneInputV1,
+    DirectLanePolicyIntegrityStateV1, DirectLaneSecretV1, DirectLaneStatV1,
+};
 use std::collections::{BTreeMap, BTreeSet};
+use zeroize::Zeroizing;
 
 /// The ACK lives in its own directory so that writing, renewing or unlinking
 /// it never changes the state directory identity the publisher fences on.
@@ -37,6 +44,68 @@ pub(crate) struct DirectLaneBinding {
     pub(crate) local_cli_block_rules: Option<bool>,
     pub(crate) evidence_drain: Option<bool>,
     pub(crate) contained_sink_command: Option<Vec<String>>,
+    pub(crate) integrity_key: Option<DirectLaneIntegrityKey>,
+    /// The daemon's process environment for exact-action proofs.
+    pub(crate) exact_action_environment: Option<DirectLaneEnvironmentV1>,
+    /// The daemon's extension-control digest for exact-action proofs.
+    pub(crate) exact_action_control_digest: Option<String>,
+    /// The policy-integrity state the daemon refreshed when it published.
+    pub(crate) policy_integrity_state: Option<DirectLanePolicyIntegrityStateV1>,
+    /// What the daemon queues a reviewed `PreToolUse` for approval with.
+    pub(crate) review: DirectLaneReviewFacts,
+    /// The managed-policy view the daemon resolves Pi structured output
+    /// mediation from.
+    pub(crate) structured_output_config: Option<serde_json::Value>,
+    /// The tool-call view the daemon decides a relayed MCP tool call with.
+    pub(crate) mcp_relay: Option<serde_json::Value>,
+}
+
+/// The daemon's policy-integrity key, held only in memory.
+pub(crate) struct DirectLaneIntegrityKey {
+    pub(crate) key: Zeroizing<Vec<u8>>,
+    pub(crate) key_id: String,
+}
+
+impl DirectLaneIntegrityKey {
+    /// The bound key, or `None` when it does not decode; the hooks that need
+    /// it then stay with the daemon.
+    fn decode(key_b64: Option<DirectLaneSecretV1>, key_id: Option<String>) -> Option<Self> {
+        let encoded = Zeroizing::new(key_b64?.0);
+        let key = Zeroizing::new(Base64UrlUnpadded::decode_vec(&encoded).ok()?);
+        if key.is_empty() {
+            return None;
+        }
+        Some(Self {
+            key,
+            key_id: key_id?,
+        })
+    }
+}
+
+#[cfg(test)]
+impl DirectLaneBinding {
+    /// A binding with no admitted inputs and no optional state, for tests of
+    /// the hooks that read its state.
+    pub(crate) fn empty_for_tests() -> Self {
+        Self {
+            generation: 1,
+            policy_digest: String::new(),
+            workspaces: BTreeSet::new(),
+            inputs: Vec::new(),
+            home_dir: None,
+            harness_postures: None,
+            local_cli_block_rules: None,
+            evidence_drain: None,
+            contained_sink_command: None,
+            integrity_key: None,
+            exact_action_environment: None,
+            exact_action_control_digest: None,
+            policy_integrity_state: None,
+            review: DirectLaneReviewFacts::default(),
+            structured_output_config: None,
+            mcp_relay: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +164,21 @@ impl PolicySnapshotStore {
                 local_cli_block_rules: binding.local_cli_block_rules,
                 evidence_drain: binding.evidence_drain,
                 contained_sink_command: binding.contained_sink_command,
+                integrity_key: DirectLaneIntegrityKey::decode(
+                    binding.integrity_key_b64,
+                    binding.integrity_key_id,
+                ),
+                exact_action_environment: binding.exact_action_environment,
+                exact_action_control_digest: binding.exact_action_control_digest,
+                policy_integrity_state: binding.policy_integrity_state,
+                review: DirectLaneReviewFacts::parse(
+                    binding.blocked_request_mode,
+                    binding.approval_center_origin,
+                    binding.review_oauth_source,
+                    binding.review_host_cwd,
+                ),
+                structured_output_config: binding.structured_output_config,
+                mcp_relay: binding.mcp_relay,
             })
         });
         match self.direct_lane.lock() {
@@ -126,10 +210,28 @@ impl PolicySnapshotStore {
     }
 
     /// Admission that also returns the binding, whose daemon state the
-    /// direct hook operation checks next.
+    /// direct operation checks next.
     pub(crate) fn admit_direct_hook(
         &self,
         workspace: &str,
+    ) -> Result<(Arc<AdmittedPolicySnapshot>, Arc<DirectLaneBinding>), DirectLaneDefer> {
+        self.admit_direct(workspace, false)
+    }
+
+    /// Hook admission, which also covers a file-less subdirectory of a
+    /// settled workspace on the current ACK, as the daemon's hook readiness
+    /// does (`policy_store_direct_lane_subdirectory.rs`).
+    pub(crate) fn admit_direct_hook_or_subdirectory(
+        &self,
+        workspace: &str,
+    ) -> Result<(Arc<AdmittedPolicySnapshot>, Arc<DirectLaneBinding>), DirectLaneDefer> {
+        self.admit_direct(workspace, true)
+    }
+
+    fn admit_direct(
+        &self,
+        workspace: &str,
+        file_less_subdirectory: bool,
     ) -> Result<(Arc<AdmittedPolicySnapshot>, Arc<DirectLaneBinding>), DirectLaneDefer> {
         if !cfg!(unix) {
             // Stat identity parity with the publisher is only established
@@ -142,9 +244,45 @@ impl PolicySnapshotStore {
             .ok()
             .and_then(|binding| binding.clone())
             .ok_or(DirectLaneDefer::Unbound)?;
-        if !binding.workspaces.contains(workspace) {
+        let known = binding.workspaces.contains(workspace)
+            || (file_less_subdirectory
+                && subdirectory::file_less_subdirectory(&binding.workspaces, workspace));
+        if !known {
             return Err(DirectLaneDefer::WorkspaceUnknown);
         }
+        let snapshot = self.admit_binding_lease(&binding)?;
+        if binding
+            .inputs
+            .iter()
+            .any(|input| observe_input(&input.path) != input.stat)
+        {
+            return Err(DirectLaneDefer::InputChanged);
+        }
+        Ok((snapshot, binding))
+    }
+
+    /// The bound binding while its lease holds, for a hook that reads no
+    /// policy input, such as the Claude permission notice lane.
+    pub(crate) fn admit_direct_binding(&self) -> Result<Arc<DirectLaneBinding>, DirectLaneDefer> {
+        if !cfg!(unix) {
+            return Err(DirectLaneDefer::Unsupported);
+        }
+        let binding = self
+            .direct_lane
+            .lock()
+            .ok()
+            .and_then(|binding| binding.clone())
+            .ok_or(DirectLaneDefer::Unbound)?;
+        self.admit_binding_lease(&binding)?;
+        Ok(binding)
+    }
+
+    /// The admitted snapshot when `binding` matches it and the publisher's
+    /// ACK lease for it is current.
+    fn admit_binding_lease(
+        &self,
+        binding: &DirectLaneBinding,
+    ) -> Result<Arc<AdmittedPolicySnapshot>, DirectLaneDefer> {
         let snapshot = self
             .current_admitted_snapshot()
             .map_err(|_| DirectLaneDefer::SnapshotUnavailable)?;
@@ -165,14 +303,7 @@ impl PolicySnapshotStore {
         if ack.lease_expires_at_ms <= now {
             return Err(DirectLaneDefer::AckExpired);
         }
-        if binding
-            .inputs
-            .iter()
-            .any(|input| observe_input(&input.path) != input.stat)
-        {
-            return Err(DirectLaneDefer::InputChanged);
-        }
-        Ok((snapshot, binding))
+        Ok(snapshot)
     }
 
     fn read_direct_lane_ack(&self) -> Result<DirectLaneAckV1, DirectLaneDefer> {
@@ -222,6 +353,13 @@ fn observe_input(path: &str) -> Option<DirectLaneStatV1> {
 fn observe_input(_path: &str) -> Option<DirectLaneStatV1> {
     None
 }
+
+#[path = "policy_store_direct_lane_subdirectory.rs"]
+mod subdirectory;
+
+#[path = "policy_store_direct_lane_review.rs"]
+mod review;
+pub(crate) use review::{DirectLaneReviewFacts, HOOK_DIRECT_REVIEW_FACTS_FEATURE};
 
 #[cfg(all(test, unix))]
 #[path = "policy_store_direct_lane_tests.rs"]

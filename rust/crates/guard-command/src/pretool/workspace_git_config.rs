@@ -78,7 +78,7 @@ pub(crate) fn linked_git_dirs(workspace: &Path, home: Option<&Path>) -> Option<(
 
 /// The repository whose work tree holds `workspace`: the workspace itself
 /// or the nearest ancestor with a `.git` entry, stopping at `home`.
-fn work_tree(workspace: &Path, home: Option<&Path>) -> Option<PathBuf> {
+pub(super) fn work_tree(workspace: &Path, home: Option<&Path>) -> Option<PathBuf> {
     let mut current = Some(workspace);
     while let Some(directory) = current {
         if fs::symlink_metadata(directory.join(".git")).is_ok() {

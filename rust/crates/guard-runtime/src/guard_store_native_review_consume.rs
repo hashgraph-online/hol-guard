@@ -113,6 +113,21 @@ fn instant(value: Option<&str>) -> Option<(i64, String)> {
 }
 
 pub(crate) fn consume(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    matching_decision(connection, args, "allow", true)
+}
+
+pub(crate) fn matching_block(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    // A refusal cannot grant execution. Keep it for the retry window so repeated
+    // attempts do not re-open the question the user has already answered.
+    matching_decision(connection, args, "block", false)
+}
+
+fn matching_decision(
+    connection: &Connection,
+    args: &Args,
+    action: &str,
+    spend: bool,
+) -> StoreResult<Value> {
     let (harness, artifact_id, artifact_name) = (
         args.str("harness")?,
         args.str("artifact_id")?,
@@ -160,7 +175,7 @@ pub(crate) fn consume(connection: &Connection, args: &Args) -> StoreResult<Value
     // Same-instant decisions are one logical resolution set. Any conflict is
     // ambiguous and refuses rather than relying on SQLite row order.
     let allowed = latest.iter().all(|(_, _, row)| {
-        row.get("resolution_action").and_then(Value::as_str) == Some("allow")
+        row.get("resolution_action").and_then(Value::as_str) == Some(action)
             && matches!(
                 row.get("resolution_scope").and_then(Value::as_str),
                 Some("once" | "artifact")
@@ -169,6 +184,9 @@ pub(crate) fn consume(connection: &Connection, args: &Args) -> StoreResult<Value
     let elapsed = current - approved_at;
     if !allowed || !(0..=WINDOW_MICROS).contains(&elapsed) {
         return Ok(json!(false));
+    }
+    if !spend {
+        return Ok(json!(true));
     }
     let request_id = latest
         .iter()

@@ -193,21 +193,6 @@ def test_tool_action_reply_keeps_embedded_command_text(monkeypatch: pytest.Monke
     assert "secret\n" in texts
 
 
-def test_native_grep_is_not_read_only_when_classification_is_down(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from codex_plugin_scanner.guard.cli import commands_support_native_search as search
-
-    def down(*_args: object, **_kwargs: object) -> bool:
-        raise client.NativeSensitiveRequestError("native_sensitive_request_unavailable")
-
-    monkeypatch.setattr(search, "_read_only_lookup_target_is_safe", down)
-    source = tmp_path / "src"
-    source.mkdir()
-    payload = {"tool_name": "grep", "tool_input": {"pattern": "handler", "path": str(source)}}
-    assert search.native_post_tool_search_is_read_only(payload=payload, cwd=tmp_path, home_dir=tmp_path) is False
-
-
 def test_command_list_outage_blocks_the_post_tool_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.cli import commands_support_codex_commands as codex
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts

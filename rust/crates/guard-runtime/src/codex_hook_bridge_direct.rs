@@ -1,8 +1,9 @@
-//! Direct resident answers for Codex, Claude Code and Cursor tool hooks.
+//! Direct resident answers for Codex, Claude Code, Cursor and bounded
+//! harness tool hooks.
 //!
 //! For a `PreToolUse` hook the edge allows or blocks outright, and for every
 //! reviewed `PostToolUse` and `UserPromptSubmit` hook the daemon does not
-//! restyle, of either harness the daemon forwards the payload to its resident
+//! restyle, of these harnesses the daemon forwards the payload to its resident
 //! and returns the edge's harness response unchanged. When a live resident
 //! of this runtime holds a direct-lane binding, the bridge asks it first
 //! with `hook_direct` and skips the daemon round trip. The resident answers
@@ -26,12 +27,16 @@ use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 const STATE_DIRECTORY: &str = "native-runtime";
 const DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
+/// Claude Code's permission dialog, which the resident answers from the
+/// session's permission notice, and Codex's, which it leaves to Codex.
+const PERMISSION_REQUEST: &str = "PermissionRequest";
+const NOTIFICATION: &str = "Notification";
 
 /// A harness whose passed-through `PreToolUse` hook the daemon answers with
 /// the edge's own response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DirectHarness {
-    name: &'static str,
+    pub(crate) name: &'static str,
     /// `0` turns the direct path off; the daemon then answers every hook.
     switch: &'static str,
 }
@@ -48,6 +53,14 @@ pub(crate) const CURSOR: DirectHarness = DirectHarness {
     name: "cursor",
     switch: "HOL_GUARD_CURSOR_DIRECT_HOOK",
 };
+/// The bounded bridge harnesses the resident answers. The resident routes a
+/// ZCode sandbox requirement to contained execution as the daemon does.
+/// Grok runs its own client, which asks through [`grok_direct_answer`].
+const BOUNDED_DIRECT_HARNESSES: [&str; 8] = [
+    "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode",
+];
+const BOUNDED_DIRECT_SWITCH: &str = "HOL_GUARD_BOUNDED_DIRECT_HOOK";
+const GROK: &str = "grok";
 /// A resident answers an allow well inside this. A slower resident leaves
 /// the daemon most of the hook's budget.
 const DIRECT_TIMEOUT: Duration = Duration::from_millis(1_000);
@@ -73,7 +86,7 @@ fn hex_value(byte: u8) -> Option<u8> {
 
 /// `unquote(text.replace("+", " "))`. Python replaces bytes that are not
 /// UTF-8; this returns `None` instead, so such a query takes the daemon path.
-fn unquote_plus(text: &str) -> Option<String> {
+pub(crate) fn unquote_plus(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -173,21 +186,100 @@ pub(crate) fn direct_request(
     }) {
         return None;
     }
+    request_body(
+        harness.name,
+        &resolved_guard_home,
+        home.as_deref(),
+        query.workspace,
+        data,
+        budget,
+    )
+}
+
+/// The `hook_direct` request for a bounded bridge hook, which reaches the
+/// daemon without a query: the daemon then reviews it under its own guard
+/// home and home, and takes the workspace from the payload alone.
+///
+/// The daemon names its guard home as the store holds it, which is the
+/// resolved path for any configured home and the user's home joined with
+/// the Guard directory otherwise. The install writes that same path into the
+/// bridge config, so the request is sent only when the config's guard home
+/// already is its resolved path; the edge then sees the daemon's spelling.
+pub(crate) fn bounded_direct_request(
+    harness: &str,
+    guard_home: &Path,
+    data: &str,
+    budget: Duration,
+) -> Option<Vec<u8>> {
+    let name = BOUNDED_DIRECT_HARNESSES
+        .iter()
+        .find(|name| **name == harness)?;
+    let resolved_guard_home = std::fs::canonicalize(guard_home).ok()?;
+    if resolved_guard_home.as_path() != guard_home {
+        return None;
+    }
+    request_body(name, &resolved_guard_home, None, None, data, budget)
+}
+
+/// The `hook_direct` request for a Grok hook, which reaches the daemon with
+/// only `?home=`: the daemon reviews it under its own guard home and takes
+/// the workspace from the payload. The request is sent only when the
+/// config's guard home is its resolved path, as for the other bounded
+/// bridge harnesses, and a non-blank `home` resolves at or under that guard
+/// home's parent, where the daemon keeps it. A blank `home` is dropped from
+/// the query, so the daemon uses its own, as the resident does.
+pub(crate) fn grok_direct_request(
+    guard_home: &Path,
+    home: &str,
+    data: &str,
+    budget: Duration,
+) -> Option<Vec<u8>> {
+    let resolved_guard_home = std::fs::canonicalize(guard_home).ok()?;
+    if resolved_guard_home.as_path() != guard_home {
+        return None;
+    }
+    let home = if home.is_empty() {
+        None
+    } else {
+        let home = resolved_directory(home)?;
+        if !home.starts_with(resolved_guard_home.parent()?) {
+            return None;
+        }
+        Some(home)
+    };
+    request_body(
+        GROK,
+        &resolved_guard_home,
+        home.as_deref(),
+        None,
+        data,
+        budget,
+    )
+}
+
+fn request_body(
+    harness: &str,
+    guard_home: &Path,
+    home: Option<&Path>,
+    workspace: Option<String>,
+    data: &str,
+    budget: Duration,
+) -> Option<Vec<u8>> {
     let payload: Value = serde_json::from_str(data).ok()?;
     if !payload.is_object() {
         return None;
     }
     let budget_ms = u64::try_from(budget.as_millis()).ok()?.max(1);
     let mut request = json!({
-        "harness": harness.name,
-        "guard_home": path_text(&resolved_guard_home)?,
+        "harness": harness,
+        "guard_home": path_text(guard_home)?,
         "deadline_budget_ms": budget_ms,
         "payload": payload,
     });
     if let Some(home) = home {
-        request["home_dir"] = Value::String(path_text(&home)?);
+        request["home_dir"] = Value::String(path_text(home)?);
     }
-    if let Some(workspace) = query.workspace {
+    if let Some(workspace) = workspace {
         request["workspace"] = Value::String(workspace);
     }
     serde_json::to_vec(&json!({ "operation": "hook_direct", "request": request })).ok()
@@ -209,17 +301,49 @@ pub(crate) fn answered_response(output: &[u8]) -> Option<String> {
     serde_json::to_string(response).ok()
 }
 
-fn direct_enabled(harness: DirectHarness) -> bool {
-    std::env::var_os(harness.switch).is_none_or(|value| value != "0")
+fn direct_enabled(switch: &str) -> bool {
+    std::env::var_os(switch).is_none_or(|value| value != "0")
+}
+
+/// Whether the resident may answer a hook the bridge names `event_name`: a
+/// tool or prompt hook it reviews, or a lifecycle hook it answers with the
+/// daemon's constant. Permission and notification hooks, and the `before*`
+/// hooks the daemon denies, go to the daemon without asking the resident;
+/// `direct_answer` asks it about Claude Code's `PermissionRequest` and
+/// `Notification`, and Codex's `PermissionRequest`.
+fn direct_event(event_name: &str) -> bool {
+    if [PRE_TOOL_USE, POST_TOOL_USE, USER_PROMPT_SUBMIT].contains(&event_name) {
+        return true;
+    }
+    let compact = event_name.replace(['_', '-'], "").to_ascii_lowercase();
+    !(compact.is_empty()
+        || compact.contains("permission")
+        || compact.contains("notification")
+        || compact.starts_with("before"))
+}
+
+/// `direct_event`, plus Claude Code's `PermissionRequest` and
+/// `Notification`, and Codex's `PermissionRequest`.
+fn harness_event(harness: &DirectHarness, event_name: &str) -> bool {
+    direct_event(event_name)
+        || (harness.name == CLAUDE_CODE.name
+            && [PERMISSION_REQUEST, NOTIFICATION].contains(&event_name))
+        || (harness.name == CODEX.name && event_name == PERMISSION_REQUEST)
 }
 
 /// Send the request to a live resident that runs this very executable.
+///
+/// The same steps serve every platform. Discovery reads only owner-only
+/// state, the resident must run this executable path and still carry the
+/// start marker its state records, and the client checks that identity
+/// again around the connect before the token handshake. A Windows resident
+/// publishes a loopback endpoint; a unix resident may publish either.
 fn send_to_live_resident(state_base: &Path, request: &[u8], deadline: Instant) -> Option<Vec<u8>> {
     // Discovery checks the directory's privacy; it must already exist.
     if !std::fs::symlink_metadata(state_base).is_ok_and(|metadata| metadata.is_dir()) {
         return None;
     }
-    let states = crate::resident_state::discover_home_states_prefer(state_base, None).ok()?;
+    let states = crate::resident_state::discover_same_executable_states(state_base).ok()?;
     for (_scope, _digest, state) in states {
         if crate::resident_state::validate_same_executable_process_identity(
             state.process_id,
@@ -263,9 +387,7 @@ pub(crate) fn direct_answer(
     data: &str,
     rpc_deadline: Instant,
 ) -> Option<String> {
-    if ![PRE_TOOL_USE, POST_TOOL_USE, USER_PROMPT_SUBMIT].contains(&event_name)
-        || !direct_enabled(harness)
-    {
+    if !harness_event(&harness, event_name) || !direct_enabled(harness.switch) {
         return None;
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
@@ -274,6 +396,70 @@ pub(crate) fn direct_answer(
     answered_response(&output)
 }
 
-#[cfg(test)]
+/// The harness response a live resident answered for a bounded bridge hook,
+/// or `None` to take the daemon path.
+pub(crate) fn bounded_direct_answer(
+    harness: &str,
+    guard_home: &Path,
+    event_name: &str,
+    data: &str,
+    rpc_deadline: Instant,
+) -> Option<String> {
+    if !direct_event(event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
+        return None;
+    }
+    let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
+    let request = bounded_direct_request(harness, guard_home, data, remaining(deadline))?;
+    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response(&output)
+}
+
+/// The harness response a live resident answered for a Grok hook, or `None`
+/// to take the daemon path. A prompt keeps the daemon path, which prepares
+/// the prompt before it is reviewed.
+pub(crate) fn grok_direct_answer(
+    guard_home: &Path,
+    home: &str,
+    event_name: &str,
+    data: &str,
+    rpc_deadline: Instant,
+) -> Option<String> {
+    if event_name == USER_PROMPT_SUBMIT
+        || !direct_event(event_name)
+        || !direct_enabled(BOUNDED_DIRECT_SWITCH)
+    {
+        return None;
+    }
+    let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
+    let request = grok_direct_request(guard_home, home, data, remaining(deadline))?;
+    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response(&output)
+}
+
+/// The harness response a live resident answered for `data` as `harness`
+/// would send it from `workspace`, or `None` when no resident answered.
+/// The contained-workspace sink asks this way for the receipt it runs under.
+#[cfg(unix)]
+pub(crate) fn resident_hook_answer(
+    harness: &str,
+    guard_home: &Path,
+    home: &Path,
+    workspace: &str,
+    data: &str,
+    deadline: Instant,
+) -> Option<String> {
+    let request = request_body(
+        harness,
+        guard_home,
+        Some(home),
+        Some(workspace.to_owned()),
+        data,
+        remaining(deadline),
+    )?;
+    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response(&output)
+}
+
+#[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_direct_tests.rs"]
 mod tests;

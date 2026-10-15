@@ -324,21 +324,6 @@ def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | Non
     )
 
 
-@dataclass(frozen=True, slots=True)
-class ManifestDependencyChange:
-    manifest_path: str
-    package_name: str
-    before: str | None
-    after: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class ManifestParseResult:
-    changes: tuple[ManifestDependencyChange, ...]
-    truncated: bool = False
-    parse_errors: tuple[str, ...] = ()
-
-
 def build_package_request_artifact(
     harness: str,
     intent: PackageIntent,

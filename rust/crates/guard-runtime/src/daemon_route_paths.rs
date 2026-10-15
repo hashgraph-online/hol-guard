@@ -201,6 +201,8 @@ pub(crate) fn requires_header_token(path: &str) -> bool {
     }
     let n = parts.len();
     (n >= 3 && starts_with(&parts, &["v1", "hooks"]))
+        // Sponsored extension discovery: authenticated daemon routes.
+        || (n >= 4 && starts_with(&parts, &["v1", "discovery", "extensions"]))
         || (n == 3
             && starts_with(&parts, &["v1", "apps"])
             && HEADLESS_APP_ACTIONS.contains(&parts[2]))
@@ -234,6 +236,8 @@ pub(crate) fn hosted_dashboard_api_path(path: &str) -> bool {
     let n = parts.len();
     (n == 3 && starts_with(&parts, &["v1", "receipts"]))
         || (n >= 4 && starts_with(&parts, &["v2", "extension-controls", "catalog"]))
+        // Sponsored extension discovery routes are hosted dashboard APIs.
+        || (n == 4 && starts_with(&parts, &["v1", "discovery", "extensions"]))
         || (n == 4 && starts_with(&parts, &["v1", "audit", "remediations"]))
         || (n == 4 && starts_with(&parts, &["v1", "approvals"]) && parts[3] == "decision")
         || (n == 5

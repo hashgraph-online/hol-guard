@@ -5,29 +5,42 @@ use super::{basename, CanonicalCommandV1, CommandSegmentV1, CompatibilityObserva
 
 #[path = "interpreter.rs"]
 mod interpreter;
+#[path = "redirects.rs"]
+mod redirects;
+use redirects::Redirect;
+
+const SENSITIVE_PATHS: [&str; 9] = [
+    ".aws/",
+    ".ssh/",
+    ".docker/",
+    ".kube/",
+    ".env",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+];
+
+/// A credential location named anywhere in the value, even inside prose.
+fn sensitive_path(value: &str) -> bool {
+    let value = value.to_ascii_lowercase().replace('\\', "/");
+    SENSITIVE_PATHS.iter().any(|needle| value.contains(needle))
+}
 
 fn sensitive(value: &str) -> bool {
-    let value = value.to_ascii_lowercase().replace('\\', "/");
-    [
-        ".aws/",
-        ".ssh/",
-        ".docker/",
-        ".kube/",
-        ".env",
-        ".netrc",
-        ".npmrc",
-        ".pypirc",
-        ".git-credentials",
-        "credential",
-        "secret",
-        "password",
-        "api_key",
-        "api-key",
-        "token",
-        "private_key",
-    ]
-    .iter()
-    .any(|needle| value.contains(needle))
+    let lowered = value.to_ascii_lowercase();
+    sensitive_path(value)
+        || [
+            "credential",
+            "secret",
+            "password",
+            "api_key",
+            "api-key",
+            "token",
+            "private_key",
+        ]
+        .iter()
+        .any(|needle| lowered.contains(needle))
 }
 
 fn option(arguments: &[String], names: &[&str]) -> bool {
@@ -179,7 +192,18 @@ fn output_format_reads_no_file(value: &str) -> bool {
         .any(|prefix| value.starts_with(prefix))
 }
 
-fn kubernetes(segment: &CommandSegmentV1, index: usize, output: &mut CompatibilityObservations) {
+fn kubernetes(
+    command: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    index: usize,
+    output: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+) {
+    // The native proof's read-only queries name no Secret and load only a
+    // trusted kubeconfig, so they cannot return Secret payloads either.
+    if crate::pretool::kubectl_reads::proven_read_segment(command, segment, context) {
+        return;
+    }
     let arguments = &segment.arguments;
     if arguments.len() == 1
         && matches!(
@@ -222,14 +246,20 @@ pub(super) fn observe(
     segment: &CommandSegmentV1,
     index: usize,
     output: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
 ) {
     let executable = basename(segment);
     let arguments = &segment.arguments;
-    if executable == "docker" {
+    // A proven container or image listing, or a start of an existing
+    // container, grants no new host access and prints no container
+    // environment, credential or Compose project data.
+    if executable == "docker"
+        && !crate::pretool::docker_reads::proven_segment(command, segment, context)
+    {
         docker(segment, index, output);
     }
     if matches!(executable.as_str(), "kubectl" | "oc") {
-        kubernetes(segment, index, output);
+        kubernetes(command, segment, index, output, context);
     }
     let normalized = segment.text.to_ascii_lowercase().replace('\\', "/");
     let literal_printer = matches!(executable.as_str(), "echo" | "printf");
@@ -261,7 +291,13 @@ pub(super) fn observe(
             .filter(|other| other.execution_context == segment.execution_context)
             .count()
             > 1;
-        if upload || pipeline {
+        // A proven read takes no option that sends stdin or a file, so a
+        // pipe after it only filters the response. A zero-I/O loopback
+        // `nc -z` probe reads no stdin and sends nothing.
+        let proven_read = (executable == "curl"
+            && crate::pretool::curl_reads::proven_read_segment(command, segment, context))
+            || crate::pretool::port_probes::proven_probe_segment(command, segment, context);
+        if (upload || pipeline) && !proven_read {
             output.rule("command.data-protection.file-upload", index, true);
         }
         if sensitive(&command.normalized_text) {
@@ -272,6 +308,13 @@ pub(super) fn observe(
             );
         }
     }
+    if literal_printer && crate::environment_secret_dump::printer_expands_secret(&segment.text) {
+        output.rule(
+            "command.shell-mutations.process-environment-secret-read",
+            index,
+            false,
+        );
+    }
     if matches!(executable.as_str(), "printenv" | "env") {
         if arguments.is_empty() || arguments.iter().any(|value| sensitive(value)) {
             output.rule(
@@ -280,11 +323,10 @@ pub(super) fn observe(
                 false,
             );
         } else if executable == "env"
-            || arguments.len() != 1
-            || !matches!(
-                arguments[0].as_str(),
-                "PATH" | "HOME" | "PWD" | "SHELL" | "LANG" | "TERM" | "--help" | "--version"
-            )
+            || !(matches!(arguments.as_slice(), [only] if only == "--help" || only == "--version")
+                || arguments
+                    .iter()
+                    .all(|name| super::environment::plain_printed_name(name)))
         {
             output.rule(
                 "command.shell-mutations.process-environment-secret-read",
@@ -337,8 +379,18 @@ pub(super) fn observe(
             | "chown"
             | "chgrp"
     );
-    let redirect = segment.text.contains('>');
-    if write_command || redirect || interpreter {
+    // A quoted `>` in a POSIX argument (a Markdown placeholder or arrow in a
+    // comment body) writes nothing; interpreter code keeps the raw check.
+    let redirect = if interpreter || command.dialect != "posix" {
+        if segment.text.contains('>') {
+            Redirect::Output
+        } else {
+            Redirect::None
+        }
+    } else {
+        redirects::posix_redirect(&segment.text)
+    };
+    if write_command || redirect != Redirect::None || interpreter {
         if [".hol-guard", ".codex/", ".claude/", "hol-guard/config"]
             .iter()
             .any(|path| normalized.contains(path))
@@ -359,13 +411,46 @@ pub(super) fn observe(
         ]
         .iter()
         .any(|operation| normalized.contains(operation));
-        if sensitive(&segment.text) && (write_command || redirect || interpreter_write) {
+        // A stderr merge or discard writes no file, but still shows the agent
+        // what the command reads: any sensitive path operand keeps review.
+        // Multi-word prose, such as a comment body, still counts when it names
+        // a credential location, but words like "token" in it are just text.
+        let output_write = write_command || redirect == Redirect::Output || interpreter_write;
+        if (output_write && sensitive(&segment.text))
+            || (redirect == Redirect::Stderr
+                && segment.tokens.iter().any(|token| {
+                    if token.contains(char::is_whitespace) {
+                        sensitive_path(token)
+                    } else {
+                        sensitive(token)
+                    }
+                }))
+        {
             output.rule("command.shell-mutations.sensitive-file-write", index, true);
         }
     }
     let introspection_only =
         matches!(arguments.as_slice(), [only] if matches!(only.as_str(), "--help" | "--version"));
+    // A write probe's trailing `rm` removes only the file the same command
+    // creates, which the native proof checked did not exist beforehand.
+    let probe_cleanup = executable == "rm"
+        && crate::pretool::safe_reads::proven_created_file_removal(command, segment, context);
+    // Removing the links an agent placed at the root of a linked worktree
+    // of the session's repository deletes no data, whether named from the
+    // session's checkout or after a leading `cd` into that worktree.
+    let link_cleanup = executable == "rm"
+        && (crate::pretool::directory_targets::sibling::link_removal(segment, context)
+            || crate::pretool::directory_targets::sibling::entered_link_removal(
+                command, index, context,
+            ));
+    // A proven in-place substitution is the same bounded edit the agent's
+    // edit tool makes on an ordinary workspace file.
+    let proven_edit = executable == "sed"
+        && crate::pretool::sed_edits::proven_in_place_segment(command, segment, context);
     if !introspection_only
+        && !probe_cleanup
+        && !link_cleanup
+        && !proven_edit
         && (matches!(
             executable.as_str(),
             "rm" | "rmdir"
@@ -383,6 +468,7 @@ pub(super) fn observe(
                 | "truncate"
         ) || (executable == "find"
             && !is_contained_compile_check_arguments(arguments)
+            && crate::read_only_fanout::find_exec(arguments).is_none()
             && option(
                 arguments,
                 &["-delete", "-exec", "-execdir", "-ok", "-okdir"],

@@ -28,6 +28,7 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 CONTAINMENT_PROFILES = {
     "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
     "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
+    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
     "native_package_test_readonly_containment_required": "package-test-readonly-v1",
     "native_node_build_output_containment_required": "node-build-output-v1",
     "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
@@ -56,7 +57,11 @@ def contained_public_path(value: object) -> bool:
 
 
 def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[list[str] | None, str | None]:
-    """Validate the canonical 12-item ``execute-contained-test`` argv the adapter exports."""
+    """Validate the canonical ``execute-contained-test`` argv the adapter exports.
+
+    The adapter leaves out ``--home`` when Guard's home directory is the agent's own HOME, so a
+    run in the account's real home has ten items instead of twelve.
+    """
     if not isinstance(command, str):
         return None, "contained wrapper command is missing"
     try:
@@ -66,7 +71,7 @@ def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[li
     canonical = " ".join("'" + value.replace("'", "'\\''") + "'" for value in argv)
     if command != canonical:
         return None, "contained wrapper command is not canonical"
-    if len(argv) != 12 or not contained_public_path(argv[0]):
+    if len(argv) not in (10, 12) or not contained_public_path(argv[0]):
         return None, "contained wrapper is not an approved path"
     if argv[1] != "execute-contained-test" or argv[2] != "--guard-home" or not contained_public_path(argv[3]):
         return None, "contained wrapper guard-home binding is malformed"
@@ -84,7 +89,7 @@ def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[li
     if argv[8] != "--request-sha256" or _HEX64.fullmatch(argv[9]) is None:
         return None, "contained wrapper request digest is malformed"
     # The home binding alone may name the redacted home directory itself.
-    if argv[10] != "--home" or not (argv[11] == "{{home}}" or contained_public_path(argv[11])):
+    if len(argv) == 12 and (argv[10] != "--home" or not (argv[11] == "{{home}}" or contained_public_path(argv[11]))):
         return None, "contained wrapper home binding is malformed"
     return argv, None
 
@@ -235,7 +240,9 @@ def _binding_error(
     argv, wrapper_error = contained_wrapper_argv(wrapper, "{{workspace}}")
     if wrapper_error or argv is None:
         return "harness-error", wrapper_error or "contained wrapper is unavailable"
-    if PurePosixPath(argv[0]).name != "hol-guard" or argv[3] != "{{fixture}}/guard-home" or argv[11] != "{{home}}":
+    # Only a full task can run in the account's own home, where the adapter omits the binding.
+    homes = ([], ["--home", "{{home}}"]) if own_exit_ok else (["--home", "{{home}}"],)
+    if PurePosixPath(argv[0]).name != "hol-guard" or argv[3] != "{{fixture}}/guard-home" or argv[10:] not in homes:
         return "harness-error", "contained wrapper is not bound to the case's Guard installation"
     post_input = post[0].get("input") if len(post) == 1 else None
     if (

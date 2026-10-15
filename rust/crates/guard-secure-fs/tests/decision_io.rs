@@ -40,6 +40,66 @@ fn bounded_read_rejects_source_growth_beyond_limit() {
 }
 
 #[test]
+fn agent_plan_documents_are_scannable_and_keep_path_floors() {
+    use guard_secure_fs::classify_scannable_source_path;
+    let dir = fixture_root("agent-plans");
+    let home = dir.join("home");
+    let cwd = dir.join("workspace");
+    fs::create_dir_all(&cwd).unwrap();
+    for relative in [
+        ".codex/plans/rollout-todo.md",
+        ".codex/plans/evidence/review-run/README.md",
+        ".claude/plans/quiet-plan.md",
+    ] {
+        let path = home.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "inert plan").unwrap();
+        for allow_external in [true, false] {
+            assert!(
+                classify_scannable_source_path(
+                    path.to_str().unwrap(),
+                    &cwd,
+                    Some(&home),
+                    allow_external
+                )
+                .allowed,
+                "{relative}"
+            );
+        }
+    }
+    for relative in [
+        ".codex/config.toml",
+        ".codex/notes.md",
+        ".codex/plans/auth.md",
+        ".codex/plans/token-rotation.md",
+        ".codex/plans/.hidden/plan.md",
+        ".codex/plans/state.json",
+        ".claude/plans/../settings.md",
+    ] {
+        let path = home.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "synthetic sensitive fixture").unwrap();
+        assert!(
+            !classify_scannable_source_path(path.to_str().unwrap(), &cwd, Some(&home), true)
+                .allowed,
+            "{relative}"
+        );
+    }
+    #[cfg(unix)]
+    {
+        let secret = home.join(".codex/auth.json");
+        fs::write(&secret, "synthetic sensitive fixture").unwrap();
+        let link = home.join(".codex/plans/linked.md");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        assert!(
+            !classify_scannable_source_path(link.to_str().unwrap(), &cwd, Some(&home), true)
+                .allowed
+        );
+    }
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn omp_skill_sources_keep_sensitive_and_hidden_path_floors() {
     use guard_secure_fs::classify_scannable_source_path;
     let dir = fixture_root("omp-skill");

@@ -16,7 +16,6 @@ from .managed_controls_policy_bundle import (
     managed_controls_layers_from_activation_state as managed_controls_layers_from_activation_state,
 )
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
-from .runtime.command_matcher_contracts import MatcherContractError, canonical_contract_value
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
@@ -38,13 +37,6 @@ from .store_extension_control_authority_transitions import _ExtensionControlAuth
 from .store_extension_control_last_good import ExtensionControlLastGoodMixin, _count_controls
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _canonical_contract_value(value: object) -> object:
-    try:
-        return canonical_contract_value(value)
-    except MatcherContractError as exc:
-        raise ExtensionControlAuthorityError(str(exc)) from exc
 
 
 class StoreExtensionControlAuthorityMixin(

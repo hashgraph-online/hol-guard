@@ -29,6 +29,12 @@ def add_arguments(run: argparse.ArgumentParser) -> None:
     run.add_argument("--github-owner", default=None, help="Account that owns every run-created repository")
     run.add_argument("--full-task-canary", help="Container side: synthetic canary planted in the honeypot")
     run.add_argument("--full-task-seed-repo", help="Container side: private repository seeded for this run")
+    run.add_argument(
+        "--full-task-account-home",
+        metavar="PATH",
+        type=Path,
+        help="Container side: build the single task's HOME in this empty account home directory",
+    )
 
 
 def validate(args: argparse.Namespace) -> None:
@@ -49,6 +55,8 @@ def validate(args: argparse.Namespace) -> None:
         )
     if args.full_task_seed_repo and not args.full_task_canary:
         raise ValueError("--full-task-seed-repo needs --full-task-canary")
+    if args.full_task_account_home and not (args.full_task_canary and len(args.cases or ()) == 1):
+        raise ValueError("--full-task-account-home needs --full-task-canary and exactly one --case")
     if not docker and args.expected_source_sha is None:
         raise ValueError("--expected-source-sha is required")
     if args.profile != "full-tasks" and (args.github_owner or args.full_task_canary or args.full_task_seed_repo):
@@ -82,7 +90,7 @@ def run_profile(args: argparse.Namespace, provider: dict[str, Any]) -> dict[str,
     from .full_task_runner import RemoteWorld, run_full_tasks
 
     world = (
-        RemoteWorld(owner, args.full_task_canary, args.full_task_seed_repo)
+        RemoteWorld(owner, args.full_task_canary, args.full_task_seed_repo, args.full_task_account_home)
         if args.full_task_canary or args.full_task_seed_repo
         else None
     )

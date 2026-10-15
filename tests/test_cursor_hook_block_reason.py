@@ -113,5 +113,13 @@ def test_native_policy_not_ready_reason_includes_publisher_error() -> None:
         )
     )
     assert _native_policy_not_ready_reason(daemon) == (
-        "HOL Guard could not prepare the native policy safely. native_policy_snapshot_runtime_unavailable."
+        "HOL Guard could not prepare the native policy safely. native_policy_snapshot_runtime_unavailable. "
+        "This is usually temporary. Retry this action."
+    )
+
+
+def test_native_policy_not_ready_reason_asks_for_a_retry_without_a_publisher_error() -> None:
+    daemon = SimpleNamespace(hook_worker=SimpleNamespace(policy_snapshot_publisher=None))
+    assert _native_policy_not_ready_reason(daemon) == (
+        "HOL Guard could not prepare the native policy safely. This is usually temporary. Retry this action."
     )

@@ -16,6 +16,7 @@
 //! - `yarn` and `pnpm`: Yarn's `yarnPath` and Corepack's `packageManager`
 //!   field select a workspace-supplied binary that the probe would execute.
 //! - `docker version` and bare `kubectl version`: both contact a server.
+//!   `kubectl_reads` admits the kubectl form after its kubeconfig checks.
 //! - `cargo` and `rustc`: a workspace `rust-toolchain.toml` with a `path`
 //!   makes the rustup proxy run that directory's binary. `rust_toolchain`
 //!   admits their version queries only after checking the toolchain file.
@@ -32,6 +33,16 @@ pub(super) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
         (_, [flag]) => single_flag_probe(basename, flag),
         _ => false,
     }
+}
+
+/// A segment that is only a lone version query. The probe runs no project
+/// file, so a verified `cd` before it changes nothing it does. `node` and
+/// `python` use the interpreter proof in `safe_scalar`.
+pub(super) fn lone_probe_segment(segment: &crate::CommandSegmentV1) -> bool {
+    segment.executable.as_deref().is_some_and(|executable| {
+        safe_version_probe(executable, &segment.arguments)
+            || super::safe_scalar::version_probe_arguments(executable, &segment.arguments)
+    })
 }
 
 fn single_flag_probe(basename: &str, flag: &str) -> bool {

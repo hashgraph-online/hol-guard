@@ -1,6 +1,9 @@
 //! Seatbelt composition for `workspace-contained-v1`, kept apart from
 //! `compose_macos_profile` so the existing profile bytes stay fixed.
 use super::*;
+use crate::harness_config_names::{
+    GITHUB_AGENT_DIRECTORIES, HARNESS_CONFIG_FILES, HARNESS_DIRECTORIES, HARNESS_INSTRUCTION_FILES,
+};
 
 /// Absolute names a sandboxed command must never execute; mirrors the
 /// classifier's privilege exclusion so a shell cannot reach them by name.
@@ -29,6 +32,10 @@ const PRIVILEGE_NAMES: &[&str] = &[
     "killall",
     "pkill",
 ];
+/// The libinfo endpoint Apple's own `system.sb` grants for user and group
+/// lookups. Credential, keychain and directory-administration services stay
+/// unreachable.
+pub(super) const USER_DATABASE_SERVICE: &str = "com.apple.system.opendirectoryd.libinfo";
 /// Root-level links (`/var` -> `/private/var`) that system tools name.
 /// xcode-select reads `/var/select/developer_dir`; without metadata on the
 /// link it fails with EPERM instead of falling back to its default.
@@ -55,10 +62,6 @@ const TOOLCHAIN_FILES: &[&str] = &[
     "/System/Library/OpenSSL/openssl.cnf",
 ];
 const PROTECTED_DIRECTORIES: &[&str] = &[
-    ".agents",
-    ".claude",
-    ".codex",
-    ".cursor",
     ".bzr",
     ".hg",
     ".jj",
@@ -68,15 +71,6 @@ const PROTECTED_DIRECTORIES: &[&str] = &[
     ".vscode",
     ".idea",
     ".devcontainer",
-];
-const PROTECTED_FILES: &[&str] = &[
-    "agents.md",
-    "claude.md",
-    "copilot-instructions.md",
-    ".clinerules",
-    ".cursorrules",
-    ".windsurfrules",
-    ".mcp.json",
 ];
 
 fn invalid() -> RestrictedPytestError {
@@ -177,16 +171,74 @@ pub(super) fn head_carrier_pattern(root: &Path) -> Result<String, RestrictedPyte
     ))
 }
 
+/// Version-control metadata, editor and devcontainer settings, and every
+/// harness directory (plugins, hooks, settings, MCP and instruction files a
+/// harness loads on its next start), at any depth.
 pub(crate) fn protected_patterns(workspace: &Path) -> Result<Vec<String>, RestrictedPytestError> {
     let root = ci(&workspace.to_string_lossy())?;
-    Ok(vec![
-        format!(
-            "^{root}/(.*/)?({})(/.*)?$",
-            alternatives(PROTECTED_DIRECTORIES)?
-        ),
-        format!("^{root}/(.*/)?({})$", alternatives(PROTECTED_FILES)?),
-        format!("^{root}/(.*/)?{}(/.*)?$", ci(".github/workflows")?),
-    ])
+    let directories: Vec<&str> = PROTECTED_DIRECTORIES
+        .iter()
+        .chain(HARNESS_DIRECTORIES)
+        .copied()
+        .collect();
+    let files: Vec<&str> = HARNESS_CONFIG_FILES
+        .iter()
+        .chain(HARNESS_INSTRUCTION_FILES)
+        .copied()
+        .collect();
+    let prefix = format!("^{root}/(.*/)?");
+    let mut patterns = bounded(&prefix, &directories, "(/.*)?$")?;
+    patterns.extend(bounded(&prefix, &files, "$")?);
+    patterns.extend(bounded(
+        &format!("{prefix}{}/", ci(".github")?),
+        GITHUB_AGENT_DIRECTORIES,
+        "(/.*)?$",
+    )?);
+    patterns.push(format!("{prefix}{}(/.*)?$", ci(".github/workflows")?));
+    Ok(patterns)
+}
+
+/// Seatbelt rejects the whole profile when one string literal reaches about
+/// 1,023 bytes, so long name lists are spread over as many rules as needed.
+const SEATBELT_PATTERN_BUDGET: usize = 900;
+
+/// Bytes `value` takes inside a Seatbelt string literal, after escaping.
+fn quoted_len(value: &str) -> usize {
+    value.len()
+        + value
+            .bytes()
+            .filter(|byte| matches!(byte, b'\\' | b'"' | b'\n' | b'\r'))
+            .count()
+}
+
+fn bounded(
+    prefix: &str,
+    names: &[&str],
+    suffix: &str,
+) -> Result<Vec<String>, RestrictedPytestError> {
+    let mut patterns = Vec::new();
+    let mut group: Vec<String> = Vec::new();
+    let empty = quoted_len(prefix) + quoted_len(suffix) + 2;
+    let mut length = empty;
+    for name in names {
+        let name = ci(name)?;
+        let size = quoted_len(&name);
+        if !group.is_empty() && length + 1 + size > SEATBELT_PATTERN_BUDGET {
+            patterns.push(format!("{prefix}({}){suffix}", group.join("|")));
+            group.clear();
+            length = empty;
+        }
+        // A name that does not fit in an empty group cannot be split further.
+        if length + size > SEATBELT_PATTERN_BUDGET {
+            return Err(invalid());
+        }
+        length += size + usize::from(!group.is_empty());
+        group.push(name);
+    }
+    if !group.is_empty() {
+        patterns.push(format!("{prefix}({}){suffix}", group.join("|")));
+    }
+    Ok(patterns)
 }
 
 /// Helper paths stay unwritable at any letter case, and so does every
@@ -247,6 +299,18 @@ pub(super) fn compose(
     roots.extend(extra_reads.iter().cloned());
     let mut metadata = vec![PathBuf::from("/")];
     metadata.extend(ancestor_paths(&roots));
+    // Bun's resolver lists every directory above the working directory while
+    // it looks for project files and fails outright when it cannot. A listing
+    // shows names, never contents, and the credential denials below still
+    // cover any ancestor they name.
+    let mut listed: Vec<PathBuf> = workspace
+        .ancestors()
+        .skip(1)
+        .map(Path::to_path_buf)
+        .collect();
+    if listed.is_empty() {
+        listed.push(PathBuf::from("/"));
+    }
     metadata.extend(existing(ROOT_LINKS));
     let mut files = files.to_vec();
     files.extend(existing(TOOLCHAIN_FILES));
@@ -271,7 +335,13 @@ pub(super) fn compose(
         format!("(deny process-exec {})", filter(&privileged, "literal")),
         "(allow signal (target self) (target children))".to_owned(),
         "(allow sysctl-read)".to_owned(),
-        "(allow file-read-data (literal \"/\"))".to_owned(),
+        // `getpwuid`, `getgrgid` and `getgrouplist` reach the user database
+        // through this one opendirectoryd endpoint; without it `id`, Python's
+        // `pwd`, Go's `os/user`, ssh and git cannot name the current user.
+        // It answers the same account queries any process can make, and no
+        // other mach service is reachable.
+        format!("(allow mach-lookup (global-name \"{USER_DATABASE_SERVICE}\"))"),
+        format!("(allow file-read-data {})", filter(&listed, "literal")),
         format!(
             "(allow file-read-metadata {})",
             filter(&metadata, "literal")
@@ -358,4 +428,16 @@ pub(super) fn compose(
         lines.push(regex_rule("file-read* file-write*", &pattern));
     }
     Ok(lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_name_that_cannot_fit_in_a_fresh_group_is_rejected() {
+        let long = "n".repeat(SEATBELT_PATTERN_BUDGET);
+        assert!(bounded("^", &["ok", &long], "$").is_err());
+        assert!(bounded("^", &["hooks", "plugins"], "$").is_ok());
+    }
 }

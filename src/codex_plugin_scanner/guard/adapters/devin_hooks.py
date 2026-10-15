@@ -115,13 +115,8 @@ def emit_devin_hook_response(
     stream.flush()
 
 
-def devin_hook_should_block(*, policy_action: str) -> bool:
-    return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-
-
 __all__ = [
     "devin_hook_response_from_guard",
-    "devin_hook_should_block",
     "emit_devin_hook_response",
     "prepare_devin_hook_payload",
 ]

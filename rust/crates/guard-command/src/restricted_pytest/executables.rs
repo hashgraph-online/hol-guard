@@ -34,22 +34,28 @@ pub(super) fn allowed_executables(
         allowed.extend(framework_python_helpers(&allowed_executable));
     }
     let workspace_launcher = path_is_within_lexically(launch_executable, workspace);
-    if allowed
-        .iter()
-        .any(|path| !allowed_executable_path(path, workspace, workspace_launcher))
-    {
+    let venv_root = if workspace_launcher {
+        None
+    } else {
+        venv::external_root(launch_executable, executable, workspace)
+    };
+    let venv_root = venv_root.as_deref();
+    if allowed.iter().any(|path| {
+        !allowed_executable_path(path, workspace, workspace_launcher || venv_root.is_some())
+            && !venv_root.is_some_and(|root| venv::in_bin(path, root))
+    }) {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
-            "Restricted pytest script resolves to an interpreter outside the workspace and trusted system roots.",
+            "Contained executable resolves to an interpreter outside the workspace and trusted runtime roots.",
         ));
     }
     if allowed
         .iter()
-        .any(|path| !executable_symlink_chain_is_approved(path, workspace))
+        .any(|path| !executable_symlink_chain_is_approved(path, workspace, venv_root))
     {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
-            "Restricted pytest executable has an unapproved path in its interpreter symlink chain.",
+            "Contained executable has an unapproved path in its interpreter symlink chain.",
         ));
     }
     let mut seen = HashSet::new();
@@ -183,7 +189,12 @@ pub(super) fn approved_user_python_runtime(path: &Path) -> bool {
 }
 
 /// `_executable_symlink_chain_is_approved` (:370-385).
-pub(super) fn executable_symlink_chain_is_approved(path: &Path, workspace: &Path) -> bool {
+/// Links inside an approved external venv's `bin` are part of its launcher.
+pub(super) fn executable_symlink_chain_is_approved(
+    path: &Path,
+    workspace: &Path,
+    venv_root: Option<&Path>,
+) -> bool {
     let mut current = path_absolute(path);
     for _depth in 0..16 {
         let expansion = match first_symlink_expansion(&current) {
@@ -194,6 +205,7 @@ pub(super) fn executable_symlink_chain_is_approved(path: &Path, workspace: &Path
         if !path_is_within_lexically(&current, workspace)
             && !path_is_within_any_lexically(&current, &TRUSTED_EXECUTABLE_ROOTS)
             && !approved_user_python_runtime(&current)
+            && !venv_root.is_some_and(|root| venv::in_bin(&current, root))
         {
             return false;
         }

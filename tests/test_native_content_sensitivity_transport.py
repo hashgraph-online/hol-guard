@@ -100,14 +100,14 @@ def test_sensitivity_uses_one_absolute_deadline_for_the_persistent_client(monkey
     }
 
 
-def test_default_budget_covers_a_resident_spawn_but_keeps_warm_round_trips_short(monkeypatch):
+def test_default_budget_covers_a_resident_spawn_and_a_loaded_warm_round_trip(monkeypatch):
     calls = _resident(monkeypatch)
     monkeypatch.setattr(client, "native_resident_client_ready", lambda *_: False)
     client.content_query("content_version", {})
     assert 500 < json.loads(calls[0]["payload"])["request"]["budget_ms"] <= 4000
     monkeypatch.setattr(client, "native_resident_client_ready", lambda *_: True)
     client.content_query("content_version", {})
-    assert json.loads(calls[1]["payload"])["request"]["budget_ms"] <= 500
+    assert 500 < json.loads(calls[1]["payload"])["request"]["budget_ms"] <= 2000
 
 
 def test_expired_sensitivity_deadline_never_opens_a_client(monkeypatch):

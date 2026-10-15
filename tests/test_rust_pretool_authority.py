@@ -280,16 +280,14 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        # Claude permission dialogs have their own passthrough route; Codex
-        # permission events still reach the native fail-safe.
+        # Claude and Codex permission dialogs have their own passthrough
+        # routes; other harnesses' permission events still reach the native
+        # fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="codex",
+        default_harness="copilot",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert (
-        result["reason_code"] == "native_hook_event_unavailable"
-        and result["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    )
+    assert result["reason_code"] == "native_hook_event_unavailable" and result["behavior"] == "deny"

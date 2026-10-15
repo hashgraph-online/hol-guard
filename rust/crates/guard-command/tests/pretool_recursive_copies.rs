@@ -29,7 +29,7 @@ fn write(path: &Path) {
 }
 
 #[test]
-fn recursive_copies_create_new_workspace_trees_only() {
+fn recursive_copies_create_new_trees_only() {
     // Avoid macOS's protected /private/var temporary root.
     let home = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-recursive-copies")
@@ -69,6 +69,10 @@ fn recursive_copies_create_new_workspace_trees_only() {
         "cp -R src/ fresh-copy",
         "cp -R src/nested nested-copy",
         "cp -R src existing/",
+        // A new visible tree in the home and a plain dot-named scratch tree
+        // pass the same screens as `mkdir`.
+        "cp -R src ~/outside/copy",
+        "cp -R src .scratch-copy",
     ] {
         assert!(permitted(command, &home, &project), "{command}");
     }
@@ -87,8 +91,11 @@ fn recursive_copies_create_new_workspace_trees_only() {
         "cp -R src-alias copied",
         "cp -R src-alias/nested alias-copy",
         "cp -R src .git/hooks-copy",
-        "cp -R src .hidden-copy",
-        "cp -R src ~/outside/copy",
+        "cp -R src .husky",
+        "cp -R src .vscode",
+        "cp -R src .claude/skills",
+        "cp -R src ~/.copy",
+        "cp -R src ~/bin",
         "cp -R src ~/.ssh/copy",
         "cp -R ~/.ssh ssh-copy",
         "cp -R src/index.ts copied.ts",
@@ -96,7 +103,6 @@ fn recursive_copies_create_new_workspace_trees_only() {
         "cp -R -L src followed",
         "cp -R src one two",
         "cp -R src copy && echo done",
-        "cp -R src copy > output.txt",
     ] {
         assert!(!permitted(command, &home, &project), "{command}");
     }

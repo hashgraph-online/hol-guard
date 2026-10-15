@@ -115,6 +115,32 @@ pub(crate) fn evaluate_resident_bytes(
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 crate::hook_direct_evidence::drain(&request, policy_store.direct_evidence())
             }
+            ResidentOperationV1::McpRelayDecide(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::mcp_relay_decide::evaluate(request, policy_store)
+            }
+            ResidentOperationV1::McpRelayReady(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::mcp_relay_ready::evaluate(&request, policy_store)
+            }
+            ResidentOperationV1::McpRelayCommit(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let pending = policy_store.mcp_relay_pending();
+                crate::mcp_relay_pending::commit(&request, pending, policy_store.direct_evidence())
+            }
+            ResidentOperationV1::McpRelayClaim(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::mcp_relay_decide::claim(&request, policy_store)
+            }
+            ResidentOperationV1::McpRelayServerReport(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::mcp_relay_servers::report(&request, policy_store.mcp_relay_servers())
+            }
             ResidentOperationV1::ApprovalChallenge(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -333,6 +359,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::HookAuthorityState(request) => {
                 crate::hook_authority_state_op::evaluate_hook_authority_state_request(&request)
             }
+            ResidentOperationV1::PolicyIntegrityRows(request) => {
+                crate::policy_integrity_rows_op::evaluate_policy_integrity_rows_request(&request)
+            }
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
             }
@@ -472,6 +501,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::CatalogRead(request) => encode_response(
                 &guard_command::catalog_read_model::evaluate_catalog_read(&request),
             ),
+            // Untrusted Cloud discovery bytes are validated and projected
+            // here; the daemon adapter only moves bytes (no Python fallback).
+            ResidentOperationV1::DiscoveryPlacementProject(request) => {
+                crate::discovery_placement_op::evaluate_discovery_placement_project(&request)
+            }
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }
@@ -511,6 +545,11 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ArchiveAcquisition(request) => Some(&request.guard_home),
         ResidentOperationV1::HookDirect(request) => Some(&request.guard_home),
         ResidentOperationV1::HookDirectEvidenceDrain(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRelayDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRelayCommit(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRelayReady(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRelayClaim(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRelayServerReport(request) => Some(&request.guard_home),
         ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.guard_home),
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
         ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),

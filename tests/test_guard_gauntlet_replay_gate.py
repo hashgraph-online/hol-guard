@@ -25,7 +25,7 @@ from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.benign_fp_gate_fixture import BenignFixture, build_fixture
+from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.gauntlet_replay import (
     ENVIRONMENTS,
     GATE_DOCUMENT,
@@ -39,6 +39,7 @@ from tests.gauntlet_replay import (
     payload_input,
     write_global_gitconfig,
 )
+from tests.native_gate_retry import review_with_unavailable_retry
 
 _CASES = expand()
 # The benign gate already records, per Linux CI result, which ordinary cases still warn or review.
@@ -108,7 +109,7 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     resolved = redact_value(case.tool_input, fixture.tokens())
     assert isinstance(resolved, dict)
     payload: dict[str, object] = {
-        "hook_event_name": "PreToolUse",
+        "hook_event_name": case.event,
         "tool_name": case.tool_name,
         "tool_input": payload_input(case, resolved),
         "session_id": "gauntlet-replay",
@@ -116,16 +117,24 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
         "cwd": str(fixture.cwd(case.cwd)),
         "guard_execution_environment": collect_hook_execution_environment(),
     }
+    if case.tool_response is not None:
+        payload["tool_response"] = case.tool_response
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
-    result = worker.review_http_payload(
-        payload=payload,
-        params={},
-        default_harness=case.harness,
-        home_dir=fixture.home,
-        guard_home=fixture.guard_home,
-        workspace=fixture.cwd(case.cwd),
+    # Approval baselines stay from before the first attempt, so a retry never hides a row.
+    result = review_with_unavailable_retry(
+        case.case_id,
+        lambda: worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness=case.harness,
+            home_dir=fixture.home,
+            guard_home=fixture.guard_home,
+            workspace=fixture.cwd(case.cwd),
+        ),
     )
+    if case.harness == "codex":
+        result = route_codex(result, payload, fixture)
     return result, approval_rows(worker.store, known)
 
 

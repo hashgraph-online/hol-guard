@@ -1,4 +1,7 @@
-use super::{command_reads_environment_secrets, command_reads_environment_secrets_with_caller_cwd};
+use super::{
+    command_reads_environment_secrets, command_reads_environment_secrets_with_caller_cwd,
+    printer_expands_secret,
+};
 use serde_json::Value;
 
 struct Cleanup(std::path::PathBuf);
@@ -74,4 +77,18 @@ fn local_script_changes_are_observed_on_each_call() {
     assert!(
         command_reads_environment_secrets("python reader.py", Some(&root), Some(&root)).unwrap()
     );
+}
+
+#[test]
+fn printing_a_credential_variable_is_a_secret_read() {
+    for text in [
+        "echo \"$GITHUB_TOKEN\" > p.txt",
+        "printf '%s' ${NPM_TOKEN}",
+        "echo Bearer $OPENAI_API_KEY",
+    ] {
+        assert!(printer_expands_secret(text), "{text}");
+    }
+    for text in ["echo \"$PATH\" > p.txt", "echo ${HOME}/x", "printf hello"] {
+        assert!(!printer_expands_secret(text), "{text}");
+    }
 }

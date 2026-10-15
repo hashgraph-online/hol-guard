@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { isAbsolute } from 'node:path';
+import { nativeProgress, watchInference } from './inference_liveness';
 
 // Outer transport only. The Gauntlet agent still executes every selected tool
 // through its installed Guard extension. No tool executes in this adapter.
@@ -257,6 +258,8 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
     const wire = backend.sse ? new WireArguments() : new StreamedArguments();
+    let inferenceProgress = () => {};
+    let stopDeadline = () => {};
     const agent = new Agent({
       initialState: { model, thinkingLevel: thinking, systemPrompt:
         body.messages.filter((m: any) => m.role === 'system' || m.role === 'developer')
@@ -268,17 +271,27 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       // Advertise the host's independent native-tool capability without forcing
       // any tool choice, call count, argument, or model-selected batch.
       onPayload: (payload: any) => { payload.parallel_tool_calls = true; },
-      onSseEvent: event => { if (wire instanceof WireArguments) wire.capture(event); },
+      onSseEvent: event => {
+        if (wire instanceof WireArguments) wire.capture(event);
+        if (nativeProgress(event)) inferenceProgress();
+      },
       // Prompt-cache affinity per case; sessionId stays unset so the
       // websocket/session transport state is untouched.
       promptCacheKey: promptCacheKey(request.headers.get('x-opencode-session')),
     });
     active.add(agent);
     let stopKeepalive = () => {};
-    const timer = setTimeout(() => { stopKeepalive(); agent.abort(); }, 240_000);
     const stream = new ReadableStream<Uint8Array>({
       start(sink) {
         let finished = false;
+        const deadline = watchInference(() => {
+          finished = true;
+          stopKeepalive();
+          sink.error(new Error('Native inference stopped making progress'));
+          agent.abort();
+        }, { idleMs: thinking === 'high' ? 240_000 : 60_000, maximumMs: 240_000 });
+        inferenceProgress = deadline.progress;
+        stopDeadline = deadline.stop;
         let bytes = 0;
         const indices = new Map<number, number>();
         stopKeepalive = keepStreamAlive(chunk => {
@@ -299,6 +312,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
           if (finished) return;
           try {
             if (event.type === 'message_update') {
+              if (nativeProgress(event.assistantMessageEvent)) inferenceProgress();
               const delta = eventDelta(event.assistantMessageEvent, indices, wire);
               if (delta) send(delta);
             } else if (event.type === 'message_end' && event.message.role === 'assistant') {
@@ -309,6 +323,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
               send({}, finishReason(event.message.stopReason), usageChunk(event.message.usage));
               sink.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
               finished = true;
+              stopDeadline();
               stopKeepalive();
               sink.close();
               // Stop the outer SDK before tool dispatch. The real Gauntlet
@@ -317,6 +332,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
             }
           } catch {
             finished = true;
+            stopDeadline();
             stopKeepalive();
             sink.error(new Error('Native transport failed'));
             agent.abort();
@@ -329,12 +345,12 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
         }).finally(() => {
           stopKeepalive();
           if (!finished) sink.error(new Error('Native inference ended without completion'));
-          unsubscribe(); clearTimeout(timer); active.delete(agent);
+          unsubscribe(); stopDeadline(); active.delete(agent);
         });
       },
-      cancel() { stopKeepalive(); agent.abort(); controller.abort(); },
+      cancel() { stopKeepalive(); stopDeadline(); agent.abort(); controller.abort(); },
     });
-    request.signal.addEventListener('abort', () => { stopKeepalive(); agent.abort(); }, { once: true });
+    request.signal.addEventListener('abort', () => { stopKeepalive(); stopDeadline(); agent.abort(); }, { once: true });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } });
   },
 });

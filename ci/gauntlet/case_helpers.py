@@ -10,7 +10,7 @@ from typing import Any
 from .agent_prompt import scenario_prompt
 from .catalog import Scenario
 from .evidence import public_events, read_events
-from .fixtures import Fixture
+from .fixtures import Fixture, scratch_checkout
 from .host_evidence import complete_host_events
 from .input_evidence import fixture_path_aliases, public_observations
 
@@ -28,6 +28,20 @@ def _watch_binding(store: Any) -> dict[str, Any]:
     if binding is None or binding.get("mode") != "observe":
         raise RuntimeError("Watch fixture lacks an authenticated resident-accepted policy")
     return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
+
+
+def ready_watch_binding(worker: Any, timeout: float = 5.0) -> dict[str, Any]:
+    """Finish the startup review-fact refresh before measuring Watch's command."""
+    publisher = worker.policy_snapshot_publisher
+    publisher._recheck_direct_lane_review_facts()
+    with publisher._condition:
+        ready = publisher._condition.wait_for(
+            lambda: publisher._acked and publisher._renewal_after_generation is None,
+            timeout=timeout,
+        )
+    if not ready:
+        raise RuntimeError("Watch fixture startup publication did not settle")
+    return _watch_binding(worker.store)
 
 
 def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
@@ -78,6 +92,9 @@ def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
         str(fixture.root): "{{fixture}}",
     }
     replacements = fixture_path_aliases(replacements)
+    scratch = str(scratch_checkout(fixture.root))
+    # The scratch leaf does not exist yet, so name its macOS alias directly.
+    replacements[scratch] = replacements["/private" + scratch] = "{{scratch}}"
     # Commands quote each interpolated fixture path. Normalize the entire
     # shell-quoted spelling before redacting raw paths, including apostrophes.
     for value, placeholder in tuple(replacements.items()):

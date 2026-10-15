@@ -17,8 +17,10 @@ pub(super) struct LinkedGit {
     pub(super) admin: PathBuf,
 }
 
-/// Admin-entry files that commits, checkouts, resets and merges rewrite, and
-/// the reflog directory a first commit creates.
+/// Admin-entry files that commits, checkouts, resets and merges rewrite, the
+/// locks Git takes to update or delete each ref among them (a commit deletes
+/// `AUTO_MERGE` through its lock), and the reflog directory a first commit
+/// creates.
 const ADMIN_FILES: &[&str] = &[
     "index",
     "index.lock",
@@ -28,7 +30,9 @@ const ADMIN_FILES: &[&str] = &[
     "ORIG_HEAD.lock",
     "COMMIT_EDITMSG",
     "AUTO_MERGE",
+    "AUTO_MERGE.lock",
     "MERGE_HEAD",
+    "MERGE_HEAD.lock",
     "MERGE_MSG",
     "MERGE_MODE",
     "logs",

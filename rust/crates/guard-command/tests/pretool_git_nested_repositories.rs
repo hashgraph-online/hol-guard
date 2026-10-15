@@ -1,8 +1,7 @@
 use serde_json::json;
 use std::path::Path;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 const LFS_CONFIG: &str = "[filter \"lfs\"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n";
 
@@ -151,21 +150,28 @@ fn linked_worktree_target_from_parent_directory_is_routed() {
             result.reason_code
         );
     }
-    for command in [
-        format!("git -C '{target}' commit --allow-empty -m fixture"),
-        format!("git -C '{target}' hash-object -w tracked.txt"),
-    ] {
-        let result = decide(&repository, &home, &command);
-        assert_ne!(result.decision, "allow", "{command}");
-    }
+    // A proven local write behind `-C` is judged as after `cd`: the commit
+    // keeps every change reachable and starts no hook. Writing an object
+    // from an arbitrary path is no such form.
+    let commit = format!("git -C '{target}' commit --allow-empty -m fixture");
+    let result = decide(&repository, &home, &commit);
+    assert_eq!(result.decision, "allow", "{commit}: {}", result.reason_code);
+    let command = format!("git -C '{target}' hash-object -w tracked.txt");
+    let result = decide(&repository, &home, &command);
+    assert_ne!(result.decision, "allow", "{command}");
     // An unregistered copy of the pointer stays reviewed. Unrelated sibling
     // repositories below home are covered by `pretool_home_layout_reads`.
     let forged = home.join("forged-worktree");
     std::fs::create_dir_all(&forged).unwrap();
     std::fs::copy(worktree.join(".git"), forged.join(".git")).unwrap();
-    let command = format!("git -C '{}' status --short", forged.display());
-    let result = decide(&repository, &home, &command);
-    assert_ne!(result.decision, "allow", "{command}");
+    let forged = forged.display();
+    for command in [
+        format!("git -C '{forged}' status --short"),
+        format!("git -C '{forged}' commit --allow-empty -m fixture"),
+    ] {
+        let result = decide(&repository, &home, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+    }
 }
 
 #[test]
@@ -200,14 +206,17 @@ fn nested_repository_cannot_hide_execution_configuration() {
     let child = repository.join("child-tool");
     std::fs::create_dir_all(&child).unwrap();
     git(&child, &["init", "--quiet"]);
-    for (command, _) in [
-        ("git -c core.fsmonitor=./hook status --short", ()),
-        ("git -c diff.external=./hook diff --stat", ()),
-        ("git --exec-path=./helpers status --short", ()),
+    // A helper the command names itself is a program Guard cannot read, so
+    // even an explicit Git Allow leaves it reviewed.
+    for command in [
+        "git -c core.fsmonitor=./hook status --short",
+        "git -c diff.external=./hook diff --stat",
+        "git --exec-path=./helpers status --short",
     ] {
         let result = decide(&repository, &home, command);
         assert_ne!(result.decision, "allow", "{command}");
     }
+    // A helper the repository's own configuration names stays reviewed.
     git(&repository, &["config", "core.fsmonitor", "./hook"]);
     let result = decide(&repository, &home, "git status --short");
     assert_ne!(result.decision, "allow", "repo-local fsmonitor");
