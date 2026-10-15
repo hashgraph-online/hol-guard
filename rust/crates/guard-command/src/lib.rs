@@ -436,8 +436,9 @@ fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCom
     if posix.confidence == "exact" && powershell_command::names_powershell_effect(&posix.segments) {
         return Ok(parse_explicit_powershell(request, raw));
     }
-    // Otherwise retry only input that POSIX cannot prove.
-    if posix.confidence != "exact"
+    // Otherwise retry input that POSIX cannot prove, or where it only saw a
+    // read-only cmdlet as an unknown word. Either keeps POSIX if PowerShell fails.
+    if (posix.confidence != "exact" || powershell_command::names_powershell_benign(&posix.segments))
         && raw.chars().count() <= MAX_COMMAND_BYTES
         && raw.len() <= MAX_COMMAND_BYTES
     {

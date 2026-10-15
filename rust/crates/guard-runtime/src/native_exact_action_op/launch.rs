@@ -2,7 +2,8 @@
 //!
 //! A launch identity binds the code a reviewed command would run. Anything
 //! that loads code the identity cannot bind (interpreters, task runners,
-//! wrappers) is refused with a stable once-only reason, and a compound command
+//! wrappers) is refused with a stable once-only reason unless its module graph
+//! is content-bound (`node <script>`), and a compound command
 //! is persistable only when every segment passes the same proof.
 
 use std::path::Path;
@@ -15,6 +16,7 @@ use super::context::Ctx;
 use super::fs_path;
 use super::git_identity::git_readonly_identity;
 use super::launcher_sets::{is_destructive, loads_unbound_code};
+use super::node_script::{node_script, NODE_LAUNCHERS};
 use super::operands::{argument_value, file_operand_hashes};
 use super::reasons::{
     Proof, COMPOUND_COMMAND, DESTRUCTIVE_COMMAND, MUTABLE_LAUNCHER, SENSITIVE_PATH, UNPROVEN_LAUNCH,
@@ -189,6 +191,12 @@ fn segment_launch(
         let local_bin = local_bin.ok_or(MUTABLE_LAUNCHER)?;
         return Ok(
             json!({"kind": "runner-local-bin", "runner": name, "local_bin": local_bin, "operands": operands}),
+        );
+    }
+    if NODE_LAUNCHERS.contains(&name) && !compound {
+        let script = node_script(arguments, cwd, ctx)?;
+        return Ok(
+            json!({"kind": "node-script", "identity": reusable_identity()?, "script": script, "operands": operands}),
         );
     }
     if loads_unbound_code(name, arguments) {
