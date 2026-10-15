@@ -360,5 +360,12 @@ def test_native_builds_stage_shared_trust_before_compilation(workflow_name, job_
         if "cargo build" in step.get("run", "") or "build-native-wheel-macos.sh" in step.get("run", "")
     )
     assert setup < build
-    assert "if" not in steps[setup]
+    if "if" in steps[setup]:
+        # Binary reuse may skip the toolchain, never fresh trust defaults.
+        assert steps[setup]["if"] == "steps.evaluator-cache.outputs.cache-hit != 'true'"
+        trust = next(i for i, step in enumerate(steps) if "--trust-only" in step.get("run", ""))
+        restore = next(i for i, step in enumerate(steps) if step.get("id") == "evaluator-cache")
+        assert trust < restore < setup
+        assert "if" not in steps[trust]
+        assert "continue-on-error" not in steps[trust]
     assert "continue-on-error" not in steps[setup]

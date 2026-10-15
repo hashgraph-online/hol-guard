@@ -45,16 +45,19 @@ def test_macos_runtime_cache_requires_all_inputs_and_only_main_can_save() -> Non
     platform = next(step for step in steps if step.get("id") == "runtime-platform")
     assert steps.index(stage) < steps.index(restore) < steps.index(setup)
     assert steps.index(platform) < steps.index(restore)
+    assert "scripts.ci.native_cache_environment" in platform["run"]
     assert "restore-keys" not in restore["with"]
     for token in (
-        "runner.arch", "steps.runtime-platform.outputs.image", "env.CARGO_PROFILE_RELEASE_OPT_LEVEL",
+        "runner.arch", "steps.runtime-platform.outputs.image", "steps.runtime-platform.outputs.compiler-env",
         "env.CARGO_PROFILE_RELEASE_LTO", "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
         "'rust/**'", "'contributions/**'", "'contracts/**'", "'spec/**'",
         "'src/codex_plugin_scanner/guard/contracts/**'",
         "'.github/actions/setup-rust/action.yml'",
-        "'.github/actions/ci-job-macos-native-runtime/action.yml'", "'.github/workflows/ci.yml'",
+        "'.github/actions/ci-job-macos-native-runtime/action.yml'", "'.cargo/**'",
+        "'scripts/ci/native_cache_environment.py'", "'scripts/refresh_extension_artifacts.py'",
     ):
         assert token in restore["with"]["key"]
+    assert "'.github/workflows/ci.yml'" not in restore["with"]["key"]
     miss = "steps.runtime-cache.outputs.cache-hit != 'true'"
     assert setup["if"] == miss
     for name in (

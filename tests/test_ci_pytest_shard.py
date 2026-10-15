@@ -212,7 +212,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 
 
 @pytest.mark.parametrize(
-        "failed_dependency", ["NATIVE_PRODUCER_RESULT", "COVERAGE_RESULT", "SCHEDULING_SENSITIVE_RESULT"]
+    "failed_dependency", ["NATIVE_PRODUCER_RESULT", "COVERAGE_RESULT", "SCHEDULING_SENSITIVE_RESULT"]
 )
 @pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
 def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
@@ -256,7 +256,11 @@ def test_native_contract_preflight_is_required_without_delaying_artifact_fanout(
     steps = producer["steps"]
     rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
     assert "rustfmt" in rust["with"]["components"].split()
-    formatting = next(i for i, step in enumerate(steps) if "cargo fmt" in step.get("run", ""))
+    formatting = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Check native formatting before compilation"
+    )
+    assert 'cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check' in steps[formatting]["run"]
+    assert "if" not in steps[formatting]
     compilation = next(i for i, step in enumerate(steps) if "cargo build" in step.get("run", ""))
     verification = next(i for i, step in enumerate(steps) if "verify_native_command_program.py" in step.get("run", ""))
     uploads = [i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/upload-artifact@")]
@@ -271,8 +275,7 @@ def test_native_contract_preflight_is_required_without_delaying_artifact_fanout(
     gates = document["jobs"]["native-gates"]
     assert gates["needs"] == "native-command-evaluators"
     checks = [
-        step for step in gates["steps"]
-        if step.get("name") == "Check native contract groups after artifact fan-out"
+        step for step in gates["steps"] if step.get("name") == "Check native contract groups after artifact fan-out"
     ]
     assert len(checks) == 1
     check = checks[0]
@@ -291,8 +294,7 @@ def test_native_contract_preflight_is_required_without_delaying_artifact_fanout(
     assert "coverage-plan" not in document["jobs"]
     planning = next(i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/plan-pytest")
     binding = next(
-        i for i, step in enumerate(steps)
-        if step.get("name") == "Bind the compiled native runtime for test discovery"
+        i for i, step in enumerate(steps) if step.get("name") == "Bind the compiled native runtime for test discovery"
     )
     assert verification < max(uploads) < binding < planning
     assert "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" in steps[binding]["run"]

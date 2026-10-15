@@ -24,6 +24,10 @@ from scripts.ci.native_cache_environment import fingerprint
         "CARGO_PROFILE_RELEASE_OPT_LEVEL",
         "CARGO_PROFILE_RELEASE_DEBUG",
         "CARGO_PROFILE_RELEASE_PANIC",
+        "HOL_GUARD_BUILD_SHA",
+        "HOL_GUARD_PACKAGE_VERSION",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX",
     ],
 )
 def test_compiler_changes_cannot_reuse_a_previous_binary(name: str) -> None:
