@@ -22,6 +22,11 @@ class PiExtensionRuntimeOwnership:
     recovery_command: str
     recovery_args: tuple[str, ...]
     recovery_accepts_failure_kind: bool
+    # Windows only: the argv that starts the contained-test sink, and the
+    # directory its request snapshots must sit in. Empty elsewhere, where the
+    # sink starts from the CLI command and requests use the process TEMP.
+    contained_sink_command: tuple[str, ...] = ()
+    contained_request_root: str = ""
 
 
 def resolve_pi_extension_runtime_ownership(
@@ -46,6 +51,7 @@ def resolve_pi_extension_runtime_ownership(
         )
     package_root = package_source.resolve().parents[3]
     python = str(Path(sys.executable).expanduser().absolute())
+    sink_command, request_root = _windows_contained_sink(python, package_root)
     return PiExtensionRuntimeOwnership(
         tuple(guard_args),
         python,
@@ -54,7 +60,22 @@ def resolve_pi_extension_runtime_ownership(
         python,
         ("-I", "-c", _windows_recovery_bootstrap(package_root, guard_home=guard_home, home_dir=home_dir)),
         True,
+        sink_command,
+        request_root,
     )
+
+
+def _windows_contained_sink(python: str, package_root: Path) -> tuple[tuple[str, ...], str]:
+    """The sink argv and request directory Claude Code's Windows route uses.
+    Without a profile Temp directory, protected runs stay denied."""
+    from ..windows_paths import trusted_windows_local_temp
+    from .zcode_contained_tests import contained_sink_command_prefix
+
+    try:
+        request_root = str(trusted_windows_local_temp())
+    except (OSError, RuntimeError, ValueError):
+        return (), ""
+    return (*contained_sink_command_prefix(python, package_root), "guard"), request_root
 
 
 def _stable_guard_cli_command(home_dir: Path) -> str:

@@ -214,7 +214,11 @@ def _run_guard_policy_action_command(
         approval_gate_grant = None
         if _policy_write_requires_approval_gate(store, action=args.policy_action, scope=args.scope):
             gate_input = (
-                prompt_for_approval_gate(store.guard_home, use_cooldown=True)
+                prompt_for_approval_gate(
+                    store.guard_home,
+                    use_cooldown=True,
+                    strict=str(args.scope) == "global",
+                )
                 if _policy_write_needs_approval_gate(store, action=args.policy_action, scope=args.scope)
                 else None
             )

@@ -107,10 +107,15 @@ def route_zcode_containment(
     return routed if routed is not None else response
 
 
-def contained_sink_command_prefix() -> tuple[str, ...]:
+def contained_sink_command_prefix(
+    python_executable: str | None = None, package_root: Path | None = None
+) -> tuple[str, ...]:
     """The argv prefix ``route_zcode_containment`` starts the sink with."""
     return _sink_command_prefix(
-        {"python_executable": sys.executable, "package_root": str(Path(__file__).resolve().parents[3])}
+        {
+            "python_executable": python_executable or sys.executable,
+            "package_root": str(package_root or Path(__file__).resolve().parents[3]),
+        }
     )
 
 

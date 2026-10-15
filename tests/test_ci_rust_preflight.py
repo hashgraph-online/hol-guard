@@ -178,18 +178,24 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux workspace validation uses Bash")
 @pytest.mark.parametrize(
-    ("check", "packages"),
+    ("check", "packages", "partition"),
     [
-        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"]),
-        ("test-command", ["--package", "guard-command"]),
-        ("test-runtime", ["--package", "hol-guard-runtime"]),
+        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"], []),
+        ("test-command", ["--package", "guard-command"], []),
+        ("test-runtime-1", ["--package", "hol-guard-runtime"], ["--partition", "hash:1/2"]),
+        ("test-runtime-2", ["--package", "hol-guard-runtime"], ["--partition", "hash:2/2"]),
     ],
 )
-def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, packages: list[str]) -> None:
+def test_rust_shards_preserve_full_target_selection(
+    tmp_path: Path, check: str, packages: list[str], partition: list[str]
+) -> None:
     """Execute each shard's shell branch and inspect the exact Cargo arguments."""
     job = workflow("ci.yml")["jobs"]["native-workspace"]
-    assert job["strategy"]["matrix"]["check"] == ["clippy", "test-core", "test-command", "test-runtime"]
+    assert job["strategy"]["matrix"]["check"] == [
+        "clippy", "test-core", "test-command", "test-runtime-1", "test-runtime-2",
+    ]
     assert job["strategy"]["fail-fast"] is False
+    assert "continue-on-error" not in job
     validate = next(step["run"] for step in job["steps"] if step.get("name") == "Validate the locked Rust workspace")
     assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in validate
     assert "-- -D warnings" in validate
@@ -222,7 +228,7 @@ def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, 
     assert invocation["opt"] == "1"
     assert invocation["args"] == [
         "nextest", "run", "--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets",
-        *packages, "--profile", "ci",
+        *packages, "--profile", "ci", *partition,
         "--test-threads", "4", "--retries", "0", "--no-fail-fast",
     ]
 

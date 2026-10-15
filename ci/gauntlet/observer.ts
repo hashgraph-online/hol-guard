@@ -152,8 +152,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
 
 // Each argument is single-quoted with embedded apostrophes written as '\'' (canonical shell argv).
 const QUOTED = String.raw`'(?:[^']|'\\'')+'`;
+// On Windows the sink is Guard's isolated Python running a fixed bootstrap: `python.exe -I -c <bootstrap> guard`.
 const CONTAINED_WRAPPER = new RegExp(
-  `^${QUOTED} 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
+  `^${QUOTED}(?: '-I' '-c' ${QUOTED} 'guard')? 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
     `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}'(?: '--home' ${QUOTED})?$`,
 );
 
@@ -170,7 +171,9 @@ function containedRequest(event: JsonRecord): JsonRecord | undefined {
   try {
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const info = fstatSync(descriptor);
-    if (!info.isFile() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600 || info.size > 1_048_576) {
+    // Windows reports no owner and fixed mode bits; the request directory's ACL is what keeps it private there.
+    const foreign = process.platform !== "win32" && (info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600);
+    if (!info.isFile() || foreign || info.size > 1_048_576) {
       return undefined;
     }
     const request = readFileSync(descriptor);

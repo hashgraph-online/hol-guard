@@ -93,3 +93,35 @@ test("contained wrapper request bytes are captured beside the start event", () =
     start("foreign", wrapper(join(root, "request.json"))),
   ]);
 });
+
+test("the Windows sink's request is captured without POSIX owner bits", () => {
+  const handlers = new Map<string, (event: Record<string, unknown>) => void>();
+  install({ on: (name, callback) => { handlers.set(name, callback); } });
+  const folder = join(root, "hol-guard-contained-test-windows");
+  mkdirSync(folder, { mode: 0o700, recursive: true });
+  const request = join(folder, "request.json");
+  writeFileSync(request, '{"schema":"guard-contained-test-request.v1"}', { mode: 0o644 });
+  const bootstrap = "import sys;sys.path.insert(0, 'C:/g/lib');from codex_plugin_scanner.cli import main";
+  const wrapper = (prefix: string[]) => [...prefix, "execute-contained-test", "--guard-home", "C:\\g",
+    "--workspace", "C:\\w", "--request-file", request, "--request-sha256", "a".repeat(64), "--home", "C:\\h"]
+    .map(value => `'${value.replaceAll("'", "'\\''")}'`).join(" ");
+  const sink = wrapper(["C:\\g\\python.exe", "-I", "-c", bootstrap, "guard"]);
+  const changed = wrapper(["C:\\g\\python.exe", "-c", bootstrap, "guard"]);
+  const start = (id: string, command: string) =>
+    ({ type: "tool_execution_start", toolCallId: id, toolName: "bash", args: { command } });
+  const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { ...platform, value: "win32" });
+  try {
+    handlers.get("tool_execution_start")!(start("windows", sink));
+    handlers.get("tool_execution_start")!(start("not-isolated", changed));
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+  }
+  const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  expect(events.slice(-3)).toEqual([
+    start("windows", sink),
+    { type: "contained_request_capture", toolCallId: "windows",
+      request: Buffer.from('{"schema":"guard-contained-test-request.v1"}').toString("base64") },
+    start("not-isolated", changed),
+  ]);
+});

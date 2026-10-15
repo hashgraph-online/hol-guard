@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.adapters import claude_hook_argv
 from codex_plugin_scanner.guard.adapters import claude_hook_config as config
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
-_LEGACY_TOOL_MATCHER = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+_LEGACY_TOOL_MATCHER = "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 _LEGACY_POST_TOOL_MATCHER = f"{_LEGACY_TOOL_MATCHER}|AskUserQuestion"
 _LEGACY_GROUPS = (
     ("PreToolUse", _LEGACY_TOOL_MATCHER, 30, "HOL Guard is checking this tool use"),

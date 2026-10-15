@@ -157,7 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clippy, test-core, test-command, test-runtime]
+        check: [clippy, test-core, test-command, test-runtime-1, test-runtime-2]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -231,17 +231,23 @@ jobs:
                 exit "$clippy_status"
               fi
               ;;
-            test-core|test-command|test-runtime)
+            test-core|test-command|test-runtime-1|test-runtime-2)
               # Partition before compiling, not merely when running tests.
               # The core partition includes every other (and future) member.
+              nextest_args=(--profile ci)
               case "$CARGO_CHECK" in
                 test-core) packages=(--workspace --exclude guard-command --exclude hol-guard-runtime) ;;
                 test-command) packages=(--package guard-command) ;;
-                test-runtime) packages=(--package hol-guard-runtime) ;;
+                test-runtime-1|test-runtime-2)
+                  packages=(--package hol-guard-runtime)
+                  # nextest partitions after compilation; both jobs retain every
+                  # runtime target, and together run each test exactly once.
+                  nextest_args+=(--partition "hash:${CARGO_CHECK##*-}/2")
+                  ;;
               esac
               nextest_bin="$(python3 scripts/ci/install_nextest.py)"
               PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
-                --profile ci \
+                "${nextest_args[@]}" \
                 --test-threads 4 --retries 0 --no-fail-fast
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;

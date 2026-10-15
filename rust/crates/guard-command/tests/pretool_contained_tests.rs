@@ -540,15 +540,17 @@ fn build_requires_bounded_outputs_and_never_direct_execution() {
 }
 
 #[test]
-fn windows_contains_only_claude_code_python_runs() {
-    let contained = classify("claude-code", "python3 test_calc.py");
-    assert_eq!(contained.decision, "deny");
-    if cfg!(target_os = "macos") || cfg!(windows) {
-        assert_eq!(contained.minimum_action, "sandbox-required");
-        assert_eq!(
-            contained.reason_code,
-            "native_python_eval_readonly_containment_required"
-        );
+fn windows_contains_only_python_runs_from_posix_shell_harnesses() {
+    for harness in ["claude-code", "omp", "pi"] {
+        let contained = classify(harness, "python3 test_calc.py");
+        assert_eq!(contained.decision, "deny", "{harness}");
+        if cfg!(target_os = "macos") || cfg!(windows) {
+            assert_eq!(contained.minimum_action, "sandbox-required", "{harness}");
+            assert_eq!(
+                contained.reason_code, "native_python_eval_readonly_containment_required",
+                "{harness}"
+            );
+        }
     }
     if cfg!(windows) {
         let resolved = classify(
@@ -562,8 +564,8 @@ fn windows_contains_only_claude_code_python_runs() {
         );
         for (harness, command) in [
             ("codex", "python3 test_calc.py"),
-            ("omp", "python3 test_calc.py"),
             ("claude-code", "node -e 'console.log(1)'"),
+            ("omp", "node -e 'console.log(1)'"),
             ("claude-code", "python3 -m pytest"),
         ] {
             let result = classify(harness, command);

@@ -578,7 +578,7 @@ fn evaluate_envelope(
             evaluate_pre_tool_with_execution_context(
                 &CommandModelRequestV1 {
                     command: command.to_owned(),
-                    dialect: "posix".to_owned(),
+                    dialect: tools::command_dialect(signals.tool_name.as_deref()).to_owned(),
                     transport: "shell_string".to_owned(),
                     extraction_provenance: "pre-tool-generic".to_owned(),
                 },
@@ -792,12 +792,13 @@ fn evaluate_envelope(
         )
     });
     // macOS runs every credential-filtering profile. Windows runs only the
-    // Python profile, in an AppContainer, for Claude Code, whose Git Bash shell
-    // runs the POSIX-quoted sink. Only harnesses that rewrite into the contained
-    // sink get the receipt; others would see a bare deny.
+    // Python profile, in an AppContainer, for harnesses whose shell runs the
+    // POSIX-quoted sink: Claude Code (Git Bash) and the Pi family (a bash
+    // implementation). Only harnesses that rewrite into the contained sink get
+    // the receipt; others would see a bare deny.
     if (cfg!(target_os = "macos")
         || (cfg!(windows)
-            && harness == "claude-code"
+            && matches!(harness, "claude-code" | "omp" | "oh-my-pi" | "pi")
             && contained_test_reason == Some("native_python_eval_readonly_containment_required")))
         && event == "PreToolUse"
         && matches!(
