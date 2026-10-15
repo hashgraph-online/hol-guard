@@ -185,7 +185,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
     assert 'test "${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in sonar_setup
-    assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
+    assert "vars.SONAR_CI_ENABLED == 'true'" in jobs["sonar-context"]["if"]
+    assert set(jobs["sonar"]["needs"]) == {"sonar-context", "sonar-rust-coverage", "native-workspace", "coverage"}
+    assert "needs.sonar-rust-coverage.result == 'success'" in jobs["sonar"]["if"]
+    assert "needs.native-workspace.result == 'success'" in jobs["sonar"]["if"]
+    assert "needs.coverage.result == 'success'" in jobs["sonar"]["if"]
     gate = jobs["ci-python-312"]
     assert gate["name"] == "ci (3.12)"
     assert gate["if"] == "always()"

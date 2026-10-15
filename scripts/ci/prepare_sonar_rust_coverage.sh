@@ -7,6 +7,14 @@ cd "$repo_root/rust"
 toolchain="$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
 coverage_version="0.6.21"
 source "$repo_root/scripts/ci/sonar_rust_profile.sh"
+partition="${1:-all}"
+case "$partition" in
+    all) packages=(--workspace) ;;
+    core) packages=(--workspace --exclude guard-command --exclude hol-guard-runtime) ;;
+    command) packages=(--package guard-command) ;;
+    runtime) packages=(--package hol-guard-runtime) ;;
+    *) echo "Unknown Rust coverage partition" >&2; exit 64 ;;
+esac
 # LLVM locks and merges concurrent processes into bounded per-binary pools.
 # PID-specific profiles make nextest subprocesses repeat large coverage maps.
 export LLVM_PROFILE_FILE_NAME="guard-%8m.profraw"
@@ -17,12 +25,22 @@ fi
 nextest_bin="$(python "$repo_root/scripts/ci/install_nextest.py")"
 
 report="$repo_root/coverage-reports/rust-lcov.info"
+if [[ "$partition" != all ]]; then
+    report="$repo_root/coverage-reports/$partition/rust-lcov.info"
+fi
 mkdir -p "$(dirname "$report")"
 # Neither a restored report nor profiles from another commit can qualify this run.
 rm -f "$report"
 cargo +"$toolchain" llvm-cov clean --workspace
-PATH="$nextest_bin:$PATH" cargo +"$toolchain" llvm-cov nextest --locked --workspace --all-targets \
-    --profile ci --test-threads 4 --retries 0 --no-fail-fast --lcov --output-path "$report"
+PATH="$nextest_bin:$PATH" cargo +"$toolchain" llvm-cov nextest --locked "${packages[@]}" --all-targets \
+    --profile ci --test-threads 4 --retries 0 --no-fail-fast --no-report
+# Include workspace dependency coverage from each group's tests, not just the
+# selected package: runtime tests also exercise command and core libraries.
+cargo +"$toolchain" llvm-cov report --locked --lcov --output-path "$report"
 test -s "$report"
 grep -q '^SF:.*\.rs$' "$report"
 grep -q '^DA:' "$report"
+if [[ "$partition" != all ]]; then
+    cd "$repo_root"
+    python -m scripts.ci.rust_coverage_reports bind "$partition"
+fi

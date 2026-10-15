@@ -51,45 +51,39 @@ runs:
     shell: bash
     run: bash scripts/ci/setup_sonar_rust.sh
     if: inputs.has-token == 'true'
-  - name: Cache Rust analysis dependencies
-    uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+  - name: Select complete source-bound Rust coverage
+    id: rust-coverage-selection
+    if: inputs.has-token == 'true'
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    run: uv run --no-sync python -m scripts.ci.rust_coverage_reports select
+  - name: Download complete Rust coverage partitions
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
     with:
-      workspaces: rust
-      # Profile overrides are set after restore. Bind the compiler recipe,
-      # not scheduling/report options that cannot affect dependency builds.
-      shared-key: sonar-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
-      # A failing quality gate must not leave the next run to rebuild cold.
-      cache-on-failure: true
-      save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      artifact-ids: ${{ steps.rust-coverage-selection.outputs.artifact-ids }}
+      path: rust-coverage-data
     if: inputs.has-token == 'true'
-  - name: Provision bubblewrap for the Linux workspace sandbox tests
-    # The coverage run executes the same Rust tests as the workspace job.
-    # Without bubblewrap 0.10+ the sandbox reports the host as unavailable,
-    # and tests that expect a contained run see a review instead.
-    uses: ./.github/actions/setup-bubblewrap
-    if: inputs.has-token == 'true'
-  - name: Provision the checked test linker
-    if: inputs.has-token == 'true'
+  - name: Merge verified Rust coverage with LCOV
     shell: bash
     run: |
-      if ! command -v ld.lld >/dev/null 2>&1; then
+      if ! command -v lcov >/dev/null 2>&1; then
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends lld
+        sudo apt-get install -y --no-install-recommends lcov
       fi
-  - name: Install instrumented compiler cache
-    uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+      uv run --no-sync pytest --noconftest -q tests/test_rust_coverage_reports.py
+      uv run --no-sync python -m scripts.ci.rust_coverage_reports merge
+    if: inputs.has-token == 'true'
+  - name: Preserve merged Rust coverage evidence
+    if: inputs.has-token == 'true'
+    uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     with:
-      version: v0.18.0
-    if: inputs.has-token == 'true'
-  - name: Generate current-checkout Rust coverage
-    shell: bash
-    run: bash scripts/ci/prepare_sonar_rust_coverage.sh
-    env:
-      SCCACHE_GHA_ENABLED: 'on'
-      SCCACHE_GHA_VERSION: sonar-rust-checked-v1
-      SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
-      SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
-    if: inputs.has-token == 'true'
+      name: rust-coverage-merged-${{ github.run_attempt }}
+      path: |
+        coverage-reports/rust-lcov.info
+        rust-coverage-selection.json
+      if-no-files-found: error
+      retention-days: 7
   - name: Wait for successful current-attempt strict Clippy report
     id: clippy-selection
     shell: bash

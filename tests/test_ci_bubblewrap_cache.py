@@ -148,5 +148,5 @@ def test_cache_is_exact_and_only_trusted_main_can_publish() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     for job in ("native-workspace", "native-gates"):
         assert any(step.get("uses") == "./.github/actions/setup-bubblewrap" for step in workflow["jobs"][job]["steps"])
-    sonar = yaml.safe_load((ROOT / ".github/actions/ci-job-sonar/action.yml").read_text())
+    sonar = yaml.safe_load((ROOT / ".github/actions/prepare-rust-coverage/action.yml").read_text())
     assert any(step.get("uses") == "./.github/actions/setup-bubblewrap" for step in sonar["runs"]["steps"])
