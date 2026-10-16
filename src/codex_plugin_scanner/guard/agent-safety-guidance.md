@@ -29,6 +29,10 @@ Use these command-shaping rules to reduce avoidable Guard reviews while preservi
   the source and destination separately, then create one link without replacing an existing path.
 - For package work, state the package manager, workspace, package, and version explicitly. Use the repository
   lockfile flow and never pipe a downloaded installer into a shell.
+- Install npm dependencies without lifecycle scripts: `npm install --ignore-scripts`, or
+  `npm ci --ignore-scripts` when a lockfile is committed. Guard lets a script-free install of registry
+  packages continue. An install that runs package install scripts, pulls a git dependency, or uses a
+  lockfile older than npm 7 waits for review.
 - For remote work, state the host and destination explicitly. Keep file transfer, remote execution, and local
   cleanup as separate actions.
 - Never read secret files, credential stores, or environment files on your own judgment. Being told

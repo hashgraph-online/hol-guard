@@ -192,6 +192,8 @@ pub(crate) fn command_shape(
     }
     let linked = super::worktree_writes::linked_worktree_common_dir(workspace).is_some();
     let temp_fixed = !reach::rebinds_private_temp(&model.normalized_text);
+    // `~` is the private home the launcher seeds only while nothing rebinds it.
+    let home_fixed = !model.normalized_text.contains("HOME");
     for (index, segment) in model.segments.iter().enumerate() {
         // A bare private assignment starts no program.
         if segment.executable.is_none() && cd::assigns_private(model, segment) {
@@ -221,6 +223,7 @@ pub(crate) fn command_shape(
                 name,
                 workspace,
                 temp_fixed,
+                home_fixed,
                 script.as_ref().map(|(operand, _)| operand.as_str()),
             )
             || (matches!(name, "cd" | "pushd")

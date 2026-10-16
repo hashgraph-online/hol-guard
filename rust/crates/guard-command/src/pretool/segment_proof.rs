@@ -113,7 +113,12 @@ pub(crate) fn benign_command_segments(
                         | "file"
                         | "npm"
                         | "jq"
-                );
+                )
+                // A file operand prints a source line on a syntax error, so it
+                // gets the same session proof as `cat`.
+                || (matches!(basename, "node" | "nodejs")
+                    && segment.arguments.len() == 2
+                    && matches!(segment.arguments[0].as_str(), "--check" | "-c"));
             let ls_has_explicit_target = basename != "ls" || {
                 let mut skip_next = false;
                 let mut found = false;
@@ -387,6 +392,12 @@ pub(super) fn exact_safe_segment_with_context(
         "python" | "python3" | "node" | "nodejs" => {
             super::safe_scalar::version_probe_arguments(basename, &segment.arguments)
                 || pure_expression::safe_inline_expression(basename, &segment.arguments)
+                || (matches!(basename, "node" | "nodejs")
+                    && super::safe_scalar::node_syntax_check_arguments(
+                        &segment.arguments,
+                        segment.pipeline_index > 0,
+                        context,
+                    ))
         }
         _ => false,
     }
