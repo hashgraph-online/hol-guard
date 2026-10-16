@@ -20,12 +20,15 @@
 //! approval is held for the relay to claim (see `mcp_relay_decide_claim.rs`).
 //!
 //! A call queued under `safe-alternative` blocks (`mcp_relay_decide_queue.rs`).
+//! A call queued under `ask` writes its approval request and blocks on it
+//! (`mcp_relay_decide_ask.rs`), for the harnesses whose native prompt is a
+//! pure function of the decision.
 //! Under `mode = "observe"` a call that needs approval forwards and records
 //! what Guard would have done (`mcp_relay_decide_observe.rs`).
 //! Every other call defers, and the relay answers it with the proxy's
 //! fail-closed "no native decision" response: remote, bundle or unverifiable
-//! saved policy, a call that needs a prompt (the `ask` mode), and any
-//! binding, lane or evidence failure.
+//! saved policy, a call that needs an inline elicitation the resident cannot
+//! raise, and any binding, lane or evidence failure.
 
 use crate::approval_proof_op::Disposition;
 use crate::mcp_tool_policy_decision::Decision;
@@ -49,6 +52,8 @@ pub(crate) const MCP_RELAY_DECIDE_FEATURE: &str = "mcp-relay-decide-v1";
 const RESULT_SCHEMA: &str = "guard-mcp-relay-decide-result.v1";
 /// The harnesses whose MCP proxy the relay replaces.
 const RELAY_HARNESSES: [&str; 4] = ["codex", "copilot", "cursor", "opencode"];
+/// `blocked_request_mode`, under which the queue route asks for approval.
+const ASK_MODE: &str = "ask";
 
 const HARNESS_UNSUPPORTED: &str = "mcp_relay_harness_unsupported";
 const RUNTIME_SUPERSEDED: &str = "mcp_relay_runtime_superseded";
@@ -78,6 +83,9 @@ pub(crate) struct McpRelayDecideRequestV1 {
     #[serde(default)]
     pub(crate) path: Option<String>,
     pub(crate) launcher_home: String,
+    /// The proxy's working directory, which a queued approval row records.
+    #[serde(default)]
+    pub(crate) cwd: Option<String>,
     pub(crate) catalog_state: String,
     /// The `tools/call` params, which the daemon projects into evidence.
     pub(crate) params: Value,
@@ -150,6 +158,16 @@ enum Routed {
         policy_action: String,
         redaction_level: String,
     },
+    /// The queue route's approval-center block under `ask`, whose request row
+    /// is already written (`mcp_relay_decide_ask.rs`).
+    Asked {
+        policy_action: String,
+        message: String,
+        data: Value,
+        /// The written request and the desktop notice the store op returned,
+        /// for the drain to raise the approval surface from.
+        approval: Value,
+    },
     /// Forward and record what Guard would have stopped (`mode = "observe"`).
     ObserveForward,
 }
@@ -220,20 +238,28 @@ fn decide(
         .map_err(|_| store::STORE_UNREADABLE)?;
     let mut resolved = resolve(request, &admitted, connection.as_deref())?;
     drop(snapshot);
+    let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
     let proxy = crate::mcp_tool_policy_proxy::proxy_payload(
         &McpToolPolicyProxyInputV1 {
             catalog_state: request.catalog_state.clone(),
             mode: resolved.mode.clone(),
             package_present: false,
-            // Both only steer a call that is neither allowed nor blocked,
-            // which is answered only under `safe-alternative`, where the
-            // proxy consults neither; any other mode defers its queue or
-            // observe-forward route.
-            asks_for_approval: false,
+            asks_for_approval: asks,
+            // The relay cannot elicit from the client, and the harnesses it
+            // serves never offer the proxy an inline prompt either; a client
+            // that would be prompted inline is left to the Python proxy.
             inline_available: false,
             tool_name: request.build.tool_name.clone(),
         },
         &resolved.decision,
+        // What `_allow_after_native_prompt` answers for this harness, so the
+        // route takes the prompt's own answer instead of naming the
+        // `native_prompt` fact the resident cannot gather. The proxy asks it
+        // about the decision the route names, gate and override included.
+        |tool| {
+            asks.then(|| ask::native_prompt_allows(&request.build.harness, tool))
+                .flatten()
+        },
     );
     let (proxy, downgraded) = observe::downgrade(proxy, &resolved.mode, &resolved.decision)?;
     let routed = route(&proxy, downgraded.as_ref().unwrap_or(&resolved.decision))?;
@@ -276,8 +302,16 @@ fn decide(
         }
         Routed::Queue { policy_action } => {
             let mode = admitted.binding.review.blocked_request_mode.as_deref();
-            let level = resolved.redaction_level.as_deref();
-            let routed = queue::safe_alternative(mode, level, policy_action)?;
+            let routed = match mode {
+                // The row is written before the block is answered, as the
+                // proxy queues it before it replies to the client.
+                Some(ASK_MODE) => ask::queue(request, &admitted, &resolved, policy_action)?,
+                _ => queue::safe_alternative(
+                    mode,
+                    resolved.redaction_level.as_deref(),
+                    policy_action,
+                )?,
+            };
             settle(request, &resolved, routed, None, policy_store)
         }
         routed => settle(request, &resolved, routed, None, policy_store),
@@ -356,6 +390,7 @@ fn settle(
     let tool = &request.build.tool_name;
     let server = &request.build.server_name;
     let mut review = None;
+    let mut approval = None;
     let (blocked, outcome, source, policy_action) = match routed {
         Routed::Forward {
             source,
@@ -403,6 +438,20 @@ fn settle(
                 policy_action,
             )
         }
+        Routed::Asked {
+            policy_action,
+            message,
+            data,
+            approval: raised,
+        } => {
+            approval = Some(raised);
+            (
+                Some(Answer::Block { message, data }),
+                "block",
+                ask::APPROVAL_PENDING_SOURCE.to_owned(),
+                policy_action,
+            )
+        }
         Routed::Claim { .. } | Routed::Queue { .. } | Routed::ObserveForward => {
             return Err(ROUTE_UNSUPPORTED)
         }
@@ -426,6 +475,10 @@ fn settle(
     // The silent inbox row the drain writes after the block receipt.
     if let Some(review) = review {
         evidence["review"] = review;
+    }
+    // The approval-center surface the proxy raises once the row is written.
+    if let Some(approval) = approval {
+        evidence["approval"] = approval;
     }
     match blocked {
         // The relay commits the ticket once the child answered the forward.
@@ -477,6 +530,10 @@ fn identity(
     })
 }
 
+#[path = "mcp_relay_decide_ask.rs"]
+mod ask;
+#[path = "mcp_relay_decide_ask_row.rs"]
+mod ask_row;
 #[path = "mcp_relay_decide_claim.rs"]
 mod claim;
 pub(crate) use claim::claim;

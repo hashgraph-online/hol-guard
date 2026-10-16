@@ -11,9 +11,11 @@
 //! queued evidence, as for any other block.
 //!
 //! Under `ask` the proxy first consults the native prompt and the client's
-//! inline elicitation, and the resident can answer neither: the route names
-//! the `native_prompt` need and the call defers. A binding whose configs do
-//! not agree on the mode or the receipt redaction level defers too.
+//! inline elicitation; the resident answers the native prompt for the one
+//! harness whose answer is a pure function of the decision and queues the
+//! call's approval request itself (`mcp_relay_decide_ask.rs`). A binding
+//! whose configs do not agree on the mode or the receipt redaction level
+//! defers either way.
 
 use super::{Routed, ROUTE_UNSUPPORTED};
 use crate::blocked_request_mode::safe_alternative_reason;

@@ -440,7 +440,7 @@ impl StoreShape<'_> {
 mod query;
 
 #[path = "hook_direct_saved_consume.rs"]
-mod consume;
+pub(crate) mod consume;
 
 #[path = "hook_direct_saved_portable.rs"]
 mod portable;

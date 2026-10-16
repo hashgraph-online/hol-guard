@@ -27,6 +27,7 @@ pub(crate) use environment::{
 };
 pub(crate) use git::{
     repository_routes_verified as git_repository_routes_verified,
+    rooted_hooks_inert as git_rooted_hooks_inert,
     runs_configured_program as git_runs_configured_program,
     subcommand_settles_uncertainty as git_subcommand_settles_uncertainty,
 };

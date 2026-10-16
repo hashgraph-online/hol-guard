@@ -71,6 +71,8 @@ pub(crate) struct RelayFacts {
     /// The proxy's own `PATH`, as set.
     path: Option<String>,
     launcher_home: String,
+    /// The relay's working directory, which the proxy reports as its own.
+    cwd: Option<String>,
 }
 
 /// The process facts the proxy reads from its own environment.

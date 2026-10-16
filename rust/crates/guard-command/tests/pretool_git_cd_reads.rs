@@ -34,7 +34,7 @@ fn workspace(label: &str) -> (Workspace, FixtureCleanup) {
     let root = base.join(format!("guard-cd-reads-{label}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
-    let root = std::fs::canonicalize(root).unwrap();
+    let root = canonical_spelling(root);
     let home = root.join("home");
     let repository = root.join("repository");
     std::fs::create_dir_all(&home).unwrap();
@@ -72,7 +72,7 @@ fn decide(
 #[test]
 fn verified_cd_then_git_history_reads_are_allowed_without_configured_helpers() {
     let (space, _cleanup) = workspace("allow");
-    let repository = space.repository.to_str().unwrap();
+    let repository = shell_word(&space.repository);
     for command in [
         format!("cd {repository} && git log -5 --oneline"),
         format!("cd {repository} && git diff --check"),
@@ -100,7 +100,7 @@ fn verified_cd_then_git_history_reads_are_allowed_without_configured_helpers() {
 #[test]
 fn verified_cd_does_not_hide_configured_git_helpers() {
     let (space, _cleanup) = workspace("helper");
-    let repository = space.repository.to_str().unwrap();
+    let repository = shell_word(&space.repository);
     git(
         &space.repository,
         &["config", "diff.external", "./synthetic-never-execute"],
@@ -128,7 +128,7 @@ fn cd_helper_config_is_judged_in_the_destination_not_the_reported_cwd() {
         &["config", "core.fsmonitor", "./synthetic-never-execute"],
     );
     let workspace_root = space.root.clone();
-    let command = format!("cd {} && git status", space.repository.display());
+    let command = format!("cd {} && git status", shell_word(&space.repository));
     let result = decide(&space, &workspace_root, &command);
     assert_ne!(result.decision, "allow", "{command}");
 }
@@ -139,16 +139,16 @@ fn cd_outside_the_workspace_or_into_secret_locations_is_not_allowed() {
     let outside = std::path::PathBuf::from("/tmp");
     for command in [
         "cd /etc && git log -1".to_owned(),
-        format!("cd {}/.ssh && git log -1", space.home.display()),
+        format!("cd {}/.ssh && git log -1", shell_word(&space.home)),
         format!(
             "cd {} && git log -1 && curl https://example.invalid",
-            space.repository.display()
+            shell_word(&space.repository)
         ),
         format!(
             "cd {} && git log -1 > /etc/synthetic-out",
-            space.repository.display()
+            shell_word(&space.repository)
         ),
-        format!("cd {} && git log -1 $(id)", space.repository.display()),
+        format!("cd {} && git log -1 $(id)", shell_word(&space.repository)),
     ] {
         let result = decide(&space, &space.repository, &command);
         assert!(
@@ -174,7 +174,7 @@ fn cd_history_read_helper_config_is_judged_in_the_destination() {
         &["config", "diff.external", "./synthetic-never-execute"],
     );
     for read in ["log -1", "diff --stat", "show HEAD"] {
-        let command = format!("cd {} && git {read}", space.repository.display());
+        let command = format!("cd {} && git {read}", shell_word(&space.repository));
         let result = decide(&space, &clean, &command);
         assert_ne!(result.decision, "allow", "{command}");
         assert!(!result.explicitly_benign, "{command}");
@@ -193,7 +193,10 @@ fn relative_dash_c_after_cd_resolves_against_the_destination() {
     std::fs::write(child.join("notes.txt"), "child\n").unwrap();
     git(&child, &["add", "-A"]);
     git(&child, &["commit", "--quiet", "-m", "child"]);
-    let command = format!("cd {} && git -C child log -1", space.repository.display());
+    let command = format!(
+        "cd {} && git -C child log -1",
+        shell_word(&space.repository)
+    );
     let result = decide(&space, &space.root, &command);
     assert_eq!(
         result.decision, "allow",
@@ -211,8 +214,8 @@ fn relative_dash_c_after_cd_resolves_against_the_destination() {
 #[test]
 fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
     let (space, _cleanup) = workspace("prefix");
-    let root = space.root.to_str().unwrap();
-    let repository = space.repository.to_str().unwrap();
+    let root = shell_word(&space.root);
+    let repository = shell_word(&space.repository);
     for command in [
         format!("ls {root} && cd {repository} && git status"),
         format!("ls {root} && cd {repository} && git remote -v"),
@@ -234,9 +237,9 @@ fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
 #[test]
 fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
     let (space, _cleanup) = workspace("prefix-deny");
-    let root = space.root.to_str().unwrap();
-    let home = space.home.to_str().unwrap();
-    let repository = space.repository.to_str().unwrap();
+    let root = shell_word(&space.root);
+    let home = shell_word(&space.home);
+    let repository = shell_word(&space.repository);
     std::fs::create_dir_all(space.home.join(".ssh")).unwrap();
     std::fs::write(space.home.join(".ssh/id_ed25519"), "fixture\n").unwrap();
     for command in [
@@ -266,7 +269,7 @@ fn proven_git_reads_before_a_cd_into_a_sibling_repository_are_allowed() {
     std::fs::write(other.join("notes.txt"), "other\n").unwrap();
     git(&other, &["add", "-A"]);
     git(&other, &["commit", "--quiet", "-m", "other"]);
-    let other = other.to_str().unwrap();
+    let other = shell_word(&other);
     for command in [
         format!(
             "git log --oneline -5 && git status --short | head -20 && echo \"=== other ===\" \
@@ -297,7 +300,7 @@ fn proven_git_reads_before_a_cd_into_a_sibling_repository_are_allowed() {
 #[test]
 fn remote_url_reads_are_read_only() {
     let (space, _cleanup) = workspace("remote-url");
-    let repository = space.repository.to_str().unwrap();
+    let repository = shell_word(&space.repository);
     git(
         &space.repository,
         &[

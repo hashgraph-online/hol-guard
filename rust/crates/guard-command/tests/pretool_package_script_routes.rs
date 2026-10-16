@@ -178,3 +178,74 @@ fn a_direct_build_keeps_the_receipt_only_for_an_accepted_output() {
     }
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// A `node_modules` link to another directory in the workspace still names a
+/// local tool, which is the entry the sink resolves.
+#[test]
+fn a_linked_node_modules_inside_the_workspace_keeps_the_tool_route() {
+    let root = root();
+    let project = project(&root, "linked", json!({"lint": "eslint src"}), &[]);
+    let store = project.join("store/node_modules/eslint/bin");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::write(store.join("eslint.js"), "").unwrap();
+    std::os::unix::fs::symlink(
+        project.join("store/node_modules"),
+        project.join("node_modules"),
+    )
+    .unwrap();
+    let result = classify(&project, "codex", "npm run lint");
+    assert_ne!(result.decision, "allow");
+    if cfg!(target_os = "macos") {
+        assert_eq!(result.reason_code, NODE_TOOL);
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A Vite config that names an output the sink cannot read stays on the
+/// generic route. A literal output keeps the build receipt only when that
+/// directory would pass the sink's admissibility checks.
+#[test]
+fn an_unverifiable_vite_config_output_does_not_take_the_build_receipt() {
+    let root = root();
+    let project = project(&root, "configured", json!({"build": "vite build"}), &[VITE]);
+    std::fs::write(
+        project.join("vite.config.js"),
+        "export default { outDir: process.env.OUT }\n",
+    )
+    .unwrap();
+    let unverifiable = classify(&project, "omp", "npm run build");
+    assert_ne!(unverifiable.decision, "allow");
+    assert_ne!(unverifiable.reason_code, NODE_BUILD);
+    std::fs::write(
+        project.join("vite.config.js"),
+        "export default { outDir: 'site' }\n",
+    )
+    .unwrap();
+    let literal = classify(&project, "omp", "npm run build");
+    assert_ne!(literal.decision, "allow");
+    if cfg!(target_os = "macos") {
+        assert_eq!(literal.reason_code, NODE_BUILD);
+    }
+    std::fs::create_dir_all(project.join("site")).unwrap();
+    std::fs::write(project.join("site/LOGO.PNG"), "").unwrap();
+    let cased = classify(&project, "omp", "npm run build");
+    assert_ne!(cased.decision, "allow");
+    if cfg!(target_os = "macos") {
+        assert_eq!(cased.reason_code, NODE_BUILD);
+    }
+    std::fs::write(project.join("site/.js"), "").unwrap();
+    let bare_suffix = classify(&project, "omp", "npm run build");
+    assert_ne!(bare_suffix.decision, "allow");
+    assert_ne!(bare_suffix.reason_code, NODE_BUILD);
+    std::fs::create_dir_all(project.join("server")).unwrap();
+    std::fs::write(project.join("server/package.json"), "{}\n").unwrap();
+    std::fs::write(
+        project.join("vite.config.js"),
+        "export default { outDir: 'server/public' }\n",
+    )
+    .unwrap();
+    let through_a_package = classify(&project, "omp", "npm run build");
+    assert_ne!(through_a_package.decision, "allow");
+    assert_ne!(through_a_package.reason_code, NODE_BUILD);
+    let _ = std::fs::remove_dir_all(root);
+}

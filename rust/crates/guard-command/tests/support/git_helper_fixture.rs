@@ -8,6 +8,35 @@ impl Drop for FixtureCleanup {
     }
 }
 
+/// The canonical path as an agent would spell it. On Windows,
+/// `std::fs::canonicalize` returns the `\\?\` extended-length form, which no
+/// harness sends, in which `/` is not a separator and which Git for Windows
+/// cannot create directories under; tests resolve links and 8.3 short names
+/// but drop that prefix.
+pub fn canonical_spelling(path: impl AsRef<std::path::Path>) -> std::path::PathBuf {
+    let canonical = std::fs::canonicalize(path).unwrap();
+    let Some(text) = canonical.to_str() else {
+        return canonical;
+    };
+    if let Some(share) = text.strip_prefix(r"\\?\UNC\") {
+        return std::path::PathBuf::from(format!(r"\\{share}"));
+    }
+    text.strip_prefix(r"\\?\")
+        .map_or(canonical.clone(), std::path::PathBuf::from)
+}
+
+/// A path as an unquoted shell word. Git Bash strips unquoted backslashes,
+/// so Guard never takes a backslash spelling as proof of a path; Windows
+/// agents write the forward-slash form instead.
+pub fn shell_word(path: &std::path::Path) -> String {
+    let text = path.to_str().unwrap();
+    if cfg!(windows) {
+        text.replace('\\', "/")
+    } else {
+        text.to_owned()
+    }
+}
+
 // Cargo injects dynamic-loader settings into the test process. Model the
 // synthetic hook caller explicitly rather than inheriting the build harness.
 pub fn evaluate_pre_tool_envelope_with_context(

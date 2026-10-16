@@ -32,6 +32,10 @@ use super::super::executable_basename;
 use super::super::PathContext;
 
 #[cfg(unix)]
+#[path = "package_script_vite.rs"]
+mod package_script_vite;
+
+#[cfg(unix)]
 const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
 #[cfg(unix)]
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
@@ -170,8 +174,12 @@ fn build_output_allowed(arguments: &[String], roots: Option<(&Path, &Path)>) -> 
         }
     }
     let Some(output) = output.filter(|output| !output.is_empty()) else {
-        // The default `dist` or the config's own output, as before.
-        return true;
+        // No command-line directory: the default `dist`, or the config's
+        // literal output. A config that names an output the sink cannot
+        // verify must not take the narrow receipt.
+        return roots.is_none_or(|(directory, workspace)| {
+            package_script_vite::vite_config_output_is_verifiable(directory, workspace)
+        });
     };
     let output = Path::new(output);
     if output
@@ -348,6 +356,10 @@ fn tool_script(
     }
     let relative = format!("node_modules/{entry}");
     let modules = nearest(directory, workspace, &relative).join("node_modules");
+    // `node_modules` may be a link to another directory in the workspace.
+    // Compare the entry with that directory after both are canonical, which
+    // is what the sink's path check does.
+    let modules = std::fs::canonicalize(&modules).ok()?;
     let resolved = std::fs::canonicalize(modules.join(entry)).ok()?;
     (resolved.is_file() && resolved.starts_with(&modules)).then_some(reason)
 }

@@ -4,15 +4,29 @@ use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use serde_json::{json, Value};
 
 fn view(mode: &str, redaction: Option<&str>) -> Value {
-    let mut harness = json!({"config": {"mode": mode}, "hash_config": {}});
+    view_for("codex", mode, redaction)
+}
+
+fn view_for(harness: &str, mode: &str, redaction: Option<&str>) -> Value {
+    let mut bound = json!({"config": {"mode": mode}, "hash_config": {}});
     if let Some(level) = redaction {
-        harness["receipt_redaction_level"] = json!(level);
+        bound["receipt_redaction_level"] = json!(level);
     }
     json!({
         "schema": "guard-mcp-relay-view.v1",
-        "harnesses": {"codex": harness},
+        "harnesses": {harness: bound},
         "extension_layers": [],
     })
+}
+
+/// An `ask` binding for opencode, whose approval request the resident writes.
+fn asking(mode: &str) -> DirectLaneBinding {
+    let mut binding = decidable(DirectLaneBinding::empty_for_tests());
+    binding.mcp_relay = Some(view_for("opencode", mode, Some("full")));
+    binding.review.blocked_request_mode = Some("ask".to_owned());
+    binding.review.approval_center_origin = Some("http://127.0.0.1:8787".to_owned());
+    binding.review.review_oauth_source = Some("device".to_owned());
+    binding
 }
 
 /// A binding the resident decides every call of: an enforcing view with a
@@ -70,6 +84,51 @@ fn a_prompting_config_hands_the_session_off() {
     unbound.mcp_relay = Some(view("enforce", None));
     assert_eq!(
         session_decidable(&unbound, &home, "codex"),
+        Err("mcp_relay_session_redaction_unbound")
+    );
+}
+
+#[test]
+fn an_asking_opencode_session_is_decidable() {
+    let home = no_store_home("ask");
+    assert_eq!(
+        session_decidable(&asking("enforce"), &home, "opencode"),
+        Ok(())
+    );
+}
+
+#[test]
+fn an_asking_session_hands_off_what_the_resident_cannot_queue() {
+    let home = no_store_home("ask-off");
+    // The proxy prompts before it observes a call.
+    assert_eq!(
+        session_decidable(&asking("observe"), &home, "opencode"),
+        Err("mcp_relay_session_review_mode")
+    );
+    // Every other relay harness answers the native prompt from its base class.
+    let mut cursor = asking("enforce");
+    cursor.mcp_relay = Some(view_for("cursor", "enforce", Some("full")));
+    assert_eq!(
+        session_decidable(&cursor, &home, "cursor"),
+        Err("mcp_relay_session_review_mode")
+    );
+    // The center the request links and the source its row is written with.
+    let mut no_center = asking("enforce");
+    no_center.review.approval_center_origin = None;
+    assert_eq!(
+        session_decidable(&no_center, &home, "opencode"),
+        Err("mcp_relay_session_review_mode")
+    );
+    let mut no_oauth = asking("enforce");
+    no_oauth.review.review_oauth_source = None;
+    assert_eq!(
+        session_decidable(&no_oauth, &home, "opencode"),
+        Err("mcp_relay_session_review_mode")
+    );
+    let mut unbound = asking("enforce");
+    unbound.mcp_relay = Some(view_for("opencode", "enforce", None));
+    assert_eq!(
+        session_decidable(&unbound, &home, "opencode"),
         Err("mcp_relay_session_redaction_unbound")
     );
 }

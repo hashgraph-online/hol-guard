@@ -135,7 +135,7 @@ fn launch_target(payload: &Map<String, Value>) -> Result<String, HookDirectDefer
 
 /// The daemon's storage gate, held shared until the spend commits. A gate
 /// the daemon has not created yet, or one held exclusively, defers.
-pub(super) fn storage_gate(guard_home: &Path) -> Result<File, HookDirectDefer> {
+pub(crate) fn storage_gate(guard_home: &Path) -> Result<File, HookDirectDefer> {
     let gate = open_no_follow(&guard_home.join(STORAGE_GATE_FILE_NAME))
         .ok_or(HookDirectDefer::SavedDecision)?;
     FileExt::try_lock_shared(&gate).map_err(|_| HookDirectDefer::SavedDecision)?;
@@ -179,7 +179,7 @@ fn open_no_follow(_path: &Path) -> Option<File> {
 /// `_repair_store_permissions`: the store files stay owner-only, including a
 /// journal this connection created.
 #[cfg(unix)]
-pub(super) fn repair_store_permissions(guard_home: &Path) {
+pub(crate) fn repair_store_permissions(guard_home: &Path) {
     use std::os::unix::fs::PermissionsExt;
     for suffix in STORE_FILE_SUFFIXES {
         let path = guard_home.join(format!("{STORE_FILE_NAME}{suffix}"));
@@ -192,7 +192,7 @@ pub(super) fn repair_store_permissions(guard_home: &Path) {
 /// The daemon's `_set_private_mode` leaves Windows store files alone: they
 /// inherit the private Guard home's DACL.
 #[cfg(not(unix))]
-pub(super) fn repair_store_permissions(_guard_home: &Path) {}
+pub(crate) fn repair_store_permissions(_guard_home: &Path) {}
 
 #[cfg(test)]
 #[path = "hook_direct_saved_consume_tests.rs"]

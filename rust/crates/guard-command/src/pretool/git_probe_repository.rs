@@ -45,6 +45,9 @@ pub(in crate::pretool) fn repository_inert(
         None => return super::outside_repository(base, deadline)?.then_some(true),
     };
     let (directories, hook) = paths.split_at(2);
+    if !directories.iter().all(|directory| directory.is_absolute()) {
+        return None;
+    }
     let mut guarded: Vec<PathBuf> = directories.to_vec();
     guarded.push(directories[1].join("config"));
     if let Some(parent) = hook.first().and_then(|hook| hook.parent()) {
@@ -53,7 +56,68 @@ pub(in crate::pretool) fn repository_inert(
     if !guarded.iter().all(|path| owned_where_shared(path, &roots)) {
         return Some(false);
     }
+    if let Some(hook) = hook.first().filter(|hook| drive_relative_root(hook)) {
+        return null_hook_inert(base, directories, hook, deadline);
+    }
     Some(hook.iter().all(|hook| hook_inert(hook)))
+}
+
+/// Git for Windows answers the hook below `core.hooksPath=/dev/null` without
+/// a drive and resolves it against the root of the directory the hook runs
+/// in: the working directory, a `-C` target, the worktree or, for a bare
+/// repository, the Git directory. Only that spelling is proven, and only
+/// while every one of those roots and every drive is local and holds no
+/// hook. Any other rooted path without a drive stays unproven.
+fn null_hook_inert(
+    base: &Command,
+    directories: &[PathBuf],
+    hook: &Path,
+    deadline: Instant,
+) -> Option<bool> {
+    let null = Path::new("/dev/null");
+    if hook.parent() != Some(null) || hook.file_name()? != "post-index-change" {
+        return None;
+    }
+    let mut directory = match base.get_current_dir() {
+        Some(directory) => directory.to_path_buf(),
+        None => std::env::current_dir().ok()?,
+    };
+    let mut roots = vec![directory.clone()];
+    let mut arguments = base.get_args();
+    while let Some(argument) = arguments.next() {
+        if argument == "-C" {
+            // Git Bash rewrites a rooted target without a drive to a
+            // directory of its own, so this probe cannot follow it.
+            let target = Path::new(arguments.next()?);
+            if drive_relative_root(target) {
+                return None;
+            }
+            directory = directory.join(target);
+            roots.push(directory.clone());
+        }
+    }
+    roots.extend_from_slice(directories);
+    roots.extend(toplevel(base, deadline)?);
+    let roots = roots.iter().map(PathBuf::as_path).collect::<Vec<_>>();
+    let hooks = ["post-index-change"];
+    Some(crate::command_compatibility::git_rooted_hooks_inert(
+        "dev\\null",
+        &hooks,
+        &roots,
+        deadline,
+    ))
+}
+
+/// The worktree a hook would run in: `Some(None)` outside any worktree.
+fn toplevel(base: &Command, deadline: Instant) -> Option<Option<PathBuf>> {
+    let mut command = super::copy_command(base)?;
+    command.args(["--no-pager", "rev-parse", "--show-toplevel"]);
+    let (status, bytes) = super::output(&mut command, deadline, PATH_LIMIT)?;
+    if !status.success() {
+        return Some(None);
+    }
+    let mut paths = absolute_lines(&bytes, 1)?;
+    paths.pop().filter(|path| path.is_absolute()).map(Some)
 }
 
 /// The absolute Git and common directories, then the `post-index-change` hook
@@ -91,7 +155,13 @@ fn temporary(base: &Command, roots: &[PathBuf]) -> bool {
         .is_none_or(|directory| roots.iter().any(|root| directory.starts_with(root)))
 }
 
-/// One absolute path per line, exactly `count` of them.
+/// A rooted path without a drive (`\dev\null`), which only Windows has.
+fn drive_relative_root(path: &Path) -> bool {
+    cfg!(windows) && path.has_root() && !path.is_absolute()
+}
+
+/// One absolute path per line, exactly `count` of them. A drive-relative
+/// root is kept for the hook path; the caller requires drives on the rest.
 fn absolute_lines(bytes: &[u8], count: usize) -> Option<Vec<PathBuf>> {
     let text = std::str::from_utf8(bytes).ok()?;
     let text = text.strip_suffix('\n').unwrap_or(text);
@@ -99,8 +169,11 @@ fn absolute_lines(bytes: &[u8], count: usize) -> Option<Vec<PathBuf>> {
         .split('\n')
         .map(|line| {
             let line = line.strip_suffix('\r').unwrap_or(line);
-            (!line.is_empty() && !line.contains(['\r', '\0']) && Path::new(line).is_absolute())
-                .then(|| PathBuf::from(line))
+            let path = Path::new(line);
+            (!line.is_empty()
+                && !line.contains(['\r', '\0'])
+                && (path.is_absolute() || drive_relative_root(path)))
+            .then(|| PathBuf::from(line))
         })
         .collect::<Option<Vec<_>>>()?;
     (paths.len() == count).then_some(paths)

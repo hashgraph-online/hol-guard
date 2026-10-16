@@ -23,7 +23,7 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
-    let home = std::fs::canonicalize(&root).unwrap();
+    let home = fixture::canonical_spelling(&root);
     let workspace = home.join("project");
     let sibling = home.join("project-fix");
     for directory in [&workspace, &sibling] {
@@ -152,7 +152,7 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
-    let workspace = std::fs::canonicalize(&root).unwrap().join("project");
+    let workspace = fixture::canonical_spelling(&root).join("project");
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::create_dir_all(workspace.join(".git")).unwrap();
     std::fs::write(workspace.join("src/a.ts"), "export const a = 1;\n").unwrap();

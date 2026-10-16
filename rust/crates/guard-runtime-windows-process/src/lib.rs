@@ -14,6 +14,8 @@ use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+mod drives;
+#[cfg(windows)]
 mod known_folders;
 #[cfg(windows)]
 mod secure_storage;
@@ -40,6 +42,9 @@ pub use windows::{
     terminate_process, terminate_process_verified, wait_for_process_exit, FileId, PathStat,
     PrivateDirectoryBinding,
 };
+
+#[cfg(windows)]
+pub use drives::local_drive_letters;
 
 #[cfg(windows)]
 pub use known_folders::trusted_install_roots;
@@ -72,6 +77,12 @@ pub fn wait_for_process_exit(_process_id: u32, _timeout: std::time::Duration) ->
         io::ErrorKind::Unsupported,
         "Windows process support is unavailable",
     ))
+}
+
+/// Only Windows has drive letters.
+#[cfg(not(windows))]
+pub fn local_drive_letters() -> Option<Vec<char>> {
+    None
 }
 
 #[cfg(not(windows))]

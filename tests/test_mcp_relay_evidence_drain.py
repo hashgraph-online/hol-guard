@@ -179,6 +179,29 @@ def test_a_record_with_unknown_or_missing_fields_is_dropped(
     assert calls == []
 
 
+@pytest.mark.parametrize("field", ["approval_center_url", "review_url", "request_id"])
+def test_an_approval_the_agent_could_not_act_on_drops_the_record(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], field: str
+) -> None:
+    approval = {
+        "approval_center_url": "http://127.0.0.1:8787",
+        "review_url": "http://127.0.0.1:8787/requests/req-1",
+        "request_id": "req-1",
+        "workspace": None,
+        "notices": [],
+        field: "   ",
+    }
+    record = _record(
+        outcome="block",
+        policy_action="review",
+        decision_source="approval-center-pending",
+        approval=approval,
+    )
+
+    assert not record_mcp_relay_evidence(object(), tmp_path, record)
+    assert calls == []
+
+
 def test_a_recorder_failure_drops_the_record(
     tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], monkeypatch: pytest.MonkeyPatch
 ) -> None:

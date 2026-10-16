@@ -490,7 +490,7 @@ pub(crate) mod local_cli;
 #[path = "hook_direct_pi.rs"]
 mod pi;
 #[path = "hook_direct_saved_decision.rs"]
-mod saved_decision;
+pub(crate) mod saved_decision;
 #[path = "hook_direct_workspace.rs"]
 mod workspace;
 
