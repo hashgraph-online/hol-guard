@@ -214,12 +214,11 @@ impl CompiledNativeCommandControls {
                         named.extend(named_words(&source));
                     }
                 }
-                // Backgrounding leaves no segments, so a module launch such as
-                // `python3 -m http.server` looks like a script that was never
-                // read. The module name is already in the command.
-                None if command.uncertainty_reason.as_deref()
-                    == Some("background_job_not_yet_supported")
-                    && !interpreter_launch_reads_a_file(shell) => {}
+                // Backgrounding or a redirect leaves no segments, so a module
+                // launch such as `python3 -m http.server` looks like a script
+                // that was never read. The module name is already in the
+                // command.
+                None if !interpreter_launch_reads_a_file(shell) => {}
                 None => return None,
             }
         }
@@ -335,12 +334,31 @@ fn literal_redirects_only(text: &str) -> bool {
 /// A backgrounded pipeline stays out of the review floor. The pipe check
 /// names a remote-code or exfiltration attack before this runs; anything it
 /// cannot classify, including a benign pipe, keeps the evaluation failure.
+/// A pipeline after the last backgrounded job runs in the foreground, as the
+/// `curl -fsS http://localhost:8080/ | grep title` that checks a server just
+/// started does.
 fn background_pipeline(text: &str) -> bool {
     let preserve_backslash = cfg!(windows);
-    match crate::parser_segments::split_pipelines_including_background(text, preserve_backslash) {
-        Ok(segments) => segments.iter().any(|segment| segment.pipeline_index > 0),
-        Err(_) => text.contains('|'),
-    }
+    let Ok(segments) =
+        crate::parser_segments::split_pipelines_including_background(text, preserve_backslash)
+    else {
+        return text.contains('|');
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let last_job = segments
+        .iter()
+        .filter(|segment| {
+            let mut rest = chars[segment.end..]
+                .iter()
+                .skip_while(|c| c.is_whitespace());
+            rest.next() == Some(&'&') && rest.next() != Some(&'&')
+        })
+        .map(|segment| segment.end)
+        .max()
+        .unwrap_or(chars.len());
+    segments
+        .iter()
+        .any(|segment| segment.pipeline_index > 0 && segment.start < last_job)
 }
 
 /// Whether shell text redirects, substitutes or sets the environment of a
@@ -349,7 +367,7 @@ fn moves_data(literal: &str) -> bool {
     literal.contains(['<', '>', '`'])
         || literal.contains("$(")
         || command_words(literal).any(|word| {
-            is_assignment(word)
+            (is_assignment(word) && !saves_job_pid(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
@@ -757,6 +775,21 @@ fn command_words(literal: &str) -> impl Iterator<Item = &str> {
             }
             leading
         })
+}
+
+/// `server=$!`: the process ID of the job just backgrounded, saved so a later
+/// `kill $server` stops it. A number moves no data, unless the name is one the
+/// shell or loader reads.
+fn saves_job_pid(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, value)| {
+        value == "$!"
+            && !matches!(
+                name,
+                "PATH" | "IFS" | "HOME" | "CDPATH" | "ENV" | "BASH_ENV" | "PS4" | "PROMPT_COMMAND"
+            )
+            && !name.starts_with("LD_")
+            && !name.starts_with("DYLD_")
+    })
 }
 
 fn is_assignment(word: &str) -> bool {

@@ -89,6 +89,7 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod postgres_reads;
+mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;
