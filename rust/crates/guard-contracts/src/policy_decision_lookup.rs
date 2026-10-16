@@ -22,6 +22,9 @@ pub const POLICY_DECISION_LOOKUP_REQUEST_SCHEMA: &str = "guard-policy-decision-l
 pub const POLICY_DECISION_LOOKUP_RESULT_SCHEMA: &str = "guard-policy-decision-lookup-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const POLICY_DECISION_LOOKUP_FEATURE: &str = "policy-decision-lookup-v1";
+/// Capability advertised when a runtime saved-decision read also composes the
+/// runtime hook's `saved_reuse` verdict (`RuntimeSavedLookupV1::reuse`).
+pub const RUNTIME_SAVED_REUSE_FEATURE: &str = "runtime-saved-reuse-v1";
 
 /// Largest canonical request serialization the op will accept.
 pub const POLICY_DECISION_LOOKUP_MAX_BYTES: usize = 512 * 1024;
@@ -116,6 +119,22 @@ pub struct RuntimeSavedLookupV1 {
     pub legacy: RuntimeSavedProbeV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alias: Option<RuntimeSavedProbeV1>,
+    /// Also compose the runtime hook's `saved_reuse` verdict on the lookup's
+    /// connection; the answer is returned as `saved_reuse`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse: Option<RuntimeSavedReuseV1>,
+}
+
+/// The current-request inputs of a runtime hook's `saved_reuse` verdict. The
+/// stored decision, its token check and the miss diagnosis come from the
+/// lookup itself.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeSavedReuseV1 {
+    pub current_action: Value,
+    /// The context token of a fresh Cursor native shell allowance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_native_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -70,6 +70,8 @@ _LOGGER = logging.getLogger(__name__)
 APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON = "approval_reuse_integrity_failure"
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
+# The runtime saved-decision lookup also answers the hook's ``saved_reuse``.
+RUNTIME_SAVED_REUSE_FEATURE = "runtime-saved-reuse-v1"
 _RESIDENT_VERDICT_ATTEMPTS = 6
 _DEGRADED_AUTHORITY_REVISION = -1
 
@@ -1130,14 +1132,16 @@ class StorePolicyMixin:
             request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
         return request
 
-    def send_policy_decision_lookup(self, request: dict[str, object]) -> Any:
+    def send_policy_decision_lookup(
+        self, request: dict[str, object], *, required_feature: str = POLICY_DECISION_LOOKUP_FEATURE
+    ) -> Any:
         """Run one ``policy_decision_lookup`` resident request; failure is terminal."""
         response = _resident_request(
             operation="policy_decision_lookup",
             request=request,
             guard_home=self.guard_home,
             timeout_seconds=10.0,
-            required_feature=POLICY_DECISION_LOOKUP_FEATURE,
+            required_feature=required_feature,
             response_schema="guard-policy-decision-lookup-result.v1",
         )
         if response is None:

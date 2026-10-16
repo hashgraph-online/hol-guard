@@ -172,7 +172,7 @@ fn bounded_read_target_with_brackets(
 
 /// A drive, verbatim, or root-relative spelling does not resolve against the
 /// working directory.
-fn rooted(value: &str) -> bool {
+pub(super) fn rooted(value: &str) -> bool {
     std::path::Path::new(value).components().any(|component| {
         matches!(
             component,

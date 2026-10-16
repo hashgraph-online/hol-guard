@@ -9,7 +9,8 @@
 //! (`_runtime_stored_policy_decision`). A legacy decision replaces the current
 //! one only when strictly more severe. When neither matched, the Claude alias
 //! of a legacy `claude-code:` artifact is probed directly. Nothing here
-//! consumes a one-shot approval or writes the store.
+//! consumes a one-shot approval or writes the store. With `reuse`, the hook's
+//! `saved_reuse` verdict is composed on the same connection.
 
 use guard_contracts::{PolicyDecisionLookupRequestV1, RuntimeSavedLookupV1, RuntimeSavedProbeV1};
 use serde_json::{json, Value};
@@ -22,6 +23,8 @@ use crate::policy_decision_lookup_op::{
     runtime_tool_action_portable_match_context,
 };
 use crate::policy_lookup_groups::remembered_rules_disabled;
+use crate::policy_lookup_reuse::diagnose_miss;
+use crate::policy_runtime_saved_reuse::saved_reuse_answer;
 
 const ERR_INVALID: &str = "native_policy_decision_lookup_invalid";
 const IGNORED: &str = "ignored_local_integrity";
@@ -44,7 +47,7 @@ pub(crate) fn evaluate(
     saved: &RuntimeSavedLookupV1,
 ) -> Result<Value, String> {
     let connection = open_lookup_connection(&request.store_path)?;
-    compose(saved, |probe| {
+    let mut composed = compose(saved, |probe| {
         let mut lookup = request.clone();
         lookup.probe_groups = None;
         lookup.harness = probe.harness.to_owned();
@@ -54,7 +57,16 @@ pub(crate) fn evaluate(
         lookup.publisher = probe.publisher.map(str::to_owned);
         lookup.runtime_exact_match_context = probe.context.map(str::to_owned);
         evaluate_non_consuming(&lookup, &connection)
-    })
+    })?;
+    if let Some(reuse) = &saved.reuse {
+        // The request names the current probe, so a miss is diagnosed for the
+        // current hash, workspace and publisher on this connection.
+        let answer = saved_reuse_answer(reuse, &saved.current.artifact_hash, &composed, || {
+            diagnose_miss(request, &connection)
+        });
+        set(&mut composed, "saved_reuse", answer);
+    }
+    Ok(composed)
 }
 
 /// `{lookup, decision}`: the lookup whose decision was kept (carrying the

@@ -428,6 +428,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PackagePolicyResolve(request) => {
                 crate::package_policy_resolve_op::evaluate_package_policy_resolve(&request)
             }
+            ResidentOperationV1::PackageProtectFinalize(request) => {
+                crate::package_protect_finalize_op::evaluate_package_protect_finalize(&request)
+            }
             ResidentOperationV1::PackagePosture(request) => {
                 crate::package_posture_op::evaluate_package_posture(&request)
             }
@@ -563,6 +566,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageApprovalHash(request) => Some(&request.guard_home),
         ResidentOperationV1::PackagePolicyResolve(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageProtectFinalize(request) => Some(&request.guard_home),
         ResidentOperationV1::PackagePosture(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAuditProjection(request) => Some(&request.guard_home),
         ResidentOperationV1::WorkspaceInventory(request) => Some(&request.guard_home),

@@ -392,7 +392,13 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
     assert scheduled["include_alpha"] is True
 
 
-def test_alpha_update_channel_requires_and_accepts_approval_proof(tmp_path: Path) -> None:
+def test_alpha_update_channel_requires_and_accepts_approval_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The accepted change answers with the live update status, which would
+    # ask PyPI for the newest alpha inside the 5-second request budget.
+    monkeypatch.setattr(update_commands, "_latest_alpha_version_from_pypi", lambda _current: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: None)
     store = _store(tmp_path)
     update_approval_gate_settings(
         store.guard_home,

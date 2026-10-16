@@ -159,6 +159,8 @@ mod package_authority;
 pub use package_authority::*;
 mod package_audit_projection;
 pub use package_audit_projection::*;
+mod package_protect_finalize;
+pub use package_protect_finalize::*;
 mod supply_chain_egress;
 pub use supply_chain_egress::*;
 

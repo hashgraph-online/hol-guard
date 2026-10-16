@@ -17,6 +17,8 @@ from .project_identity import (
 )
 from .store_base import PolicyDecisionLookupResult
 from .store_policy import _DEGRADED_AUTHORITY_REVISION, _most_restrictive_policy_lookup, memory_lookup_candidates
+from .store_policy import POLICY_DECISION_LOOKUP_FEATURE as _LOOKUP
+from .store_policy import RUNTIME_SAVED_REUSE_FEATURE as _SAVED_REUSE
 
 _PROJECT_IDENTITY_CACHE_MAX_ITEMS = 128
 _PROJECT_IDENTITY_CACHE: dict[tuple[str, int], str] = {}
@@ -178,14 +180,16 @@ class StorePortableProjectMemoryMixin:
         current: Mapping[str, object],
         legacy: Mapping[str, object],
         alias: Mapping[str, object] | None,
-    ) -> tuple[PolicyDecisionLookupResult, dict[str, Any] | None]:
+        reuse: Mapping[str, object] | None = None,
+    ) -> tuple[PolicyDecisionLookupResult, dict[str, Any] | None, dict[str, Any] | None]:
         """Resolve a runtime hook evaluation's saved decision in one resident call.
 
         ``current`` and ``legacy`` probe the request hash and the legacy content
         hash with their exact-command and memory candidates; ``alias`` probes
         the Claude alias of a legacy ``claude-code:`` artifact when neither
-        matched. Nothing is consumed. Returns the lookup carrying the trust and
-        integrity evidence, and the decision this artifact may use.
+        matched. Nothing is consumed. Returns the trust and integrity evidence,
+        the decision this artifact may use and, with ``reuse``, the resident's
+        ``saved_reuse`` (a degraded store builds only its query).
         """
         evidence = self.policy_lookup_evidence()
         if evidence.degraded_trust_status is not None:
@@ -195,7 +199,8 @@ class StorePortableProjectMemoryMixin:
                 "trust_status": evidence.degraded_trust_status,
                 "authority_revision": _DEGRADED_AUTHORITY_REVISION,
             }
-            return degraded, None
+            query = None if reuse is None else {"query": self._degraded_saved_reuse_query(current, reuse)}
+            return degraded, None, query
         probes = {"current": current, "legacy": legacy, **({"alias": alias} if alias is not None else {})}
         runtime = {
             name: {**probe, "portable_workspace": self._portable_project_workspace(_text(probe.get("workspace")))}
@@ -211,9 +216,29 @@ class StorePortableProjectMemoryMixin:
             runtime_exact_match_context=_text(current.get("exact_match_context")),
             consume_one_shot=False,
         )
-        request["probe_groups"] = {"groups": [], "runtime": runtime}
-        payload = self.send_policy_decision_lookup(request)
-        return payload["lookup"], payload["decision"]
+        request["probe_groups"] = {"groups": [], "runtime": {**runtime, **({"reuse": reuse} if reuse else {})}}
+        payload = self.send_policy_decision_lookup(request, required_feature=_SAVED_REUSE if reuse else _LOOKUP)
+        return payload["lookup"], payload["decision"], None if reuse is None else payload.get("saved_reuse")
+
+    def _degraded_saved_reuse_query(self, current: Mapping[str, object], reuse: Mapping[str, object]) -> dict[str, Any]:
+        """The ``saved_reuse`` query of a store that serves no saved decision."""
+        from .runtime.approval_context import approval_context_tokens_validation_reason as validate
+
+        token, keys = reuse.get("cursor_native_token"), ("artifact_id", "artifact_hash", "workspace", "publisher")
+        reason, stored_hash = (
+            self.approval_reuse_diagnostic(str(current["harness"]), *(_text(current.get(key)) for key in keys))
+            if token is None
+            else (None, None)
+        )
+        return {
+            "current_action": reuse["current_action"],
+            **dict.fromkeys(("stored_action", "stored_artifact_hash", "stored_validation_reason"), None),
+            **dict.fromkeys(("stored_present", "integrity_failure"), False),
+            "cursor_native_present": token is not None,
+            "cursor_validation_reason": None if token is None else validate(token, current["artifact_hash"]),
+            "diagnostic_reason": reason,
+            "diagnostic_stored_hash": stored_hash,
+        }
 
     def mcp_policy_lookup_input(
         self,

@@ -110,13 +110,4 @@ def test_archive_override_variants_never_allow_when_resident_is_down(monkeypatch
 def test_allow_paths_still_raise_when_resident_is_down(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(compose, "ensure_resident_prerequisite", lambda _home: False)
     with pytest.raises(compose.NativePackageEvaluationComposeError):
-        lsc.compose_package_evaluation("saved_allow", _Evaluation(), **FACTS["saved_allow"])
-
-
-def test_identity_current_policy_rewrite_skips_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
-    def boom(*_a: object, **_k: object) -> None:
-        raise AssertionError("resident must not be consulted")
-
-    monkeypatch.setattr(compose, "ensure_resident_prerequisite", boom)
-    evaluation = _Evaluation(policy_action="review")
-    assert lsc._package_evaluation_with_current_policy_action(evaluation, current_action="review") is evaluation
+        compose.compose_package_evaluation("saved_allow", _Evaluation(), **FACTS["saved_allow"])
