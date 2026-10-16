@@ -631,6 +631,7 @@ mod supply_chain_cloud_vectors_tests;
 mod supply_chain_egress;
 mod supply_chain_eval_rounds;
 mod supply_chain_eval_seams;
+mod supply_chain_eval_transport;
 mod totp;
 #[cfg(windows)]
 mod windows_readonly;

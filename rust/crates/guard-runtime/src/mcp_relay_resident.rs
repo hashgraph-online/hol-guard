@@ -237,9 +237,30 @@ impl ResidentRelayAuthority {
                 return None;
             }
         }
-        let output = send(&fresh, payload, deadline).ok()?;
+        // The fresh resident is held whether or not its send landed: it is the
+        // one this round went to, so it is the one a caller reading the lane's
+        // runtime records the round against. A send that failed because the
+        // resident is gone fails the same way on the next call, which
+        // rediscovers from there.
+        let output = send(&fresh, payload, deadline);
         self.resident = Some(fresh);
-        Some(output)
+        output.ok()
+    }
+}
+
+/// A package evaluation borrows the same lane a decision travels on: the
+/// resident is already discovered, its direct-lane identity already checked,
+/// and an evaluation's rounds are requests like any other.
+impl crate::supply_chain_eval_transport::ResidentLane for ResidentRelayAuthority {
+    fn exchange_until(&mut self, payload: &[u8], deadline: Instant) -> Option<Vec<u8>> {
+        let guard_home = PathBuf::from(&self.facts.as_ref()?.guard_home);
+        ResidentRelayAuthority::exchange_until(self, &guard_home, payload, deadline)
+    }
+
+    fn runtime_sha256(&self) -> Option<String> {
+        self.resident
+            .as_ref()
+            .map(|resident| resident.state.runtime_sha256.clone())
     }
 }
 
