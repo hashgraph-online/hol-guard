@@ -27,7 +27,10 @@ use crate::CanonicalCommandV1;
 
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_shapes.rs"]
+mod shapes;
 use link_makers::creates_links;
+use shapes::{data_heredocs, without_lookups, without_plain_awk};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
 const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
@@ -155,8 +158,17 @@ impl CompiledNativeCommandControls {
         if !reviewable_structure(command) {
             return None;
         }
-        let text = &command.normalized_text;
-        let shell = shell_text(text);
+        // A lookup such as `command -v doctl` only prints a path: it never
+        // runs the program it names, so it owns nothing.
+        let looked = without_lookups(&command.normalized_text);
+        let text = &looked;
+        let heredocs = data_heredocs(text);
+        let shell = match &heredocs {
+            Some((shell, _)) => shell.clone(),
+            None => shell_text(text).to_owned(),
+        };
+        let shell = without_plain_awk(&shell);
+        let shell = shell.as_str();
         let interpreted = named_words(&joined_quotes(shell));
         if shell.contains("$'")
             || shell.contains("$\"")
@@ -230,11 +242,29 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
                 || literal_redirects_only(&command.normalized_text)
         }
         Some("command_redirect_not_yet_supported") => {
-            input_heredoc(&command.normalized_text)
-                || literal_redirects_only(&command.normalized_text)
+            let text = without_lookups(&command.normalized_text);
+            input_heredoc(&text)
+                || literal_redirects_only(&text)
+                || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell))
+        }
+        // A lookup in a substitution is the only one that does not run a
+        // program, so a command whose substitutions are all lookups reads
+        // like any other compound command.
+        Some("command_substitution_not_yet_supported") => {
+            let text = without_lookups(&command.normalized_text);
+            !text.contains("$(")
+                && !text.contains('`')
+                && !text.contains("<<")
+                && plain_after_heredocs(&text)
         }
         _ => false,
     }
+}
+
+/// A command with its heredocs removed that moves no data, or only to
+/// literal paths.
+fn plain_after_heredocs(shell: &str) -> bool {
+    !moves_data(&unquoted_literal(shell)) || literal_redirects_only(shell)
 }
 
 /// Every redirect names a literal path or feeds `cat` a quoted heredoc, and
