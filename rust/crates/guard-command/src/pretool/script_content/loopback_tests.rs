@@ -184,6 +184,10 @@ fn a_loopback_base_bound_once_may_be_fetched() {
         ports("const base = 'http://localhost:4173/app';\nconst page = await fetch(base, { method: 'HEAD' });\nconsole.log(page.status);\n"),
         set(&[4173])
     );
+    assert_eq!(
+        ports("const base = 'http://localhost:4173'\nconst page = await fetch(base)\nconsole.log(page.status)\n"),
+        set(&[4173])
+    );
     for source in [
         // A binding that can change, or one read anywhere but `fetch`.
         TODO_SMOKE.replace("const base=", "let base="),
@@ -206,6 +210,12 @@ fn a_loopback_base_bound_once_may_be_fetched() {
         // Text appended to the base that could name another host.
         TODO_SMOKE.replace("fetch(base+\"/api/todos\"", "fetch(base+\"@example.com/\""),
         TODO_SMOKE.replace("fetch(base+\"/api/todos\"", "fetch(base+process.env.SUFFIX"),
+        // A line break that continues the binding's expression.
+        TODO_SMOKE.replace("3000\";", "3000\"\n+ \"@example.com\";"),
+        TODO_SMOKE.replace(
+            "3000\";",
+            "3000\"\n  .replace(\"127.0.0.1\", \"example.com\");",
+        ),
         // Other bases.
         TODO_SMOKE.replace("127.0.0.1:3000", "127.0.0.1:2375"),
         TODO_SMOKE.replace("127.0.0.1:3000", "127.0.0.1"),

@@ -523,6 +523,10 @@ fn awk_ending_at_a_separator_with_a_redirect_does_not_swallow_the_next_command()
     for command in [
         "doctl registry repository list-manifests r | awk '{print}' ;</dev/null sh evil.sh",
         "doctl registry repository list-manifests r | awk '{print}' |>o bash x.sh",
+        "doctl registry repository list-manifests r | awk '{print}' ;2>&1 python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;>&/dev/null python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;>|log python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;< \"in put\" node evil.js",
     ] {
         assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }

@@ -6,8 +6,16 @@
 //! (`-TERM`, `-INT`, `-15`, `-2`, `-SIGTERM`, `-SIGINT`) and a pattern that is
 //! exactly an interpreter and a relative script that exists below the working
 //! directory, such as `node server.js` or `python3 app/main.py`. Those are
-//! the signals a server shuts down on; the pattern only matches a command line
-//! that runs that script.
+//! the signals a server shuts down on.
+//!
+//! `pkill -f` matches the pattern as an unanchored regex against every
+//! command line the user owns, so the stop also reaches the same command run
+//! from another directory, a near name such as `node serverXjs`, and a shell
+//! whose arguments quote the pattern, the agent's own `bash -c` included. The
+//! script check bounds what the agent asked for, not what pkill matches. That
+//! is accepted: the user's own processes get a polite TERM or INT they can
+//! handle, the same stop the agent would send by hand, and a pattern that
+//! names Guard or a harness is refused.
 //!
 //! Still reviewed: `pkill` without `-f`, a bare program such as `pkill node`
 //! or `pkill -f python`, any other option (`-u`, `-U`, `-g`, `-P`, `-t`, `-n`,
