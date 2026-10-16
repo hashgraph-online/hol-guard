@@ -216,7 +216,7 @@ fn named_once(text: &str, name: &str) -> bool {
 fn written_data_masked(text: &str) -> String {
     let heredocs = extract_heredocs(text);
     let masked = mask_heredoc_bodies(text, &heredocs);
-    let operators = heredoc_operators(&masked);
+    let operators = crate::shell_structure::heredoc_operators(&masked);
     if operators != heredocs.len() || redefines_cat(&masked) {
         return text.to_owned();
     }
@@ -279,28 +279,6 @@ fn plain_path(path: &str) -> bool {
         && path
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
-}
-
-/// Top-level `<<` operators, the same ones `extract_heredocs` reads. A quoted
-/// `<<`, as in `echo '<<'`, is text and is not one of them.
-fn heredoc_operators(text: &str) -> usize {
-    let chars: Vec<char> = text.chars().collect();
-    let mut state = ShellScanState::new();
-    let mut index = 0;
-    let mut operators = 0;
-    while index < chars.len() {
-        if state.is_top_level()
-            && chars.get(index) == Some(&'<')
-            && chars.get(index + 1) == Some(&'<')
-            && chars.get(index.wrapping_sub(1)) != Some(&'<')
-            && chars.get(index + 2) != Some(&'<')
-        {
-            operators += 1;
-        }
-        let next = state.advance(&chars, index);
-        index = if next > index { next } else { index + 1 };
-    }
-    operators
 }
 
 /// Whether `text` might make `cat` an alias or a function. A `.` stays inside

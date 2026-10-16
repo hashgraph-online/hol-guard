@@ -124,10 +124,7 @@ pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
 pub(super) fn substitution_spans(command: &str) -> Option<(Vec<ShellCommandSubstitution>, String)> {
     let heredocs = extract_heredocs(command);
     let masked = mask_heredoc_bodies(command, &heredocs);
-    let operators = masked
-        .match_indices("<<")
-        .filter(|(at, _)| !masked[..*at].ends_with('<') && !masked[at + 2..].starts_with('<'))
-        .count();
+    let operators = crate::shell_structure::heredoc_operators(&masked);
     let length = command.chars().count();
     let unsafe_body = heredocs.iter().any(|heredoc| {
         heredoc.body_end >= length
