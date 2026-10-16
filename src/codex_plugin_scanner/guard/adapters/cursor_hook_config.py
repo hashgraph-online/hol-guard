@@ -100,14 +100,16 @@ def _managed_hook_command(
     python_executable: Path | None,
     script_path: Path,
     event_name: str,
+    guard_home: Path | None = None,
 ) -> str:
     script = str(script_path.resolve())
     event_args = ["--cursor-hook-event", event_name]
     interpreter = str(python_executable) if python_executable is not None else isolated_cursor_hook_python()
-    if not interpreter and bool(getattr(sys, "frozen", False)):
-        return render_hook_command([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
-    native_bridge = native_cursor_hook_bridge()
+    native_bridge = native_cursor_hook_bridge(guard_home)
     prefix = [] if native_bridge is None else [str(native_bridge), NATIVE_CURSOR_HOOK_COMMAND]
+    if not interpreter and bool(getattr(sys, "frozen", False)):
+        launcher = [_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args]
+        return render_hook_command([*prefix, *launcher])
     return render_hook_command([*prefix, interpreter or sys.executable, "-I", script, *event_args])
 
 
@@ -169,12 +171,12 @@ def _managed_hook_entry(
     event_name: str,
     python_executable: Path | None = None,
 ) -> dict[str, object]:
-    del context
     entry: dict[str, object] = {
         "command": _managed_hook_command(
             python_executable=python_executable,
             script_path=script_path,
             event_name=event_name,
+            guard_home=context.guard_home,
         ),
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
@@ -414,8 +416,8 @@ def live_cursor_hooks_use_frozen_control_plane(hooks: object) -> bool:
     """Return whether live Cursor config still boots the frozen control plane."""
 
     for command in managed_cursor_hook_commands(hooks):
-        tokens = split_cursor_hook_command(command)
-        if tokens is not None and len(tokens) >= 2 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+        tokens = client_hook_tokens(split_cursor_hook_command(command) or ())
+        if len(tokens) >= 2 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
             return True
     return False
 

@@ -319,18 +319,18 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        # Claude and Codex permission dialogs have their own passthrough
-        # routes; other harnesses' permission events still reach the native
-        # fail-safe.
+        # Claude, Codex, Copilot, Devin and ZCode permission dialogs have
+        # their own passthrough routes; other harnesses' permission events
+        # still reach the native fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="copilot",
+        default_harness="kimi",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_hook_event_unavailable"
-    assert result["behavior"] == "deny"
+    assert result["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     grok_session = worker.review_http_payload(
         payload={"hookEventName": "session_start"},
         params={},
@@ -342,26 +342,31 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     assert grok_session == {}
 
 
-def test_hook_worker_leaves_codex_permission_requests_to_codex_prompt(
+def test_hook_worker_leaves_permission_requests_to_the_harness_prompt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def unexpected_review(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("Codex permission requests must not reach the edge")
+        raise AssertionError("passthrough permission requests must not reach the edge")
 
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         unexpected_review,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    for event_name in ("PermissionRequest", "permission_request"):
+    cases = [
+        (harness, event_name)
+        for harness in ("codex", "copilot", "devin", "zcode")
+        for event_name in ("PermissionRequest", "permission_request", "permissionRequestV2")
+    ]
+    for harness, event_name in cases:
         result = worker.review_http_payload(
             payload={"hook_event_name": event_name, "tool_name": "Bash", "tool_input": {"command": "pwd"}},
             params={},
-            default_harness="codex",
+            default_harness=harness,
             home_dir=tmp_path / "home",
             guard_home=tmp_path / "guard-home",
             workspace=tmp_path / "workspace",
         )
-        # No decision: Codex shows its normal approval prompt.
+        # No decision: the harness shows its normal approval prompt.
         assert result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}

@@ -30,9 +30,13 @@ pub(in crate::pretool) fn carry_settings(
         return false;
     }
     let home = context.home_dir.map(Path::new);
-    let Some(workspace) = context
-        .cwd
-        .and_then(|cwd| workspace_admissible(Path::new(cwd), home))
+    // After a `cd` into a sibling repository the sandbox starts at that
+    // repository's root, as it does for the command without its settings.
+    let root = sibling_root(command, context);
+    let Some(workspace) = root
+        .as_deref()
+        .or(context.cwd.map(Path::new))
+        .and_then(|cwd| workspace_admissible(cwd, home))
     else {
         return false;
     };
@@ -56,6 +60,18 @@ pub(in crate::pretool) fn carry_settings(
         mark_contained(projected);
     }
     admitted
+}
+
+/// The sibling repository root the sink runs `command` from, if any.
+fn sibling_root(command: &str, context: PathContext<'_>) -> Option<std::path::PathBuf> {
+    let model = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()?;
+    super::sibling::sibling_run(&model, context).map(|(root, _)| root)
 }
 
 #[cfg(unix)]

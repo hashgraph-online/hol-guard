@@ -91,7 +91,9 @@ pub(crate) fn evaluate_mcp_tool_policy_decide_request(
             if let (Some(input), Some(object)) = (&request.proxy, payload.as_object_mut()) {
                 object.insert(
                     "proxy".to_owned(),
-                    crate::mcp_tool_policy_proxy::proxy_payload(input, &decision),
+                    // The proxy answers `_allow_after_native_prompt` itself, so
+                    // the route names the fact and the caller supplies it.
+                    crate::mcp_tool_policy_proxy::proxy_payload(input, &decision, |_| None),
                 );
             }
             result(request, digest, "ok", "ok", Some(payload))

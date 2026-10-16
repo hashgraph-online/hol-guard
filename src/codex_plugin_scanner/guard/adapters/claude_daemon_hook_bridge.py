@@ -399,6 +399,9 @@ def _run_local_fallback(
     *,
     deadline: float | None = None,
 ) -> str:
+    if getattr(sys, "frozen", False):
+        # A frozen Guard runs no cold evaluator: without a daemon answer the hook fails closed.
+        return _degraded(f"{reason}; no daemon answered", data)
     timeout_seconds = _remaining_seconds(deadline, cap=_FALLBACK_TIMEOUT_SECONDS)
     if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
         return _degraded(f"{reason}; fallback exhausted the hook deadline", data)

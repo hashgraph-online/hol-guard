@@ -28,6 +28,7 @@ from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 MCP_PROXY_DECISION_FEATURE = "mcp-proxy-decision-v1"
+MCP_PROXY_ARCHIVE_VERIFY_FEATURE = "mcp-proxy-archive-verify-v1"
 _REQUEST_SCHEMA = "guard-mcp-proxy-decision-request.v1"
 _RESULT_SCHEMA = "guard-mcp-proxy-decision-result.v1"
 _OPERATION = "mcp_proxy_decide"
@@ -46,7 +47,9 @@ def _fail(code: str) -> NativeMcpProxyDecisionError:
     return NativeMcpProxyDecisionError(code)
 
 
-def _round_trip(query: Mapping[str, object], guard_home: Path) -> tuple[dict[str, Any], str, str]:
+def _round_trip(
+    query: Mapping[str, object], guard_home: Path, required_feature: str
+) -> tuple[dict[str, Any], str, str]:
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"mcp-proxy-decision-{uuid4().hex}",
@@ -63,7 +66,7 @@ def _round_trip(query: Mapping[str, object], guard_home: Path) -> tuple[dict[str
         request=request,
         guard_home=guard_home,
         timeout_seconds=_TIMEOUT_SECONDS,
-        required_feature=MCP_PROXY_DECISION_FEATURE,
+        required_feature=required_feature,
         response_schema=_RESULT_SCHEMA,
         max_request_bytes=_MAX_REQUEST_BYTES,
         record_success=False,
@@ -96,12 +99,13 @@ def native_mcp_proxy_decide(
     *,
     guard_home: Path,
     supply: Mapping[str, Supplier] | None = None,
+    required_feature: str = MCP_PROXY_DECISION_FEATURE,
 ) -> dict[str, Any]:
     """Return the resident's payload for ``query``, resolving ``need`` replies."""
 
     current = dict(query)
     for _ in range(_MAX_NEED_ROUNDS):
-        payload, _digest, _request_id = _round_trip(current, guard_home)
+        payload, _digest, _request_id = _round_trip(current, guard_home, required_feature)
         need = payload.get("need")
         if need is None:
             _record_success(guard_home)
@@ -160,35 +164,45 @@ def cursor_fact(cursor: object) -> dict[str, object]:
 
 
 def native_external_archive_bind(
-    params: Mapping[str, Any],
-    replacements: Mapping[str, str],
+    params: Any,
+    downloads: Sequence[Any],
     *,
     requires_binding: bool,
     guard_home: Path,
-) -> dict[str, Any] | None:
-    """The request ``params`` rebound to verified local archives, or ``None``.
+) -> Any | None:
+    """``params`` (request params or a launch argv) bound to verified local archives.
 
-    ``None`` means the resident refused the binding (fail closed). Only the
-    resident's edits are applied, so key order and number formatting of the
-    forwarded request stay what the client sent.
+    The resident re-verifies every download (single-link, read-only regular file
+    with the recorded size and SHA-256) before binding. ``None`` means it refused
+    (fail closed). Only the resident's edits are applied, so key order and number
+    formatting of the forwarded request stay what the client sent.
     """
 
     payload = native_mcp_proxy_decide(
         {
             "check": "external_archive_bind",
             "params": params,
-            "replacements": [[source, local] for source, local in replacements.items()],
+            "downloads": [
+                {
+                    "source_url": download.source_url,
+                    "path": str(download.path),
+                    "size": download.size,
+                    "sha256": download.sha256,
+                }
+                for download in downloads
+            ],
             "requires_binding": requires_binding,
         },
         guard_home=guard_home,
+        required_feature=MCP_PROXY_ARCHIVE_VERIFY_FEATURE,
     )
     kind = payload.get("kind")
     if kind == "unchanged":
-        return dict(params)
+        return deepcopy(params)
     edits = payload.get("edits")
     if kind != "bound" or not isinstance(edits, list):
         return None
-    bound = deepcopy(dict(params))
+    bound = deepcopy(params)
     for edit in edits:
         slot: Any = bound
         *parents, last = edit["path"]

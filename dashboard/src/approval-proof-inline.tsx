@@ -28,6 +28,25 @@ export function approvalProofRequiresPassword(gate: GuardApprovalGatePublicConfi
 
 
 
+export function approvalGateNeedsSetup(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate !== null && gate !== undefined && gate.enabled !== true;
+}
+
+export function ApprovalGateRecommendationNotice() {
+  return (
+    <div
+      role="note"
+      className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3"
+    >
+      <HiMiniKey className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-sm text-slate-600">
+        Set an approval password or MFA so only you can approve blocked actions.
+      </p>
+      <ActionButton href="/settings?section=approval" variant="outline">Set up approval</ActionButton>
+    </div>
+  );
+}
+
 export function ApprovalGateSetupNotice() {
   return (
     <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4">

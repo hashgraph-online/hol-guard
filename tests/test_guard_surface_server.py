@@ -1828,8 +1828,9 @@ class TestGuardSurfaceServer:
             workspace,
             payload_hydrated=False,
             deadline=None,
+            release_capacity=None,
         ) -> None:
-            del default_harness, home_dir, guard_home, workspace, payload_hydrated, deadline
+            del default_harness, home_dir, guard_home, workspace, payload_hydrated, deadline, release_capacity
             nonlocal call_count
             with call_lock:
                 call_count += 1

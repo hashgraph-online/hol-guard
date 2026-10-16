@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-import shutil
+import site
 import sys
+import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,11 @@ class PiExtensionRuntimeOwnership:
     recovery_command: str
     recovery_args: tuple[str, ...]
     recovery_accepts_failure_kind: bool
+    # Windows only: the argv that starts the contained-test sink, and the
+    # directory its request snapshots must sit in. Empty elsewhere, where the
+    # sink starts from the CLI command and requests use the process TEMP.
+    contained_sink_command: tuple[str, ...] = ()
+    contained_request_root: str = ""
 
 
 def resolve_pi_extension_runtime_ownership(
@@ -46,6 +52,7 @@ def resolve_pi_extension_runtime_ownership(
         )
     package_root = package_source.resolve().parents[3]
     python = str(Path(sys.executable).expanduser().absolute())
+    sink_command, request_root = _windows_contained_sink(python, package_root)
     return PiExtensionRuntimeOwnership(
         tuple(guard_args),
         python,
@@ -54,20 +61,37 @@ def resolve_pi_extension_runtime_ownership(
         python,
         ("-I", "-c", _windows_recovery_bootstrap(package_root, guard_home=guard_home, home_dir=home_dir)),
         True,
+        sink_command,
+        request_root,
     )
+
+
+def _windows_contained_sink(python: str, package_root: Path) -> tuple[tuple[str, ...], str]:
+    """The sink argv and request directory Claude Code's Windows route uses.
+    Without a profile Temp directory, protected runs stay denied."""
+    from ..windows_paths import trusted_windows_local_temp
+    from .zcode_contained_tests import contained_sink_command_prefix
+
+    try:
+        request_root = str(trusted_windows_local_temp())
+    except (OSError, RuntimeError, ValueError):
+        return (), ""
+    return (*contained_sink_command_prefix(python, package_root), "guard"), request_root
 
 
 def _stable_guard_cli_command(home_dir: Path) -> str:
     # AppImages prepend a transient mount to PATH. The official user install is
     # durable and must own hooks after the desktop process exits. Managed Core
     # under the Desktop app-data directory is also durable and must outrank a
-    # PATH pipx hol-guard that would start a second, older daemon.
+    # PATH pipx hol-guard that would start a second, older daemon. Past those,
+    # the extension runs the CLI of the runtime installing it, never whichever
+    # hol-guard happens to come first on PATH, which can be another install.
     durable_desktop = durable_desktop_current_hol_guard(home_dir)
     candidates = (
         os.environ.get(_DESKTOP_RUNTIME_OWNER_ENV),
         str(durable_desktop) if durable_desktop is not None else None,
         str(home_dir / ".local" / "bin" / "hol-guard"),
-        shutil.which("hol-guard"),
+        *_installing_runtime_cli_candidates(),
     )
     for candidate in candidates:
         if not candidate:
@@ -90,6 +114,20 @@ def _stable_guard_cli_command(home_dir: Path) -> str:
         if path.is_file() and os.access(path, os.X_OK):
             return str(path)
     return "hol-guard"
+
+
+def _installing_runtime_cli_candidates() -> tuple[str, ...]:
+    """Return the ``hol-guard`` entry points that belong to this interpreter."""
+    if getattr(sys, "frozen", False):
+        return (sys.executable,)
+    scripts = [sysconfig.get_path("scripts")]
+    user_site = site.getusersitepackages() if site.ENABLE_USER_SITE else None
+    if user_site and Path(__file__).resolve().is_relative_to(Path(user_site).resolve()):
+        # A user install's own entry point outranks an unrelated one beside
+        # the interpreter.
+        scripts.insert(0, sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user")))
+    name = "hol-guard.exe" if os.name == "nt" else "hol-guard"
+    return tuple(str(Path(directory) / name) for directory in scripts if directory)
 
 
 def _windows_cli_bootstrap(package_root: Path, *, guard_home: Path, harness: str) -> str:

@@ -208,6 +208,45 @@ fn assignment_prefixes_are_attributed_as_uncertainty_not_evaluation_failure() {
     assert!(compatibility_observations(&model("PATH=/tmp git status"), None).is_err());
 }
 
+/// `OUT=build/report.json && ...` runs no program in its first list item, so
+/// it is attributed like the rest of the chain instead of failing evaluation.
+#[test]
+fn a_list_item_that_only_sets_an_ordinary_variable_runs_no_program() {
+    for command in [
+        "OUT=build/report.json && ls",
+        "TODO_FILE=\"/tmp/t.json\"; ./todo.py list",
+        "A=1 B=2; ls",
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert!(observed.permission_matches.is_empty(), "{command}");
+    }
+    // A later program inherits the value when the session already exported
+    // the name, so it is steered as a prefix would steer it.
+    let push = compatibility_observations(&model("OUT=x; git push origin main"), None).unwrap();
+    assert!(!push.rule_matches.is_empty());
+    assert!(push.rule_matches.iter().all(|item| item.uncertainty));
+    let inert = compatibility_observations(&model("CI=1; git push origin main"), None).unwrap();
+    assert!(!inert.rule_matches.is_empty());
+    assert!(inert.rule_matches.iter().all(|item| !item.uncertainty));
+    for command in [
+        "GIT_DIR=/tmp/x; git push origin main",
+        "GH_HOST=example.com; gh pr view 12",
+        "KUBECONFIG=/tmp/k; kubectl get pods",
+        "LD_PRELOAD=./x.so; ls",
+        "HOME=/tmp; ls",
+        "IFS=,; ls",
+        "PATH=/tmp; ls",
+        "X=$GIT_DIR; ls",
+        "X=${GIT_DIR:=/tmp/x}; git status",
+    ] {
+        assert!(
+            compatibility_observations(&model(command), None).is_err(),
+            "{command}"
+        );
+    }
+}
+
 #[test]
 fn github_api_query_suffix_preserves_merge_authorization() {
     let observed = compatibility_observations(
@@ -279,4 +318,28 @@ fn printing_a_credential_variable_reads_the_secret() {
     assert!(reads_secret("printf '%s' \"${NPM_TOKEN}\""));
     assert!(!reads_secret("echo \"$PATH\""));
     assert!(!reads_secret("echo hello"));
+}
+
+#[test]
+fn a_port_variable_read_names_no_dotenv_file() {
+    let writes_sensitive = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|matched| matched.rule_id == "command.shell-mutations.sensitive-file-write")
+    };
+    for command in [
+        "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(Number(process.env.PORT)||3000)\"",
+        "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(process.env.DEV_PORT||3000)\"",
+    ] {
+        assert!(!writes_sensitive(command), "{command}");
+    }
+    for command in [
+        "node -e \"require('node:http').createServer((q,r)=>r.end(JSON.stringify(process.env))).listen(3000)\"",
+        "node -e \"require('node:http').createServer((q,r)=>r.end(require('fs').readFileSync('.env'))).listen(process.env.PORT)\"",
+        "node -e \"require('fs').promises.writeFile('.env',String(process.env.PORT)).then(()=>0)\"",
+    ] {
+        assert!(writes_sensitive(command), "{command}");
+    }
 }

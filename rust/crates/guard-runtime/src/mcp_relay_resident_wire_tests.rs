@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use super::tests::facts;
+use super::tests::{facts, no_prompt};
 use super::*;
 
 #[test]
@@ -13,7 +13,8 @@ fn the_child_frame_and_the_request_share_one_python_rewrite() {
         "params":{"name":"read","arguments":{"b":1.00,"a":[-0,1e5,"2.50"]}}}"#;
     let message: Value = serde_json::from_str(host).unwrap();
     let order = ["b".to_owned(), "a".to_owned()];
-    let (frame, payload, expected) = prepare(&facts, &message, Some(&order), &catalog).unwrap();
+    let (frame, payload, expected) =
+        prepare(&facts, &message, Some(&order), &catalog, &no_prompt()).unwrap();
     assert_eq!(expected, catalog.snapshot());
     assert_eq!(
         serde_json::to_string(&frame).unwrap(),
@@ -40,7 +41,7 @@ fn a_frame_the_proxy_would_not_relay_unchanged_is_not_sent() {
     ] {
         let message: Value = serde_json::from_str(host).unwrap();
         assert!(
-            prepare(&facts, &message, None, &catalog).is_none(),
+            prepare(&facts, &message, None, &catalog, &no_prompt()).is_none(),
             "{host}"
         );
     }

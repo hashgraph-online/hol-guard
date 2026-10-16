@@ -140,6 +140,16 @@ fn result_for(
     }
 }
 
+/// The same build in process, for the resident's own lanes. A failure is one
+/// code rather than a typed result: the caller is not a request to answer, so
+/// it defers on anything this cannot build, the unsupported Windows path
+/// semantics included.
+pub(crate) fn build_execution_context(
+    request: &PackageContextBuildRequestV1,
+) -> Result<PackageContextBuildContextV1, &'static str> {
+    evaluate(request).map_err(|failure| failure.code)
+}
+
 pub(crate) fn evaluate_package_context_build(
     request: &PackageContextBuildRequestV1,
 ) -> Result<Vec<u8>, String> {

@@ -12,15 +12,19 @@
 //! verify item without a usable key answers `unknown_key`, matching the
 //! store's own verification.
 //!
+//! A `generation` section reads the store's local rows read-only and decides
+//! startup's trusted control state; it needs the key and fails the request
+//! when the store or the given state is unusable.
+//!
 //! The reply's `request_sha256` binds every request field except
 //! `integrity_key_b64`: the digest never covers key bytes, so a reply, log or
 //! diagnostic that carries the digest reveals nothing about the key.
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_contracts::{
-    PolicyIntegrityRowsPayloadV1, PolicyIntegrityRowsRequestV1, PolicyIntegrityRowsResultV1,
-    PolicyIntegritySignItemV1, PolicyIntegritySignatureV1, PolicyIntegrityVerifyItemV1,
-    PolicyIntegrityVerifyOutcomeV1, POLICY_INTEGRITY_ROWS_MAX_BYTES,
+    PolicyIntegrityGenerationRequestV1, PolicyIntegrityRowsPayloadV1, PolicyIntegrityRowsRequestV1,
+    PolicyIntegrityRowsResultV1, PolicyIntegritySignItemV1, PolicyIntegritySignatureV1,
+    PolicyIntegrityVerifyItemV1, PolicyIntegrityVerifyOutcomeV1, POLICY_INTEGRITY_ROWS_MAX_BYTES,
     POLICY_INTEGRITY_ROWS_MAX_ITEMS, POLICY_INTEGRITY_ROWS_REQUEST_SCHEMA,
     POLICY_INTEGRITY_ROWS_RESULT_SCHEMA,
 };
@@ -63,6 +67,8 @@ pub(crate) struct KeyRedactedRequest<'a> {
     integrity_key_id: Option<&'a str>,
     verify: &'a [PolicyIntegrityVerifyItemV1],
     sign: &'a [PolicyIntegritySignItemV1],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation: Option<&'a PolicyIntegrityGenerationRequestV1>,
 }
 
 impl<'a> From<&'a PolicyIntegrityRowsRequestV1> for KeyRedactedRequest<'a> {
@@ -73,6 +79,7 @@ impl<'a> From<&'a PolicyIntegrityRowsRequestV1> for KeyRedactedRequest<'a> {
             integrity_key_id: request.integrity_key_id.as_deref(),
             verify: &request.verify,
             sign: &request.sign,
+            generation: request.generation.as_ref(),
         }
     }
 }
@@ -109,7 +116,22 @@ pub(crate) fn evaluate(
             .map(|item| sign_item(item, key, key_id))
             .collect::<Result<Vec<_>, _>>()?
     };
-    Ok(PolicyIntegrityRowsPayloadV1 { verify, sign })
+    let generation = match &request.generation {
+        None => None,
+        Some(generation) => {
+            let (Some(key), Some(key_id)) = (key_bytes, key_id) else {
+                return Err("native_policy_integrity_key_unavailable");
+            };
+            Some(crate::policy_integrity_generation::decide(
+                generation, key, key_id,
+            )?)
+        }
+    };
+    Ok(PolicyIntegrityRowsPayloadV1 {
+        verify,
+        sign,
+        generation,
+    })
 }
 
 /// The decoded key, `None` when the caller shipped none. A key that is not

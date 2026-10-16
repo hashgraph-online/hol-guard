@@ -220,6 +220,7 @@ def test_direct_pip_signed_url_preserves_exact_private_download_and_binding_sour
     bound = _bound_external_archive_launch_command(
         command,
         evaluation=SimpleNamespace(external_archive_downloads=(download,)),
+        guard_home=tmp_path / "guard-home",
     )
 
     assert bound == ["pip", "install", str(archive_path)]

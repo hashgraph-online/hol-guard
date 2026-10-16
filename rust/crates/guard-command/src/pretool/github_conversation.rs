@@ -191,7 +191,7 @@ fn api_write(arguments: &[String]) -> Option<(&str, &str, &str)> {
             _ if argument.len() > 2
                 && argument
                     .get(..2)
-                    .is_some_and(|head| matches!(head, "-X" | "-f" | "-F")) =>
+                    .is_some_and(|head| matches!(head, "-X" | "-f" | "-F" | "-q")) =>
             {
                 (&argument[..2], Some(&argument[2..]))
             }
@@ -199,7 +199,7 @@ fn api_write(arguments: &[String]) -> Option<(&str, &str, &str)> {
         };
         match name {
             "--silent" if attached.is_none() => {}
-            "-X" | "--method" | "-f" | "--raw-field" | "-F" | "--field" | "--jq" => {
+            "-X" | "--method" | "-f" | "--raw-field" | "-F" | "--field" | "--jq" | "-q" => {
                 let value = match attached {
                     Some(value) => value,
                     None => {

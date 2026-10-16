@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import json
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Final, Literal, cast
+from uuid import uuid4
 
 from .models import GuardAction, PolicyDecision
-from .runtime.approval_context import build_runtime_launch_identity, runtime_launch_identity_is_reusable
-from .runtime.command_model import CommandSegment, parse_shell_command
-from .runtime.command_tokens import executable_name
-from .runtime.routine_local_node import routine_local_node_approval_profile
-from .trusted_local_tool_jq import safe_jq_arguments
-from .trusted_package_tools import _stable_identity_mapping, trusted_package_tool_profile
+from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
+from .native_execution import _resident_request
 
 LocalToolGrantTarget = Literal["capability", "version"]
 LocalToolGrantDuration = Literal["15m", "1h", "5h", "version", "always"]
@@ -26,49 +23,15 @@ LOCAL_TOOL_GRANT_DURATIONS: Final = ("15m", "1h", "5h", "version", "always")
 _DURATION_SECONDS: Final = {"15m": 900, "1h": 3600, "5h": 18000}
 _SELECTOR_PREFIX: Final = "local-tool-grant:v1"
 _POLICY_SOURCE: Final = "trusted-local-tool"
-_INTERPRETERS: Final = frozenset({"bun", "deno", "node", "nodejs", "python", "python3"})
-_READ_ONLY_OPERATIONS: Final = frozenset(
-    {
-        "check",
-        "describe",
-        "diff",
-        "find",
-        "get",
-        "inspect",
-        "list",
-        "query",
-        "read",
-        "report",
-        "search",
-        "show",
-        "status",
-    }
+LOCAL_TOOL_ELIGIBILITY_FEATURE: Final = "local-tool-eligibility-v1"
+_ELIGIBILITY_REQUEST_SCHEMA: Final = "guard-local-tool-eligibility-request.v1"
+_ELIGIBILITY_RESULT_SCHEMA: Final = "guard-local-tool-eligibility-result.v1"
+_ELIGIBILITY_TIMEOUT_SECONDS: Final = 10.0
+# The request carries the caller environment, which the launch identity binds.
+_ELIGIBILITY_MAX_REQUEST_BYTES: Final = 2 * 1024 * 1024
+_ELIGIBILITY_PAYLOAD_KEYS: Final = frozenset(
+    {"tool_name", "tool_identity_hash", "capability", "read_only_reason", "trust_basis", "indefinite_allowed"}
 )
-_READ_ONLY_HTTP_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
-_HTTP_OPERATIONS: Final = frozenset({"api", "fetch", "query", "request"})
-_SIDE_EFFECTING_OPTIONS: Final = frozenset(
-    {
-        "-o",
-        "--apply",
-        "--create",
-        "--delete",
-        "--download",
-        "--exec",
-        "--execute",
-        "--force",
-        "--out",
-        "--output",
-        "--publish",
-        "--remove",
-        "--save",
-        "--send",
-        "--update",
-        "--upload",
-        "--write",
-    }
-)
-_HTTP_METHOD_OPTIONS: Final = frozenset({"-x", "--method", "--request"})
-_VARIABLE_READ_SELECTOR_OPTIONS: Final = frozenset({"--path", "--query"})
 _HARD_RISK_EXCLUSIONS: Final = (
     "shell_chaining",
     "shell_redirection",
@@ -136,75 +99,78 @@ def local_tool_approval_eligibility(
     cwd: Path,
     home_dir: Path | None,
 ) -> LocalToolApprovalEligibility | None:
-    routine_profile = routine_local_node_approval_profile(command, home_dir=home_dir or cwd)
-    if routine_profile is not None:
-        return LocalToolApprovalEligibility(
-            tool_name=routine_profile.tool_name,
-            tool_identity_hash=sha256(_canonical_json(routine_profile.identity_material)).hexdigest(),
-            capability=routine_profile.capability,
-            read_only_reason="Authenticated local developer validation command",
-            trust_basis="package-profile",
-        )
-    model = parse_shell_command(
-        command,
-        cwd=cwd,
-        home_dir=home_dir,
-        dialect="posix",
-        transport="shell_string",
-        extraction_provenance="hook_tool_input",
-    )
-    if model.confidence != "exact" or model.redirects or model.embedded_commands or len(model.segments) not in {1, 2}:
-        return None
-    primary = model.segments[0]
-    package_profile = trusted_package_tool_profile(primary, cwd=cwd, home_dir=home_dir)
-    if package_profile is not None and len(model.segments) == 1:
-        identity_hash = sha256(_canonical_json(package_profile.identity_material)).hexdigest()
-        return LocalToolApprovalEligibility(
-            tool_name=package_profile.tool_name,
-            tool_identity_hash=identity_hash,
-            capability=package_profile.capability,
-            read_only_reason=package_profile.read_only_reason,
-            trust_basis="package-profile",
-            indefinite_allowed=package_profile.indefinite_allowed,
-        )
-    if not _safe_top_level_segment(primary, pipeline_index=0):
-        return None
-    processor_binding: dict[str, object] | None = None
-    if len(model.segments) == 2:
-        processor = model.segments[1]
-        if not _safe_top_level_segment(processor, pipeline_index=1):
-            return None
-        if executable_name(processor.executable) != "jq":
-            return None
-        if not safe_jq_arguments(processor.arguments):
-            return None
-        processor_binding = _reusable_launch_binding(processor, cwd=cwd)
-        if processor_binding is None:
-            return None
-        processor_binding["arguments_sha256"] = sha256(_canonical_json(list(processor.arguments))).hexdigest()
+    """Ask the resident whether the command may carry a reusable local tool grant.
 
-    launch_binding = _reusable_launch_binding(primary, cwd=cwd)
-    if launch_binding is None:
+    Any missing, failed or malformed answer is ``None``: not eligible, never
+    more permissive.
+    """
+
+    try:
+        request: dict[str, object] = {
+            "schema": _ELIGIBILITY_REQUEST_SCHEMA,
+            "request_id": f"local-tool-eligibility-{uuid4().hex}",
+            "command": command,
+            "cwd": str(cwd),
+            "home_dir": None if home_dir is None else str(home_dir),
+            "user_home": str(Path.home()),
+            "launch_env": dict(os.environ),
+        }
+        digest = "sha256:" + _canonical_request_sha256(request)
+        guard_home = _resolve_existing_digest_home(None)
+        if not ensure_resident_prerequisite(guard_home):
+            return None
+        response = _resident_request(
+            operation="local_tool_eligibility",
+            request=request,
+            guard_home=guard_home,
+            timeout_seconds=_ELIGIBILITY_TIMEOUT_SECONDS,
+            required_feature=LOCAL_TOOL_ELIGIBILITY_FEATURE,
+            response_schema=_ELIGIBILITY_RESULT_SCHEMA,
+            max_request_bytes=_ELIGIBILITY_MAX_REQUEST_BYTES,
+        )
+    except Exception:
         return None
-    operation = _local_tool_operation(primary)
-    if operation is None:
+    if (
+        response is None
+        or response.get("schema") != _ELIGIBILITY_RESULT_SCHEMA
+        or response.get("request_id") != request["request_id"]
+        or response.get("request_sha256") != digest
+        or response.get("status") != "ok"
+        or response.get("code") != "ok"
+    ):
         return None
-    read_only_reason = _read_only_reason(primary.arguments, operation)
-    if read_only_reason is None:
+    return _eligibility_from_payload(response.get("payload"))
+
+
+def _eligibility_from_payload(payload: object) -> LocalToolApprovalEligibility | None:
+    if not isinstance(payload, dict) or set(payload) != _ELIGIBILITY_PAYLOAD_KEYS:
         return None
-    tool_name = _tool_display_name(primary, launch_binding)
-    identity_payload = {
-        "version": 1,
-        "launch": launch_binding,
-        "argument_shape": _argument_shape(primary),
-        "output_processor": processor_binding,
-    }
-    identity_hash = sha256(_canonical_json(identity_payload)).hexdigest()
+    fields = cast(dict[str, object], payload)
+    tool_name, identity_hash = fields["tool_name"], fields["tool_identity_hash"]
+    capability, read_only_reason = fields["capability"], fields["read_only_reason"]
+    trust_basis, indefinite_allowed = fields["trust_basis"], fields["indefinite_allowed"]
+    if (
+        not isinstance(tool_name, str)
+        or _nonempty_string(tool_name) is None
+        or not isinstance(identity_hash, str)
+        or not _is_sha256(identity_hash)
+        or not isinstance(capability, str)
+        or _nonempty_string(capability) is None
+        or not isinstance(read_only_reason, str)
+        or _nonempty_string(read_only_reason) is None
+        or not isinstance(trust_basis, str)
+        or trust_basis not in {"verified-files", "package-profile"}
+        or not isinstance(indefinite_allowed, bool)
+        or (indefinite_allowed and trust_basis != "package-profile")
+    ):
+        return None
     return LocalToolApprovalEligibility(
         tool_name=tool_name,
         tool_identity_hash=identity_hash,
-        capability=operation,
+        capability=capability,
         read_only_reason=read_only_reason,
+        trust_basis=cast(Literal["verified-files", "package-profile"], trust_basis),
+        indefinite_allowed=indefinite_allowed,
     )
 
 
@@ -338,131 +304,6 @@ def _eligibility_from_request(request: Mapping[str, object]) -> LocalToolApprova
                 bool(normalized_item.get("indefinite_allowed", False)),
             )
     return None
-
-
-def _safe_top_level_segment(segment: CommandSegment, *, pipeline_index: int) -> bool:
-    return (
-        segment.execution_context == "top:0"
-        and segment.pipeline_index == pipeline_index
-        and not segment.environment_names
-        and not segment.wrapper_chain
-        and not segment.path_overridden
-        and segment.executable is not None
-    )
-
-
-def _reusable_launch_binding(segment: CommandSegment, *, cwd: Path) -> dict[str, object] | None:
-    identity = build_runtime_launch_identity(
-        segment.executable,
-        args=segment.arguments,
-        structured_command=True,
-        cwd=cwd,
-    )
-    if not runtime_launch_identity_is_reusable(identity):
-        return None
-    executable = identity.get("executable")
-    entrypoint = identity.get("entrypoint")
-    if not isinstance(executable, Mapping) or not isinstance(entrypoint, Mapping):
-        return None
-    normalized_executable = dict(cast(Mapping[str, object], executable))
-    normalized_entrypoint = dict(cast(Mapping[str, object], entrypoint))
-    if normalized_executable.get("status") != "verified":
-        return None
-    entrypoint_status = normalized_entrypoint.get("status")
-    if entrypoint_status not in {"verified", "bound-by-executable"}:
-        return None
-    if executable_name(segment.executable) in _INTERPRETERS and not str(normalized_entrypoint.get("kind", "")).endswith(
-        "-script"
-    ):
-        return None
-    return {
-        "executable": _stable_identity_mapping(normalized_executable),
-        "entrypoint": _stable_identity_mapping(normalized_entrypoint),
-    }
-
-
-def _local_tool_operation(segment: CommandSegment) -> str | None:
-    args = segment.arguments
-    if not args:
-        return None
-    executable = executable_name(segment.executable)
-    operation_index = 1 if executable in _INTERPRETERS else 0
-    if len(args) <= operation_index:
-        return None
-    operation = args[operation_index].strip().lower()
-    if not operation or operation.startswith("-"):
-        return None
-    return operation[:80]
-
-
-def _read_only_reason(arguments: Sequence[str], operation: str) -> str | None:
-    if any(_normalized_option(argument) in _SIDE_EFFECTING_OPTIONS for argument in arguments):
-        return None
-    methods: list[str] = []
-    for index, argument in enumerate(arguments):
-        option = _normalized_option(argument)
-        if option not in _HTTP_METHOD_OPTIONS:
-            continue
-        if "=" in argument:
-            methods.append(argument.split("=", 1)[1].upper())
-        elif index + 1 < len(arguments):
-            methods.append(arguments[index + 1].upper())
-        else:
-            return None
-    if len(methods) > 1:
-        return None
-    method = methods[0] if methods else None
-    if method in _READ_ONLY_HTTP_METHODS and operation in _HTTP_OPERATIONS:
-        return f"http_{method.lower()}"
-    if method is not None:
-        return None
-    return f"operation_{operation}" if operation in _READ_ONLY_OPERATIONS else None
-
-
-def _argument_shape(segment: CommandSegment) -> list[str]:
-    executable = executable_name(segment.executable)
-    start = 2 if executable in _INTERPRETERS else 1
-    shape: list[str] = []
-    arguments = segment.arguments[start:]
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        option = _normalized_option(argument)
-        if option is None:
-            shape.extend(("<positional>", argument))
-            index += 1
-            continue
-        shape.append(option)
-        if "=" in argument:
-            value = argument.split("=", 1)[1]
-        elif index + 1 < len(arguments) and _normalized_option(arguments[index + 1]) is None:
-            index += 1
-            value = arguments[index]
-        else:
-            index += 1
-            continue
-        shape.append("<selector>" if option in _VARIABLE_READ_SELECTOR_OPTIONS else value)
-        index += 1
-    return shape
-
-
-def _normalized_option(argument: str) -> str | None:
-    if not argument.startswith("-") or argument == "-":
-        return None
-    return argument.split("=", 1)[0].lower()
-
-
-def _tool_display_name(segment: CommandSegment, binding: Mapping[str, object]) -> str:
-    entrypoint = binding.get("entrypoint")
-    if isinstance(entrypoint, Mapping):
-        path = cast(Mapping[str, object], entrypoint).get("path")
-        if isinstance(path, str) and path:
-            return Path(path).name
-    return Path(segment.executable or "local-tool").name
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
 
 def _nonempty_string(value: object) -> str | None:

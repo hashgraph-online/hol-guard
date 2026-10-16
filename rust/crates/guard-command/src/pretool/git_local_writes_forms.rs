@@ -1,6 +1,7 @@
 //! The argument forms of the local Git writes `git_local_writes` proves:
 //! `add`, a non-forced `rm`, `commit` with its message on the command line
-//! and a non-forced `branch` rename, plus the `stash list` read beside them.
+//! and a non-forced `branch` rename, plus the `stash list` and `stash show`
+//! reads beside them.
 
 use super::super::git_remote_config::GitConfig;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
@@ -50,34 +51,72 @@ pub(super) fn rm(rest: &[&str]) -> bool {
 
 /// A commit whose message is on the command line, so no editor starts.
 pub(super) fn commit(rest: &[&str]) -> bool {
-    let (mut message, mut amend, mut no_edit) = (false, false, false);
+    commit_form(rest).is_some()
+}
+
+/// Whether a `git commit` segment asks Git to sign the commit, which starts
+/// the configured signing program (`git_local_writes_signing`).
+pub(super) fn signs(segment: &CommandSegmentV1) -> bool {
+    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    matches!(words.split_first(), Some((&"commit", rest)) if commit_form(rest) == Some(true))
+}
+
+/// `Some(signs)` for a commit form the proof accepts. An author or a reset
+/// author only changes the commit's metadata; `-S` and `--gpg-sign` (with an
+/// attached key) start the signing program, which the caller must prove.
+/// Short options may be clustered as Git allows: `-qm msg`, `-am msg`.
+pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
+    let (mut message, mut amend, mut no_edit, mut signs) = (false, false, false, false);
     let mut options = true;
     let mut words = rest.iter();
     while let Some(word) = words.next() {
         if !options || !word.starts_with('-') {
             if word.is_empty() {
-                return false;
+                return None;
             }
             continue;
         }
         match *word {
             "--" => options = false,
-            "-m" | "--message" | "-am" => {
-                if words.next().is_none() {
-                    return false;
-                }
-                message = true;
+            "--message" | "--author" => {
+                words.next()?;
+                message |= *word == "--message";
             }
             value if value.starts_with("--message=") => message = true,
-            value if value.len() > 2 && value.starts_with("-m") => message = true,
-            "-q" | "--quiet" | "-a" | "--all" | "-s" | "--signoff" | "-n" | "--no-verify"
-            | "--allow-empty" | "--no-gpg-sign" => {}
+            value if value.starts_with("--author=") => {}
+            value if value == "--gpg-sign" || value.starts_with("--gpg-sign=") => signs = true,
+            "--quiet" | "--all" | "--signoff" | "--no-verify" | "--allow-empty"
+            | "--no-gpg-sign" | "--reset-author" => {}
             "--amend" => amend = true,
             "--no-edit" => no_edit = true,
-            _ => return false,
+            value if value.starts_with("--") => return None,
+            "-" => return None,
+            cluster => {
+                for (offset, flag) in cluster[1..].char_indices() {
+                    match flag {
+                        'q' | 'a' | 's' | 'n' => {}
+                        // The rest of the cluster, or else the next word, is
+                        // the message.
+                        'm' => {
+                            if cluster.len() == offset + 2 {
+                                words.next()?;
+                            }
+                            message = true;
+                            break;
+                        }
+                        // The rest of the cluster names the key; Git never
+                        // takes it from the next word.
+                        'S' => {
+                            signs = true;
+                            break;
+                        }
+                        _ => return None,
+                    }
+                }
+            }
         }
     }
-    message || (amend && no_edit)
+    (message || (amend && no_edit)).then_some(signs)
 }
 
 /// `branch -m NEW` or `branch -m OLD NEW`, options first. A rename moves the
@@ -131,6 +170,65 @@ pub(super) fn stash_restore(rest: &[&str]) -> bool {
     })
 }
 
+/// `stash show` with the diff options that only choose how the entry's diff
+/// is printed, and at most one entry. The options an external or textconv
+/// driver needs (`--ext-diff`, `--textconv`) are refused, so the read runs
+/// only Git's own diff.
+pub(super) fn stash_show(rest: &[&str]) -> bool {
+    let mut entries = 0;
+    rest.iter().all(|option| match *option {
+        "-p"
+        | "-u"
+        | "--patch"
+        | "--include-untracked"
+        | "--only-untracked"
+        | "--stat"
+        | "--numstat"
+        | "--shortstat"
+        | "--name-only"
+        | "--name-status"
+        | "--summary"
+        | "--no-color"
+        | "--no-ext-diff"
+        | "--no-textconv"
+        | "-q"
+        | "--quiet" => true,
+        entry if stash_entry(entry) => {
+            entries += 1;
+            entries == 1
+        }
+        _ => false,
+    })
+}
+
+/// `(external diff disarmed, textconv disarmed)` for a `stash show`.
+/// A summary never runs textconv; a patch does unless `--no-textconv` wins.
+pub(super) fn show_diff_drivers_disarmed(segment: &CommandSegmentV1) -> Option<(bool, bool)> {
+    if segment.arguments.first().map(String::as_str) != Some("stash")
+        || segment.arguments.get(1).map(String::as_str) != Some("show")
+    {
+        return None;
+    }
+    let mut external = false;
+    let mut textconv_flag = None;
+    let mut patch = false;
+    for flag in segment.arguments[2..]
+        .iter()
+        .map(String::as_str)
+        .filter(|word| word.starts_with('-'))
+    {
+        match flag {
+            "--no-ext-diff" => external = true,
+            "--ext-diff" => external = false,
+            "--no-textconv" => textconv_flag = Some(true),
+            "--textconv" => textconv_flag = Some(false),
+            "-p" | "-u" | "--patch" => patch = true,
+            _ => {}
+        }
+    }
+    Some((external, textconv_flag.unwrap_or(!patch)))
+}
+
 fn stash_entry(value: &str) -> bool {
     let index = value
         .strip_prefix("stash@{")
@@ -140,8 +238,10 @@ fn stash_entry(value: &str) -> bool {
 }
 
 /// Whether the `git stash` at `index` starts no program its hooks do not
-/// cover. Stash pages only under its own `pager.stash` setting. `list` runs
+/// cover. Stash pages only under its own `pager.stash` setting, and the
+/// command each form runs keeps its own pager key besides. `list` runs
 /// `git log -g refs/stash`, held to the configuration proof of that log
+/// read; `show` prints the entry's diff, held to the proof of a `git diff`
 /// read; `apply` and `pop` merge the entry, which may run a configured merge
 /// driver, and then run `git status`, held to the proof of that read.
 pub(super) fn stash_free(
@@ -156,11 +256,12 @@ pub(super) fn stash_free(
     let stripped = super::super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
     let stdout_piped = super::super::git_helper_context::stdout_piped(model, index);
-    let free = |arguments: &[&str]| {
+    let free = |arguments: &[&str], pager: Option<&str>| {
         let arguments: Vec<String> = arguments.iter().map(|word| (*word).to_owned()).collect();
-        super::super::git_config::execution_free(
+        super::super::git_config::execution_free_paging(
             "git",
             &arguments,
+            pager,
             context,
             deadline,
             execution_environment,
@@ -174,13 +275,32 @@ pub(super) fn stash_free(
         let key = key.to_ascii_lowercase();
         key.starts_with("merge.") && key.ends_with(".driver")
     });
-    (stdout_piped
+    let stash_pages = stdout_piped
         || effective
             .get("pager.stash")
-            .is_none_or(|values| values.iter().all(pager_off)))
+            .is_none_or(|values| values.iter().all(pager_off));
+    // `stash show` prints the entry's diff, so it clears under the same
+    // configuration proof a `git diff` read clears under, read with the
+    // options the caller gave. `--no-ext-diff` and `--no-textconv` keep a
+    // configured driver out of the read, and a summary form runs no textconv
+    // program. It pages twice over: `pager.stash` decides whether the stash
+    // command pages at all, and `show_stash` then asks for the diff pager, so
+    // `pager.diff` starts a program of its own where `pager.stash` left the
+    // choice open. Both keys are held to the proof.
+    stash_pages
         && match segment.arguments.get(1).map(String::as_str) {
-            Some("list") => free(&["log", "-g", "--first-parent", "refs/stash"]),
-            Some("apply" | "pop") => !merge_driver && free(&["status"]),
+            Some("list") => free(&["log", "-g", "--first-parent", "refs/stash"], None),
+            Some("show") => {
+                let mut arguments = vec!["diff"];
+                arguments.extend(
+                    segment.arguments[2..]
+                        .iter()
+                        .map(String::as_str)
+                        .filter(|word| word.starts_with('-')),
+                );
+                free(&arguments, None)
+            }
+            Some("apply" | "pop") => !merge_driver && free(&["status"], None),
             _ => true,
         }
 }

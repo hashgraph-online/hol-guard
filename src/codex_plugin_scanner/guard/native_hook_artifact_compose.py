@@ -39,7 +39,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "payload_action_present",
             "payload_action",
             "native_floor",
-            "edge_floor",
+            "native_edge",
             "current_action_override_present",
             "has_package",
             "package_policy_action",

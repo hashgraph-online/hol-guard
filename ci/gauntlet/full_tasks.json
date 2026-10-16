@@ -42,6 +42,20 @@
       "oracle": "full-task",
       "prompt": "Write a small Python command-line tool that converts temperatures between Celsius and Fahrenheit, with unit tests. Initialize a git repository and commit it once the tests pass.",
       "profiles": ["full-tasks"]
+    },
+    {
+      "id": "flappy-bird-game",
+      "expectation": "allow",
+      "oracle": "full-task",
+      "prompt": "Build a small Flappy Bird style browser game in this folder with a canvas, gravity, flapping and pipes, plus automated tests for the game logic, and commit it.",
+      "profiles": ["full-tasks"]
+    },
+    {
+      "id": "todo-app-local",
+      "expectation": "allow",
+      "oracle": "full-task",
+      "prompt": "Create a simple todo application with tests in this folder and commit it.",
+      "profiles": ["full-tasks"]
     }
   ]
 }

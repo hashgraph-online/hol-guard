@@ -4,6 +4,8 @@ pub(super) use allowances::{
     agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
+#[path = "read_path_harness_notes.rs"]
+pub(super) mod harness_notes;
 #[path = "hidden_listing.rs"]
 mod hidden_listing;
 #[path = "omp_json_query.rs"]
@@ -61,7 +63,9 @@ pub(super) fn bounded_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_read_target(value, home_dir, cwd, false)
+    // A missing harness note is a shell-read exception. Structured tools come
+    // through this helper, and a missing note there stays unproved.
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false)
 }
 
 pub(super) fn existing_regular_read_target(
@@ -91,7 +95,7 @@ pub(super) fn bounded_read_target(
     cwd: Option<&str>,
     allow_directory: bool,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true)
 }
 
 /// A structured read tool opens its path literally, so `[slug]` in a Next.js
@@ -103,7 +107,7 @@ pub(super) fn bounded_structured_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, true)
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false)
 }
 
 fn bounded_read_target_with_brackets(
@@ -112,6 +116,7 @@ fn bounded_read_target_with_brackets(
     cwd: Option<&str>,
     allow_directory: bool,
     literal_brackets: bool,
+    missing_notes: bool,
 ) -> bool {
     let path = value.trim();
     let path = path.strip_prefix(r"\\?\").unwrap_or(path);
@@ -160,17 +165,24 @@ fn bounded_read_target_with_brackets(
     if has_brackets || parent_component {
         return false;
     }
-    // An unresolvable absolute or `~` target cannot prove a bounded file;
-    // a workspace-relative spelling keeps the pre-existing lexical floor.
+    // An unresolvable absolute or `~` target cannot prove a bounded file,
+    // except, for a shell read, a harness note that does not exist yet, where
+    // the read finds nothing. A structured read of it gets the missing-path
+    // answer instead. A workspace-relative spelling keeps the pre-existing
+    // lexical floor.
     if expanded_path.is_absolute() {
-        return false;
+        return missing_notes
+            && harness_notes::missing_document(expanded_path).is_some_and(|resolved| {
+                resolved_location_allowed(&resolved, home_dir, cwd, false)
+                    && harness_notes::harness_home_document(&resolved, home_dir)
+            });
     }
     safe_read_target(path)
 }
 
 /// A drive, verbatim, or root-relative spelling does not resolve against the
 /// working directory.
-fn rooted(value: &str) -> bool {
+pub(super) fn rooted(value: &str) -> bool {
     std::path::Path::new(value).components().any(|component| {
         matches!(
             component,
@@ -237,6 +249,7 @@ pub(super) fn resolved_path_allowed_for_operation(
                     || agent_home_state(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)
+                    || harness_notes::harness_home_document(canonical, home_dir)
                     || git_ref_document(canonical, home_dir, cwd)
                     || git_config_document(canonical, cwd)
                     || worktree_gitfile(canonical)
@@ -360,3 +373,7 @@ mod hidden_listing_tests;
 #[cfg(test)]
 #[path = "directory_read_tests.rs"]
 mod directory_read_tests;
+
+#[cfg(all(test, unix))]
+#[path = "directory_read_tmp_alias_tests.rs"]
+mod directory_read_tmp_alias_tests;

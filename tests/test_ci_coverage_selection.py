@@ -35,7 +35,7 @@ def job(name, number, *, attempt=1):
 
 def fixture():
     old = [job(f"coverage (3.12, {i})", i + 1) for i in range(SHARDS)]
-    prerequisites = [job("coverage-plan", 1000), job("native-command-evaluators", 1001)]
+    prerequisites = [job("native-command-evaluators", 1001)]
     for item in prerequisites:
         item["started_at"] = "2026-10-03T11:59:00Z"
         item["created_at"] = "2026-10-03T11:58:00Z"
@@ -152,16 +152,7 @@ def test_inherited_result_requires_its_matching_actual_original_execution(field,
         select(data)
 
 
-def test_reexecuting_the_plan_invalidates_old_shards():
-    data = fixture()
-    data[1][-2].update(
-        created_at="2026-10-03T12:10:00Z", started_at="2026-10-03T12:10:10Z", completed_at="2026-10-03T12:11:00Z"
-    )
-    with pytest.raises(ValueError, match="predates"):
-        select(data)
-
-
-def test_reexecuting_native_producer_invalidates_old_shards():
+def test_reexecuting_native_and_plan_producer_invalidates_old_shards():
     data = fixture()
     data[1][-1].update(
         created_at="2026-10-03T12:10:00Z", started_at="2026-10-03T12:10:10Z", completed_at="2026-10-03T12:11:00Z"

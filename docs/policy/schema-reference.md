@@ -7,7 +7,7 @@ Canonical, portable HOL Guard policy document. The authoritative source is [`sch
 Add this line to the top of a policy file and your editor validates it as you type:
 
 ```yaml
-# yaml-language-server: $schema=https://guard.hashgraphonline.com/schema/policy/v1alpha1
+# yaml-language-server: $schema=https://hol.org/schema/policy/v1alpha1
 ```
 
 ## Document

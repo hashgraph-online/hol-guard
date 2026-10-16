@@ -69,6 +69,28 @@ fn shell_composio_command_and_nameless_tools_are_decided_by_the_proxy() {
         json!({"name": "github__composio_execute"}),
         json!({"name": "exec", "inputSchema": {"properties": {"cmd": {"type": "string"}}}}),
         json!({"name": "exec", "input_schema": {"properties": {"shellCommand": {}}}}),
+        // A schema that names its properties elsewhere: the host fills the
+        // schema it resolved, so a command argument reaches the call.
+        json!({"name": "run", "inputSchema": {"$ref": "#/$defs/Run"}}),
+        json!({"name": "run", "inputSchema": {"allOf": [{"properties": {"command": {}}}]}}),
+        json!({"name": "run", "inputSchema": {"type": "object", "anyOf": []}}),
+        json!({"name": "run", "input_schema": {"properties": {"path": {}}, "oneOf": []}}),
+        json!({"name": "run", "inputSchema": {"if": {}, "then": {}}}),
+        json!({"name": "run", "inputSchema": {"if": {}, "else": {}}}),
+        json!({"name": "run", "inputSchema": {"$dynamicRef": "#run"}}),
+        json!({"name": "run", "inputSchema": {"$recursiveRef": "#"}}),
+        json!({
+            "name": "run",
+            "inputSchema": {
+                "properties": {"path": {}},
+                "dependentSchemas": {"path": {"properties": {"command": {}}}}
+            }
+        }),
+        json!({
+            "name": "run",
+            "input_schema": {"properties": {"path": {}}, "dependencies": {"path": ["command"]}}
+        }),
+        json!({"name": "run", "inputSchema": {"patternProperties": {"^comm": {}}}}),
         json!({"description": "no name"}),
         json!({"name": 7}),
     ] {
@@ -78,6 +100,10 @@ fn shell_composio_command_and_nameless_tools_are_decided_by_the_proxy() {
         json!({"name": "read_file", "inputSchema": {"properties": {"path": {}}}}),
         json!({"name": "bash_history_search"}),
         json!({"name": "commands", "inputSchema": {"properties": {"commands": {}}}}),
+        // `$defs` alone names no property of this object, and a schema the
+        // relay cannot read as an object declares nothing either.
+        json!({"name": "read_file", "inputSchema": {"properties": {}, "$defs": {"X": {}}}}),
+        json!({"name": "read_file", "inputSchema": "object"}),
     ] {
         assert!(!proxy_tool(&tool), "{tool}");
     }

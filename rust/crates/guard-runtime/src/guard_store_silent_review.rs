@@ -210,7 +210,7 @@ fn evidence(row: &Row) -> StoreResult<Vec<Value>> {
 }
 
 /// `native_approval_scope._narrow_envelope`.
-fn narrow_envelope(envelope: &Value) -> Value {
+pub(crate) fn narrow_envelope(envelope: &Value) -> Value {
     let Value::Object(fields) = envelope else {
         return envelope.clone();
     };
@@ -239,12 +239,12 @@ fn present(value: Value) -> Option<Value> {
     (!value.is_null()).then_some(value)
 }
 
-fn raw(row: &Row, name: &str) -> Value {
+pub(crate) fn raw(row: &Row, name: &str) -> Value {
     row.get(name).cloned().unwrap_or(Value::Null)
 }
 
 /// `str(value)` for a stored cell.
-fn py_str(value: Option<&Value>) -> StoreResult<String> {
+pub(crate) fn py_str(value: Option<&Value>) -> StoreResult<String> {
     Ok(match value {
         None | Some(Value::Null) => "None".to_owned(),
         Some(Value::String(stored)) => stored.clone(),

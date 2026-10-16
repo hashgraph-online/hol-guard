@@ -1,0 +1,75 @@
+{
+  "policyAllowed": true,
+  "remainingLeaseMs": 23206,
+  "snapshot": {
+    "enabled": true,
+    "generatedAt": "2026-10-16T09:40:25.942Z",
+    "leaseExpiresAt": "2026-10-16T09:40:55.942Z",
+    "offers": [
+      {
+        "availability": "open",
+        "checkedAt": "2026-10-16T09:40:25.944Z",
+        "currency": "usd",
+        "indicativeAmountCents": 50000,
+        "openSlots": 9,
+        "product": "always",
+        "quoteRequired": true,
+        "totalSlots": 10
+      },
+      {
+        "availability": "open",
+        "checkedAt": "2026-10-16T09:40:25.944Z",
+        "currency": "usd",
+        "indicativeAmountCents": 5000,
+        "openSlots": 59,
+        "product": "time_slot",
+        "quoteRequired": true,
+        "totalSlots": 60
+      },
+      {
+        "availability": "unknown",
+        "checkedAt": null,
+        "currency": null,
+        "indicativeAmountCents": null,
+        "product": "sponsored",
+        "quoteRequired": true
+      }
+    ],
+    "placements": [
+      {
+        "creative": {
+          "body": "Review the supported extension and its permissions.",
+          "brandName": "Discovery Publisher",
+          "headline": "Explore Discovery Tool 0"
+        },
+        "creativeVersion": "cv-1-afd73eb5",
+        "endsAt": "2026-11-15T09:40:25.758Z",
+        "extensionId": "command.discovery-01",
+        "product": "always",
+        "publicPlacementId": "04e2959f-7066-4c24-95ed-076c0e0ecbbe",
+        "slotIndex": 0,
+        "startsAt": "2026-10-16T09:40:25.758Z",
+        "windowIndex": null
+      },
+      {
+        "creative": {
+          "body": "Review the supported extension and its permissions.",
+          "brandName": "Discovery Publisher",
+          "headline": "Explore Discovery Tool 2"
+        },
+        "creativeVersion": "cv-1-f586cd27",
+        "endsAt": "2026-11-15T09:40:25.854Z",
+        "extensionId": "command.discovery-03",
+        "product": "sponsored",
+        "publicPlacementId": "ddb08c05-416f-4eaf-845c-c5c0fc20658c",
+        "slotIndex": 0,
+        "startsAt": "2026-10-16T09:40:25.854Z",
+        "windowIndex": null
+      }
+    ],
+    "reasonCode": null,
+    "schemaVersion": "guard.extensions.discovery.v1",
+    "snapshotId": "11dd60cd-36c3-44be-8907-147a7e9bccd7",
+    "state": "ready"
+  }
+}

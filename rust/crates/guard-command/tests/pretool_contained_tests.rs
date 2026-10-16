@@ -336,7 +336,7 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             "pnpm exec vitest run && rm -rf /",
         ] {
             let result = classify(harness, command);
-            if command == "python3 test_calc.py" {
+            if command == "python3 test_calc.py" && harness != "zcode" {
                 assert_eq!(result.decision, "deny", "{harness} {command}");
             }
             assert_ne!(
@@ -540,15 +540,17 @@ fn build_requires_bounded_outputs_and_never_direct_execution() {
 }
 
 #[test]
-fn windows_contains_only_claude_code_python_runs() {
-    let contained = classify("claude-code", "python3 test_calc.py");
-    assert_eq!(contained.decision, "deny");
-    if cfg!(target_os = "macos") || cfg!(windows) {
-        assert_eq!(contained.minimum_action, "sandbox-required");
-        assert_eq!(
-            contained.reason_code,
-            "native_python_eval_readonly_containment_required"
-        );
+fn windows_contains_only_python_runs_from_harnesses_with_a_sink_command() {
+    for harness in ["claude-code", "codex", "omp", "pi"] {
+        let contained = classify(harness, "python3 test_calc.py");
+        assert_eq!(contained.decision, "deny", "{harness}");
+        if cfg!(target_os = "macos") || cfg!(windows) {
+            assert_eq!(contained.minimum_action, "sandbox-required", "{harness}");
+            assert_eq!(
+                contained.reason_code, "native_python_eval_readonly_containment_required",
+                "{harness}"
+            );
+        }
     }
     if cfg!(windows) {
         let resolved = classify(
@@ -561,13 +563,14 @@ fn windows_contains_only_claude_code_python_runs() {
             "native_python_eval_readonly_containment_required"
         );
         for (harness, command) in [
-            ("codex", "python3 test_calc.py"),
-            ("omp", "python3 test_calc.py"),
+            ("zcode", "python3 test_calc.py"),
+            ("codex", "node -e 'console.log(1)'"),
             ("claude-code", "node -e 'console.log(1)'"),
+            ("omp", "node -e 'console.log(1)'"),
             ("claude-code", "python3 -m pytest"),
         ] {
             let result = classify(harness, command);
-            if command == "python3 test_calc.py" {
+            if command == "python3 test_calc.py" && harness != "zcode" {
                 assert_eq!(result.decision, "deny", "{harness} {command}");
             }
             assert_ne!(
@@ -576,4 +579,97 @@ fn windows_contains_only_claude_code_python_runs() {
             );
         }
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_contains_direct_vite_builds_of_a_flat_install() {
+    let root = std::env::temp_dir().join(format!("hg-vite-build-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let app = root.join("dashboard");
+    std::fs::create_dir_all(app.join("node_modules/vite/bin")).unwrap();
+    std::fs::create_dir_all(app.join("node_modules/.bin")).unwrap();
+    std::fs::write(
+        app.join("package.json"),
+        r#"{"scripts":{"build":"vite build"}}"#,
+    )
+    .unwrap();
+    std::fs::write(app.join("node_modules/vite/bin/vite.js"), "").unwrap();
+    std::fs::write(app.join("node_modules/.bin/vite"), "").unwrap();
+    let workspace = root.to_str().unwrap();
+    // The hook bridge stamps an environment without CDPATH, which proves a
+    // bare `cd dashboard`.
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: vec!["PATH".to_owned()],
+        environment_digest: "0".repeat(64),
+        home: Some(r"C:\Users\tester".to_owned()),
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: false,
+        library_search_paths: Default::default(),
+    };
+    let classify_in = |harness: &str, command: &str, cwd: &str| {
+        guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            harness,
+            "PreToolUse",
+            &json!({"tool_name":"bash","tool_input":{"command":command}}),
+            None,
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: Some(r"C:\Users\tester"),
+                cwd: Some(cwd),
+                cdpath_unset: true,
+                rustup_override_absent: false,
+                npm_config_inert: false,
+                shell_home_matches: false,
+                ripgrep_config_absent: false,
+                psql_environment: Default::default(),
+            },
+            Some(&environment),
+        )
+    };
+    let entry = app
+        .join("node_modules/vite/bin/vite.js")
+        .to_string_lossy()
+        .replace('\\', "/");
+    let resolved = format!(r"'C:\Program Files\nodejs\node.exe' {entry} build");
+    for harness in ["claude-code", "omp", "pi"] {
+        for (command, cwd) in [
+            (
+                "cd dashboard && ./node_modules/.bin/vite build 2>&1 | tail -15",
+                workspace,
+            ),
+            ("npx vite build", app.to_str().unwrap()),
+            (resolved.as_str(), app.to_str().unwrap()),
+        ] {
+            let result = classify_in(harness, command, cwd);
+            assert_eq!(
+                result.minimum_action, "sandbox-required",
+                "{harness} {command}"
+            );
+            assert_eq!(
+                result.reason_code, "native_node_build_output_containment_required",
+                "{harness} {command}"
+            );
+        }
+    }
+    let app_dir = app.to_str().unwrap();
+    for (harness, command) in [
+        ("codex", "npx vite build"),
+        ("omp", "npm run build"),
+        ("omp", "npx vite build --outDir ../elsewhere"),
+    ] {
+        let result = classify_in(harness, command, app_dir);
+        assert_ne!(
+            result.minimum_action, "sandbox-required",
+            "{harness} {command}"
+        );
+    }
+    // A pnpm store links packages across directories and is not staged.
+    std::fs::create_dir(app.join("node_modules/.pnpm")).unwrap();
+    let pnpm = classify_in("omp", "npx vite build", app_dir);
+    assert_ne!(pnpm.minimum_action, "sandbox-required");
+    let _ = std::fs::remove_dir_all(&root);
 }

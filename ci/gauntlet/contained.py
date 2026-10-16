@@ -33,6 +33,8 @@ from .evidence import public_events, read_events
 from .fixtures import create_fixture, create_run_root, digest_file
 from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
+from .native_routes import await_native_routes
+from .observed_extension import generate_observed_extension
 from .provider import InferenceRelay, LoopbackCollector
 from .runner import HERE, REPO
 from .source_files import digest_runner_files
@@ -187,6 +189,7 @@ def run_contained_profile(
     inference: dict[str, Any] = {"live_rounds": [], "canary_export_violations": 0}
     egress_requests: list[dict[str, Any]] = []
     native_routes: dict[str, Any] = {}
+    resident_direct = 0
     returncode = -1
     timed_out = False
     approval_delta = 0
@@ -220,7 +223,7 @@ def run_contained_profile(
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
+            generate_observed_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
             extension_sha256 = digest_file(extension)
             wrapper_command = _guard_wrapper_command(extension)
             wrapper_sha256 = digest_file(Path(wrapper_command))
@@ -270,19 +273,24 @@ def run_contained_profile(
                     )
                     returncodes.append(status)
                     timeouts.append(timed)
-                    raw_events.extend(read_events(raw_logs[index]))
+                    batch_events = read_events(raw_logs[index])
+                    raw_events.extend(batch_events)
+                    # Each print process settles on its own; export them apart.
+                    events.extend(public_events(batch_events, replacements, status == 0 and not timed))
                 request_records = capture.records
             returncode = next((status for status in returncodes if status != 0), 0)
             timed_out = any(timeouts)
             time.sleep(0.1)
-            native_routes = worker.metrics.snapshot().get("routes", {})
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
             inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
-            events = public_events(raw_events, replacements)
             if guard_log.exists():
                 rows = [json.loads(line) for line in guard_log.read_text().splitlines() if line.strip()]
                 guard_observations = public_observations(rows, replacements)
+            # A bridged hook is answered either by a live resident, which counts
+            # it itself, or by the daemon, which routes it; read both once the
+            # observations say how many answers to account for.
+            native_routes, resident_direct = await_native_routes(worker, len(guard_observations))
             if (
                 digest_file(extension) != extension_sha256
                 or digest_file(identity.path) != identity.sha256
@@ -310,6 +318,7 @@ def run_contained_profile(
         events=events,
         guard_observations=guard_observations,
         native_routes=native_routes,
+        resident_direct_answers=resident_direct,
         inference=inference,
         filesystem=filesystem,
         returncode=returncode,
@@ -394,6 +403,7 @@ def run_contained_profile(
             "guard_observations": guard_observations,
             "inference": inference,
             "native_routes": native_routes,
+            "resident_direct_answers": resident_direct,
             "caller_workspace": public_callers[index],
             "target_workspace": public_targets[index],
             "tool_call_count": result["tool_calls"],

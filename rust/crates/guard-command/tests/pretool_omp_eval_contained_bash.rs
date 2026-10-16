@@ -155,8 +155,6 @@ fn bridged_secret_reads_and_exfiltration_stay_reviewed() {
         // A contained call does not carry a secret read beside it.
         "await tool.bash({command: \"python3 -I -c 'print(1)'\"}); display(await tool.read({path: '.env'}));",
         "await tool.bash({command: \"doctl version\"}); display(await tool.read({path: '~/.ssh/id_rsa'}));",
-        // The shell must run in the workspace it was proven for.
-        "display(await tool.bash({command: \"python3 -I -c 'print(1)'\", cwd: '../..'}));",
         "display(await tool.bash({command: \"doctl version\", env: 'A=1'}));",
         // Processes the cell spawns itself are not re-hooked or contained.
         "const p = Bun.spawn(['doctl', 'version']); display(await new Response(p.stdout).text());",
@@ -164,6 +162,20 @@ fn bridged_secret_reads_and_exfiltration_stay_reviewed() {
     ] {
         let result = eval(&f, code);
         assert_ne!(result.minimum_action, "allow", "{code}");
+    }
+    // A bridged `cwd` is judged where the shell runs, as the direct call is:
+    // the cell is reviewed unless that call is allowed or contained there.
+    let alone = omp(
+        &f,
+        "bash",
+        json!({"command": "python3 -I -c 'print(1)'", "cwd": "../.."}),
+    );
+    let result = eval(
+        &f,
+        "display(await tool.bash({command: \"python3 -I -c 'print(1)'\", cwd: '../..'}));",
+    );
+    if alone.minimum_action != "allow" && !contained(&alone) {
+        assert_ne!(result.minimum_action, "allow", "{}", alone.reason_code);
     }
     for code in [
         "import subprocess\nprint(subprocess.run(['doctl', 'version'], capture_output=True).stdout)",

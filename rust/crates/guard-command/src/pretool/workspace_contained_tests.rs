@@ -60,6 +60,13 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "rm notes.txt",
         "chmod +x scripts/run.sh",
         "chmod 755 bin/tool && ./bin/tool",
+        // A job specification stops only what this command started.
+        "kill %1",
+        "kill -9 %1",
+        "kill -s TERM %vite",
+        "kill -SIGTERM %1",
+        "kill -- %1",
+        "kill %+ %-",
         "rm -f init_repo.py",
         "rm a.py && rm -rf __pycache__",
         "echo hi > scratch.txt && rm scratch.txt",
@@ -89,6 +96,14 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
 #[test]
 fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
     let ws = workspace("node-narrow", true);
+    // The narrow profiles run only these script bodies, from local entrypoints.
+    let scripts = r#"{"scripts":{"lint":"eslint src","build":"vite build"}}"#;
+    std::fs::write(ws.join("package.json"), scripts).unwrap();
+    for entry in ["eslint/bin/eslint.js", "vite/bin/vite.js"] {
+        let entry = ws.join("node_modules").join(entry);
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        std::fs::write(entry, "").unwrap();
+    }
     for (command, narrower) in [
         (
             "npm run lint",
@@ -186,6 +201,17 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "chmod 777 x",
         "chmod u+s x",
         "chmod -R 755 .",
+        "kill 4821",
+        "kill -9 -1",
+        "kill %1 4821",
+        "kill -l",
+        "kill %$name",
+        // Only the first word is a signal: every `-N` after it is a pid or a
+        // process group, and both reach past this shell's own jobs.
+        "kill -9 -1 %1",
+        "kill -9 -4821 %1",
+        "kill -s TERM -1 %1",
+        "kill -- -1 %1",
         "echo $(x)",
         "echo hi > ../out",
         "git reset --hard",
@@ -573,4 +599,45 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         assert_ne!(reason(command), CONTAINED, "{command}");
     }
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `timeout 30 pytest -q` runs the program the text already names, under a
+/// clock that signals that one child, so this route reaches the same verdict
+/// it reaches for the command without the clock. `sudo` changes who runs the
+/// program and keeps the command off the route either way.
+#[test]
+fn a_timeout_clock_keeps_the_command_it_wraps_in_the_sandbox() {
+    let ws = workspace("timeout-wrapper", true);
+    for command in [
+        "python3 app.py",
+        "./todo.py add x",
+        "git commit -m init",
+        "rm -f *.pyc",
+        "npm run build && git diff",
+    ] {
+        assert_eq!(
+            reason("omp", &format!("timeout 30 {command}"), &ws, true),
+            reason("omp", command, &ws, true),
+            "{command}"
+        );
+        assert_eq!(
+            reason("omp", &format!("timeout -- 5s {command}"), &ws, true),
+            reason("omp", command, &ws, true),
+            "{command}"
+        );
+    }
+    assert_eq!(
+        reason("omp", "timeout 60 npm run build", &ws, true) == CONTAINED,
+        host()
+    );
+    for command in [
+        "timeout 30 sudo npm run build",
+        "sudo timeout 30 npm run build",
+        "timeout 30 curl https://example.com",
+        "timeout 30 cat /Users/nobody/.ssh/id_rsa",
+        "timeout 30 git push origin main",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
 }

@@ -5,9 +5,11 @@
 //! sanitized workspace override files. Every unreadable, unsafe or malformed
 //! source is an error so that callers keep the request blocked.
 //!
-//! Managed (MDM) policy composition is not ported. A machine policy source or
-//! its cache can only make the effective configuration stricter, so its mere
-//! presence is reported as an error rather than silently ignored.
+//! Managed (MDM) policy is composed here as Python composes it: the machine
+//! source is loaded, an unreadable one stands in as the fail-closed floor, and
+//! the resulting policy is applied to the merged payload before any value is
+//! read out of it. A managed requirement can only make the configuration
+//! stricter.
 
 use std::fs;
 use std::io::ErrorKind;
@@ -19,6 +21,10 @@ use guard_command::local_supply_chain::{GuardConfig, VALID_RISK_ACTION_KEYS};
 use guard_command::supply_chain_package_eval::{ConfigLoaderApi, EvalError, EvalResult};
 use guard_secure_fs::read_stable;
 use serde_json::{Map, Value};
+
+use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
+use crate::managed_policy_floor::effective_managed_policy;
+use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
 
 pub(crate) const HOME_CONFIG_FILENAME: &str = "config.toml";
 pub(crate) const WORKSPACE_CONFIG_FILENAMES: [&str; 2] =
@@ -67,53 +73,17 @@ impl ConfigLoaderApi for ResidentConfigLoader {
         workspace: Option<&Path>,
         require_canonical_workspace: bool,
     ) -> EvalResult<GuardConfig> {
-        let machine_policy = machine_policy_paths()?;
         load_effective_guard_config(
             guard_home,
             workspace,
             require_canonical_workspace,
-            &machine_policy,
+            &ManagedPolicySource::native(),
         )
     }
 }
 
 pub(crate) fn config_error(reason: &str) -> EvalError {
     EvalError::Internal(format!("guard config unavailable: {reason}"))
-}
-
-/// Paths whose presence means a managed policy may apply on this machine.
-#[cfg(target_os = "macos")]
-fn machine_policy_paths() -> EvalResult<Vec<PathBuf>> {
-    Ok(vec![
-        PathBuf::from("/Library/Managed Preferences/org.hol.guard.plist"),
-        PathBuf::from("/Library/Application Support/HOL Guard State/managed-policy-cache.json"),
-    ])
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn machine_policy_paths() -> EvalResult<Vec<PathBuf>> {
-    Ok(vec![
-        PathBuf::from("/etc/hol-guard/managed-policy.json"),
-        PathBuf::from("/var/lib/hol-guard/managed-policy-cache.json"),
-    ])
-}
-
-/// The Windows managed policy lives in the registry, which the resident cannot
-/// read natively. Fail closed instead of assuming that no policy applies.
-#[cfg(windows)]
-fn machine_policy_paths() -> EvalResult<Vec<PathBuf>> {
-    Err(config_error("managed_policy_registry_unreadable"))
-}
-
-fn reject_machine_policy(paths: &[PathBuf]) -> EvalResult<()> {
-    for path in paths {
-        match fs::symlink_metadata(path) {
-            Ok(_) => return Err(config_error("managed_policy_present")),
-            Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(_) => return Err(config_error("managed_policy_unreadable")),
-        }
-    }
-    Ok(())
 }
 
 /// Read one allowed config file. `Ok(None)` means the file does not exist,
@@ -170,6 +140,11 @@ fn reject_symlinked_ancestors(workspace: &Path) -> EvalResult<()> {
     let mut walked = PathBuf::new();
     for component in workspace.components() {
         walked.push(component);
+        // A bare Windows drive (`C:`, `\\?\C:`) names no directory entry: it is
+        // the drive's current directory, or no path at all once verbatim.
+        if matches!(component, Component::Prefix(_)) {
+            continue;
+        }
         match fs::symlink_metadata(&walked) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(config_error("config_file_unavailable_or_changed"));
@@ -278,18 +253,29 @@ pub(crate) fn coerce_harness_risk_actions(
     actions
 }
 
-/// Load the effective config. `machine_policy` are the managed-policy sources
-/// whose presence the native loader cannot compose and so rejects.
+/// Load the effective config. `managed` names the machine policy source whose
+/// document is composed into the local configuration.
 pub(crate) fn load_effective_guard_config(
     guard_home: &Path,
     workspace: Option<&Path>,
     require_canonical_workspace: bool,
-    machine_policy: &[PathBuf],
+    managed: &ManagedPolicySource,
 ) -> EvalResult<GuardConfig> {
-    reject_machine_policy(machine_policy)?;
+    let managed_state = load_managed_policy(managed);
+    let managed_policy = effective_managed_policy(&managed_state);
     let home = read_config_table(guard_home, HOME_CONFIG_FILENAME)?.unwrap_or_default();
     let workspace_config = load_workspace_config(workspace, require_canonical_workspace)?;
-    let merged = merge_config_payload(&home, &workspace_config);
+    let local = merge_config_payload(&home, &workspace_config);
+    let merged = match &managed_policy {
+        Some(policy) => apply_managed_policy(
+            &local,
+            &ManagedInput {
+                settings: policy.settings.clone(),
+                locked_settings: policy.locked_settings.iter().cloned().collect(),
+            },
+        ),
+        None => local,
+    };
 
     let security_level = coerce_security_level(merged.get("security_level"));
     let posture_override = explicit_posture(merged.get("protection_posture"));
@@ -300,13 +286,18 @@ pub(crate) fn load_effective_guard_config(
         security_level,
         protection_posture,
         protection_posture_explicit,
-        managed_locked_settings: Vec::new(),
+        managed_locked_settings: managed_policy
+            .as_ref()
+            .map(|policy| policy.locked_settings.iter().cloned().collect())
+            .unwrap_or_default(),
         risk_actions: Some(coerce_risk_action_map(merged.get("risk_actions"))),
         harness_risk_actions: Some(coerce_harness_risk_actions(
             merged.get("harness_risk_actions"),
         )),
-        managed_policy_status: "absent".to_owned(),
-        managed_policy_hash: None,
+        managed_policy_status: managed_state.status.as_str().to_owned(),
+        managed_policy_hash: managed_policy
+            .as_ref()
+            .map(|policy| policy.content_hash.clone()),
         guard_home: Some(guard_home.to_path_buf()),
         extra: Map::new(),
     })

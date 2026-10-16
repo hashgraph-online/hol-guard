@@ -318,6 +318,7 @@ fn classify_secret_path_profile(
         .replace('\\', "/")
         .to_lowercase()
         .split('/')
+        .map(guard_secure_fs::win32_name)
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();

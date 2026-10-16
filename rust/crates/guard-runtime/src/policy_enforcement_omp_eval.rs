@@ -56,9 +56,12 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
         ("native_omp_eval_bounded_tools", PreToolActionTypeV1::Command) => {
             Some(PreToolActionTypeV1::Command)
         }
-        ("native_omp_yield_metadata", PreToolActionTypeV1::Harness) => {
-            Some(PreToolActionTypeV1::Harness)
-        }
+        (
+            "native_omp_yield_metadata"
+            | "native_omp_eval_pure_compute"
+            | "native_omp_eval_loopback_browser",
+            PreToolActionTypeV1::Harness,
+        ) => Some(PreToolActionTypeV1::Harness),
         _ => None,
     }
 }

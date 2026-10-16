@@ -22,8 +22,11 @@ pub(crate) fn canonicalize_text(path: &Path) -> std::io::Result<PathBuf> {
     std::fs::canonicalize(path).map(strip_verbatim_prefix)
 }
 
+/// Removes the `\\?\` verbatim prefix of a canonical Windows path (identity
+/// elsewhere), so a cwd that came from `std::fs::canonicalize` joins to the
+/// same text as `canonicalize_text` output.
 #[cfg(windows)]
-fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+pub(crate) fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
     if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
         return PathBuf::from(format!(r"\\{rest}"));
@@ -35,7 +38,7 @@ fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
 }
 
 #[cfg(not(windows))]
-fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+pub(crate) fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
     path
 }
 

@@ -17,7 +17,7 @@ import {
 import { AppliedPolicyToast } from "../../extension-policy-applied-toast";
 import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
 import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
-import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns } from "../model/protection-landing";
+import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns, wordMatch } from "../model/protection-landing";
 import { useCatalogPermissionSearch } from "../use-catalog-permission-search";
 import { ProtectionModuleRow } from "./protection-primitives";
 import { ExtensionBrandMark } from "./extension-brand-mark";
@@ -119,8 +119,8 @@ export function PatternSearchConsole(props: {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
     return props.catalog.filter((extension) => {
-      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ").toLowerCase();
-      return terms.every((term) => text.includes(term));
+      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ");
+      return terms.every((term) => wordMatch(text, term) !== null);
     });
   }, [props.catalog, query]);
   const grouped = useMemo(() => {

@@ -85,6 +85,37 @@ pub(crate) fn daemon_target(guard_home: &Path, harness: &str) -> Option<DaemonTa
     })
 }
 
+impl DaemonTarget {
+    /// The daemon's status and body for a hook posted to `path`, or `None`
+    /// when no complete answer of at most `MAX_DAEMON_RESPONSE_BYTES`
+    /// arrived in time. A refusal is returned as the daemon gave it.
+    pub(crate) fn post_status(
+        &self,
+        path: &str,
+        data: &str,
+        deadline: Instant,
+    ) -> Option<(u16, Vec<u8>)> {
+        let mut connection = LoopbackConnection::new(&self.host, self.port);
+        let head = connection
+            .post(
+                path,
+                &[
+                    ("Content-Type", "application/json"),
+                    ("Connection", "close"),
+                    ("X-Guard-Token", self.token.as_str()),
+                ],
+                data.as_bytes(),
+                deadline,
+            )
+            .ok()?;
+        let body = connection
+            .read_body(&head, deadline, HOOK_DEADLINE, HOOK_DEADLINE)
+            .ok()?;
+        (Instant::now() < deadline && body.len() <= MAX_DAEMON_RESPONSE_BYTES)
+            .then_some((head.status, body))
+    }
+}
+
 /// The deadline for one daemon request: at most `budget` and half of the
 /// `left` the hook had, so the rest of the hook keeps the other half. `None`
 /// when no time is left for the request.

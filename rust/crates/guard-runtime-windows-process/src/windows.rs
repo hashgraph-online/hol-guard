@@ -39,6 +39,8 @@ use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE
 mod bound_open;
 #[path = "windows/capture.rs"]
 mod capture;
+#[path = "windows/child_tree.rs"]
+mod child_tree;
 #[path = "directory_binding.rs"]
 mod directory_binding;
 #[path = "file_identity.rs"]
@@ -51,12 +53,14 @@ mod private_files;
 mod process_lifecycle;
 pub use bound_open::{
     directory_file_id, handle_file_id, open_bound_executable_file, open_bound_regular_file,
-    open_bound_replaceable_file, open_skill_directory, regular_file_id, FileId,
+    open_bound_replaceable_file, open_skill_directory, path_stat, regular_file_id, FileId,
+    PathStat,
 };
 pub use capture::{
     capture as capture_managed_child, capture_owned_child, capture_pipes, CaptureCommand,
     CapturePipes, CapturedOutput, InheritWindow,
 };
+pub use child_tree::{disinherit_standard_handles, ChildTree, CHILD_TREE_CREATION_FLAGS};
 pub use directory_binding::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     path_is_within, PrivateDirectoryBinding,
@@ -67,7 +71,7 @@ pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
 };
 pub use process_lifecycle::{
-    process_start_marker, running_process_start_marker, terminate_process,
+    process_liveness, process_start_marker, running_process_start_marker, terminate_process,
     terminate_process_verified, wait_for_process_exit,
 };
 
@@ -355,20 +359,30 @@ fn extend_over_max_path(wide: Vec<u16>, absolute: bool) -> Vec<u16> {
 }
 
 fn command_line(executable: &OsStr, args: &[&OsStr]) -> io::Result<Vec<u16>> {
-    let mut output = Vec::new();
-    let all_args = std::iter::once(executable).chain(args.iter().copied());
-    for (index, arg) in all_args.enumerate() {
-        if index != 0 {
-            output.push(' ' as u16);
-        }
-        output.extend(quote_arg(arg)?);
+    // The image comes from the application name; argv[0] only names it.
+    // Programs such as cmd.exe scan the raw command line for switches, so a
+    // `/` in the program name (`System32/cmd.exe`) would read as `/c md.exe`
+    // and run a different command. Name the program with native separators.
+    let program = executable
+        .encode_wide()
+        .map(|unit| {
+            if unit == b'/' as u16 {
+                b'\\' as u16
+            } else {
+                unit
+            }
+        })
+        .collect();
+    let mut output = quote_units(program)?;
+    for arg in args {
+        output.push(' ' as u16);
+        output.extend(quote_units(arg.encode_wide().collect())?);
     }
     output.push(0);
     Ok(output)
 }
 
-fn quote_arg(arg: &OsStr) -> io::Result<Vec<u16>> {
-    let value: Vec<u16> = arg.encode_wide().collect();
+fn quote_units(value: Vec<u16>) -> io::Result<Vec<u16>> {
     if value.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

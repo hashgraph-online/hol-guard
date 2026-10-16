@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from hashlib import sha256
-from typing import Final, cast
+from typing import Final, NamedTuple, cast
 
 from .adapters.contracts import contract_for
 from .codex_app_server_target import codex_app_server_target_reachable
@@ -169,33 +169,63 @@ def _offer_from_request(
     headless: bool,
     operation_override: Mapping[str, object] | None = None,
 ) -> ContinuationOffer:
-    harness = _canonical_harness(request_row.get("harness"))
     operation = operation_override or store.get_guard_operation_for_approval_request(request_id)
+    facts = continuation_offer_facts(
+        store, harness=request_row.get("harness"), operation=operation, observed_at=observed_at
+    )
+    return capability_offer(
+        correlation_id=canonical_continuation_correlation_id(
+            request_id=request_id,
+            request_row=request_row,
+            operation_metadata=facts.metadata,
+        ),
+        harness=facts.harness,
+        original_hook_attached=facts.original_hook_attached,
+        wait_deadline=facts.wait_deadline,
+        opaque_target_id=facts.opaque_target_id,
+        session_target_verified=facts.session_target_verified,
+        headless=headless,
+        now=lambda: observed_at,
+    )
+
+
+class ContinuationOfferFacts(NamedTuple):
+    """What an offer reads from the harness and the operation that queued it."""
+
+    harness: str
+    metadata: Mapping[str, object]
+    original_hook_attached: bool
+    wait_deadline: datetime | None
+    opaque_target_id: str | None
+    session_target_verified: bool
+
+
+def continuation_offer_facts(
+    store: GuardStore,
+    *,
+    harness: object,
+    operation: Mapping[str, object] | None,
+    observed_at: datetime,
+) -> ContinuationOfferFacts:
+    canonical = _canonical_harness(harness)
     metadata: Mapping[str, object] = _mapping(operation.get("metadata")) if isinstance(operation, Mapping) else {}
     deadline = codex_live_hook_wait_deadline(store, operation=operation, metadata=metadata) if operation else None
-    original_hook_attached = harness == "codex" and deadline is not None and deadline > observed_at
+    original_hook_attached = canonical == "codex" and deadline is not None and deadline > observed_at
     raw_target = _first_text(metadata, _SESSION_KEYS)
     session_target_verified = (
-        harness == "codex"
+        canonical == "codex"
         and not original_hook_attached
         and not codex_live_hook_process_is_unavailable(metadata)
         and raw_target is not None
         and codex_app_server_target_reachable(metadata)
     )
-    opaque_target_id = _opaque_target_id(harness, raw_target)
-    return capability_offer(
-        correlation_id=canonical_continuation_correlation_id(
-            request_id=request_id,
-            request_row=request_row,
-            operation_metadata=metadata,
-        ),
-        harness=harness,
-        original_hook_attached=original_hook_attached,
-        wait_deadline=deadline,
-        opaque_target_id=opaque_target_id,
-        session_target_verified=session_target_verified,
-        headless=headless,
-        now=lambda: observed_at,
+    return ContinuationOfferFacts(
+        canonical,
+        metadata,
+        original_hook_attached,
+        deadline,
+        _opaque_target_id(canonical, raw_target),
+        session_target_verified,
     )
 
 

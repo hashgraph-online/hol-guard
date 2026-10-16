@@ -53,10 +53,13 @@ from .input_evidence import (
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
+from .native_routes import await_native_routes
 from .native_tools import cleanup_private_temp
+from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
+from .script_cases import stage_script_cases
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 from .supply_chain import stage_supply_chain
@@ -86,6 +89,7 @@ def run_case(
         scenario_id=scenario.id,
     )
     stage_supply_chain(fixture.workspace, scenario.id)
+    stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
@@ -97,6 +101,7 @@ def run_case(
         "events": [],
         "guard_observations": [],
         "native_routes": {},
+        "resident_direct_answers": 0,
         "inference": {"live_rounds": [], "canary_export_violations": 0},
         "filesystem": {},
         "egress_requests": [],
@@ -201,7 +206,7 @@ def run_case(
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(
+            generate_observed_extension(
                 extension, guard_home=fixture.root / "guard-home", home=fixture.home, settings_path=settings
             )
             case["guard_extension_sha256"] = digest_file(extension)
@@ -259,7 +264,6 @@ def run_case(
                 timeout=timeout + 15,
             )
             time.sleep(0.1)
-            case["native_routes"] = worker.metrics.snapshot().get("routes", {})
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
@@ -272,6 +276,12 @@ def run_case(
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["stderr_sha256"] = digest_file(error_log)
             read_case_logs(case, raw_log, guard_log, replacements, host_log)
+            # A bridged hook is answered either by a live resident, which counts
+            # it itself, or by the daemon, which routes it; read both once the
+            # case's observations say how many answers to account for.
+            case["native_routes"], case["resident_direct_answers"] = await_native_routes(
+                worker, len(case["guard_observations"])
+            )
             if proofs := request_proofs(host_log, fixture.workspace, replacements):
                 case["contained_request_proofs"] = proofs
             if scenario.oracle == "blocked-extension":

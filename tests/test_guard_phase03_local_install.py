@@ -2430,6 +2430,7 @@ def test_current_update_does_not_repair_artifacts_owned_by_newer_desktop_runtime
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
     monkeypatch.setattr(update_commands, "_verified_newer_guard_daemon", lambda *_args, **_kwargs: retained)
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: False)
     monkeypatch.setattr(
         update_commands,
         "_refresh_package_shims_after_update",

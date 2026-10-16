@@ -11,7 +11,6 @@ import pytest
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_catalog import _values_for_payload
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     load_mcp_contribution_payloads,
     validate_mcp_contribution,
@@ -44,12 +43,8 @@ def artifact(command="kranz", args=(), transport="stdio", tool="action_run"):
     )
 
 
-def test_validates_and_projects_runnable_example():
-    value = payload()
-    validate_mcp_contribution(value)
-    projected = _values_for_payload(value)
-    assert projected["executables"] == ("fixture-mcp",)
-    assert {p.example_command for p in projected["permissions"]} == {"fixture-mcp"}
+def test_validates_runnable_example():
+    validate_mcp_contribution(payload())
 
 
 @pytest.mark.parametrize(

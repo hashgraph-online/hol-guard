@@ -2,18 +2,41 @@
 //!
 //! The identity proofs bind exact path spellings, so paths stay strings and
 //! every helper mirrors the CPython call it replaces. A path that cannot be
-//! resolved is `None`, never a guess.
+//! resolved is `None`, never a guess. On Windows the spelling helpers and the
+//! resolvers come from `fs_path_windows`; the rest is shared.
 
+#[cfg(not(windows))]
 use std::collections::HashMap;
+#[cfg(not(windows))]
 use std::path::Path;
 
+#[cfg(windows)]
+pub(super) use super::fs_path_windows::{
+    expand_tilde, is_abs, is_anchored, is_literal, is_sep, join, name, norm, parent, resolve,
+    resolve_strict,
+};
+
+#[cfg(not(windows))]
 const MAX_SYMLINK_DEPTH: usize = 64;
 
+#[cfg(not(windows))]
 pub(super) fn is_abs(path: &str) -> bool {
     path.starts_with('/')
 }
 
+/// Has a root of its own, so it never names a path below another.
+#[cfg(not(windows))]
+pub(super) fn is_anchored(path: &str) -> bool {
+    is_abs(path)
+}
+
+#[cfg(not(windows))]
+pub(super) fn is_sep(character: char) -> bool {
+    character == '/'
+}
+
 /// `str(PurePosixPath(path))`: collapse empty and `.` components.
+#[cfg(not(windows))]
 pub(super) fn norm(path: &str) -> String {
     let leading = path.bytes().take_while(|byte| *byte == b'/').count();
     let parts: Vec<&str> = path
@@ -36,6 +59,7 @@ pub(super) fn norm(path: &str) -> String {
 }
 
 /// `base / rel`: an absolute `rel` replaces the base.
+#[cfg(not(windows))]
 pub(super) fn join(base: &str, rel: &str) -> String {
     if is_abs(rel) {
         norm(rel)
@@ -47,6 +71,7 @@ pub(super) fn join(base: &str, rel: &str) -> String {
 }
 
 /// `Path.name`.
+#[cfg(not(windows))]
 pub(super) fn name(path: &str) -> String {
     let normalized = norm(path);
     if normalized == "." || normalized.bytes().all(|byte| byte == b'/') {
@@ -56,6 +81,7 @@ pub(super) fn name(path: &str) -> String {
 }
 
 /// `Path.parent`.
+#[cfg(not(windows))]
 pub(super) fn parent(path: &str) -> String {
     let normalized = norm(path);
     match normalized.rfind('/') {
@@ -94,15 +120,28 @@ pub(super) fn is_inside(path: &str, root: &str) -> bool {
     path == root || parents(path).iter().any(|ancestor| ancestor == root)
 }
 
+/// A relative path is never probed: on Windows the process cwd and per-drive
+/// state would decide what it names.
+#[cfg(windows)]
+fn is_probe(path: &str) -> bool {
+    is_abs(path)
+}
+
+#[cfg(not(windows))]
+fn is_probe(_path: &str) -> bool {
+    true
+}
+
 pub(super) fn is_dir(path: &str) -> bool {
-    std::fs::metadata(path).is_ok_and(|meta| meta.is_dir())
+    is_probe(path) && std::fs::metadata(path).is_ok_and(|meta| meta.is_dir())
 }
 
 pub(super) fn is_file(path: &str) -> bool {
-    std::fs::metadata(path).is_ok_and(|meta| meta.is_file())
+    is_probe(path) && std::fs::metadata(path).is_ok_and(|meta| meta.is_file())
 }
 
 /// `Path(path).resolve(strict=True)`.
+#[cfg(not(windows))]
 pub(super) fn resolve_strict(path: &str) -> Option<String> {
     if !is_abs(path) {
         return None;
@@ -116,6 +155,7 @@ pub(super) fn resolve_strict(path: &str) -> Option<String> {
 
 /// `Path(path).resolve()` (`os.path.realpath`, non-strict): symlinks of the
 /// existing prefix are followed and a missing tail is kept lexically.
+#[cfg(not(windows))]
 pub(super) fn resolve(path: &str) -> Option<String> {
     if !is_abs(path) {
         return None;
@@ -126,6 +166,7 @@ pub(super) fn resolve(path: &str) -> Option<String> {
 }
 
 /// `posixpath.split(path)[0]` for the non-root cases `join_real` produces.
+#[cfg(not(windows))]
 fn split_head(path: &str) -> (String, String) {
     let cut = path.rfind('/').map_or(0, |index| index + 1);
     let (head, tail) = path.split_at(cut);
@@ -137,9 +178,11 @@ fn split_head(path: &str) -> (String, String) {
     (head.to_owned(), tail.to_owned())
 }
 
+#[cfg(not(windows))]
 type Seen = HashMap<String, Option<String>>;
 
 /// `posixpath._joinrealpath(path, rest, strict=False, seen)`.
+#[cfg(not(windows))]
 fn join_real(
     mut path: String,
     rest: &str,
@@ -213,6 +256,7 @@ fn join_real(
 }
 
 /// `expand_home(value, home)` for a `~`-prefixed argument: only `~/` is expanded.
+#[cfg(not(windows))]
 pub(super) fn expand_tilde(value: &str, home: &str) -> String {
     match value.strip_prefix("~/") {
         Some(rest) => join(home, rest),
@@ -227,6 +271,9 @@ pub(super) use crate::guard_store_wfcap_frame::sha256_hex;
 /// size check) is `None`, so a read never exceeds the budget.
 pub(super) fn read_bounded(path: &str, limit: u64) -> Option<Vec<u8>> {
     use std::io::Read;
+    if !is_probe(path) {
+        return None;
+    }
     let mut data = Vec::new();
     std::fs::File::open(path)
         .ok()?

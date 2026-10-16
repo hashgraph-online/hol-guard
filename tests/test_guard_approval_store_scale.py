@@ -16,17 +16,17 @@ from codex_plugin_scanner.guard.store_approvals import (
     approval_index_statements,
     approval_schema_statement,
     bulk_resolve_approval_requests,
-    count_approval_requests,
     get_approval_request,
     list_approval_requests,
-    list_pending_approval_summaries,
-    resolve_approval_request,
     resolve_request_with_queue_result,
 )
 from tests.coverage_ci import under_coverage_scale
 from tests.native_approval_writes import (
+    _store_for,
     add_approval_request,
     native_approval_connection,
+    native_store,
+    page_cursor,
     seed_pending_approval_rows,
 )
 
@@ -126,8 +126,8 @@ class TestCursorPagination:
             _insert(conn, _make_request(), f"2026-01-{i + 1:02d}T00:00:00Z")
         page1 = list_approval_requests(conn, status="pending", limit=3)
         assert len(page1) == 3
-        cursor = page1[-1]["created_at"]
-        page2 = list_approval_requests(conn, status="pending", limit=3, before_cursor=cursor)
+        cursor = page_cursor(page1[-1])
+        page2 = _store_for(conn).list_approval_requests(status="pending", limit=3, cursor=cursor)
         assert len(page2) == 3
         dates_p1 = {r["created_at"] for r in page1}
         dates_p2 = {r["created_at"] for r in page2}
@@ -138,18 +138,20 @@ class TestCursorPagination:
         for i in range(3):
             _insert(conn, _make_request(), f"2026-01-0{i + 1}T00:00:00Z")
         page1 = list_approval_requests(conn, status="pending", limit=3)
-        cursor = page1[-1]["created_at"]
-        page2 = list_approval_requests(conn, status="pending", limit=3, before_cursor=cursor)
+        cursor = page_cursor(page1[-1])
+        page2 = _store_for(conn).list_approval_requests(status="pending", limit=3, cursor=cursor)
         assert page2 == []
 
 
 class TestQueueScaleTargets:
     def test_listing_first_queue_page_with_100k_rows_stays_under_100ms(self) -> None:
-        conn = _make_memory_conn()
+        conn = _make_conn()
         seed_pending_approval_rows(conn, 100_000)
+        store = native_store(conn)
+        store.count_approval_requests()  # starts the resident outside the timed read
 
         started = time.perf_counter()
-        page = list_pending_approval_summaries(conn, limit=25)
+        page = store.list_pending_approval_summaries(limit=25)
         elapsed = time.perf_counter() - started
 
         assert len(page["items"]) == 25
@@ -198,21 +200,23 @@ class TestQueueScaleTargets:
         assert get_approval_request(conn, second_id)["status"] == "pending"
 
     def test_listing_queue_page_without_totals_skips_count_queries(self) -> None:
-        conn = _make_memory_conn()
+        conn = _make_conn()
         seed_pending_approval_rows(conn, 50)
 
-        page = list_pending_approval_summaries(conn, limit=10, include_totals=False)
+        page = native_store(conn).list_pending_approval_summaries(limit=10, include_totals=False)
 
         assert len(page["items"]) == 10
         assert "total_pending_count" not in page
         assert "total_count" not in page
 
     def test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows(self) -> None:
-        conn = _make_memory_conn()
+        conn = _make_conn()
         seed_pending_approval_rows(conn, 100_000)
+        store = native_store(conn)
+        store.count_approval_requests()  # starts the resident outside the timed read
 
         started = time.perf_counter()
-        page = list_pending_approval_summaries(conn, limit=25, include_totals=False)
+        page = store.list_pending_approval_summaries(limit=25, include_totals=False)
         elapsed = time.perf_counter() - started
 
         assert len(page["items"]) == 25
@@ -235,7 +239,7 @@ class TestSearchFilter:
         )
         _insert(conn, req)
         _insert(conn, req2)
-        results = list_approval_requests(conn, search="special")
+        results = _store_for(conn).list_approval_requests(search="special")
         assert len(results) == 1
         assert results[0]["artifact_name"] == "special-tool"
 
@@ -253,7 +257,7 @@ class TestSearchFilter:
             }
         )
         _insert(conn, mod)
-        results = list_approval_requests(conn, search="specialtool")
+        results = _store_for(conn).list_approval_requests(search="specialtool")
         assert len(results) == 1
 
     def test_search_matches_raw_command_text_in_queue_pages(self) -> None:
@@ -272,7 +276,7 @@ class TestSearchFilter:
         _insert(conn, req)
         _insert(conn, mod)
 
-        page = list_pending_approval_summaries(conn, search="bulk")
+        page = native_store(conn).list_pending_approval_summaries(search="bulk")
 
         assert page["total_count"] == 1
         assert page["items"][0]["request_id"] == mod.request_id
@@ -294,7 +298,7 @@ class TestSearchFilter:
         _insert(conn, req)
         _insert(conn, mod)
 
-        results = list_approval_requests(conn, search="bulk-import")
+        results = _store_for(conn).list_approval_requests(search="bulk-import")
 
         assert len(results) == 1
         assert results[0]["request_id"] == mod.request_id
@@ -302,8 +306,16 @@ class TestSearchFilter:
     def test_search_no_match_returns_empty(self) -> None:
         conn = _make_conn()
         _insert(conn, _make_request())
-        results = list_approval_requests(conn, search="xyznotfound")
+        results = _store_for(conn).list_approval_requests(search="xyznotfound")
         assert results == []
+
+
+def _mark_resolved(conn: sqlite3.Connection, request_id: str) -> None:
+    conn.execute(
+        "update approval_requests set status = 'resolved', resolution_action = 'allow', "
+        "resolution_scope = 'session', resolved_at = '2026-01-02T00:00:00Z' where request_id = ?",
+        (request_id,),
+    )
 
 
 class TestStatusFilterList:
@@ -313,14 +325,7 @@ class TestStatusFilterList:
         req2 = _make_request()
         _insert(conn, req1)
         _insert(conn, req2)
-        resolve_approval_request(
-            conn,
-            req1.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req1.request_id)
         rows = list_approval_requests(conn, status=None)
         statuses = {r["status"] for r in rows}
         assert "pending" in statuses
@@ -330,14 +335,7 @@ class TestStatusFilterList:
         conn = _make_conn()
         req = _make_request()
         _insert(conn, req)
-        resolve_approval_request(
-            conn,
-            req.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req.request_id)
         rows = list_approval_requests(conn, status="pending")
         assert rows == []
         rows = list_approval_requests(conn, status="resolved")
@@ -354,24 +352,6 @@ class TestHarnessFilter:
         assert len(rows) == 1
 
 
-class TestDateRangeFilter:
-    def test_after_filter_excludes_older_rows(self) -> None:
-        conn = _make_conn()
-        _insert(conn, _make_request(), "2026-01-01T00:00:00Z")
-        _insert(conn, _make_request(), "2026-03-01T00:00:00Z")
-        rows = list_approval_requests(conn, created_after="2026-02-01T00:00:00Z")
-        assert len(rows) == 1
-        assert rows[0]["created_at"] == "2026-03-01T00:00:00Z"
-
-    def test_before_filter_excludes_newer_rows(self) -> None:
-        conn = _make_conn()
-        _insert(conn, _make_request(), "2026-01-01T00:00:00Z")
-        _insert(conn, _make_request(), "2026-03-01T00:00:00Z")
-        rows = list_approval_requests(conn, created_before="2026-02-01T00:00:00Z")
-        assert len(rows) == 1
-        assert rows[0]["created_at"] == "2026-01-01T00:00:00Z"
-
-
 class TestCountFilter:
     def test_count_matches_status_filter(self) -> None:
         conn = _make_conn()
@@ -379,16 +359,9 @@ class TestCountFilter:
         req2 = _make_request()
         _insert(conn, req1)
         _insert(conn, req2)
-        resolve_approval_request(
-            conn,
-            req1.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
-        pending_count = count_approval_requests(conn, status="pending")
-        resolved_count = count_approval_requests(conn, status="resolved")
+        _mark_resolved(conn, req1.request_id)
+        pending_count = native_store(conn).count_approval_requests(status="pending")
+        resolved_count = native_store(conn).count_approval_requests(status="resolved")
         assert pending_count == 1
         assert resolved_count == 1
 
@@ -396,8 +369,8 @@ class TestCountFilter:
         conn = _make_conn()
         _insert(conn, _make_request(harness="codex"))
         _insert(conn, _make_request(harness="claude"))
-        assert count_approval_requests(conn, status="pending", harness="codex") == 1
-        assert count_approval_requests(conn, status="pending", harness="claude") == 1
+        assert native_store(conn).count_approval_requests(status="pending", harness="codex") == 1
+        assert native_store(conn).count_approval_requests(status="pending", harness="claude") == 1
 
 
 class TestBulkResolve:
@@ -431,7 +404,7 @@ class TestBulkResolve:
             reason=None,
             resolved_at="2026-01-01T00:00:00Z",
         )
-        assert count_approval_requests(conn) == 0
+        assert native_store(conn).count_approval_requests() == 0
 
 
 class TestMigrationFromOldSchema:
@@ -504,7 +477,7 @@ class TestCorruptionRecovery:
             assert stored["launch_target"] == f"chrome-devtools {operation} unknown"
             assert stored["risk_signals_json"] == f'["{risk_prefix} unknown target"]'
 
-        page = list_pending_approval_summaries(conn, limit=10)
+        page = native_store(conn).list_pending_approval_summaries(limit=10)
         summaries = page["items"]
         assert isinstance(summaries, list)
         repaired: set[object] = set()

@@ -28,6 +28,10 @@ pub(super) struct RedirectProjection {
     /// Every file written is a scratch file, where a network read's body
     /// may be saved.
     pub(super) scratch_writes: bool,
+    /// [`crate::pretool::git_init_chain::admits`] took the chain, so only
+    /// that proof may allow it: the targets were checked in the working
+    /// directory, and a write after the `cd` lands in the new repository.
+    init_chain: bool,
     /// The literal targets the removed redirects write.
     written: Vec<String>,
 }
@@ -168,10 +172,12 @@ pub(super) fn project(
     });
     let git_chain =
         (chain && bounded_writes && git_chain::admits(&model, &targets)).then(|| targets.clone());
+    let init_chain =
+        chain && bounded_writes && crate::pretool::git_init_chain::admits(&model, &targets);
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write)
+        || (chain && git_chain.is_none() && !leading_write && !init_chain)
     {
         return None;
     }
@@ -191,6 +197,7 @@ pub(super) fn project(
         bounded_writes,
         git_chain,
         scratch_writes,
+        init_chain,
         written: targets,
     })
 }
@@ -228,9 +235,8 @@ fn redirect_disqualifies_containment(reason: &str) -> bool {
         )
 }
 
-/// The macOS package and Node tool profiles. A redirect disqualifies them,
-/// though the workspace sandbox, which runs the raw text in a shell, may
-/// still take the command once it passes the workspace route's runner gate.
+/// The macOS package and Node tool profiles. A redirect disqualifies them; the
+/// workspace sandbox may still take the command once its runner gate passes.
 pub(super) fn package_profile(reason: &str) -> bool {
     matches!(
         reason,
@@ -260,7 +266,12 @@ pub(super) fn join(
     // tool loads on its own.
     let scratch_body = projection.scratch_writes
         && projected.reason_code == crate::pretool::curl_reads::NETWORK_READ_REASON;
-    if writes_file && !scratch_body && redirect_disqualifies_containment(&projected.reason_code) {
+    let other_proof =
+        projection.init_chain && projected.reason_code != crate::pretool::git_init_chain::REASON;
+    if writes_file
+        && !scratch_body
+        && (other_proof || redirect_disqualifies_containment(&projected.reason_code))
+    {
         write_review(&mut projected);
         projected.explicitly_benign = false;
     }
@@ -281,9 +292,8 @@ pub(super) fn join(
         projected.decision = raw.decision;
         projected.reason_code = raw.reason_code;
         projected.reason = raw.reason;
-        // The raw text can earn a read-only profile on its own, and the
-        // redirect disqualifies it there too. Its workspace sandbox route
-        // stays: that sandbox runs the raw text in a shell.
+        // The raw text can earn a read-only profile on its own, which the
+        // redirect disqualifies too; its workspace sandbox route stays.
         let profile = &projected.reason_code;
         if writes_file
             && (package_profile(profile) || profile.ends_with("_readonly_containment_required"))

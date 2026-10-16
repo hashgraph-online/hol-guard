@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar
@@ -7,6 +8,7 @@ from typing import Any, ClassVar
 import pytest
 
 from codex_plugin_scanner.guard import mcp_tool_calls, native_mcp_tool_call_identity
+from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
 from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
 from codex_plugin_scanner.guard.daemon.mcp_relay_evidence_drain import (
     is_mcp_relay_evidence,
@@ -179,6 +181,29 @@ def test_a_record_with_unknown_or_missing_fields_is_dropped(
     assert calls == []
 
 
+@pytest.mark.parametrize("field", ["approval_center_url", "review_url", "request_id"])
+def test_an_approval_the_agent_could_not_act_on_drops_the_record(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], field: str
+) -> None:
+    approval = {
+        "approval_center_url": "http://127.0.0.1:8787",
+        "review_url": "http://127.0.0.1:8787/requests/req-1",
+        "request_id": "req-1",
+        "workspace": None,
+        "notices": [],
+        field: "   ",
+    }
+    record = _record(
+        outcome="block",
+        policy_action="review",
+        decision_source="approval-center-pending",
+        approval=approval,
+    )
+
+    assert not record_mcp_relay_evidence(object(), tmp_path, record)
+    assert calls == []
+
+
 def test_a_recorder_failure_drops_the_record(
     tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -199,3 +224,110 @@ def test_the_drain_routes_relay_records_to_the_relay_recorder(
     assert not is_mcp_relay_evidence({"event": "PreToolUse"})
     assert hook_direct_evidence_drain.record_direct_hook_evidence(host, _record())  # type: ignore[arg-type]
     assert [kind for kind, _ in calls] == ["allow"]
+
+
+def test_an_inline_approved_forward_remembers_its_allow(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]]
+) -> None:
+    record = _record(decision_source="inline-approved", remember=True)
+
+    assert record_mcp_relay_evidence(object(), tmp_path, record)
+
+    [(remembered_kind, remembered), (kind, recorded)] = calls
+    assert remembered_kind == "allow"
+    assert remembered["remember"] is True
+    assert remembered["emit_runtime_evidence"] is False
+    assert remembered["decision_source"] == "inline-approved"
+    # The receipt follows, as `_allow_and_forward` writes it after the forward.
+    assert kind == "allow"
+    assert recorded["remember"] is False
+    assert "emit_runtime_evidence" not in recorded
+
+
+def test_a_closed_gate_costs_the_memory_not_the_receipt(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def allow_tool_call(**kwargs: Any) -> None:
+        if kwargs.get("remember"):
+            raise ApprovalGateError("approval_gate_locked", "locked")
+        calls.append(("allow", kwargs))
+
+    monkeypatch.setattr(mcp_tool_calls, "allow_tool_call", allow_tool_call)
+
+    assert record_mcp_relay_evidence(object(), tmp_path, _record(decision_source="inline-approved", remember=True))
+
+    [(kind, recorded)] = calls
+    assert kind == "allow"
+    assert recorded["remember"] is False
+
+
+def test_a_refused_memory_write_costs_the_memory_not_the_receipt(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The call was forwarded, so no failure of the policy write loses its receipt."""
+
+    def allow_tool_call(**kwargs: Any) -> None:
+        if kwargs.get("remember"):
+            raise sqlite3.OperationalError("database is locked")
+        calls.append(("allow", kwargs))
+
+    monkeypatch.setattr(mcp_tool_calls, "allow_tool_call", allow_tool_call)
+
+    assert record_mcp_relay_evidence(object(), tmp_path, _record(decision_source="inline-approved", remember=True))
+
+    [(kind, recorded)] = calls
+    assert kind == "allow"
+    assert recorded["remember"] is False
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"remember": True},
+        {"decision_source": "inline-approved", "remember": False},
+        {"decision_source": "inline-approved", "remember": "yes"},
+        {
+            "outcome": "block",
+            "decision_source": "inline-denied",
+            "policy_action": "block",
+            "decision": _decision("block"),
+            "remember": True,
+        },
+    ],
+)
+def test_only_an_inline_approved_forward_remembers_its_allow(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], fields: dict[str, object]
+) -> None:
+    assert not record_mcp_relay_evidence(object(), tmp_path, _record(**fields))
+    assert calls == []
+
+
+@pytest.mark.parametrize("decision_source", ["inline-denied", "inline-invalid"])
+def test_a_refused_inline_prompt_blocks_the_call_on_its_own(
+    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], decision_source: str
+) -> None:
+    record = _record(
+        outcome="block",
+        decision_source=decision_source,
+        policy_action="block",
+        decision=_decision("block"),
+    )
+
+    assert record_mcp_relay_evidence(object(), tmp_path, record)
+
+    [(kind, recorded)] = calls
+    assert kind == "block"
+    assert recorded["decision_source"] == decision_source
+
+
+def test_a_refused_inline_prompt_carries_no_inbox_row(tmp_path: Path, calls: list[tuple[str, dict[str, Any]]]) -> None:
+    record = _record(
+        outcome="block",
+        decision_source="inline-denied",
+        policy_action="block",
+        decision=_decision("block"),
+        review={"redaction_level": "full"},
+    )
+
+    assert not record_mcp_relay_evidence(object(), tmp_path, record)
+    assert calls == []

@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol, TextIO, cast
+from typing import Any, TextIO, cast
 
 from ..approval_gate import ApprovalGateError
 from ..business_policy_document_import import has_business_rules
@@ -53,10 +53,6 @@ _COMMAND_ERRORS = (
     NativePolicySnapshotError,
     NativePolicyDocumentError,
 )
-
-
-class PolicyDxArgs(Protocol):
-    policy_command: str
 
 
 def wants_json(args: Any) -> bool:

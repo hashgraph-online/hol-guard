@@ -63,6 +63,11 @@ fn rg_arguments_pass(
     pattern_from_option: bool,
 ) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
+    // `-g`/`--glob` (not the case-blind `--iglob`) awaiting its value.
+    let mut pending_glob = false;
+    // Inclusion globs the name screen cannot clear, such as `*.md`; proven
+    // below by what they select on disk.
+    let mut unscreened_globs: Vec<&str> = Vec::new();
     let mut pattern_supplied = pattern_from_option;
     let mut pattern_option_seen = false;
     let mut options_enabled = true;
@@ -72,8 +77,13 @@ fn rg_arguments_pass(
     for argument in arguments {
         if let Some(role) = pending_value.take() {
             if unsafe_search_value(role, argument, context) {
-                return false;
+                if !std::mem::take(&mut pending_glob) || stdin_only {
+                    return false;
+                }
+                unscreened_globs.push(argument);
+                continue;
             }
+            pending_glob = false;
             // `--file` is the only path-valued option and supplies patterns.
             if matches!(role, SearchValueRole::Pattern | SearchValueRole::Path) {
                 pattern_supplied = true;
@@ -120,10 +130,15 @@ fn rg_arguments_pass(
                 if stdin_only && matches!(role, SearchValueRole::Path) {
                     return false;
                 }
+                let glob = name == "--glob";
                 if attached.is_empty() {
                     pending_value = Some(role);
+                    pending_glob = glob;
                 } else if unsafe_search_value(role, attached, context) {
-                    return false;
+                    if !glob || stdin_only {
+                        return false;
+                    }
+                    unscreened_globs.push(attached);
                 } else if matches!(role, SearchValueRole::Pattern | SearchValueRole::Path) {
                     pattern_supplied = true;
                     pattern_option_seen = true;
@@ -144,6 +159,15 @@ fn rg_arguments_pass(
                     .any(|option| option == 'f')
             {
                 return false;
+            }
+            if let Some(glob) = argument.strip_prefix("-g").filter(|glob| !glob.is_empty()) {
+                if unsafe_search_value(SearchValueRole::RgGlob, glob, context) {
+                    if stdin_only {
+                        return false;
+                    }
+                    unscreened_globs.push(glob);
+                }
+                continue;
             }
             let parsed = short_search_option(
                 argument,
@@ -168,6 +192,7 @@ fn rg_arguments_pass(
             let Ok((next_value, supplied_pattern)) = parsed else {
                 return false;
             };
+            pending_glob = matches!(next_value, Some(SearchValueRole::RgGlob));
             pending_value = next_value;
             pattern_supplied |= supplied_pattern;
             pattern_option_seen |= supplied_pattern;
@@ -214,8 +239,16 @@ fn rg_arguments_pass(
     // arguments, so `--pre`, `--hidden` or `--no-ignore` there would undo
     // every check above. A stdin filter walks no files, so the config's
     // file options have nothing to act on.
+    let scope: &[&str] = if roots.is_empty() { &["."] } else { &roots };
     pending_value.is_none()
         && (!stdin_only || pattern_supplied)
         && (stdin_only || config_disabled || context.ripgrep_config_absent)
         && (stdin_only || paths_only || !prove_roots || rg_whitelist::roots_proven(&roots, context))
+        && (unscreened_globs.is_empty()
+            || super::super::search_scope::rg_glob_scope_proven(
+                scope,
+                &unscreened_globs,
+                context.home_dir,
+                context.cwd,
+            ))
 }

@@ -267,6 +267,23 @@ pub(super) fn denial_patterns(
     Ok(patterns)
 }
 
+/// The network a run's inline Node source needs when it serves and fetches
+/// only on literal loopback ports, derived again from the exact command
+/// about to run: each port may be bound, accepted on and connected to on
+/// the loopback address. Every other address stays denied by default.
+pub(super) fn loopback_rules(ports: &[u16]) -> Vec<String> {
+    ports
+        .iter()
+        .flat_map(|port| {
+            [
+                format!("(allow network-bind (local ip \"localhost:{port}\"))"),
+                format!("(allow network-inbound (local ip \"localhost:{port}\"))"),
+                format!("(allow network-outbound (remote ip \"localhost:{port}\"))"),
+            ]
+        })
+        .collect()
+}
+
 fn regex_rule(operations: &str, pattern: &str) -> String {
     format!("(deny {operations} (regex {}))", seatbelt_string(pattern))
 }
@@ -285,6 +302,19 @@ pub(super) fn compose(
         .as_ref()
         .map(|linked| linked.checked(workspace))
         .transpose()?;
+    // The only read grants a workspace run takes beyond the system and its
+    // toolchain are scripts the command launches, each one regular file.
+    if input.read_only_roots.iter().any(|root| {
+        !root.is_absolute()
+            || root.starts_with(workspace)
+            || !std::fs::symlink_metadata(root).is_ok_and(|meta| meta.file_type().is_file())
+            || root.canonicalize().ok().as_deref() != Some(root.as_path())
+            || root.to_str().is_none_or(|text| {
+                crate::secret_path_probe::is_request_secret_path(text, None, None)
+            })
+    }) {
+        return Err(invalid());
+    }
     let mut extra_reads = existing(&[
         "/bin",
         "/usr/bin",
@@ -423,6 +453,14 @@ pub(super) fn compose(
     for pattern in denial_patterns(workspace, &input.write_denials)? {
         lines.push(regex_rule("file-write*", &pattern));
     }
+    // The daemon's state is read again here, at launch: the port it settled
+    // on may have changed since the command was judged.
+    let home = std::env::var("HOME").ok();
+    lines.extend(loopback_rules(&crate::pretool::launch_loopback_ports(
+        &input.command,
+        input.cwd.to_str(),
+        home.as_deref(),
+    )));
     // Last, so no earlier allow can reopen a credential for reading or writing.
     for pattern in patterns() {
         lines.push(regex_rule("file-read* file-write*", &pattern));

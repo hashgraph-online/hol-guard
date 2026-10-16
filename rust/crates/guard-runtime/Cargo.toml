@@ -25,6 +25,7 @@ hex.workspace = true
 fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
+roxmltree.workspace = true
 rsa.workspace = true
 rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
@@ -36,6 +37,7 @@ saphyr-parser.workspace = true
 unicode-normalization = "0.1.25"
 zeroize = "1.9.0"
 aes.workspace = true
+base64.workspace = true
 base64ct.workspace = true
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 cbc.workspace = true
@@ -66,7 +68,6 @@ landlock = "=0.4.7"
 capctl = "=0.2.4"
 
 [dev-dependencies]
-base64.workspace = true
 tempfile = "3.10"
 
 [lints]

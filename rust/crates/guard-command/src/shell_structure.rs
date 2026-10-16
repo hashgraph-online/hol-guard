@@ -91,6 +91,37 @@ pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
     results
 }
 
+/// Top-level `<<` operators, the same places `extract_heredocs` looks. A
+/// quoted `<<`, as in `echo '<<'`, is text.
+pub(crate) fn heredoc_operators(text: &str) -> usize {
+    let chars: Vec<char> = text.chars().collect();
+    let mut state = ShellScanState::new();
+    let mut index = 0;
+    let mut operators = 0;
+    while index < chars.len() {
+        // Declarations are read one line at a time, with a fresh state. A
+        // quote still open at a newline is a different `<<` than the next
+        // line's, so the two counts are not the same operator.
+        if chars[index] == '\n' {
+            if !state.is_top_level() {
+                return usize::MAX;
+            }
+            state = ShellScanState::new();
+        }
+        if state.is_top_level()
+            && chars.get(index) == Some(&'<')
+            && chars.get(index + 1) == Some(&'<')
+            && chars.get(index.wrapping_sub(1)) != Some(&'<')
+            && chars.get(index + 2) != Some(&'<')
+        {
+            operators += 1;
+        }
+        let next = state.advance(&chars, index);
+        index = if next > index { next } else { index + 1 };
+    }
+    operators
+}
+
 struct HeredocDecl {
     start: usize,
     end: usize,

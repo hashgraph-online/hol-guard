@@ -90,13 +90,19 @@ fn read_only_segments_before_a_git_read_keep_its_proof() {
         &home,
         &["config", "core.pager", &format!("touch '{marker}'")],
     );
-    // Either Git context check may stop it first; both keep the review.
+    // Either Git context check may stop it first; both keep the review. On
+    // macOS the helper check sends a Git inspection to its read-only
+    // sandbox instead (`git_inspections_require_protected_execution_not_helper_consent`),
+    // which still never runs it directly.
+    let contained = cfg!(target_os = "macos").then_some("native_git_readonly_containment_required");
     for command in ["git log --oneline -5", "ls && git log --oneline -5"] {
         let code = reason(&home, &repository, command);
         assert!(
-            [FLOOR, "native_git_helper_context_review"].contains(&code.as_str()),
+            [FLOOR, "native_git_helper_context_review"].contains(&code.as_str())
+                || contained == Some(code.as_str()),
             "{command}: {code}"
         );
+        assert_ne!(action(&home, &repository, command), "allow", "{command}");
     }
 }
 

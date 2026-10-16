@@ -4,6 +4,27 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 const TRUSTED_INSTALL_DIRS: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin"];
 
+/// POSIX system program directories. On Windows, Git Bash and MSYS2 (the
+/// shells harnesses run POSIX commands in) map them into their own install
+/// tree, which the host filesystem cannot inspect under these spellings.
+const POSIX_SYSTEM_BIN_DIRS: &[&str] =
+    &["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin"];
+
+/// On a Windows host, `Path::is_absolute` rejects a drive-less POSIX spelling
+/// such as `/bin/sh` or `/usr/bin/env`, so a wrapper launched through one was
+/// never unwrapped and the command it runs escaped inspection. A program that
+/// sits directly in a POSIX system directory names the same system tool a
+/// bare `sh` lookup does (which is unwrapped by name), so its basename is
+/// returned. Any other spelling, and every spelling on a POSIX host (where the
+/// path is absolute and checked on disk), returns `None`.
+pub(super) fn posix_system_command_basename(token: &str) -> Option<&str> {
+    if !cfg!(windows) || token.starts_with("//") || token.contains('\\') {
+        return None;
+    }
+    let (directory, name) = token.rsplit_once('/')?;
+    (POSIX_SYSTEM_BIN_DIRS.contains(&directory) && !matches!(name, "" | "." | "..")).then_some(name)
+}
+
 /// `is_trusted_absolute_command_path` (:337-349).
 pub fn is_trusted_absolute_command_path(
     command_path: &Path,

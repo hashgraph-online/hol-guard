@@ -86,10 +86,77 @@ fn bodies_files_credentials_and_routing_stay_reviewed() {
 }
 
 #[test]
-fn local_and_reserved_destinations_stay_reviewed() {
+fn local_dev_server_reads_are_proven() {
     for command in [
         "curl http://localhost:3000/",
         "curl http://127.0.0.1/",
+        "curl -fsS http://127.0.0.1:4173/game.js",
+        "curl -sI https://localhost:8443/health",
+        "curl -s -o /dev/null -w '%{http_code}' http://LOCALHOST:3001/",
+        "curl -s --url http://127.0.0.1:8080/api/items?page=2",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn a_dev_port_in_the_daemon_range_follows_the_daemon_state() {
+    let home = std::env::temp_dir().join(format!("curl-reads-daemon-{}", std::process::id()));
+    let guard = home.join(".hol-guard");
+    std::fs::create_dir_all(&guard).unwrap();
+    let home_dir = home.to_str().unwrap();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(home_dir),
+        ..Default::default()
+    };
+    let command = "curl -s http://localhost:5173/";
+    assert!(!proven_in(command, context), "no daemon state");
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 4781}"#).unwrap();
+    assert!(proven_in(command, context), "daemon on 4781");
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 5173}"#).unwrap();
+    assert!(!proven_in(command, context), "daemon on 5173");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn local_admin_ports_and_other_loopback_spellings_stay_reviewed() {
+    for command in [
+        "curl http://127.0.0.1:2375/containers/json",
+        "curl http://localhost:2376/info",
+        "curl http://127.0.0.1:2379/v2/keys",
+        "curl http://localhost:6443/api",
+        "curl http://127.0.0.1:8001/api/v1/secrets",
+        "curl http://127.0.0.1:8200/v1/secret/data/app",
+        "curl http://localhost:8500/v1/kv/?recurse",
+        "curl http://127.0.0.1:9222/json",
+        "curl http://127.0.0.1:9229/json/list",
+        "curl http://localhost:10250/pods",
+        "curl http://localhost:2019/config/",
+        // Data and node APIs off the dev-server list.
+        "curl http://127.0.0.1:9200/_search",
+        "curl http://127.0.0.1:4001/v2/keys",
+        "curl http://localhost:10249/metrics",
+        "curl http://localhost:8086/query?q=SHOW+DATABASES",
+        // Guard's daemon: its default port, a fixed one and an ephemeral one.
+        "curl -s http://127.0.0.1:4781/v1/requests?status=pending",
+        "curl -s http://127.0.0.1:7392/v1/requests?status=pending",
+        "curl -s http://localhost:54321/v1/requests",
+        "curl http://127.0.0.2:3000/",
+        "curl http://localhost.:3000/",
+        "curl http://app.localhost:3000/",
+        "curl http://user@localhost:3000/",
+        "curl -L http://127.0.0.1:3000/",
+        "curl -X POST http://localhost:3000/api/items",
+        "curl -d x=1 http://localhost:3000/api/items",
+        "curl localhost:3000/",
+    ] {
+        assert!(!proven(command), "{command}");
+    }
+}
+
+#[test]
+fn local_and_reserved_destinations_stay_reviewed() {
+    for command in [
         "curl http://[::1]/",
         "curl http://[fd00::1]/",
         "curl http://169.254.169.254/latest/meta-data/",

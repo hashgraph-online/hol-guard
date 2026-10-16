@@ -14,10 +14,12 @@ from codex_plugin_scanner.guard import native_binary_identity as identity
 @pytest.fixture(autouse=True)
 def empty_identity_cache():
     with identity._CACHE_LOCK:
-        identity._IDENTITIES.clear()
+        for key in tuple(identity._IDENTITIES):
+            identity._forget_locked(key)
     yield
     with identity._CACHE_LOCK:
-        identity._IDENTITIES.clear()
+        for key in tuple(identity._IDENTITIES):
+            identity._forget_locked(key)
 
 
 def _binary(tmp_path: Path, name: str = "runtime") -> Path:
@@ -42,12 +44,13 @@ def test_unchanged_binary_reuses_hash_only_when_cache_is_supported(monkeypatch, 
     second = identity.validate_native_binary(path)
     assert first is not None and first == second
     assert first.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
-    assert len(calls) == (1 if identity._CACHE_ENABLED else 2)
+    assert len(calls) == (1 if identity._CACHE_ENABLED or identity._WRITE_LOCK_ENABLED else 2)
 
 
 def test_uncached_platform_rehashes_every_time(monkeypatch, tmp_path):
     path = _binary(tmp_path)
     monkeypatch.setattr(identity, "_CACHE_ENABLED", False)
+    monkeypatch.setattr(identity, "_WRITE_LOCK_ENABLED", False)
     assert identity.validate_native_binary(path) is not None
     monkeypatch.setattr(identity, "_read_digest", lambda *_: None)
     assert identity.validate_native_binary(path) is None
@@ -75,6 +78,9 @@ def test_same_size_replacement_with_restored_mtime_invalidates_digest(tmp_path):
     replacement = _binary(tmp_path, "replacement")
     replacement.write_bytes(b"native-runtime-modified")
     os.utime(replacement, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+    # Windows refuses to replace a binary that is in use (running, or held
+    # for digest reuse), so updaters move it aside first. Do the same here.
+    path.rename(tmp_path / "retired")
     replacement.replace(path)
     after = identity.validate_native_binary(path)
     assert before is not None and after is not None
@@ -117,12 +123,18 @@ def test_file_replaced_before_descriptor_open_is_rejected(monkeypatch, tmp_path)
     path = _binary(tmp_path)
     replacement = _binary(tmp_path, "replacement")
     opened = identity.os.open
+    locked = identity.open_write_locked
 
     def swap(*args, **kwargs):
         replacement.replace(path)
         return opened(*args, **kwargs)
 
+    def swap_locked(target):
+        replacement.replace(path)
+        return locked(target)
+
     monkeypatch.setattr(identity.os, "open", swap)
+    monkeypatch.setattr(identity, "open_write_locked", swap_locked)
     assert identity.validate_native_binary(path) is None
     assert not identity._IDENTITIES
 
@@ -164,6 +176,7 @@ def test_recent_or_future_change_time_never_enables_reuse(monkeypatch, tmp_path,
     path = _binary(tmp_path)
     metadata = path.stat()
     monkeypatch.setattr(identity, "_CACHE_ENABLED", True)
+    monkeypatch.setattr(identity, "_WRITE_LOCK_ENABLED", False)
     monkeypatch.setattr(identity.time, "time_ns", lambda: metadata.st_ctime_ns + age)
     assert identity.validate_native_binary(path) is not None
     assert not identity._IDENTITIES

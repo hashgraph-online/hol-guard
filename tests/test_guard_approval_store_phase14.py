@@ -10,8 +10,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import count_approval_requests
-from tests.native_approval_writes import add_approval_request, native_approval_connection
+from tests.native_approval_writes import add_approval_request, native_approval_connection, native_store
 
 
 def _connect(guard_home: Path) -> sqlite3.Connection:
@@ -93,7 +92,7 @@ def test_phase14_package_queue_identity_collapses_legacy_and_enriched_envelopes(
     second_id = add_approval_request(conn, enriched_request, "2026-05-19T10:01:00Z")
 
     assert first_id == second_id
-    assert count_approval_requests(conn, status="pending") == 1
+    assert native_store(conn).count_approval_requests(status="pending") == 1
 
 
 def test_phase14_simultaneous_identical_package_requests_collapse_to_one_row(tmp_path: Path) -> None:
@@ -124,7 +123,7 @@ def test_phase14_simultaneous_identical_package_requests_collapse_to_one_row(tmp
     verify_conn = _connect(guard_home)
     try:
         assert first_id == second_id
-        assert count_approval_requests(verify_conn, status="pending") == 1
+        assert native_store(verify_conn).count_approval_requests(status="pending") == 1
     finally:
         verify_conn.close()
 
@@ -156,6 +155,6 @@ def test_phase14_simultaneous_distinct_package_requests_stay_isolated(tmp_path: 
     verify_conn = _connect(guard_home)
     try:
         assert first_id != second_id
-        assert count_approval_requests(verify_conn, status="pending") == 2
+        assert native_store(verify_conn).count_approval_requests(status="pending") == 2
     finally:
         verify_conn.close()

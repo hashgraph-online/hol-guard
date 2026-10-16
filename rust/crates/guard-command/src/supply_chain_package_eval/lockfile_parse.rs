@@ -15,7 +15,7 @@ use super::contracts::{
 use super::lockfile_validate::validate_structure;
 use super::*;
 use crate::local_supply_chain::stable_digest_hex;
-use crate::package_manifest_diff::try_dependency_map_for_path;
+use crate::package_manifest_diff::{compile_patterns, try_dependency_map_for_path};
 
 pub const LOCKFILE_PARSER_VERSION: &str = "complete-v1";
 const LOCKFILE_MAX_BYTES: usize = 8 * 1024 * 1024;
@@ -87,6 +87,7 @@ pub fn parse_lockfile_with_budget(
     budget_seconds: f64,
 ) -> LockfileParseResult {
     let budget_ms = budget_seconds * 1000.0;
+    compile_patterns();
     let started = Instant::now();
     let deadline = started + Duration::from_secs_f64(budget_seconds);
     match parse_complete(path, source, deadline) {

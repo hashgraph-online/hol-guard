@@ -197,6 +197,7 @@ def test_package_firewall_rejects_archive_blob_changed_after_inspection(tmp_path
     bound = _bound_external_archive_launch_command(
         ["npm", "install", f"demo@{source_url}"],
         evaluation=evaluation,
+        guard_home=tmp_path / "guard-home",
     )
 
     assert bound is None

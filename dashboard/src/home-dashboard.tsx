@@ -34,6 +34,7 @@ import { WatchProtectionBanner } from "./watch-protection-banner";
 import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
 import { updateSettings } from "./guard-api";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
+import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 import type {
@@ -107,11 +108,12 @@ export function redactHomeArtifactLabel(value: string | null | undefined): strin
 }
 
 export function buildRecentProtectionCopy(receipt: GuardReceipt): string {
-  return guardActionActivityCopy(
-    receipt.policy_decision,
-    harnessDisplayName(receipt.harness),
-    redactHomeArtifactLabel(receipt.artifact_name),
-  );
+  const harness = harnessDisplayName(receipt.harness);
+  const label = redactHomeArtifactLabel(receipt.artifact_name);
+  if (approvalLeftActionStopped(receipt)) {
+    return `${harness} stayed stopped on ${label} after a one-time approval`;
+  }
+  return guardActionActivityCopy(receipt.policy_decision, harness, label);
 }
 
 type HomeRequestState =

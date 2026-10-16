@@ -67,6 +67,11 @@ from .commands_support_runtime_resolution import (
 from .commands_support_workspace import _workspace_from_hook_payload
 
 _NATIVE_EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
+# Harnesses whose PermissionRequest hook gets no decision, as on the daemon
+# path: each raises it only for a call its PreToolUse hook already sent to
+# Guard. Copilot and Codex keep their own permission-request flows on this
+# path.
+_PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"devin", "zcode"})
 
 
 def run_native_hook_pipeline(
@@ -86,6 +91,13 @@ def run_native_hook_pipeline(
 ) -> int:
     """Compose the native edge decision into the harness hook response."""
 
+    if (
+        runtime_hook_event_name(payload) == "PermissionRequest"
+        and _canonical_harness_name(args.harness) in _PERMISSION_PASSTHROUGH_HARNESSES
+    ):
+        # Empty output and exit 0 carry no decision, so the harness shows its
+        # own approval prompt instead of reading a review as a refusal.
+        return 0
     # Anchor any harness-stamped hint at CLI entry, before state preparation.
     edge_timing = RuntimeHookDeadline.cli_edge_kwargs(payload)
     if config is None:

@@ -306,8 +306,10 @@ def _runtime_saved_policy_decision(
     alias_artifact: GuardArtifact | None,
     alias_artifact_hash: str | None,
     alias_workspace: str | None,
-) -> tuple[Mapping[str, object], Mapping[str, object] | None]:
-    """Return the saved-decision lookup and the decision this artifact may use.
+    reuse: Mapping[str, object] | None = None,
+) -> tuple[Mapping[str, object], Mapping[str, object] | None, Mapping[str, object] | None]:
+    """Return the saved-decision lookup, the decision this artifact may use and,
+    with ``reuse``, the resident's ``saved_reuse`` ``{answer, query}``.
 
     The resident composes the current-hash and legacy-hash lookups (a legacy
     decision wins only when strictly more severe, so a new exact allow never
@@ -336,7 +338,7 @@ def _runtime_saved_policy_decision(
             workspace=alias_workspace,
             memory=False,
         )
-    return store.resolve_runtime_saved_decision(current, legacy, alias)
+    return store.resolve_runtime_saved_decision(current, legacy, alias, reuse)
 
 
 def _runtime_saved_allow_validation_reason(

@@ -80,7 +80,9 @@ pub(crate) const DIRECT_HARNESSES: [&str; 14] = [
 ];
 const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
 const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
-const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = ["guard_payload_ref", "guard_source_ref"];
+const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
+const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
+const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];
 const EVENT_NAME_FIELDS: [&str; 6] = [
     "event",
     "eventName",
@@ -257,9 +259,10 @@ fn answer(
         // A probe carries a request identity only the daemon assigns.
         return Err(HookDirectDefer::TransitionProbe);
     }
-    if PAYLOAD_REFERENCE_FIELDS
-        .iter()
-        .any(|field| payload.contains_key(*field))
+    // The edge refuses an encrypted payload reference and reviews a source
+    // reference only after a tool ran, reading the file as the daemon does.
+    if payload.contains_key(ENCRYPTED_PAYLOAD_FIELD)
+        || (payload.contains_key(SOURCE_REFERENCE_FIELD) && event != POST_TOOL_USE)
     {
         return Err(HookDirectDefer::PayloadUnsupported);
     }
@@ -483,11 +486,11 @@ mod edge;
 #[path = "hook_direct_lifecycle.rs"]
 mod lifecycle;
 #[path = "hook_direct_local_cli.rs"]
-mod local_cli;
+pub(crate) mod local_cli;
 #[path = "hook_direct_pi.rs"]
 mod pi;
 #[path = "hook_direct_saved_decision.rs"]
-mod saved_decision;
+pub(crate) mod saved_decision;
 #[path = "hook_direct_workspace.rs"]
 mod workspace;
 

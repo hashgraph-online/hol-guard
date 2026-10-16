@@ -1,4 +1,4 @@
-//! Read-only contained execution of one installed interpreter.
+//! Contained execution of one interpreter against a private workspace copy.
 //!
 //! The live workspace is never granted. A bounded, handle-bound copy is staged
 //! in a private directory; only that copy (read-only) and private HOME/TEMP
@@ -6,12 +6,20 @@
 //! rest of the user profile stays unreadable and the container requests no
 //! network capability. Callers own the withholding policy and environment.
 //!
+//! A build run (`BuildRun`) differs in three ways. The copy is writable, so
+//! the tool can write caches and its output inside it. The interpreter binary
+//! and the dependency directories it needs are copied in too, because an LPAC
+//! process cannot read a per-user install. After a clean exit, only the
+//! declared output directories are synced back to the live workspace, through
+//! handle-bound writes that never follow a link.
+//!
 //! An LPAC process cannot read the registry policy the loader consults when it
 //! first builds a module's activation context, so a manifest-bearing DLL fails
 //! to load until one exists. The runner builds those contexts beforehand for
 //! the installation's and the snapshot's binaries; this parses manifests only
 //! and runs no module code. Granting `registryRead` instead would also expose
-//! the user's HKCU hive, including persisted environment variables.
+//! the user's HKCU hive, including persisted environment variables, so only a
+//! build run, whose Node runtime cannot start Winsock without it, requests it.
 use super::AppContainer;
 use crate::bound_fs::{self, Directory};
 use crate::{CapturedOutput, Isolation, PinnedCommand};
@@ -26,6 +34,7 @@ use std::time::Instant;
 const REPARSE_POINT: u32 = 0x400;
 const MAX_ACTIVATION_ENTRIES: usize = 20_000;
 const MAX_ACTIVATION_DEPTH: usize = 12;
+const MAX_EXECUTABLE_BYTES: usize = 512 * 1024 * 1024;
 /// Profile locations always name the private staging directories.
 const PROFILE_VARIABLES: [&str; 8] = [
     "APPDATA",
@@ -53,8 +62,30 @@ pub struct ReadonlySnapshotRun<'a> {
     pub deadline: Instant,
     pub cancel: &'a AtomicBool,
     pub job_limits: guard_runtime_windows_process::ResourceLimits,
+    pub build: Option<BuildRun<'a>>,
 }
 
+pub struct BuildRun<'a> {
+    /// `(live directory, workspace-relative destination)` pairs copied into
+    /// the snapshot, such as a `node_modules` the workspace copy withholds.
+    pub dependencies: &'a [(PathBuf, PathBuf)],
+    /// Dependency-relative paths that never enter the snapshot.
+    pub withhold_dependency: &'a dyn Fn(&Path) -> bool,
+    pub max_dependency_entries: usize,
+    pub max_dependency_bytes: usize,
+    /// Workspace-relative directories published back after exit code 0.
+    pub outputs: &'a [PathBuf],
+    pub max_output_entries: usize,
+    pub max_output_bytes: usize,
+}
+
+struct Limits<'a> {
+    withhold: &'a dyn Fn(&Path) -> bool,
+    max_entries: usize,
+    max_bytes: usize,
+}
+
+#[derive(Default)]
 struct Budget {
     entries: usize,
     bytes: usize,
@@ -79,36 +110,66 @@ pub fn run_readonly_snapshot(run: ReadonlySnapshotRun<'_>) -> io::Result<Capture
     for directory in [&snapshot, &home, &temp] {
         fs::create_dir(directory)?;
     }
-    let mut budget = Budget {
-        entries: 0,
-        bytes: 0,
-    };
-    copy_tree(&workspace, Path::new("."), &snapshot, &run, &mut budget)?;
-    drop(workspace);
-    let mut remaining = MAX_ACTIVATION_ENTRIES;
-    if let Some(installation) = run.executable.parent() {
-        build_activation_contexts(installation, 0, &mut remaining);
-    }
-    build_activation_contexts(&snapshot, 0, &mut remaining);
     let mut suffix = [0u8; 12];
     getrandom::fill(&mut suffix).map_err(io::Error::other)?;
     let name = format!("hol-guard-ro-{}", hex::encode(suffix));
-    let container = AppContainer::create(&name)?;
-    grant_snapshot(&container, &snapshot)?;
+    let mut container = AppContainer::create(&name)?;
+    if run.build.is_some() {
+        container.allow_registry_read()?;
+        // Granted while empty, so every copied object inherits write access.
+        container.grant(&snapshot, true, true)?;
+    }
+    let workspace_limits = Limits {
+        withhold: run.withhold,
+        max_entries: run.max_entries,
+        max_bytes: run.max_bytes,
+    };
+    copy_tree(
+        &workspace,
+        Path::new("."),
+        &snapshot,
+        &workspace_limits,
+        &mut Budget::default(),
+    )?;
+    drop(workspace);
+    let mut executable = run.executable.to_path_buf();
+    if let Some(build) = &run.build {
+        let limits = Limits {
+            withhold: build.withhold_dependency,
+            max_entries: build.max_dependency_entries,
+            max_bytes: build.max_dependency_bytes,
+        };
+        let mut budget = Budget::default();
+        for (source, destination) in build.dependencies {
+            bound_fs::relative_components(destination)?;
+            let target = snapshot.join(destination);
+            fs::create_dir_all(&target)?;
+            let source = Directory::open(source)?;
+            copy_tree(&source, Path::new("."), &target, &limits, &mut budget)?;
+        }
+        executable = stage_executable(run.executable, &staging.path().join("bin"))?;
+        grant_snapshot(&container, executable.parent().unwrap_or(staging.path()))?;
+    }
+    let mut remaining = MAX_ACTIVATION_ENTRIES;
+    if let Some(installation) = executable.parent() {
+        build_activation_contexts(installation, 0, &mut remaining);
+    }
+    build_activation_contexts(&snapshot, 0, &mut remaining);
+    if run.build.is_none() {
+        grant_snapshot(&container, &snapshot)?;
+    }
     container.grant(&home, true, true)?;
     container.grant(&temp, true, true)?;
     // Windows points an AppContainer's TEMP and LOCALAPPDATA at its package
     // folder under the supplied LOCALAPPDATA; create it inside private HOME.
     fs::create_dir_all(home.join("Packages").join(&name).join("AC").join("Temp"))?;
-    let environment = private_environment(run.environment, &home, &temp);
+    let mut environment = private_environment(run.environment, &home, &temp);
+    if run.build.is_some() {
+        staged_search_path(&mut environment, &executable);
+    }
     let arguments: Vec<&OsStr> = run.arguments.iter().map(OsString::as_os_str).collect();
-    let command = PinnedCommand::new(
-        run.executable,
-        &arguments,
-        &snapshot.join(&cwd),
-        &environment,
-    )?;
-    command.capture(
+    let command = PinnedCommand::new(&executable, &arguments, &snapshot.join(&cwd), &environment)?;
+    let output = command.capture(
         &[],
         run.output_cap,
         run.deadline,
@@ -119,7 +180,44 @@ pub fn run_readonly_snapshot(run: ReadonlySnapshotRun<'_>) -> io::Result<Capture
             output_per_stream: true,
             ..Isolation::default()
         },
-    )
+    )?;
+    if let Some(build) = &run.build {
+        if output.exit_code == Some(0) && !output.timed_out {
+            super::publish::publish_outputs(run.workspace, &snapshot, build, run.withhold)?;
+        }
+    }
+    Ok(output)
+}
+
+/// An LPAC process cannot read a per-user install, so the binary itself is
+/// copied next to the snapshot. Only a self-contained executable such as
+/// `node.exe` runs this way; it loads nothing else from its install.
+fn stage_executable(source: &Path, directory: &Path) -> io::Result<PathBuf> {
+    let name = source.file_name().ok_or_else(bound_fs::changed)?;
+    let mut file = bound_fs::open_executable(source)?;
+    let image = bound_fs::read_executable(&mut file, MAX_EXECUTABLE_BYTES)?;
+    fs::create_dir(directory)?;
+    let target = directory.join(name);
+    fs::write(&target, &image.bytes)?;
+    Ok(target)
+}
+
+/// The staged binary's directory and the system directories, nothing from
+/// the user's own search path.
+fn staged_search_path(environment: &mut Vec<(OsString, OsString)>, executable: &Path) {
+    environment.retain(|(name, _)| !name.eq_ignore_ascii_case("PATH"));
+    let mut path = vec![executable.parent().unwrap_or(executable).to_path_buf()];
+    if let Some((_, root)) = environment
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("SystemRoot"))
+    {
+        let root = PathBuf::from(root);
+        path.push(root.join("System32"));
+        path.push(root);
+    }
+    if let Ok(path) = std::env::join_paths(path) {
+        environment.push(("PATH".into(), path));
+    }
 }
 
 /// Links and other reparse points are never followed into the snapshot.
@@ -127,7 +225,7 @@ fn copy_tree(
     source: &Directory,
     relative: &Path,
     target: &Path,
-    run: &ReadonlySnapshotRun<'_>,
+    run: &Limits<'_>,
     budget: &mut Budget,
 ) -> io::Result<()> {
     let remaining = run.max_entries.saturating_sub(budget.entries);
@@ -185,7 +283,9 @@ fn build_activation_contexts(directory: &Path, depth: usize, remaining: &mut usi
         if metadata.is_dir() {
             build_activation_contexts(&path, depth + 1, remaining);
         } else if path.extension().is_some_and(|extension| {
-            extension.eq_ignore_ascii_case("pyd") || extension.eq_ignore_ascii_case("dll")
+            ["pyd", "dll", "node"]
+                .iter()
+                .any(|known| extension.eq_ignore_ascii_case(known))
         }) {
             super::build_activation_context(&path);
         }
