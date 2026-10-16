@@ -175,7 +175,9 @@ def main() -> int:
         type=Path,
         help="Parent for the short per-attempt fixture work directories (default /tmp/hol-guard-gauntlet-<uid>/w)",
     )
-    qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
+    qualify.add_argument(
+        "--wheel", type=Path, help="Prebuilt native wheel; required on hosts other than macOS and Linux x86_64"
+    )
     qualify.add_argument(
         "--release-profile-wheel",
         action="store_true",
@@ -184,6 +186,12 @@ def main() -> int:
     )
     qualify.add_argument("--sdk-root", type=Path, help="Pinned SDK directory; skips the lock-keyed SDK cache")
     qualify.add_argument("--keep-work", action="store_true", help="Keep passing attempts' work roots")
+    qualify.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Set up the SDK, wheel and installed candidate, print their paths and stop; "
+        "for local `run` invocations, never qualifies",
+    )
     qualify.add_argument("--timeout", type=float, default=300)
     qualify.add_argument("--max-inference-rounds", type=int, default=32)
     args = parser.parse_args()

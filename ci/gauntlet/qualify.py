@@ -323,6 +323,7 @@ def main(args: Any) -> int:
     sdk_info: dict[str, Any] | None = None
     info: dict[str, Any] = {}
     qualified = False
+    prepared = False
     error = None
     try:
         with terminate_as_exit():
@@ -355,7 +356,9 @@ def main(args: Any) -> int:
             with timings.measure("install"):
                 candidate = prepare_candidate(REPO, sha, run_root, Path(wheel_info["path"]))
             progress("candidate installed")
-            for k in range(1, args.attempts + 1):
+            # --prepare-only stops here and keeps the candidate for local `run` invocations.
+            prepared = args.prepare_only
+            for k in range(1, (0 if prepared else args.attempts) + 1):
                 evidence = run_root / "evidence" / f"attempt-{k}"
                 work = attempt_work_root(work_parent)
                 argv = attempt_argv(
@@ -414,7 +417,9 @@ def main(args: Any) -> int:
         progress(f"aborted: {error}")
     finally:
         cleanup: list[str] = []
-        if candidate is not None:
+        if candidate is not None and prepared and error is None:
+            cleanup.append("candidate-worktree-kept")
+        elif candidate is not None:
             try:
                 with timings.measure("cleanup"):
                     removed = _remove_candidate(REPO, candidate)
@@ -434,6 +439,8 @@ def main(args: Any) -> int:
             "sha": sha,
             "candidate_sha": args.candidate_sha,
             "qualified": qualified,
+            "prepare_only": args.prepare_only,
+            "candidate": str(candidate) if prepared and error is None and candidate is not None else None,
             "independent_verifier": info.get("independent_verifier"),
             "verifier_sha": info.get("verifier_sha"),
             "platform": platform.system().lower(),
@@ -462,4 +469,4 @@ def main(args: Any) -> int:
             result["error"] = error
         (run_root / "qualification.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(result))
-    return 0 if qualified else 1
+    return 0 if qualified or (prepared and error is None) else 1
