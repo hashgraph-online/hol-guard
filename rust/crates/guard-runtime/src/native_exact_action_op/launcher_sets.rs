@@ -97,7 +97,7 @@ pub(super) fn is_code_launcher(name: &str) -> bool {
     MUTABLE_CODE_LAUNCHERS.contains(&name) || is_python_launcher(name)
 }
 
-fn is_python_launcher(name: &str) -> bool {
+pub(super) fn is_python_launcher(name: &str) -> bool {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN
         .get_or_init(|| {

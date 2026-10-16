@@ -62,6 +62,18 @@ def test_transport_failure_survives_public_export():
     assert summarize_hook_latency([row])["failed_attempts"] == 1
 
 
+def test_discarded_bridge_reply_is_omitted_from_guard_observations():
+    dropped = {
+        "observer_error": True,
+        "transport": "pi-hook-bridge",
+        "observer_error_code": "bridge_no_reply",
+        "exit_code": None,
+        "elapsed_ms": 12,
+    }
+    kept = {"transport_error": True, "elapsed_ms": 1000}
+    assert public_observations([dropped, kept], {}) == [kept]
+
+
 def test_empty_and_single_sample_distributions():
     assert summarize_hook_latency([])["p50_ms"] is None
     result = summarize_hook_latency([{"elapsed_ms": 0, "http_status": 200}])

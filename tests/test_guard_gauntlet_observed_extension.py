@@ -1,4 +1,4 @@
-"""Gauntlet extensions post every hook over the loopback fetch the observer wraps."""
+"""Gauntlet extensions carry each hook on the transport an install would use."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ from ci.gauntlet import observed_extension
 from codex_plugin_scanner.guard.adapters.pi_extension_native_hook import PI_HOOK_BRIDGE_SWITCH
 
 
-def test_extension_is_generated_on_the_fetch_transport(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_the_extension_keeps_the_transport_the_installed_runtime_chooses(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Forcing the loopback fetch here would hide the native bridge, which is the
+    # lane installed users actually run; observer.ts records both.
     seen: list[str | None] = []
 
     def generate(extension: Path, **_: object) -> None:
@@ -22,7 +26,7 @@ def test_extension_is_generated_on_the_fetch_transport(monkeypatch: pytest.Monke
     observed_extension.generate_observed_extension(
         tmp_path / "guard.ts", guard_home=tmp_path, home=tmp_path, settings_path=tmp_path / "settings.json"
     )
-    assert seen == ["fetch"]
+    assert seen == [None]
     assert PI_HOOK_BRIDGE_SWITCH not in os.environ
 
 

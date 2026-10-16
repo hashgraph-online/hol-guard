@@ -20,7 +20,6 @@ from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
 from .agent_configuration import write_agent_configuration
-from .case_helpers import generate_observed_extension
 from .catalog import catalog_digest
 from .cleanup import cleanup_case_resources
 from .contained_judge import (
@@ -34,6 +33,7 @@ from .evidence import public_events, read_events
 from .fixtures import create_fixture, create_run_root, digest_file
 from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
+from .native_routes import await_native_routes
 from .observed_extension import generate_observed_extension
 from .provider import InferenceRelay, LoopbackCollector
 from .runner import HERE, REPO
@@ -189,6 +189,7 @@ def run_contained_profile(
     inference: dict[str, Any] = {"live_rounds": [], "canary_export_violations": 0}
     egress_requests: list[dict[str, Any]] = []
     native_routes: dict[str, Any] = {}
+    resident_direct = 0
     returncode = -1
     timed_out = False
     approval_delta = 0
@@ -277,7 +278,6 @@ def run_contained_profile(
             returncode = next((status for status in returncodes if status != 0), 0)
             timed_out = any(timeouts)
             time.sleep(0.1)
-            native_routes = worker.metrics.snapshot().get("routes", {})
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
             inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
@@ -285,6 +285,10 @@ def run_contained_profile(
             if guard_log.exists():
                 rows = [json.loads(line) for line in guard_log.read_text().splitlines() if line.strip()]
                 guard_observations = public_observations(rows, replacements)
+            # A bridged hook is answered either by a live resident, which counts
+            # it itself, or by the daemon, which routes it; read both once the
+            # observations say how many answers to account for.
+            native_routes, resident_direct = await_native_routes(worker, len(guard_observations))
             if (
                 digest_file(extension) != extension_sha256
                 or digest_file(identity.path) != identity.sha256
@@ -312,6 +316,7 @@ def run_contained_profile(
         events=events,
         guard_observations=guard_observations,
         native_routes=native_routes,
+        resident_direct_answers=resident_direct,
         inference=inference,
         filesystem=filesystem,
         returncode=returncode,
@@ -396,6 +401,7 @@ def run_contained_profile(
             "guard_observations": guard_observations,
             "inference": inference,
             "native_routes": native_routes,
+            "resident_direct_answers": resident_direct,
             "caller_workspace": public_callers[index],
             "target_workspace": public_targets[index],
             "tool_call_count": result["tool_calls"],

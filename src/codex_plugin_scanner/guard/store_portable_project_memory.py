@@ -240,36 +240,19 @@ class StorePortableProjectMemoryMixin:
             "diagnostic_stored_hash": stored_hash,
         }
 
-    def mcp_policy_lookup_input(
-        self,
-        harness: str,
-        artifact_id: str,
-        *,
-        workspace: str | None,
-        memory_command: str | None,
-        memory_artifact_type: str | None,
-        memory_artifact_name: str | None,
-    ) -> dict[str, object]:
+    def mcp_policy_lookup_input(self, *, workspace: str | None) -> dict[str, object]:
         """Ship the keyring-facing evidence once so the resident can read saved policy itself.
 
         The resident runs the same non-consuming probes this class composes in
         ``resolve_policy_decision_lookup`` (direct, exact-command and memory ids,
-        portable Git workspace, most restrictive wins) over one store connection.
+        portable Git workspace, most restrictive wins) over one store connection,
+        deriving the candidate ids from the tool-call subject.
         """
         evidence = self.policy_lookup_evidence()
-        exact_ids, memory_id = memory_lookup_candidates(
-            harness,
-            artifact_id,
-            memory_command=memory_command,
-            memory_artifact_type=memory_artifact_type,
-            memory_artifact_name=memory_artifact_name,
-            guard_home=Path(self.guard_home),
-        )
         lookup: dict[str, object] = {
             "store_path": str(self.path),
             "guard_home": str(self.guard_home),
             "now": evidence.now,
-            "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
             "portable_workspace": self._portable_project_workspace(workspace),
             "integrity_state": evidence.integrity_state,
             "integrity_key_b64": evidence.integrity_key_b64,

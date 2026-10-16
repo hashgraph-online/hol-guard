@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
 from pathlib import Path
 from typing import Any
@@ -14,28 +13,6 @@ from .evidence import public_events, read_events
 from .fixtures import Fixture, scratch_checkout
 from .host_evidence import complete_host_events
 from .input_evidence import fixture_path_aliases, public_observations
-
-# ``observer.ts`` sees Guard through the extension's loopback ``fetch``. The
-# native ``pi-hook-bridge`` answers from a subprocess the observer cannot see,
-# so the generated extension keeps the daemon request. Both reach the same
-# native resident review.
-PI_HOOK_BRIDGE_SWITCH = "HOL_GUARD_PI_HOOK_BRIDGE"
-
-
-def generate_observed_extension(path: Path, *, guard_home: Path, home: Path, settings_path: Path) -> None:
-    """Write the Oh My Pi extension with the daemon transport ``observer.ts`` records."""
-    from ci.native_runtime import probe_installed_pi_output as probe
-
-    previous = os.environ.get(PI_HOOK_BRIDGE_SWITCH)
-    os.environ[PI_HOOK_BRIDGE_SWITCH] = "fetch"
-    try:
-        probe._generate_extension(path, guard_home=guard_home, home=home, settings_path=settings_path)
-    finally:
-        if previous is None:
-            os.environ.pop(PI_HOOK_BRIDGE_SWITCH, None)
-        else:
-            os.environ[PI_HOOK_BRIDGE_SWITCH] = previous
-
 
 FIXTURE_SYSTEM_CONTEXT = (
     "The agent process inherits no provider, GitHub, or cloud credentials. "

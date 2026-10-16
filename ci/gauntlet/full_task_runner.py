@@ -21,7 +21,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
-from .case_helpers import _fixture_replacements, generate_observed_extension, read_case_logs
+from .case_helpers import _fixture_replacements, read_case_logs
 from .catalog import Scenario
 from .cleanup import cleanup_case_resources
 from .contained_core import request_proofs

@@ -15,9 +15,10 @@ use serde_json::{json, Value};
 use super::context::Ctx;
 use super::fs_path;
 use super::git_identity::git_readonly_identity;
-use super::launcher_sets::{is_destructive, loads_unbound_code};
+use super::launcher_sets::{is_destructive, is_python_launcher, loads_unbound_code};
 use super::node_script::{node_script, NODE_LAUNCHERS};
 use super::operands::{argument_value, file_operand_hashes};
+use super::python_script::python_script;
 use super::reasons::{
     Proof, COMPOUND_COMMAND, DESTRUCTIVE_COMMAND, MUTABLE_LAUNCHER, SENSITIVE_PATH, UNPROVEN_LAUNCH,
 };
@@ -197,6 +198,13 @@ fn segment_launch(
         let script = node_script(arguments, cwd, ctx)?;
         return Ok(
             json!({"kind": "node-script", "identity": reusable_identity()?, "script": script, "operands": operands}),
+        );
+    }
+    if is_python_launcher(name) && !compound {
+        let identity = reusable_identity()?;
+        let script = python_script(arguments, cwd, ctx, &identity["executable"])?;
+        return Ok(
+            json!({"kind": "python-script", "identity": identity, "script": script, "operands": operands}),
         );
     }
     if loads_unbound_code(name, arguments) {

@@ -27,7 +27,6 @@ from .case_helpers import (
     _scenario_prompt,
     _scenario_tools,
     _watch_binding,
-    generate_observed_extension,
     read_case_logs,
     ready_watch_binding,
 )
@@ -54,6 +53,7 @@ from .input_evidence import (
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
+from .native_routes import await_native_routes
 from .native_tools import cleanup_private_temp
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
@@ -101,6 +101,7 @@ def run_case(
         "events": [],
         "guard_observations": [],
         "native_routes": {},
+        "resident_direct_answers": 0,
         "inference": {"live_rounds": [], "canary_export_violations": 0},
         "filesystem": {},
         "egress_requests": [],
@@ -263,7 +264,6 @@ def run_case(
                 timeout=timeout + 15,
             )
             time.sleep(0.1)
-            case["native_routes"] = worker.metrics.snapshot().get("routes", {})
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
@@ -276,6 +276,12 @@ def run_case(
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["stderr_sha256"] = digest_file(error_log)
             read_case_logs(case, raw_log, guard_log, replacements, host_log)
+            # A bridged hook is answered either by a live resident, which counts
+            # it itself, or by the daemon, which routes it; read both once the
+            # case's observations say how many answers to account for.
+            case["native_routes"], case["resident_direct_answers"] = await_native_routes(
+                worker, len(case["guard_observations"])
+            )
             if proofs := request_proofs(host_log, fixture.workspace, replacements):
                 case["contained_request_proofs"] = proofs
             if scenario.oracle == "blocked-extension":

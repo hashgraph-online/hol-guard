@@ -117,7 +117,7 @@ pub struct McpToolPolicyProxyInputV1 {
 /// The keyring-facing integrity material and the integrity state are
 /// caller-shipped exactly as for the `policy_decision_lookup` op; the resident
 /// owns everything else: the per-call request fields, the portable-workspace
-/// composition and the most-restrictive choice over `candidate_artifact_ids`.
+/// composition and the most-restrictive choice over the subject's candidate ids.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct McpPolicyLookupInputV1 {
@@ -125,8 +125,6 @@ pub struct McpPolicyLookupInputV1 {
     pub guard_home: String,
     /// Canonical lookup timestamp, shared by every candidate probe.
     pub now: String,
-    /// Direct artifact id first, then exact-command and memory-pattern ids.
-    pub candidate_artifact_ids: Vec<String>,
     /// Git-derived portable workspace, when the workspace has one.
     #[serde(default)]
     pub portable_workspace: Option<String>,
