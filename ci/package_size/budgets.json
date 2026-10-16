@@ -3,5 +3,6 @@
   "macosx_11_0_arm64": {"download": 19922944, "unpacked": 57671680, "runtime": 33554432},
   "macosx_13_0_x86_64": {"download": 20971520, "unpacked": 61865984, "runtime": 37748736},
   "manylinux_2_17_x86_64": {"download": 20971520, "unpacked": 62914560, "runtime": 37748736},
-  "win_amd64": {"download": 20971520, "unpacked": 67108864, "runtime": 42991616}
+  "win_amd64": {"download": 20971520, "unpacked": 67108864, "runtime": 42991616},
+  "win_arm64": {"download": 23068672, "unpacked": 73400320, "runtime": 47185920}
 }

@@ -37,6 +37,13 @@ jobs:
             target: x86_64-pc-windows-msvc
             suffix: .exe
             rustflags: -C link-arg=/Brepro
+          # Windows ARM64 binaries are cross-compiled on x64; the native
+          # windows-11-arm wheel job self-tests and verifies them before packaging.
+          - runner: windows-latest
+            target: aarch64-pc-windows-msvc
+            suffix: .exe
+            rustflags: -C link-arg=/Brepro
+            cross: true
     env:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       VERSION: ${{ inputs.version }}

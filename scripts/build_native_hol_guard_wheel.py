@@ -40,6 +40,7 @@ _SHA64_RE = re.compile(r"^[0-9a-f]{64}$")
 _NATIVE_DIR = "codex_plugin_scanner/_native"
 _RUNTIME_MANIFEST_PATH = f"{_NATIVE_DIR}/runtime-manifest.json"
 _SOURCE_COMPILER_MANIFEST_PATH = f"{_NATIVE_DIR}/source-compiler-manifest.json"
+_NATIVE_WHEEL_MANIFEST_PATH = "codex_plugin_scanner/native-wheels.json"
 _NATIVE_PROGRAM_PATH = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
 _DETERMINISTIC_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
@@ -219,6 +220,8 @@ def _load_source_wheel(path: Path, *, version: str) -> SourceWheel:
         raise NativeWheelError("source wheel already contains a native source compiler")
     if _SOURCE_COMPILER_MANIFEST_PATH in entries:
         raise NativeWheelError("source wheel already contains a native source compiler manifest")
+    if _NATIVE_WHEEL_MANIFEST_PATH in entries:
+        raise NativeWheelError("source wheel already contains a native wheel manifest")
 
     return SourceWheel(
         path=path,

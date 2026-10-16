@@ -819,6 +819,11 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardCli:
+    @pytest.fixture(autouse=True)
+    def _bundled_native_runtime_present(self, monkeypatch):
+        # These update tests simulate package-index installs; a source checkout has no bundled runtime.
+        monkeypatch.setattr(guard_update_commands_module, "bundled_native_runtime_missing", lambda: False)
+
     def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
         legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
         pinned_command = (

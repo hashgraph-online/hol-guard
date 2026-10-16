@@ -672,6 +672,8 @@ pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
 #[cfg(test)]
+mod local_supply_chain_saved_claim_tests;
+#[cfg(test)]
 mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;
 pub mod package_policy_override;

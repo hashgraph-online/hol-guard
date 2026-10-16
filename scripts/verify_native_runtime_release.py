@@ -57,8 +57,13 @@ EXPECTED_TARGETS: Final[Mapping[str, str]] = {
     "macosx_13_0_x86_64": "x86_64-apple-darwin",
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
+    "win_arm64": "aarch64-pc-windows-msvc",
 }
 EXPECTED_PLATFORMS: Final = frozenset(EXPECTED_TARGETS)
+# Pull request canaries skip the Windows ARM64 runner; alpha and stable releases always carry it.
+CANARY_OPTIONAL_PLATFORMS: Final = frozenset({"win_arm64"})
+NATIVE_WHEEL_MANIFEST_PATH: Final = "codex_plugin_scanner/native-wheels.json"
+NATIVE_WHEEL_MANIFEST_SCHEMA: Final = "hol-guard-native-wheels.v1"
 _MAX_NATIVE_WHEEL_BYTES: Final = 256 * 1024 * 1024
 _MAX_BASE_DISTRIBUTION_BYTES: Final = 256 * 1024 * 1024
 _MAX_RUNTIME_BYTES: Final = 128 * 1024 * 1024
@@ -261,11 +266,33 @@ def local_native_hashes(
             raise NativeReleaseError("Native wheel manifest identity does not match the embedded runtime")
         hashes[wheel.name] = _sha256_file(wheel)
 
-    if platforms != EXPECTED_PLATFORMS:
+    required = EXPECTED_PLATFORMS - CANARY_OPTIONAL_PLATFORMS if Version(version).is_devrelease else EXPECTED_PLATFORMS
+    if not required <= platforms <= EXPECTED_PLATFORMS:
         missing = sorted(EXPECTED_PLATFORMS - platforms)
         extra = sorted(platforms - EXPECTED_PLATFORMS)
         raise NativeReleaseError(f"Native wheel platform set is incomplete: missing={missing}, extra={extra}")
     return hashes
+
+
+def _assert_native_wheel_manifest(pure_wheel: Path, *, version: str, native: Mapping[str, str]) -> None:
+    """Require the pure wheel to list the exact digest of every native wheel in this release."""
+
+    try:
+        with zipfile.ZipFile(pure_wheel) as archive:
+            names = [entry.filename for entry in archive.infolist()]
+            if names.count(NATIVE_WHEEL_MANIFEST_PATH) != 1:
+                raise NativeReleaseError("Guard pure wheel must carry exactly one native wheel manifest")
+            raw = _read_zip_member_bounded(
+                archive,
+                archive.getinfo(NATIVE_WHEEL_MANIFEST_PATH),
+                max_bytes=_MAX_MANIFEST_BYTES,
+                label="native wheel manifest",
+            )
+        document = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, zipfile.BadZipFile, json.JSONDecodeError, KeyError) as exc:
+        raise NativeReleaseError("Guard pure wheel native wheel manifest could not be read") from exc
+    if document != {"schema": NATIVE_WHEEL_MANIFEST_SCHEMA, "version": version, "wheels": dict(native)}:
+        raise NativeReleaseError("Guard pure wheel native wheel manifest does not match the native wheels")
 
 
 def local_guard_hashes(
@@ -274,7 +301,7 @@ def local_guard_hashes(
     version: str,
     source_sha: str,
 ) -> dict[str, str]:
-    """Return the exact six-file Guard release set after validating native bytes."""
+    """Return the exact Guard release set after validating native bytes and the pure wheel manifest."""
     version = _canonical_version(version)
     native = local_native_hashes(
         dist_dir,
@@ -296,6 +323,7 @@ def local_guard_hashes(
         raise NativeReleaseError(f"Guard release artifact set is not exact: missing={missing}, extra={extra}")
     _assert_regular_distribution(dist_dir / pure_wheel, label="Guard pure wheel")
     _assert_regular_distribution(dist_dir / sdist, label="Guard source distribution")
+    _assert_native_wheel_manifest(dist_dir / pure_wheel, version=version, native=native)
     return {filename: complete[filename] for filename in sorted(expected)}
 
 
