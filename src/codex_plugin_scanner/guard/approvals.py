@@ -74,7 +74,7 @@ from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .protection_capabilities import protection_capability_payloads
-from .risk import artifact_risk_signals, artifact_risk_summary
+from .risk import artifact_risk_profile
 from .runtime.command_capability import command_capability_status
 from .runtime.github_workflow_runtime import (
     issue_github_workflow_capability_for_resolution,
@@ -367,11 +367,12 @@ def _needs_review(item: Mapping[str, object]) -> bool:
 
 
 def _queue_artifact(artifact: GuardArtifact) -> dict[str, object]:
+    artifact_risk = artifact_risk_profile(artifact)
     return {
         "wire": wire_artifact(artifact),
         **{key: artifact.metadata.get(key) for key in _QUEUE_METADATA_KEYS},
-        "risk_summary": artifact_risk_summary(artifact),
-        "risk_signals": list(artifact_risk_signals(artifact)),
+        "risk_summary": artifact_risk.summary,
+        "risk_signals": [signal.explanation for signal in artifact_risk.signals],
     }
 
 

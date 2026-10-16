@@ -7,6 +7,10 @@ truncation were Python). That module now delegates to the native
 ``embedded_script_evidence`` shell helper action, so this script documents how
 ``vectors.json`` was produced rather than re-running against the current tree.
 
+The recording ran on POSIX. ``windows_style_path`` also carries hand-added
+``windows_entries``: on Windows the owner's tokenizer keeps unquoted
+backslashes literal, so the executable is ``python.exe``.
+
 Usage (with a native runtime available)::
 
     python record_vectors.py vectors.json

@@ -167,6 +167,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_shell_helpers.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
+        # Bounded decoding of the resident artifact-risk reply (gzip-packed when
+        # large); signals and summary are computed in Rust and only validated.
+        "src/codex_plugin_scanner/guard/risk.py",
         # Bounded response decoding for the resident approval-identity/hash result.
         "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
         "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",

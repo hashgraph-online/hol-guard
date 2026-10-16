@@ -151,7 +151,7 @@ fn read<T>(
     then: impl FnOnce(Option<&Saved<'_>>) -> T,
 ) -> Result<T, &'static str> {
     let connection = store::open(home)?.expect("store");
-    let saved = store::saved(&connection, binding, home.to_str().unwrap())?;
+    let saved = store::saved(&connection, binding, home.to_str().unwrap(), HARNESS)?;
     Ok(then(saved.as_ref()))
 }
 

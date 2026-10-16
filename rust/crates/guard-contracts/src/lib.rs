@@ -82,6 +82,8 @@ mod consumer_artifact_project;
 pub use consumer_artifact_project::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
+mod artifact_risk;
+pub use artifact_risk::*;
 mod local_tool_eligibility;
 pub use local_tool_eligibility::*;
 mod contributed_mcp_decision;

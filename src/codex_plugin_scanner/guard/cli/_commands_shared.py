@@ -147,7 +147,7 @@ from ..package_firewall_entitlement import (
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
-from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
+from ..risk import artifact_risk_profile, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
 from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
 from ..runtime.false_positive_rules import (

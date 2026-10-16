@@ -10,6 +10,16 @@ fn vectors() -> Vec<Value> {
     .expect("vectors parse")
 }
 
+/// The vectors were recorded on POSIX. On Windows the shell tokenizer keeps
+/// unquoted backslashes literal (as the Python owner's `windows_tokens` path
+/// did), so a vector whose owner depends on that carries `windows_entries`.
+fn expected(vector: &Value) -> &Value {
+    match vector.get("windows_entries") {
+        Some(entries) if cfg!(windows) => entries,
+        _ => &vector["entries"],
+    }
+}
+
 #[test]
 fn embedded_script_evidence_matches_recorded_python_vectors() {
     let vectors = vectors();
@@ -19,10 +29,10 @@ fn embedded_script_evidence_matches_recorded_python_vectors() {
         let name = vector["name"].as_str().expect("vector name");
         let command = vector["command"].as_str().expect("vector command");
         let observed = Value::Array(embedded_script_evidence_entries(command));
-        if observed != vector["entries"] {
+        if &observed != expected(vector) {
             mismatches.push(format!(
                 "{name}: rust={observed} python={}",
-                vector["entries"]
+                expected(vector)
             ));
         }
     }
@@ -41,7 +51,7 @@ fn shell_helpers_action_projects_the_same_entries() {
         let observed =
             shell_helpers::evaluate("embedded_script_evidence", &json!({"command": command}))
                 .expect("action evaluates");
-        assert_eq!(observed, vector["entries"], "{}", vector["name"]);
+        assert_eq!(&observed, expected(&vector), "{}", vector["name"]);
     }
 }
 

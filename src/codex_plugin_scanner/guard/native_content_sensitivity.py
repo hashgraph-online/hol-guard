@@ -43,6 +43,20 @@ class NativeContentSensitivityDeadlineError(NativeContentSensitivityError):
     """The caller's absolute transport budget expired."""
 
 
+# Bodies over this size cross the transport as gzip-packed JSON the resident
+# bounds and unpacks (``guard_command::content_sensitivity::decode_input``).
+PACK_THRESHOLD_BYTES = 128 * 1024
+
+
+def pack_json_body(body_bytes: bytes) -> dict[str, object]:
+    """The lossless packed wire form of an encoded JSON body."""
+
+    return {
+        "packed_json_gzip_v1": base64.b64encode(gzip.compress(body_bytes, compresslevel=1, mtime=0)).decode("ascii"),
+        "decoded_bytes": len(body_bytes),
+    }
+
+
 def _binary_signature(status: NativeRuntimeStatus) -> tuple[int, ...] | None:
     if status.identity is None:
         return None
@@ -103,13 +117,8 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
         if deadline_monotonic is not None
         else started + (_LARGE_QUERY_SECONDS if len(body_bytes) > 65536 else _COLD_START_SECONDS)
     )
-    if len(body_bytes) > 128 * 1024:
-        body = {
-            "packed_json_gzip_v1": base64.b64encode(gzip.compress(body_bytes, compresslevel=1, mtime=0)).decode(
-                "ascii"
-            ),
-            "decoded_bytes": len(body_bytes),
-        }
+    if len(body_bytes) > PACK_THRESHOLD_BYTES:
+        body = pack_json_body(body_bytes)
     status = _status(deadline)
     if time.monotonic() >= deadline:
         raise NativeContentSensitivityDeadlineError("native_content_sensitivity_deadline_exceeded")

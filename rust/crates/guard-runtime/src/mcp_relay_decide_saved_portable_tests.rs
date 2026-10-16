@@ -199,7 +199,7 @@ fn a_portable_block_saved_before_the_claim_outranks_the_claimed_allow() {
     let claim = Connection::open(home.join(crate::local_store_read::STORE_FILE_NAME)).unwrap();
     let transaction = claim.unchecked_transaction().unwrap();
     claim.execute_batch("PRAGMA query_only = ON").unwrap();
-    let saved = store::saved(&claim, &binding(), home.to_str().unwrap())
+    let saved = store::saved(&claim, &binding(), home.to_str().unwrap(), HARNESS)
         .unwrap()
         .expect("saved rows");
     let fresh = saved.answer(&need).unwrap();

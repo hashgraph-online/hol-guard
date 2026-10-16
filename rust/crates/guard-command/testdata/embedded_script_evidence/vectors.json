@@ -992,6 +992,25 @@
      "end": 36
     }
    }
+  ],
+  "windows_entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python.exe",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 27,
+     "end": 36
+    }
+   }
   ]
  },
  {

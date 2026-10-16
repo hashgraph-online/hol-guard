@@ -428,6 +428,7 @@ def evaluate_native_artifact_hook(
     compound_finding_count = artifact_metadata.get("compound_finding_count")
     has_compound_findings = isinstance(compound_finding_count, int) and compound_finding_count > 1
     scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
+    artifact_risk = artifact_risk_profile(runtime_artifact)
     stack = native_hook_compose(
         "policy_stack",
         {
@@ -455,9 +456,9 @@ def evaluate_native_artifact_hook(
                 else None
             ),
             "has_compound_findings": has_compound_findings,
-            "artifact_risk_signals": list(artifact_risk_signals(runtime_artifact)),
+            "artifact_risk_signals": [signal.explanation for signal in artifact_risk.signals],
             "data_flow_reasons": [signal.plain_reason for signal in data_flow_signals],
-            "artifact_risk_summary": artifact_risk_summary(runtime_artifact),
+            "artifact_risk_summary": artifact_risk.summary,
             "data_flow_summary": _runtime_data_flow_summary(data_flow_signals) if data_flow_signals else None,
             "package_risk_signals": (
                 [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
@@ -492,7 +493,7 @@ def evaluate_native_artifact_hook(
     scanner_evidence_payload.extend(cast("list[dict[str, object]]", stack["normalizer_evidence"]))
     if package_execution_context is not None:
         scanner_evidence_payload.append(package_execution_context.to_evidence())
-    artifact_decision_signals = artifact_risk_signals_v2(runtime_artifact)
+    artifact_decision_signals = artifact_risk.signals_v2
     base_decision_signals = tuple(
         {signal.signal_id: signal for signal in (*artifact_decision_signals, *data_flow_signals)}.values()
     )

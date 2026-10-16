@@ -445,7 +445,12 @@ fn resolve(
         .ok_or(BINDING_INCOMPLETE)?;
     let view = view::bound_harness_view(binding, &request.build.harness)?;
     let saved = match connection {
-        Some(connection) => store::saved(connection, binding, &request.guard_home)?,
+        Some(connection) => store::saved(
+            connection,
+            binding,
+            &request.guard_home,
+            &request.build.harness,
+        )?,
         None => None,
     };
     let identity = identity(request, &view, control_digest)?;
