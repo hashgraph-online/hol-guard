@@ -173,6 +173,7 @@ pub(super) fn decide_request(
     params: &Map<String, Value>,
     order: Option<&[String]>,
     catalog: &RelayCatalog,
+    inline: &Value,
 ) -> Option<(Vec<u8>, CatalogSnapshot)> {
     let name = params
         .get("name")
@@ -230,6 +231,7 @@ pub(super) fn decide_request(
         "cwd": facts.cwd,
         "catalog_state": expected.state,
         "params": params,
+        "inline": inline,
     });
     let payload = json!({"operation": "mcp_relay_decide", "request": request});
     Some((serde_json::to_vec(&payload).ok()?, expected))

@@ -40,7 +40,9 @@ mod unix {
 
     use crate::guard_config_load::approval_wait_timeout_seconds;
     use crate::mcp_relay_args::parse;
-    use crate::mcp_relay_core::{child_response_timeout, ChildLink, Relay, RelayExit};
+    use crate::mcp_relay_core::{
+        child_response_timeout, inline_approval_timeout, ChildLink, Relay, RelayExit,
+    };
     use crate::mcp_relay_host::LineHost;
     use crate::mcp_relay_lane::{
         hand_off, hands_off, note, startup, DaemonKick, Gate, STARTUP_BUDGET,
@@ -103,7 +105,8 @@ mod unix {
             }
         };
         let timeout = child_response_timeout(configured);
-        let mut relay = Relay::new(child, host, authority, timeout);
+        let inline_timeout = inline_approval_timeout(configured);
+        let mut relay = Relay::new(child, host, authority, timeout, inline_timeout);
         let outcome = relay.serve();
         let mut child = relay.into_child();
         match outcome {

@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    BrowserMcpArtifactV1, ContributedMcpLayerV1, LocalMcpServerMaterialV1, McpToolArgumentsV1,
+    BrowserMcpArtifactV1, ContributedMcpLayerV1, LocalMcpServerMaterialV1, McpInlineApprovalV1,
+    McpToolArgumentsV1,
 };
 
 /// Schema discriminator for the request.
@@ -103,6 +104,11 @@ pub struct McpToolPolicyProxyInputV1 {
     pub asks_for_approval: bool,
     pub inline_available: bool,
     pub tool_name: String,
+    /// The inline prompt's answer, when the caller has already raised it.
+    /// Left out, an inline-capable route asks for the `inline_approval` fact
+    /// as before, so an existing caller's payload is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline_approval: Option<McpInlineApprovalV1>,
 }
 
 /// Evidence for the saved-policy lookup, so the resident reads the store in

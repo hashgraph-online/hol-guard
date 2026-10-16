@@ -40,6 +40,7 @@ use crate::mcp_relay_authority::{
     ToolCallVerdict,
 };
 use crate::mcp_relay_catalog::{CatalogSnapshot, RelayCatalog};
+use crate::mcp_relay_decide::inline::Reply as InlineReply;
 use crate::mcp_relay_launch::Launch;
 use crate::mcp_relay_pending::COMMIT_RESULT_SCHEMA;
 use crate::resident_state::ResidentState;
@@ -113,6 +114,13 @@ pub(crate) struct ResidentRelayAuthority {
     warming: bool,
     /// The relayed catalog's report, until the resident records it.
     report: Option<report::CatalogReport>,
+    /// `_inline_prompt_available`: the client declared the `elicitation`
+    /// capability in its `initialize`, so a route may ask for the prompt.
+    inline_available: bool,
+    /// The answer to the prompt the relay just raised, which the next decide
+    /// of that same call carries. One slot: the relay hands the answer over
+    /// with nothing else running, and the next request spends it.
+    inline_answer: Option<InlineReply>,
 }
 
 /// What a commit request did with one ticket.
@@ -172,6 +180,8 @@ impl ResidentRelayAuthority {
             kick: None,
             warming: false,
             report: None,
+            inline_available: false,
+            inline_answer: None,
         }
     }
 
@@ -247,7 +257,14 @@ impl RelayAuthority for ResidentRelayAuthority {
             defer::note(defer::FACTS_UNAVAILABLE);
             return no_decision();
         };
-        let Some((message, payload, expected)) = prepare(facts, message, order, catalog) else {
+        // The answer belongs to this call: the relay raised its prompt with
+        // nothing else running, so the next request it sends spends it.
+        let inline = json!({
+            "available": self.inline_available,
+            "answer": self.inline_answer.take(),
+        });
+        let Some((message, payload, expected)) = prepare(facts, message, order, catalog, &inline)
+        else {
             defer::note(defer::REQUEST_UNSENDABLE);
             return no_decision();
         };
@@ -268,6 +285,7 @@ impl RelayAuthority for ResidentRelayAuthority {
                 expected,
                 claim: ticket,
             }),
+            Some(Reply::Elicit { params }) => ToolCallVerdict::Elicit(params),
             Some(Reply::Block { message, data }) => ToolCallVerdict::Respond(blocked_response(
                 id,
                 &tool_name(params),
@@ -316,7 +334,9 @@ impl RelayAuthority for ResidentRelayAuthority {
                     Some(data),
                 ))
             }
-            Some(Reply::Claim { .. }) | None => no_decision,
+            // The decision the claim settles was already made, so a second
+            // claim and a prompt are both answers this exchange cannot take.
+            Some(Reply::Claim { .. }) | Some(Reply::Elicit { .. }) | None => no_decision,
         }
     }
 
@@ -343,6 +363,25 @@ impl RelayAuthority for ResidentRelayAuthority {
         self.poll_report();
     }
 
+    fn client_capabilities(&mut self, params: Option<&Value>) {
+        // `_record_client_capabilities`: only a declared `elicitation` object
+        // offers the prompt, so anything else leaves the queue route alone.
+        self.inline_available = params
+            .and_then(|params| params.get("capabilities"))
+            .and_then(Value::as_object)
+            .is_some_and(|capabilities| {
+                capabilities
+                    .get("elicitation")
+                    .is_some_and(Value::is_object)
+            });
+    }
+
+    fn elicited(&mut self, answer: Option<&Value>) {
+        // `_request_inline_approval` answers an unanswered prompt with a
+        // cancel, which falls through to the approval queue.
+        self.inline_answer = Some(answer.map_or(InlineReply::Fallthrough, InlineReply::classify));
+    }
+
     fn catalog_complete(&mut self, tools: &[Value]) {
         self.report_server(tools);
     }
@@ -358,10 +397,11 @@ fn prepare(
     message: &Value,
     order: Option<&[String]>,
     catalog: &RelayCatalog,
+    inline: &Value,
 ) -> Option<(Value, Vec<u8>, CatalogSnapshot)> {
     let frame = python_canonical(message).filter(|frame| frame.get("id") == message.get("id"))?;
     let call = frame.get("params")?.as_object()?;
-    let (payload, expected) = decide_request(facts, call, order, catalog)?;
+    let (payload, expected) = decide_request(facts, call, order, catalog, inline)?;
     Some((frame, payload, expected))
 }
 
@@ -384,9 +424,20 @@ fn committed(output: &[u8]) -> Sent {
 /// What the resident decided.
 #[derive(Debug, Clone, PartialEq)]
 enum Reply {
-    Forward { ticket: String },
-    Claim { ticket: String },
-    Block { message: String, data: Value },
+    Forward {
+        ticket: String,
+    },
+    Claim {
+        ticket: String,
+    },
+    Block {
+        message: String,
+        data: Value,
+    },
+    /// Raise the client's inline prompt, then decide this call again.
+    Elicit {
+        params: Value,
+    },
 }
 
 fn reply_of(output: Option<&[u8]>) -> Option<Reply> {
@@ -408,6 +459,12 @@ fn reply(output: &[u8]) -> Option<Reply> {
     match result.get("outcome")?.as_str()? {
         "forward" => Some(Reply::Forward { ticket: ticket()? }),
         "claim" => Some(Reply::Claim { ticket: ticket()? }),
+        "elicit" => Some(Reply::Elicit {
+            params: result
+                .get("params")
+                .filter(|params| params.is_object())?
+                .clone(),
+        }),
         "block" => Some(Reply::Block {
             message: result.get("message")?.as_str()?.to_owned(),
             data: result.get("data").filter(|data| data.is_object())?.clone(),

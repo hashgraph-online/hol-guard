@@ -94,7 +94,9 @@ pub(crate) fn proxy_payload(
         decision: tool,
         package_saved_policy_blocks: None,
         native_prompt_allows: None,
-        inline_approval: None,
+        // The answer to the inline prompt, when the caller has already raised
+        // it. Left out, the route names the `inline_approval` fact it needs.
+        inline_approval: input.inline_approval,
     };
     let mut route = route_tool_call(&query);
     if route.get("need").and_then(Value::as_str) == Some(NATIVE_PROMPT) {

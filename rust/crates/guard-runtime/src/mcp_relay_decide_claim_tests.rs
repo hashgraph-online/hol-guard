@@ -62,6 +62,7 @@ fn a_covered_claim_forwards_as_the_decision_routed() {
         Routed::Forward {
             source: "policy".to_owned(),
             policy_action: "allow".to_owned(),
+            remember: false,
         }
     );
     assert!(append.is_empty());

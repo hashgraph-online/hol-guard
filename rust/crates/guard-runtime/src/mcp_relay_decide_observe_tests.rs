@@ -65,7 +65,7 @@ fn the_observe_downgrade_presents_the_current_policy() {
     assert_eq!(downgraded.current_action, Some(GuardAction::Review));
     assert_eq!(downgraded.saved_action, Some(GuardAction::Allow));
     // The taken payload routes the downgraded decision.
-    assert_eq!(route(&taken, &downgraded), Ok(Routed::ObserveForward));
+    assert_eq!(route(&taken, &downgraded, None), Ok(Routed::ObserveForward));
 }
 
 #[test]
@@ -107,11 +107,11 @@ fn any_other_override_defers() {
 fn route_takes_observe_forward_only_without_a_pending_approval() {
     let payload = proxy(observe_route(), Value::Null);
     assert_eq!(
-        route(&payload, &decision(GuardAction::Review)),
+        route(&payload, &decision(GuardAction::Review), None),
         Ok(Routed::ObserveForward)
     );
     assert_eq!(
-        route(&payload, &pending(GuardAction::Review)),
+        route(&payload, &pending(GuardAction::Review), None),
         Err(ROUTE_UNSUPPORTED)
     );
     // An override left in the payload is never routed past.
@@ -120,7 +120,7 @@ fn route_takes_observe_forward_only_without_a_pending_approval() {
         json!({"action": "review", "source": "observe-current-policy"}),
     );
     assert_eq!(
-        route(&overridden, &decision(GuardAction::Review)),
+        route(&overridden, &decision(GuardAction::Review), None),
         Err(ROUTE_UNSUPPORTED)
     );
 }
@@ -134,6 +134,7 @@ fn an_observed_review_forwards_as_allow_with_the_observe_mode_item() {
         Routed::Forward {
             source: "policy-observe".to_owned(),
             policy_action: "allow".to_owned(),
+            remember: false,
         }
     );
     assert_eq!(
@@ -166,6 +167,7 @@ fn a_permitted_observed_action_forwards_as_itself_with_no_evidence() {
         Routed::Forward {
             source: "policy-observe".to_owned(),
             policy_action: "warn".to_owned(),
+            remember: false,
         }
     );
     assert_eq!(append, None);

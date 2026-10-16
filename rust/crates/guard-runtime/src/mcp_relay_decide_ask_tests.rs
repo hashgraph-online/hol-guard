@@ -24,21 +24,18 @@ fn row(approval_url: Value) -> Map<String, Value> {
 }
 
 #[test]
-fn only_opencode_answers_the_native_prompt_from_its_decision() {
+fn the_native_prompt_answer_follows_the_harness_proxy_class() {
     let facts = |source: &str| crate::mcp_tool_policy_proxy::facts(&decision(source));
     // `_allow_after_native_prompt`: anything the saved policy itself decided
     // stays blocked after the prompt; every other source allows.
-    assert_eq!(
-        native_prompt_allows(OPENCODE, &facts("policy")),
-        Some(false)
-    );
-    assert_eq!(
-        native_prompt_allows(OPENCODE, &facts("approval-gate")),
-        Some(true)
-    );
+    assert!(!native_prompt_allows(OPENCODE, &facts("policy")));
+    assert!(native_prompt_allows(OPENCODE, &facts("approval-gate")));
     // The base class answers `False`, which routes to an inline elicitation.
     for harness in ["codex", "copilot", "cursor"] {
-        assert_eq!(native_prompt_allows(harness, &facts("approval-gate")), None);
+        assert!(
+            !native_prompt_allows(harness, &facts("approval-gate")),
+            "{harness}"
+        );
     }
     // A pending decision is answered off the facts that reach the route, so
     // the saved-allow gate's replacement decides the prompt, not the policy
@@ -50,7 +47,7 @@ fn only_opencode_answers_the_native_prompt_from_its_decision() {
         has_pending: false,
         ..crate::mcp_tool_policy_proxy::facts(&pending)
     };
-    assert_eq!(native_prompt_allows(OPENCODE, &gated), Some(true));
+    assert!(native_prompt_allows(OPENCODE, &gated));
 }
 
 #[test]

@@ -6,14 +6,15 @@
 //! request, raises the desktop notice and the approval center, and blocks the
 //! call on that request; the agent is told which request to approve and that
 //! retrying the same action is what resumes it. This ports that branch for
-//! the harnesses whose native prompt is a pure function of the decision, so
-//! the resident answers such a call without the Python proxy in the byte path.
+//! every relay harness, so the resident answers such a call without the
+//! Python proxy in the byte path.
 //!
-//! Only opencode qualifies. `_allow_after_native_prompt` is the one fact the
-//! route still needs under `ask`, and the opencode proxy answers it from the
-//! decision alone (`decision.source != "policy"`); every other relay harness
-//! answers it from its base class, whose `False` leaves the route to the
-//! client's inline elicitation, which the resident cannot raise.
+//! `_allow_after_native_prompt` is the one fact the route still needs under
+//! `ask`, and every relay harness answers it from the decision alone: the
+//! opencode proxy with `decision.source != "policy"`, and every other one
+//! with its base class's `False`, which routes the call to the client's
+//! inline elicitation (`mcp_relay_decide_inline.rs`) and reaches this queue
+//! only once that prompt falls through or the client offers none.
 //!
 //! The row is written before the block is answered, through the daemon's own
 //! `queue_blocked_approvals` store operation under the shared storage gate,
@@ -28,8 +29,6 @@
 //! What the resident cannot reproduce defers, and a defer blocks the call, so
 //! each one costs the user a stopped tool call:
 //!
-//! - any relay harness other than opencode, until its inline elicitation is
-//!   ported;
 //! - a binding with no approval-center origin, no review OAuth source or no
 //!   bound receipt redaction level, which the daemon publishes together;
 //! - a decision whose signals, projected risk summary or launch target are
@@ -50,19 +49,22 @@
 
 use std::path::Path;
 
-use guard_contracts::{GuardStoreRequestV1, McpToolFactsV1, GUARD_STORE_REQUEST_SCHEMA};
+use guard_contracts::{
+    GuardStoreRequestV1, McpToolCallArtifactV1, McpToolFactsV1, GUARD_STORE_REQUEST_SCHEMA,
+};
 use serde_json::{json, Map, Value};
 
 use super::ask_row::{args, nonempty, project, review_item, temporary_mcp_approval};
 use super::{Admitted, McpRelayDecideRequestV1, Resolved, Routed};
 use crate::hook_direct::saved_decision::consume::{repair_store_permissions, storage_gate};
+use crate::local_mcp_grant_identity::composio_requires_action_review;
 use crate::local_store_read::STORE_FILE_NAME;
 
 /// The decision source `_queue_approval_center_response` records for a call
 /// it blocks on a queued approval request.
 pub(super) const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
-/// The one relay harness whose `_allow_after_native_prompt` is a pure
-/// function of the decision.
+/// The one relay harness whose `_allow_after_native_prompt` reads the
+/// decision; every other one answers `False` from its base class.
 pub(super) const OPENCODE: &str = "opencode";
 /// The busy timeout the daemon's own store calls take.
 const BUSY_TIMEOUT_MS: u64 = 250;
@@ -74,12 +76,46 @@ const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
 
 const ASK_UNSUPPORTED: &str = "mcp_relay_ask_unsupported";
 const ASK_QUEUE_FAILED: &str = "mcp_relay_ask_queue_failed";
+const REMEMBER_UNSUPPORTED: &str = "mcp_relay_remember_unsupported";
 
 /// `_allow_after_native_prompt` for a relay harness, read off the decision the
 /// route names: the gated one, with the route's own observe-mode override on
 /// top, exactly as the proxy's need loop answers it.
-pub(super) fn native_prompt_allows(harness: &str, tool: &McpToolFactsV1) -> Option<bool> {
-    (harness == OPENCODE).then(|| tool.source != "policy")
+///
+/// `OpenCodeMcpGuardProxy` reads the decision's source; the base class every
+/// other relay harness uses answers `False`, which routes the call on to the
+/// client's inline elicitation.
+pub(super) fn native_prompt_allows(harness: &str, tool: &McpToolFactsV1) -> bool {
+    harness == OPENCODE && tool.source != "policy"
+}
+
+/// Whether the allow a remembered inline approval saves would be refused, in
+/// which case the proxy queues a re-approval request instead of forwarding.
+///
+/// `upsert_policy` writes an artifact-scoped `allow`, which the approval gate
+/// holds to a decision whenever it is enabled, and the relay carries no
+/// grant. The resident asks the gate before it forwards, because the drain
+/// performs the write after the child already answered the call.
+pub(super) fn remembered_write_refused(
+    guard_home: &str,
+    artifact: &McpToolCallArtifactV1,
+) -> Result<bool, &'static str> {
+    // `allow_tool_call` refuses to remember a provider action whose every call
+    // is reviewed and raises where the proxy has no answer for it. The route
+    // reads the tool name for this, and the write reads the server's command,
+    // so a command the route did not see leaves the call to the proxy.
+    if composio_requires_action_review(artifact.command.as_deref().unwrap_or_default()) {
+        return Err(REMEMBER_UNSUPPORTED);
+    }
+    Ok(crate::approval_gate_consumers::require_policy_write(
+        Path::new(guard_home),
+        crate::approval_gate_op::grants(),
+        "allow",
+        "artifact",
+        None,
+        None,
+    )
+    .is_err())
 }
 
 /// Write this call's approval request and block on it, as the `ask` branch of
@@ -90,7 +126,7 @@ pub(super) fn queue(
     resolved: &Resolved,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
-    if request.build.harness != OPENCODE || !REVIEWABLE.contains(&policy_action.as_str()) {
+    if !REVIEWABLE.contains(&policy_action.as_str()) {
         return Err(ASK_UNSUPPORTED);
     }
     let review = &admitted.binding.review;

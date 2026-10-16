@@ -89,15 +89,42 @@ pub(crate) struct McpRelayDecideRequestV1 {
     pub(crate) catalog_state: String,
     /// The `tools/call` params, which the daemon projects into evidence.
     pub(crate) params: Value,
+    /// The client's inline approval prompt, which the relay owns.
+    #[serde(default)]
+    pub(crate) inline: Inline,
+}
+
+/// What the relay knows about the client's inline elicitation prompt.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Inline {
+    /// Whether the client's `initialize` declared the `elicitation`
+    /// capability, which `_record_client_capabilities` reads.
+    #[serde(default)]
+    pub(crate) available: bool,
+    /// The answer to the prompt the relay already raised for this call.
+    #[serde(default)]
+    pub(crate) answer: Option<inline::Reply>,
 }
 
 /// What the relay does with the call; `Claim` spends the held saved approval
 /// once the relay found the catalog still current.
 #[derive(Debug, Clone, PartialEq)]
 enum Answer {
-    Forward { ticket: String },
-    Block { message: String, data: Value },
-    Claim { ticket: String },
+    Forward {
+        ticket: String,
+    },
+    Block {
+        message: String,
+        data: Value,
+    },
+    Claim {
+        ticket: String,
+    },
+    /// Raise the client's inline prompt and decide the call again with it.
+    Elicit {
+        params: Value,
+    },
 }
 
 /// The lane admission one decision was made under.
@@ -139,6 +166,9 @@ enum Routed {
     Forward {
         source: String,
         policy_action: String,
+        /// Whether the forward first saves the artifact allow the inline
+        /// prompt approved (`allow_tool_call(remember=True)`).
+        remember: bool,
     },
     Terminal {
         policy_action: String,
@@ -170,6 +200,14 @@ enum Routed {
     },
     /// Forward and record what Guard would have stopped (`mode = "observe"`).
     ObserveForward,
+    /// Raise the client's inline prompt; the route needs its answer
+    /// (`mcp_relay_decide_inline.rs`).
+    Elicit,
+    /// The inline prompt denied the call, or answered it invalidly.
+    InlineDenied {
+        /// `inline-denied` or `inline-invalid`.
+        source: &'static str,
+    },
 }
 
 pub(crate) fn evaluate(
@@ -212,6 +250,9 @@ fn encode(answer: Result<Answer, &'static str>) -> Result<Vec<u8>, String> {
         Ok(Answer::Claim { ticket }) => {
             json!({"schema": RESULT_SCHEMA, "outcome": "claim", "ticket": ticket})
         }
+        Ok(Answer::Elicit { params }) => {
+            json!({"schema": RESULT_SCHEMA, "outcome": "elicit", "params": params})
+        }
         Ok(Answer::Block { message, data }) => json!({
             "schema": RESULT_SCHEMA,
             "outcome": "block",
@@ -245,24 +286,28 @@ fn decide(
             mode: resolved.mode.clone(),
             package_present: false,
             asks_for_approval: asks,
-            // The relay cannot elicit from the client, and the harnesses it
-            // serves never offer the proxy an inline prompt either; a client
-            // that would be prompted inline is left to the Python proxy.
-            inline_available: false,
+            // `_inline_prompt_available`: the client declared the capability
+            // and the proxy class raises the prompt. `OpenCodeMcpGuardProxy`
+            // takes the base class's no-op, so it never prompts inline.
+            inline_available: request.inline.available && request.build.harness != ask::OPENCODE,
             tool_name: request.build.tool_name.clone(),
+            // The answer to the prompt the relay already raised; without one
+            // the route names the `inline_approval` fact and the relay asks.
+            inline_approval: request.inline.answer.map(inline::Reply::contract),
         },
         &resolved.decision,
         // What `_allow_after_native_prompt` answers for this harness, so the
         // route takes the prompt's own answer instead of naming the
         // `native_prompt` fact the resident cannot gather. The proxy asks it
         // about the decision the route names, gate and override included.
-        |tool| {
-            asks.then(|| ask::native_prompt_allows(&request.build.harness, tool))
-                .flatten()
-        },
+        |tool| asks.then(|| ask::native_prompt_allows(&request.build.harness, tool)),
     );
     let (proxy, downgraded) = observe::downgrade(proxy, &resolved.mode, &resolved.decision)?;
-    let routed = route(&proxy, downgraded.as_ref().unwrap_or(&resolved.decision))?;
+    let routed = route(
+        &proxy,
+        downgraded.as_ref().unwrap_or(&resolved.decision),
+        request.inline.answer,
+    )?;
     if routed == Routed::ObserveForward {
         // `_observe_tool_forward` records the decision without the downgrade.
         let mode = admitted.binding.review.blocked_request_mode.as_deref();
@@ -299,6 +344,44 @@ fn decide(
                 .hold(context, Instant::now())
                 .map(|ticket| Answer::Claim { ticket })
                 .ok_or(EVIDENCE_FULL)
+        }
+        // Phase one of the inline prompt: the relay raises it and decides the
+        // call again with the answer. No evidence is written for this pass,
+        // so the second decide is an ordinary full decide of the same call.
+        Routed::Elicit => Ok(Answer::Elicit {
+            params: inline::prompt(
+                &request.build.server_name,
+                &request.build.tool_name,
+                &resolved.decision.summary,
+            ),
+        }),
+        Routed::Forward {
+            source,
+            policy_action,
+            remember: true,
+        } => {
+            // The remembered allow is an artifact-scoped policy write, and the
+            // approval gate holds every allow to a decision while it is
+            // enabled. `upsert_policy` raising `ApprovalGateError` is what
+            // sends the proxy to the re-approval queue, so the resident asks
+            // the gate before it forwards and the drain performs the write.
+            let routed =
+                if ask::remembered_write_refused(&request.guard_home, &resolved.identity.artifact)?
+                {
+                    ask::queue(
+                        request,
+                        &admitted,
+                        &resolved,
+                        "require-reapproval".to_owned(),
+                    )?
+                } else {
+                    Routed::Forward {
+                        source,
+                        policy_action,
+                        remember: true,
+                    }
+                };
+            settle(request, &resolved, routed, None, policy_store)
         }
         Routed::Queue { policy_action } => {
             let mode = admitted.binding.review.blocked_request_mode.as_deref();
@@ -391,11 +474,20 @@ fn settle(
     let server = &request.build.server_name;
     let mut review = None;
     let mut approval = None;
+    let mut remembered = false;
     let (blocked, outcome, source, policy_action) = match routed {
         Routed::Forward {
             source,
             policy_action,
-        } => (None, "forward", source, policy_action),
+            remember,
+        } => {
+            // The artifact allow the inline prompt approved, which the drain
+            // saves before it records the forward.
+            if remember {
+                remembered = true;
+            }
+            (None, "forward", source, policy_action)
+        }
         Routed::Terminal { policy_action } => {
             let message = if policy_action == "block" {
                 format!("HOL Guard blocked tool call {tool} from {server}.")
@@ -452,7 +544,16 @@ fn settle(
                 policy_action,
             )
         }
-        Routed::Claim { .. } | Routed::Queue { .. } | Routed::ObserveForward => {
+        Routed::InlineDenied { source } => (
+            Some(Answer::Block {
+                message: inline::block_message(source, tool, server),
+                data: json!({"approvalRequests": [], "guardPolicyAction": "block"}),
+            }),
+            "block",
+            source.to_owned(),
+            "block".to_owned(),
+        ),
+        Routed::Claim { .. } | Routed::Queue { .. } | Routed::ObserveForward | Routed::Elicit => {
             return Err(ROUTE_UNSUPPORTED)
         }
     };
@@ -469,6 +570,11 @@ fn settle(
         "identity": serde_json::to_value(identity).map_err(|_| IDENTITY_FAILED)?,
         "decision": decision.to_value(),
     });
+    // `allow_tool_call(remember=True, emit_runtime_evidence=False)`, which the
+    // drain performs before the forward's own record.
+    if remembered {
+        evidence["remember"] = json!(true);
+    }
     if let Some(append) = evidence_append {
         evidence["evidence_append"] = Value::Array(append);
     }
@@ -537,6 +643,8 @@ mod ask_row;
 #[path = "mcp_relay_decide_claim.rs"]
 mod claim;
 pub(crate) use claim::claim;
+#[path = "mcp_relay_decide_inline.rs"]
+pub(crate) mod inline;
 #[path = "mcp_relay_decide_observe.rs"]
 mod observe;
 #[path = "mcp_relay_decide_package.rs"]

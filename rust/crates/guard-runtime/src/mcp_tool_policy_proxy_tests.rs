@@ -24,6 +24,7 @@ fn input(catalog_state: &str, mode: &str) -> McpToolPolicyProxyInputV1 {
         asks_for_approval: true,
         inline_available: false,
         tool_name: "navigate".to_owned(),
+        inline_approval: None,
     }
 }
 

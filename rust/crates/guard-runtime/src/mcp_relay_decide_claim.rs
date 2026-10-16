@@ -253,6 +253,8 @@ fn postclaim(claimed: &Claimed, fresh: &Resolved) -> Result<(Routed, Vec<Value>)
         Some("forward") => Routed::Forward {
             source: claimed.source.clone(),
             policy_action: claimed.policy_action.clone(),
+            // A claimed saved approval is already saved policy.
+            remember: false,
         },
         Some("stored_block") => Routed::StoredBlock,
         Some("terminal") => Routed::Terminal {

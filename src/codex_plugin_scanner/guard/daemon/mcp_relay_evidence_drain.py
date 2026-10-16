@@ -58,11 +58,17 @@ _APPEND_KEY = "evidence_append"
 _REVIEW_KEY = "review"
 # The written approval request, present only on an ask block's record.
 _APPROVAL_KEY = "approval"
-_OPTIONAL_KEYS = frozenset({_APPEND_KEY, _REVIEW_KEY, _APPROVAL_KEY})
+# The remembered allow, present only on an inline-approved forward's record.
+_REMEMBER_KEY = "remember"
+_OPTIONAL_KEYS = frozenset({_APPEND_KEY, _REVIEW_KEY, _APPROVAL_KEY, _REMEMBER_KEY})
 _FORWARD_ACTIONS = frozenset({"allow", "warn"})
 _BLOCK_SOURCE = "policy-block"
 _SAFE_ALTERNATIVE_SOURCE = "policy-safe-alternative"
 _APPROVAL_PENDING_SOURCE = "approval-center-pending"
+# The client's inline prompt: an approval the proxy may also remember, and the
+# two refusals it blocks the call with.
+_INLINE_APPROVED_SOURCE = "inline-approved"
+_INLINE_BLOCK_SOURCES = frozenset({"inline-denied", "inline-invalid"})
 _REDACTION_LEVELS = frozenset({"full", "partial", "none"})
 _APPROVAL_KEYS = frozenset({"approval_center_url", "review_url", "request_id", "workspace", "notices"})
 # The persisted fields `_QueuedNotice` reads.
@@ -131,10 +137,14 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
     queued = _queued_approval(record[_APPROVAL_KEY]) if _APPROVAL_KEY in record else None
     if _APPROVAL_KEY in record and (queued is None or reviewed):
         return False
+    # Only an inline-approved forward remembers its allow, and it must say so.
+    remember = record.get(_REMEMBER_KEY)
+    if _REMEMBER_KEY in record and (remember is not True or source != _INLINE_APPROVED_SOURCE):
+        return False
     if outcome == "forward":
         if policy_action not in _FORWARD_ACTIONS or reviewed or queued is not None:
             return False
-    elif outcome != "block" or policy_action in _FORWARD_ACTIONS or source != _block_source(reviewed, queued):
+    elif outcome != "block" or policy_action in _FORWARD_ACTIONS or not _block_source_fits(reviewed, queued, source):
         return False
     try:
         identity = _decode(record["identity"], expect_hash=True, token=True)
@@ -165,6 +175,13 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
             "policy_action": policy_action,
         }
         if outcome == "forward":
+            if remember is True:
+                # `_allow_and_forward` writes the remembered allow before the
+                # forward; the call already went out, so a write that fails --
+                # a gate closed since, a policy store that refused it -- costs
+                # the memory, never the receipt below.
+                with contextlib.suppress(Exception):
+                    allow_tool_call(remember=True, emit_runtime_evidence=False, **recorded)
             allow_tool_call(remember=False, **recorded)
         else:
             block_tool_call(**recorded)
@@ -198,12 +215,15 @@ def _redaction_level(review: object) -> str | None:
     return level if isinstance(level, str) and level in _REDACTION_LEVELS else None
 
 
-def _block_source(reviewed: bool, queued: _QueuedApproval | None) -> str:
-    """The decision source the block receipt of this queue route carries."""
+def _block_source_fits(reviewed: bool, queued: _QueuedApproval | None, source: str) -> bool:
+    """Whether this block receipt's decision source fits its queue route."""
 
     if queued is not None:
-        return _APPROVAL_PENDING_SOURCE
-    return _SAFE_ALTERNATIVE_SOURCE if reviewed else _BLOCK_SOURCE
+        return source == _APPROVAL_PENDING_SOURCE
+    if reviewed:
+        return source == _SAFE_ALTERNATIVE_SOURCE
+    # A refused inline prompt blocks the call on its own, with no row to show.
+    return source == _BLOCK_SOURCE or source in _INLINE_BLOCK_SOURCES
 
 
 def _queued_approval(approval: object) -> _QueuedApproval | None:
