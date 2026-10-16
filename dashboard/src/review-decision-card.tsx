@@ -53,6 +53,7 @@ import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
+import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -456,8 +457,17 @@ export function ReviewDecisionCard(props: {
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>Last time</SectionLabel>
           <p className="mt-2 text-sm text-muted-foreground">
-            You previously {pastDecisionVerb(detail.receipt.policy_decision)} a similar action{" "}
-            {formatRelativeTime(detail.receipt.timestamp)}.
+            {approvalLeftActionStopped(detail.receipt) ? (
+              <>
+                You approved a similar action once {formatRelativeTime(detail.receipt.timestamp)}, but it stayed
+                stopped.
+              </>
+            ) : (
+              <>
+                You previously {pastDecisionVerb(detail.receipt.policy_decision)} a similar action{" "}
+                {formatRelativeTime(detail.receipt.timestamp)}.
+              </>
+            )}
           </p>
           {detail.diff && detail.diff.changed_fields.length > 0 && (
             <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4">

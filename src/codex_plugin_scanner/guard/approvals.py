@@ -25,6 +25,7 @@ from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approva
 from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
+    RETRY_CANNOT_REUSE_APPROVAL,
     IneligibleApprovalScopeError,
     apply_scope_surfaces,
     package_request_portable_workspace_scope,
@@ -718,6 +719,7 @@ def apply_approval_resolution(
             resolved_at,
             persisted_rule=persisted_rule,
             local_once_fallback=local_once_fallback,
+            retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
         )
         issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
         result.update(scope_payload_for_request(request, contract))
@@ -760,6 +762,7 @@ def apply_approval_resolution(
         resolved_at,
         persisted_rule=persisted_rule,
         local_once_fallback=local_once_fallback,
+        retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
     updated.update(scope_payload_for_request(request, contract))
@@ -875,6 +878,7 @@ def _record_resolution_event(
     *,
     persisted_rule: bool,
     local_once_fallback: bool = False,
+    retry_cannot_reuse_approval: bool = False,
 ) -> None:
     store.add_event(
         "approval.resolved",
@@ -913,6 +917,9 @@ def _record_resolution_event(
         action=action,
         scope=scope,
         resolved_at=resolved_at,
+        # Only a saved rule lets an unbound native retry run; a one-time
+        # approval of it leaves the action blocked.
+        retry_blocked=action == "allow" and not persisted_rule and retry_cannot_reuse_approval,
     )
 
 
@@ -923,6 +930,7 @@ def _enqueue_memory_decision_for_resolution(
     action: str,
     scope: str,
     resolved_at: str,
+    retry_blocked: bool = False,
 ) -> None:
     """Feed the local-to-cloud memory candidate pipeline for this decision.
 
@@ -941,6 +949,7 @@ def _enqueue_memory_decision_for_resolution(
         action=action,
         scope=scope,
         resolved_at=resolved_at,
+        retry_blocked=retry_blocked,
     )
 
 
