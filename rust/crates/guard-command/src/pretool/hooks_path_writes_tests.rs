@@ -50,6 +50,10 @@ fn a_header_line_assignment_with_a_comment_names_a_nested_directory() {
     assert!(!hit(&repo.join("scripts/build.sh"), &home));
 }
 
+// The fixture writes a canonical Windows path (`\\?\D:\...`) unquoted into a git
+// config, where backslash starts an escape sequence and `\?` is invalid, so
+// the config is unreadable and Guard fails closed. The case needs POSIX paths.
+#[cfg(unix)]
 #[test]
 fn a_hooks_directory_outside_the_work_tree_is_screened_from_that_repository() {
     let base = fixture("outside");

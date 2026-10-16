@@ -231,7 +231,7 @@ fn request_matches_the_decide_wire_shape() {
     let facts = facts();
     let catalog = RelayCatalog::default();
     let call = params(json!({"name": "read", "arguments": {"path": "a.txt"}}));
-    let (payload, expected) = decide_request(&facts, &call, None, &catalog).unwrap();
+    let (payload, expected) = decide_request(&facts, &call, None, &catalog, &no_prompt()).unwrap();
     assert_eq!(expected, catalog.snapshot());
     let payload: Value = serde_json::from_slice(&payload).unwrap();
     assert_eq!(payload["operation"], json!("mcp_relay_decide"));
@@ -253,7 +253,7 @@ fn request_matches_the_decide_wire_shape() {
     assert_eq!(decoded.hash_workspace, facts.hash_workspace);
     assert_eq!(decoded.path.as_deref(), Some("/usr/bin:/bin"));
     let shell = params(json!({"name": "bash", "arguments": {"command": "ls"}}));
-    assert!(decide_request(&facts, &shell, None, &catalog).is_some());
+    assert!(decide_request(&facts, &shell, None, &catalog, &no_prompt()).is_some());
 }
 
 #[test]
@@ -268,7 +268,7 @@ fn calls_the_relay_cannot_send_are_not_requested() {
         json!({"name": "composio_x", "arguments": {}}),
     ] {
         assert!(
-            decide_request(&facts, &params(call.clone()), None, &catalog).is_none(),
+            decide_request(&facts, &params(call.clone()), None, &catalog, &no_prompt()).is_none(),
             "{call}"
         );
     }
@@ -296,6 +296,13 @@ fn replies_map_to_forward_or_block() {
             data: json!({"guardPolicyAction": "block"}),
         })
     );
+    let prompt = json!({"schema": RESULT_SCHEMA, "outcome": "elicit", "params": {"mode": "form"}});
+    assert_eq!(
+        reply(&serde_json::to_vec(&prompt).unwrap()),
+        Some(Reply::Elicit {
+            params: json!({"mode": "form"}),
+        })
+    );
     let claim = json!({"schema": RESULT_SCHEMA, "outcome": "claim", "ticket": "claim-1:1"});
     let held = Some(Reply::Claim {
         ticket: "claim-1:1".to_owned(),
@@ -310,6 +317,9 @@ fn replies_map_to_forward_or_block() {
         json!({"schema": RESULT_SCHEMA, "outcome": "forward", "ticket": ""}),
         json!({"schema": RESULT_SCHEMA, "outcome": "forward", "ticket": 1}),
         json!({"schema": RESULT_SCHEMA, "outcome": "block", "message": "m"}),
+        // A prompt the relay cannot raise is no decision.
+        json!({"schema": RESULT_SCHEMA, "outcome": "elicit"}),
+        json!({"schema": RESULT_SCHEMA, "outcome": "elicit", "params": "form"}),
     ] {
         assert_eq!(reply(&serde_json::to_vec(&other).unwrap()), None);
     }
@@ -330,6 +340,8 @@ fn without_a_resident_every_call_is_blocked() {
         kick: None,
         warming: false,
         report: None,
+        inline_available: false,
+        inline_answer: None,
     };
     assert_eq!(unbound.decide(&message, &call, None, &catalog), expected);
     // A claim goes only to the resident that decided the call.
@@ -346,6 +358,8 @@ fn without_a_resident_every_call_is_blocked() {
         kick: None,
         warming: false,
         report: None,
+        inline_available: false,
+        inline_answer: None,
     };
     assert_eq!(
         unreachable.decide(&message, &call, None, &catalog),
@@ -370,7 +384,64 @@ fn authority() -> ResidentRelayAuthority {
         kick: None,
         warming: false,
         report: None,
+        inline_available: false,
+        inline_answer: None,
     }
+}
+
+/// A session whose client offers no inline prompt and raised none.
+pub(super) fn no_prompt() -> Value {
+    json!({"available": false, "answer": null})
+}
+
+#[test]
+fn only_a_declared_elicitation_capability_offers_the_prompt() {
+    let mut relay = authority();
+    for (params, available) in [
+        (json!({"capabilities": {"elicitation": {}}}), true),
+        (
+            json!({"capabilities": {"elicitation": {"form": true}}}),
+            true,
+        ),
+        (json!({"capabilities": {"elicitation": true}}), false),
+        (json!({"capabilities": {}}), false),
+        (json!({"capabilities": null}), false),
+        (json!("initialize"), false),
+    ] {
+        relay.inline_available = !available;
+        relay.client_capabilities(Some(&params));
+        assert_eq!(relay.inline_available, available, "{params}");
+    }
+    relay.inline_available = true;
+    relay.client_capabilities(None);
+    assert!(!relay.inline_available);
+}
+
+#[test]
+fn the_prompt_answer_waits_for_the_call_that_raised_it() {
+    let mut relay = authority();
+    assert_eq!(relay.inline_answer, None);
+    let approved = json!({"result": {"action": "accept", "content": {"decision": "approve"}}});
+    relay.elicited(Some(&approved));
+    assert_eq!(relay.inline_answer, Some(InlineReply::Allow));
+    // `_request_inline_approval` answers an unanswered prompt with a cancel.
+    relay.elicited(None);
+    assert_eq!(relay.inline_answer, Some(InlineReply::Fallthrough));
+}
+
+#[test]
+fn the_request_carries_the_prompt_the_relay_owns() {
+    let facts = facts();
+    let catalog = RelayCatalog::default();
+    let call = params(json!({"name": "read", "arguments": {"path": "a.txt"}}));
+    let inline = json!({"available": true, "answer": "denied"});
+    let (payload, _) = decide_request(&facts, &call, None, &catalog, &inline).unwrap();
+    let payload: Value = serde_json::from_slice(&payload).unwrap();
+    assert_eq!(payload["request"]["inline"], inline);
+    let decoded: McpRelayDecideRequestV1 =
+        serde_json::from_value(payload["request"].clone()).unwrap();
+    assert!(decoded.inline.available);
+    assert_eq!(decoded.inline.answer, Some(InlineReply::Denied));
 }
 
 fn result(id: i64) -> Value {

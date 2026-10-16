@@ -62,6 +62,7 @@ fn a_covered_claim_forwards_as_the_decision_routed() {
         Routed::Forward {
             source: "policy".to_owned(),
             policy_action: "allow".to_owned(),
+            remember: false,
         }
     );
     assert!(append.is_empty());
@@ -87,27 +88,26 @@ fn a_fresh_block_after_the_claim_is_the_proxy_terminal() {
 }
 
 #[test]
-fn a_post_claim_reapproval_rolls_the_claim_back() {
-    // The proxy queues an approval request here (`runtime_mcp.py` 2670); the
-    // resident cannot, so it refuses and the claim rolls back unspent.
+fn a_post_claim_reapproval_queues_the_fresh_call() {
+    // The proxy spends the claim and queues a re-approval request for the
+    // fresh identity (`runtime_mcp.py` 2674-2684).
+    let queued = || Routed::Queue {
+        policy_action: "require-reapproval".to_owned(),
+    };
     let moved = fresh(GuardAction::Allow, "guard-approval-context:v1:moved");
-    assert_eq!(
-        postclaim(&claimed(Disposition::Consumed), &moved),
-        Err(POSTCLAIM_REAPPROVAL)
-    );
+    let (routed, append) = postclaim(&claimed(Disposition::Consumed), &moved).unwrap();
+    assert_eq!(routed, queued());
+    // The context change is the evidence the queued row and receipt append.
+    assert!(!append.is_empty());
     // A retained claim does not authorize a fresh review.
     let review = fresh(GuardAction::Review, HASH);
-    assert_eq!(
-        postclaim(&claimed(Disposition::Retained), &review),
-        Err(POSTCLAIM_REAPPROVAL)
-    );
+    let (routed, _) = postclaim(&claimed(Disposition::Retained), &review).unwrap();
+    assert_eq!(routed, queued());
     // A fresh require-reapproval asks whether the claim still covers it; an
     // empty claimed row never does.
     let reapproval = fresh(GuardAction::RequireReapproval, HASH);
-    assert_eq!(
-        postclaim(&claimed(Disposition::Consumed), &reapproval),
-        Err(POSTCLAIM_REAPPROVAL)
-    );
+    let (routed, _) = postclaim(&claimed(Disposition::Consumed), &reapproval).unwrap();
+    assert_eq!(routed, queued());
 }
 
 #[test]

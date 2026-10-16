@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
+from .pi_extension_native_hook import native_hook_reply_source
 from .pi_extension_prompt_response_source import PROMPT_RESPONSE_HELPER_SOURCE
 from .pi_extension_readiness_cache_source import WORKSPACE_READINESS_CACHE_SOURCE
-from .pi_extension_source_body_shared_v1 import build_source_body_shared_v1
+from .pi_extension_source_body_shared_v2 import build_source_body_shared_v2
 
 _STRUCTURED_BLOCKED_REASON_PRELUDE = (
     '  if (reasonCode === "structured_review_deadline_exceeded") {\n'
@@ -131,6 +132,61 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  if (!(port > 0) || authToken.length === 0) return null;\n"
         "  return { port, authToken, stateId };\n"
         "}\n"
+        "\n" + native_hook_reply_source(harness) + "async function guardDaemonAttempt(\n"
+        "  reply: GuardDaemonReply,\n"
+        "  serializedPayload: string,\n"
+        "): Promise<GuardDaemonAttempt> {\n"
+        "  if (reply.status < 200 || reply.status > 299) {\n"
+        "    let reasonCode = `daemon_http_${reply.status}`;\n"
+        "    try {\n"
+        "      const errorBody = await reply.readBody(GUARD_TEXT_LIMIT_CHARS);\n"
+        "      if (errorBody === null) {\n"
+        '        reasonCode = "daemon_response_body_unbounded";\n'
+        "      } else {\n"
+        "        const errorPayload = JSON.parse(errorBody) as { error?: unknown };\n"
+        "        if (typeof errorPayload.error === 'string' && errorPayload.error) {\n"
+        "          reasonCode = errorPayload.error;\n"
+        "        }\n"
+        "      }\n"
+        "    } catch {}\n"
+        "    if (reply.status === 401 || reply.status === 403) {\n"
+        "      return {\n"
+        "        response: null,\n"
+        '        recoveryKind: "authenticated-control-plane-failure",\n'
+        "      };\n"
+        "    }\n"
+        "    return {\n"
+        "      response: {\n"
+        '        decision: "deny",\n'
+        "        reason: `HOL Guard could not safely review this action (${reasonCode}).`,\n"
+        "        reason_code: reasonCode,\n"
+        "      },\n"
+        "      recoveryKind: null,\n"
+        "    };\n"
+        "  }\n"
+        "  const rawResponse = await reply.readBody(GUARD_MAX_SERIALIZED_RESPONSE_CHARS);\n"
+        '  if (rawResponse === null) return { response: null, recoveryKind: "transport-failure" };\n'
+        "  const raw = rawResponse.trim();\n"
+        '  if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
+        "  try {\n"
+        "    const parsed = JSON.parse(raw) as unknown;\n"
+        "    const normalized = normalizePromptGuardResponse(\n"
+        "      parsed, JSON.parse(serializedPayload).hook_event_name,\n"
+        "    );\n"
+        "    if (normalized !== null) {\n"
+        "      return { response: normalized, recoveryKind: null };\n"
+        "    }\n"
+        '    return { response: null, recoveryKind: "transport-failure" };\n'
+        "  } catch {}\n"
+        "  return {\n"
+        "    response: {\n"
+        '      decision: "deny",\n'
+        '      reason: "HOL Guard received an invalid response from the authenticated local daemon.",\n'
+        '      reason_code: "daemon_invalid_response",\n'
+        "    },\n"
+        "    recoveryKind: null,\n"
+        "  };\n"
+        "}\n"
         "\n"
         "async function daemonGuardResponse(\n"
         "  serializedPayload: string,\n"
@@ -138,25 +194,40 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  timeoutMs: number = GUARD_DAEMON_TIMEOUT_MS,\n"
         "  deadlineAt?: number,\n"
         "): Promise<GuardDaemonAttempt> {\n"
-        '  if (typeof fetch !== "function") {\n'
-        '    return { response: null, recoveryKind: "transport-failure" };\n'
-        "  }\n"
-        "  const connection = loadGuardDaemonConnection();\n"
-        '  if (!connection) return { response: null, recoveryKind: "transport-failure" };\n'
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         "  const params = new URLSearchParams({ 'guard-home': GUARD_HOME });\n"
         "  if (workspace) params.set('workspace', workspace);\n"
         "  if (!GUARD_HOME_DIR_IS_DEFAULT && GUARD_HOME_DIR) params.set('home', GUARD_HOME_DIR);\n"
+        "  const remainingMs = deadlineAt === undefined ? timeoutMs : deadlineAt - Date.now();\n"
+        "  const budgetMs = Math.min(60_000, Math.max(1, Math.min(timeoutMs, remainingMs)));\n"
+        "  const bridgeBudgetMs = nativeGuardBudgetMs(budgetMs, remainingMs);\n"
+        "  const payloadWithBudget = (remaining: number): string => {\n"
+        "    try {\n"
+        "      const parsedPayload = JSON.parse(serializedPayload) as Record<string, unknown>;\n"
+        "      parsedPayload.guard_remaining_ms = remaining;\n"
+        "      return JSON.stringify(parsedPayload);\n"
+        "    } catch {\n"
+        "      return serializedPayload;\n"
+        "    }\n"
+        "  };\n"
+        "  // The bridge finds a live resident without the daemon's state or token.\n"
+        "  const nativeReply = await nativeGuardReply(\n"
+        "    params.toString(),\n"
+        "    payloadWithBudget(bridgeBudgetMs),\n"
+        "    bridgeBudgetMs,\n"
+        "  );\n"
+        '  if (nativeReply === null) return { response: null, recoveryKind: "transport-failure" };\n'
+        "  if (nativeReply !== undefined) return guardDaemonAttempt(nativeReply, serializedPayload);\n"
+        "  const connection = loadGuardDaemonConnection();\n"
+        '  if (!connection) return { response: null, recoveryKind: "transport-failure" };\n'
+        '  if (typeof fetch !== "function") {\n'
+        '    return { response: null, recoveryKind: "transport-failure" };\n'
+        "  }\n"
+        "  // A direct post keeps the whole budget; only the bridge is capped.\n"
+        "  const daemonPayload = payloadWithBudget(budgetMs);\n"
         "  const controller = typeof AbortController === 'function' ? new AbortController() : undefined;\n"
         "  const timeoutHandle = setTimeout(() => controller?.abort(), timeoutMs);\n"
         "  try {\n"
-        "    let daemonPayload = serializedPayload;\n"
-        "    try {\n"
-        "      const parsedPayload = JSON.parse(serializedPayload) as Record<string, unknown>;\n"
-        "      const remainingMs = deadlineAt === undefined ? timeoutMs : deadlineAt - Date.now();\n"
-        "      parsedPayload.guard_remaining_ms = Math.min(60_000, Math.max(1, Math.min(timeoutMs, remainingMs)));\n"
-        "      daemonPayload = JSON.stringify(parsedPayload);\n"
-        "    } catch {}\n"
         f"    const response = await fetch(`http://127.0.0.1:${{connection.port}}"
         f"/v1/hooks/{harness}?${{params.toString()}}`, {{\n"
         "      method: 'POST',\n"
@@ -169,63 +240,15 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      body: daemonPayload,\n"
         "      signal: controller?.signal,\n"
         "    });\n"
-        "    if (!response.ok) {\n"
-        "      let reasonCode = `daemon_http_${response.status}`;\n"
-        "      try {\n"
-        "        const errorBody = await boundedResponseText(response, GUARD_TEXT_LIMIT_CHARS, deadlineAt);\n"
-        "        if (errorBody === null) {\n"
-        '          reasonCode = "daemon_response_body_unbounded";\n'
-        "        } else {\n"
-        "          const errorPayload = JSON.parse(errorBody) as { error?: unknown };\n"
-        "          if (typeof errorPayload.error === 'string' && errorPayload.error) {\n"
-        "            reasonCode = errorPayload.error;\n"
-        "          }\n"
-        "        }\n"
-        "      } catch {}\n"
-        "      if (response.status === 401 || response.status === 403) {\n"
-        "        return {\n"
-        "          response: null,\n"
-        '          recoveryKind: "authenticated-control-plane-failure",\n'
-        "        };\n"
-        "      }\n"
-        "      return {\n"
-        "        response: {\n"
-        '          decision: "deny",\n'
-        "          reason: `HOL Guard could not safely review this action (${reasonCode}).`,\n"
-        "          reason_code: reasonCode,\n"
-        "        },\n"
-        "        recoveryKind: null,\n"
-        "      };\n"
-        "    }\n"
-        "    const rawResponse = await boundedResponseText(\n"
-        "      response, GUARD_MAX_SERIALIZED_RESPONSE_CHARS, deadlineAt,\n"
-        "    );\n"
-        '    if (rawResponse === null) return { response: null, recoveryKind: "transport-failure" };\n'
-        "    const raw = rawResponse.trim();\n"
-        '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
-        "    try {\n"
-        "      const parsed = JSON.parse(raw) as unknown;\n"
-        "      const normalized = normalizePromptGuardResponse(\n"
-        "        parsed, JSON.parse(serializedPayload).hook_event_name,\n"
-        "      );\n"
-        "      if (normalized !== null) {\n"
-        "        return { response: normalized, recoveryKind: null };\n"
-        "      }\n"
-        '      return { response: null, recoveryKind: "transport-failure" };\n'
-        "    } catch {}\n"
-        "    return {\n"
-        "      response: {\n"
-        '        decision: "deny",\n'
-        '        reason: "HOL Guard received an invalid response from the authenticated local daemon.",\n'
-        '        reason_code: "daemon_invalid_response",\n'
+        "    return await guardDaemonAttempt(\n"
+        "      {\n"
+        "        status: response.status,\n"
+        "        readBody: (limitChars) => boundedResponseText(response, limitChars, deadlineAt),\n"
         "      },\n"
-        "      recoveryKind: null,\n"
-        "    };\n"
-        "  } catch (error) {\n"
-        "    if (error instanceof Error && error.name === 'AbortError') {\n"
-        "      // Classified transport recovery preserves a live overloaded daemon.\n"
-        '      return { response: null, recoveryKind: "transport-failure" };\n'
-        "    }\n"
+        "      serializedPayload,\n"
+        "    );\n"
+        "  } catch {\n"
+        "    // Classified transport recovery preserves a live overloaded daemon.\n"
         '    return { response: null, recoveryKind: "transport-failure" };\n'
         "  } finally {\n"
         "    clearTimeout(timeoutHandle);\n"
@@ -399,12 +422,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         '      reason_code: "hook_payload_unbounded",\n'
         "    };\n"
         "  }\n"
-        + build_source_body_shared_v1(
+        + build_source_body_shared_v2(
             display_name=display_name, blocked_reason_prelude=_STRUCTURED_BLOCKED_REASON_PRELUDE
-        ).replace(
-            "const normalized = normalizeGuardResponse(parsed);",
-            "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);",
-            1,
         )
         + "function reviewedToolResult(content: unknown, details: unknown, isError?: boolean, deadlineAt?: number) {\n"
         "  let body = '';\n"

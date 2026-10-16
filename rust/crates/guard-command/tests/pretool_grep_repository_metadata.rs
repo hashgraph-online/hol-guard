@@ -52,7 +52,7 @@ fn home() -> PathBuf {
 }
 
 fn shell(home: &Path, command: &str) -> String {
-    evaluate_pre_tool_envelope_with_context(
+    let result = evaluate_pre_tool_envelope_with_context(
         "omp",
         "PreToolUse",
         &json!({"tool_name": "bash", "tool_input": {"command": command}}),
@@ -60,8 +60,11 @@ fn shell(home: &Path, command: &str) -> String {
         None,
         home.to_str(),
         home.join("project").to_str(),
-    )
-    .minimum_action
+    );
+    if result.minimum_action != "allow" {
+        eprintln!("{}: {}", result.reason_code, result.reason);
+    }
+    result.minimum_action
 }
 
 #[test]

@@ -464,14 +464,16 @@ def _headless_approval_resolver(
             home_dir=context.home_dir,
         )
 
-        def apply_delivery_and_wait(payload, queued):
+        def apply_delivery_and_wait(payload, queued, *, complete=True):
             """Attach delivery copy and either record the pending wait or block on approvals.
 
-            Returns the wait result, or None when no wait was performed.
+            Returns the wait result, or None when no wait was performed. An
+            incomplete queue never waits: approving the requests that were
+            written must not resume a launch whose other findings have none.
             """
             payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
             _localize_pending_approval_copy(payload, harness=args.harness)
-            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
+            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals or not complete:
                 payload["approval_wait"] = {
                     "resolved": False,
                     "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
@@ -505,7 +507,7 @@ def _headless_approval_resolver(
                 logging.getLogger(__name__).warning(
                     "Guard approval queue unavailable: %s", queue_error, exc_info=True
                 )
-                queued = []
+                queued = approvals_queued_before(queue_error)
                 payload["approval_queue_unavailable"] = type(queue_error).__name__
             payload["approval_requests"] = queued
             _attach_primary_approval_link(
@@ -521,7 +523,9 @@ def _headless_approval_resolver(
                 queued=queued,
                 review_url=_preferred_approval_review_url(payload, harness=args.harness),
             )
-            wait_result = apply_delivery_and_wait(payload, queued)
+            wait_result = apply_delivery_and_wait(
+                payload, queued, complete="approval_queue_unavailable" not in payload
+            )
             if wait_result is None:
                 return payload
             if bool(wait_result.get("resolved")):

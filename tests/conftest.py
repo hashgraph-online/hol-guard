@@ -23,6 +23,7 @@ pytest_plugins = [
     "tests.approval_mode_fixtures",
     "tests.approval_reuse_fixtures",
     "tests.native_runtime_fixtures",
+    "tests.native_resident_teardown",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -90,7 +91,7 @@ def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytes
     # Subprocess installers copy os.environ and do not see this monkeypatch.
     # The adapter treats this value as the Python bridge pin.
     monkeypatch.setenv("HOL_GUARD_CODEX_HOOK_BRIDGE", "python")
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda: None)
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda *_args, **_kwargs: None)
 
 
 @pytest.fixture(autouse=True)
@@ -111,6 +112,21 @@ def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pyt
 
 
 @pytest.fixture(autouse=True)
+def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generate Pi and Oh My Pi extensions that post to the daemon themselves.
+
+    Pi extension tests stub the extension's ``fetch``. Tests marked
+    ``native_pi_hook_bridge`` keep the native runtime selection.
+    """
+
+    if request.node.get_closest_marker("native_pi_hook_bridge") is not None:
+        return
+    # Subprocess installers copy os.environ and do not see a monkeypatched
+    # function, so the generated source pins the daemon request by value.
+    monkeypatch.setenv("HOL_GUARD_PI_HOOK_BRIDGE", "fetch")
+
+
+@pytest.fixture(autouse=True)
 def _python_mcp_proxy_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
     """Install MCP proxies with the Python launcher argv unless a test opts in.
 
@@ -128,6 +144,18 @@ def _reset_registry_cache() -> None:
     from codex_plugin_scanner.guard.native_supply_chain_registry_cache import REGISTRY_CACHE
 
     REGISTRY_CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_last_bound_digest_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A guard home one test bound must not answer another test's unbound digests.
+
+    The remembered home outlives its test's temporary directory; a later test
+    that binds none would otherwise ask the resident about a deleted home.
+    """
+    from codex_plugin_scanner.guard import native_context
+
+    monkeypatch.setattr(native_context, "_last_bound_home", None)
 
 
 @pytest.fixture(autouse=True)

@@ -6,6 +6,7 @@ import copy
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +149,42 @@ def test_token_changes_when_native_rules_change(
     original = _token("cat package.json", workspace, result=result, receipt=receipt)
     assert original is not None
     assert _token("cat package.json", workspace, result=changed_result, receipt=changed_receipt) not in {None, original}
+
+
+def _node_script(workspace: Path) -> Path:
+    library = workspace / "scripts" / "lib"
+    library.mkdir(parents=True, exist_ok=True)
+    (workspace / "scripts" / "report.mjs").write_text(
+        "import path from 'node:path';\nimport { total } from './lib/sum.mjs';\nconsole.log(total([1, 2]), path.sep);\n"
+    )
+    (library / "sum.mjs").write_text("export const total = (xs) => xs.length;\n")
+    return library / "sum.mjs"
+
+
+def test_node_script_token_binds_the_code_it_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    # A native binary: a script-backed `node` never gets a reusable identity.
+    node = tmp_path / "manager-bin" / "node"
+    shutil.copyfile("/bin/echo", node)
+    node.chmod(0o755)
+    imported = _node_script(workspace)
+    first = _token("node scripts/report.mjs", workspace)
+    assert first is not None
+    assert _token("node scripts/report.mjs", workspace) == first
+    assert _token("node scripts/report.mjs --dry-run", workspace) not in {None, first}
+
+    imported.write_text("export const total = () => 0;\n")
+    assert _token("node scripts/report.mjs", workspace) not in {None, first}
+
+    imported.write_text("import { execSync } from 'node:child_process';\nexport const total = () => execSync('id');\n")
+    assert _token("node scripts/report.mjs", workspace) is None
+    imported.write_text("export const total = () => 0;\n")
+    assert _token("node -e 1", workspace) is None
+    assert _token("cd scripts && node report.mjs", workspace) is None
+    monkeypatch.setenv("NODE_OPTIONS", "--require ./preload.js")
+    assert _token("node scripts/report.mjs", workspace) is None
 
 
 @pytest.mark.parametrize(

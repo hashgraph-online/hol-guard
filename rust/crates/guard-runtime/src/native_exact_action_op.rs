@@ -9,12 +9,31 @@
 mod binding;
 pub(crate) mod context;
 mod fs_path;
+#[cfg(windows)]
+mod fs_path_windows;
 mod git_config;
 mod git_identity;
+#[cfg(windows)]
+mod git_windows;
 mod launch;
+#[cfg(windows)]
+mod launch_windows;
 mod launcher_sets;
+// Windows launches refuse interpreters (`launch.rs`), so these POSIX
+// module-graph proofs are unreached there.
+#[cfg_attr(windows, allow(dead_code))]
+mod node_script;
+#[cfg_attr(windows, allow(dead_code))]
+mod node_source;
 mod operands;
+#[cfg_attr(windows, allow(dead_code))]
+mod python_modules;
+#[cfg_attr(windows, allow(dead_code))]
+mod python_script;
+#[cfg_attr(windows, allow(dead_code))]
+mod python_source;
 mod reasons;
+mod reuse_shape;
 pub(crate) mod runner_bin;
 mod token;
 mod tool_target;
@@ -75,6 +94,7 @@ pub(crate) fn review_binding_for(
     let NativeExactActionQueryV1::ExactAction {
         harness,
         command,
+        payload_cwd,
         workspace,
         facts,
         policy_binding,
@@ -86,6 +106,10 @@ pub(crate) fn review_binding_for(
     binding::review_binding(
         harness,
         command.as_deref(),
+        payload_cwd
+            .as_deref()
+            .or(workspace.as_deref())
+            .map(std::path::Path::new),
         workspace.is_some(),
         facts,
         receipt,
@@ -104,6 +128,7 @@ fn decide(
         NativeExactActionQueryV1::ReviewBinding {
             harness,
             command,
+            cwd,
             workspace_bound,
             facts,
             receipt,
@@ -112,6 +137,7 @@ fn decide(
             binding: binding::review_binding(
                 harness,
                 command.as_deref(),
+                cwd.as_deref().map(std::path::Path::new),
                 *workspace_bound,
                 facts,
                 receipt.as_ref(),
@@ -138,3 +164,7 @@ fn decide(
 #[cfg(test)]
 #[path = "native_exact_action_op_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "native_exact_action_op/windows_tests.rs"]
+mod windows_tests;

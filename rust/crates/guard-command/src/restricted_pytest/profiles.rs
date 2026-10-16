@@ -29,6 +29,9 @@ struct Input {
 #[path = "workspace_profile.rs"]
 pub(super) mod workspace_profile;
 #[cfg(test)]
+#[path = "workspace_profile_loopback_tests.rs"]
+mod workspace_profile_loopback_tests;
+#[cfg(test)]
 #[path = "workspace_profile_tests.rs"]
 mod workspace_profile_tests;
 

@@ -17,8 +17,13 @@ fn ungrantable_material_matches_nothing() {
 
 #[test]
 fn missing_store_and_missing_tables_match_nothing() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let identity = script();
+    // Windows refuses to delete a file a connection still holds open.
+    drop(std::mem::replace(
+        &mut fixture.connection,
+        Connection::open_in_memory().unwrap(),
+    ));
     fs::remove_file(fixture.home.join("guard.db")).unwrap();
     assert_eq!(state(&fixture, &identity, "review", None), "none");
     Connection::open(fixture.home.join("guard.db"))

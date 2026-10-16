@@ -1,7 +1,7 @@
 use super::super::tests::{binding, local_store, sign_decision, ARTIFACT, SIGNED_AT, TOKEN};
 use super::super::{saved_response, Context, HookDirectDefer, StoreShape};
 use crate::project_identity::{resolve, PortableIdentity, PORTABLE_PROJECT_IDENTITY_PREFIX};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OpenFlags};
 use serde_json::{json, Map, Value};
 
 const REMOTE: &str = "https://github.com/example/hook.git";
@@ -102,7 +102,7 @@ fn a_portable_block_outranks_the_saved_allow_in_its_checkout() {
 }
 
 #[test]
-fn a_portable_row_bound_elsewhere_defers() {
+fn a_portable_row_bound_elsewhere_is_read_by_no_lookup_of_this_workspace() {
     let (home, connection) = store("portable-elsewhere");
     let checkout = directory("elsewhere", Some(REMOTE));
     let plain = directory("plain", None);
@@ -112,17 +112,59 @@ fn a_portable_row_bound_elsewhere_defers() {
         Some(&identity_of(&checkout)),
         "block",
     );
-    // A workspace with no identity reads no portable row.
+    // Every workspace selector the lookup binds is the probe's own, so a
+    // workspace with no identity of its own reads none of the checkout's
+    // rows and the local allow still answers.
     assert_eq!(
         status(&connection, &home, &plain),
-        Err(HookDirectDefer::SavedDecision)
+        Ok(Some(json!("accepted")))
     );
+    // A row under a third project's identity changes neither answer.
     let other = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{}", "f".repeat(64));
     decide(&connection, "workspace", Some(&other), "block");
+    assert_eq!(status(&connection, &home, &checkout), Ok(None));
     assert_eq!(
-        status(&connection, &home, &checkout),
-        Err(HookDirectDefer::SavedDecision)
+        status(&connection, &home, &plain),
+        Ok(Some(json!("accepted")))
     );
+}
+
+#[test]
+fn a_workspace_that_already_names_an_identity_reads_that_identity_alone() {
+    let (home, connection) = store("portable-named");
+    let identity = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{}", "a".repeat(64));
+    // `_portable_project_workspace` answers such a workspace with itself, so
+    // the identity's own lookup is the whole composition and no local
+    // authority is read beside it. The saved allow is a portable permission
+    // the daemon strips, so the review stands instead of being reused.
+    assert_eq!(status(&connection, &home, &identity), Ok(None));
+    // The same workspace spelled with surrounding space is the same
+    // identity: `_portable_project_workspace` strips before it compares.
+    let padded = format!("  {identity}  ");
+    assert_eq!(status(&connection, &home, &padded), Ok(None));
+}
+
+#[test]
+fn a_local_row_an_identity_named_workspace_never_reads_does_not_stop_it() {
+    let (path, connection) = local_store("portable-named-readonly");
+    let home = path.parent().unwrap().to_str().unwrap().to_owned();
+    decide(&connection, "artifact", None, "allow");
+    let identity = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{}", "b".repeat(64));
+    let padded = format!("  {identity}  ");
+    // An unsigned row only the local lookup of the padded workspace matches.
+    // Reading it records an integrity audit event, which this store cannot
+    // take, so running that lookup at all would stop the call.
+    connection
+        .execute(
+            "insert into policy_decisions (harness, scope, artifact_id, action, artifact_hash,
+               workspace, source, created_at, updated_at)
+             values ('claude-code', 'workspace', ?1, 'allow', ?2, ?3, 'approval-gate', ?4, ?4)",
+            params![ARTIFACT, TOKEN, padded, SIGNED_AT],
+        )
+        .unwrap();
+    drop(connection);
+    let readable = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    assert_eq!(status(&readable, &home, &padded), Ok(None));
 }
 
 #[test]

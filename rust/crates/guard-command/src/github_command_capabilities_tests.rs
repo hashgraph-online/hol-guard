@@ -193,3 +193,27 @@ fn split(command: &str) -> Vec<&str> {
     }
     words
 }
+
+#[test]
+fn api_jq_filters_that_read_the_environment_are_no_static_reads() {
+    let reason = |option: &str, filter: &str| {
+        let argv = ["repos/o/r/pulls", option, filter].map(String::from);
+        crate::github_command_capabilities::classify_github_api(&argv).reason_code
+    };
+    for filter in ["$ENV.GH_TOKEN", "env.GH_TOKEN", ".[0] | env", "$ENV | keys"] {
+        for option in ["--jq", "-q"] {
+            assert_eq!(
+                reason(option, filter),
+                "github.api.dynamic-option-value",
+                "{filter}"
+            );
+        }
+    }
+    for filter in [".[].number", ".[].env", ".[].environment"] {
+        assert_ne!(
+            reason("--jq", filter),
+            "github.api.dynamic-option-value",
+            "{filter}"
+        );
+    }
+}

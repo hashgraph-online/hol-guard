@@ -27,7 +27,7 @@ pub(in crate::pretool) fn owned_temporary_directory(
 
 /// Whether canonical `parent` may hold a fresh checkout `git worktree add`
 /// creates: an owned directory below the shared temporary root, or the root
-/// itself, or the home owner's private macOS temporary directory.
+/// itself, or the home owner's private macOS or Windows temporary directory.
 ///
 /// Directly in the sticky shared root, another user could pre-create the
 /// leaf only by winning a race against the existence check, the same race
@@ -43,6 +43,16 @@ pub(in crate::pretool) fn temporary_checkout_parent(
             .iter()
             .any(|root| root == parent && sticky_shared_root(root, context))
         || private_temporary_root(parent, context)
+}
+
+/// Whether canonical `parent` is a temporary directory no other user can
+/// create an entry in: an owned directory below the shared temporary root,
+/// or the home owner's private macOS temporary directory or one below it.
+pub(in crate::pretool) fn private_temporary_parent(
+    parent: &std::path::Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    owned_temporary_directory(parent, context) || private_temporary_root(parent, context)
 }
 
 /// A sticky shared root owned by root or the home owner, so entries another
@@ -103,7 +113,32 @@ fn private_temporary_root(
         && owned_below(&root, parent, &home)
 }
 
-#[cfg(not(target_os = "macos"))]
+/// The profile's own Windows temporary directory (`<home>\AppData\Local\Temp`,
+/// where Git Bash mounts `/tmp`), or a non-hidden directory below it. It is
+/// located from the canonical home rather than the caller-controlled
+/// `TEMP`/`TMP`, must be its own canonical path (no junction), and the
+/// profile ACL keeps other non-administrator users out of it.
+#[cfg(windows)]
+fn private_temporary_root(
+    parent: &std::path::Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    let Some(home) = context
+        .home_dir
+        .and_then(|home| std::fs::canonicalize(home).ok())
+    else {
+        return false;
+    };
+    let root = home.join("AppData").join("Local").join("Temp");
+    std::fs::canonicalize(&root).ok().as_deref() == Some(root.as_path())
+        && parent.strip_prefix(&root).is_ok_and(|relative| {
+            relative.components().all(|part| {
+                matches!(part, std::path::Component::Normal(name) if !name.to_string_lossy().starts_with('.'))
+            })
+        })
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn private_temporary_root(
     _parent: &std::path::Path,
     _context: super::super::PathContext<'_>,

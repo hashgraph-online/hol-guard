@@ -87,6 +87,8 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
     for command in [
         "git checkout main 2>/dev/null && gh pr view 12",
         "ln -s a b 2>/dev/null; gh pr view 12 >/dev/null",
+        // `&>` inside an argument is not a separator glued to the interpreter.
+        "python3 app.py \"a&>b\"",
     ] {
         assert_ne!(
             decision(&controls, command).1,
@@ -389,5 +391,160 @@ fn prefixed_git_commands_keep_the_git_permission_decision() {
         "command command git push origin main",
     ] {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
+    }
+}
+
+fn reason_text(controls: &CompiledNativeCommandControls, command: &str) -> String {
+    crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+        "zcode",
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}}),
+        Some(controls),
+        None,
+    )
+    .reason
+}
+
+const FAILED: &str = "native_command_extension_evaluation_failed";
+
+#[test]
+fn heredoc_python_edits_and_test_runs_are_reviewed_not_blocked() {
+    let controls = controls(serde_json::json!([]), false);
+    let command = "python3 - <<'EOF'\np='src/cli.js'\ns=open(p).read()\ns=s.replace(\"a\",\"b\")\nopen(p,'w').write(s)\nEOF\ncat > test/todo.test.js <<'EOF'\nimport { test } from 'node:test';\nEOF\nnpm test 2>&1 | tail -15";
+    assert_ne!(decision(&controls, command).1, FAILED);
+    // A body that can start a program keeps the failure.
+    for body in [
+        "import subprocess\nsubprocess.run(['gh','pr','list'])",
+        "import os\nos.system('gh pr list')",
+        "getattr(__import__('os'), 'sys' + 'tem')('x')",
+        "import operator, os\noperator.attrgetter('sys'+'tem')(os)('g'+'h pr merge 1')",
+        "x=1; import pickle\npickle.loads(b'x')",
+        "exec('print(1)')",
+    ] {
+        let command = format!("python3 - <<'EOF'\n{body}\nEOF\nnpm test");
+        assert_eq!(decision(&controls, &command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn a_heredoc_python_edit_that_writes_import_meta_is_reviewed() {
+    let controls = controls(serde_json::json!([]), false);
+    let edit = "s=s.replace(\"if (main) {\",\"if (process.argv[1] && import.meta.url) {\")";
+    let command = format!("python3 - <<'EOF'\ns=open('a').read()\n{edit}\nEOF\nnpm test");
+    assert_ne!(decision(&controls, &command).1, FAILED);
+    // A real import beside it, or a program that starts one, still fails.
+    for body in [
+        format!("{edit}; import os"),
+        "import subprocess\nsubprocess.run(['gh','pr','list'])".to_owned(),
+    ] {
+        let command = format!("python3 - <<'EOF'\n{body}\nEOF\nnode --test test/ 2>&1 | tail -10\nexport TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list");
+        assert_eq!(decision(&controls, &command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn program_lookups_do_not_make_a_command_unmatchable() {
+    let controls = controls(serde_json::json!([]), false);
+    let command = "date -u +%Y-%m-%dT%H:%M:%SZ; echo \"rc=$?\"; echo \"HOME=$HOME\"; command -v doctl; ls -l \"$(command -v doctl)\"";
+    assert_ne!(decision(&controls, command).1, FAILED);
+    // A lookup whose name is computed, or a substitution that runs a program,
+    // still could run anything.
+    for command in [
+        "ls -l \"$(command -v $tool)\"",
+        "ls -l \"$(command -v doctl; gh pr list)\"",
+        "echo $(gh pr list)",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn plain_awk_filters_are_not_interpreters() {
+    let controls = controls(serde_json::json!([]), false);
+    let command = "doctl registry repository list-manifests r | grep sha | awk '{print $1}' > /tmp/digests.txt";
+    assert_ne!(decision(&controls, command).1, FAILED);
+    for command in [
+        "doctl registry repository list-manifests r | awk '{system(\"rm x\")}' > /tmp/d.txt",
+        "doctl registry repository list-manifests r | awk '{print | \"sh\"}' > /tmp/d.txt",
+        "doctl registry repository list-manifests r | awk -f prog.awk > /tmp/d.txt",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn a_shell_variable_assignment_is_not_named_an_environment_prefix() {
+    let controls = controls(serde_json::json!([]), false);
+    let loop_command = "b=\"\"; n=0; for d in $(doctl registry repository list-manifests r); do b=\"$b $d\"; n=$((n+1)); done";
+    let reason = reason_text(&controls, loop_command);
+    assert!(!reason.contains("environment prefix"), "{reason}");
+    assert!(reason.contains("$(...)"), "{reason}");
+    // A setting that reaches a command's environment is still named.
+    let prefixed = "GH_HOST=$(cat host.txt) gh pr list";
+    assert!(
+        reason_text(&controls, prefixed).contains("GH_HOST"),
+        "{prefixed}"
+    );
+}
+
+#[test]
+fn a_looked_up_program_in_command_position_keeps_its_owner() {
+    let controls = controls(
+        github("enabled", Some("command.github.permission.merge-remote")),
+        false,
+    );
+    // The lookup names the program it will run, so its extension still owns it.
+    assert_eq!(
+        decision(&controls, "\"$(command -v gh)\" pr merge 12; echo done").0,
+        "block"
+    );
+    assert_eq!(
+        decision(&controls, "$(which python3) -c 'print(1)'; echo done").1,
+        FAILED
+    );
+}
+
+#[test]
+fn a_backtick_in_a_redirect_target_does_not_hide_the_interpreter() {
+    assert!(super::unread_file_interpreter("echo hi >`python3 evil.py`"));
+}
+
+#[test]
+fn a_redirect_before_an_awk_program_does_not_hide_it() {
+    let controls = controls(serde_json::json!([]), false);
+    let command =
+        "doctl registry repository list-manifests r | awk > /tmp/d.txt 'BEGIN { system(\"id\") }'";
+    assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+}
+
+#[test]
+fn a_substituted_setting_before_a_bare_env_is_named() {
+    let controls = controls(serde_json::json!([]), false);
+    let reason = reason_text(&controls, "SERVICE_TOKEN=$(echo x) env");
+    assert!(reason.contains("SERVICE_TOKEN"), "{reason}");
+}
+
+#[test]
+fn awk_ending_at_a_separator_with_a_redirect_does_not_swallow_the_next_command() {
+    let controls = controls(serde_json::json!([]), false);
+    for command in [
+        "doctl registry repository list-manifests r | awk '{print}' ;</dev/null sh evil.sh",
+        "doctl registry repository list-manifests r | awk '{print}' |>o bash x.sh",
+        "doctl registry repository list-manifests r | awk '{print}' ;>&/dev/null python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;>|log python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;< \"in put\" node evil.js",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn heredoc_python_with_a_coding_cookie_or_padded_terminator_keeps_the_failure() {
+    let controls = controls(serde_json::json!([]), false);
+    for command in [
+        "python3 - <<'EOF'\n# coding: utf-7\n+AF8AXw-x\nEOF\nnpm test",
+        "python3 - <<'EOF'\nprint(1)\n  EOF\nimport os\nEOF\nnpm test",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }
 }

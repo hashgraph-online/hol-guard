@@ -121,8 +121,39 @@ def test_unbound_review_does_not_tell_the_agent_to_wait_for_approval() -> None:
         "Blocked.", reason_code="native_command_review_required", approval_queued=True, retry_reuses_approval=False
     )
     assert "approving it there will not let you run it" in text
-    assert "Do not retry it." in text
+    assert "Do not retry this exact command." in text
     assert "Do not retry the same action until it is approved" not in text
+
+
+def test_unproven_command_review_says_its_steps_may_run_separately() -> None:
+    # A chained command that cannot be proven read-only often passes step by step;
+    # without this the agent reads "do not retry" as a stop and abandons the task.
+    for queued, reuses in ((True, False), (True, True), (False, True)):
+        text = safe_alternative_reason(
+            "Blocked.",
+            reason_code="native_command_review_required",
+            approval_queued=queued,
+            retry_reuses_approval=reuses,
+        )
+        assert "run each step as its own command" in text
+        assert "Do not retry it." not in text
+
+
+def test_review_drops_the_inbox_offer_only_when_approval_cannot_let_it_run() -> None:
+    native = (
+        "HOL Guard requires review because this command could not be confirmed read-only."
+        " Approve it in the HOL Guard inbox (choose Always for a repeated read-only command),"
+        " or split it into simpler commands."
+    )
+    for queued, reuses, offered in ((True, False, False), (False, True, False), (True, True, True)):
+        text = safe_alternative_reason(
+            native,
+            reason_code="native_command_review_required",
+            approval_queued=queued,
+            retry_reuses_approval=reuses,
+        )
+        assert text.startswith("HOL Guard requires review because this command could not be confirmed read-only.")
+        assert ("Approve it in the HOL Guard inbox" in text) is offered
 
 
 def test_unbound_review_with_exact_action_names_always_allow_as_the_only_way_through() -> None:
@@ -144,3 +175,19 @@ def test_bound_review_keeps_the_wait_for_approval_text() -> None:
     )
     assert "Do not retry the same action until it is approved" in text
     assert "will not let you run it" not in text
+
+
+def test_build_review_leaves_out_the_install_hint() -> None:
+    build = (
+        "HOL Guard requires review before this build or test command can execute, "
+        "because it can download dependencies and run their build scripts."
+    )
+    text = safe_alternative_reason(build, reason_code="native_package_review", approval_queued=True)
+    assert text.startswith(build)
+    assert "--ignore-scripts" not in text
+    install = safe_alternative_reason(
+        "HOL Guard requires review before this package or script command can execute.",
+        reason_code="native_package_review",
+        approval_queued=True,
+    )
+    assert "--ignore-scripts" in install

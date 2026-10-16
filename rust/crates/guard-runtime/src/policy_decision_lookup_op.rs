@@ -1326,7 +1326,12 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     })
 }
 
-fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
+/// One lookup on its own store connection: the `lookup_result` payload, with
+/// the consuming path serialized in its own transaction. In-process callers
+/// that hold a store themselves resolve a lookup through this rather than
+/// reading `policy_decisions` directly, so a decision they go on to claim
+/// carries the authority revision and integrity payload the claim compares.
+pub(crate) fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
     if request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
         return Err("native_policy_decision_lookup_schema_mismatch".to_owned());
     }

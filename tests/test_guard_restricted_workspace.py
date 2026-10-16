@@ -182,6 +182,30 @@ def test_a_plan_that_differs_from_the_authorized_command_is_rejected(
     assert started == []
 
 
+def test_a_read_grant_is_one_canonical_script_the_command_names(tmp_path: Path) -> None:
+    (tmp_path / "scratch").mkdir()
+    script = (tmp_path / "scratch" / "check.py").resolve()
+    script.write_text("print(1)\n", encoding="utf-8")
+    link = tmp_path / "scratch" / "link.py"
+    link.symlink_to(script)
+    text = f"python3 {script}"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    accepted = workspace_sink._validated_plan(plan(workspace, text, read_only_roots=[str(script)]), text, workspace)
+    assert accepted["read_only_roots"] == [str(script)]
+    for roots in (
+        [str(script.parent)],
+        [str(link)],
+        ["check.py"],
+        [str(tmp_path / "scratch" / "missing.py")],
+        [str(tmp_path / "scratch" / "other.py")],
+        str(script),
+        [3],
+    ):
+        with pytest.raises(RestrictedPytestError):
+            workspace_sink._validated_plan(plan(workspace, text, read_only_roots=roots), text, workspace)
+
+
 @pytest.fixture(autouse=True)
 def macos_host(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(workspace_sink, "_host_backend", lambda: "macos-seatbelt")
@@ -454,3 +478,24 @@ def test_a_cd_below_a_sibling_root_without_a_workspace_receipt_never_runs_there(
                 home_dir=home,
             )
     assert ran == []
+
+
+def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    root = tmp_path.resolve()
+    upper = root / "Build.JS"
+    good = root / "good.py"
+    upper.write_text("x")
+    good.write_text("x")
+    assert read_grants_valid([str(upper)], f"node {upper}")
+    assert not read_grants_valid([str(good)], f"python3 {root}/other/good.py")
+    assert not read_grants_valid([str(good), str(upper)], f"node {upper}; python3 {good}")
+    assert read_grants_valid([str(good)], f"python3 {good};echo ok")
+    assert read_grants_valid([str(good)], f"python3 {good}|head")
+    assert read_grants_valid([str(good)], f"python3 {good}>out.log")
+    hashed = root / "run#2"
+    hashed.mkdir()
+    (hashed / "good.py").write_text("x")
+    assert read_grants_valid([str(hashed / "good.py")], f"python3 {hashed}/good.py")
+    assert not read_grants_valid([str(good)], f"python3 {good}#x")

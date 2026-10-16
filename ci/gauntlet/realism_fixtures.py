@@ -18,6 +18,8 @@ None of it holds a credential, reaches the network or writes outside the fixture
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 DASHBOARD = "dashboard"
@@ -66,6 +68,15 @@ VITE_STUB = (
     "printf 'dist/index.html  0.40 kB\\n'\n"
     "printf 'built in 12ms\\n'\n"
 )
+# Windows runs the package entry with Node, as Guard's contained build does.
+VITE_STUB_NODE = (
+    "// Synthetic stand-in for the installed vite CLI: no network, no writes.\n"
+    "process.stdout.write(\n"
+    f"  'vite v{VITE_VERSION} building for production...\\n' +\n"
+    "  'dist/index.html  0.40 kB\\n' +\n"
+    "  'built in 12ms\\n'\n"
+    ");\n"
+)
 DOCTL_STUB = (
     "#!/bin/sh\n"
     "# Read-only stand-in for doctl: it never reaches the network or reads a token.\n"
@@ -75,6 +86,32 @@ DOCTL_STUB = (
     "  *) printf 'doctl stand-in: unsupported command\\n' >&2; exit 2 ;;\n"
     "esac\n"
 )
+
+DOCTL_STUB_PYTHON = (
+    "import sys\n"
+    "command = sys.argv[1] if len(sys.argv) > 1 else ''\n"
+    "if command == 'version':\n"
+    "    sys.stdout.buffer.write(b'doctl version 1.110.0-release\\n')\n"
+    "elif command == 'apps':\n"
+    "    sys.stdout.buffer.write(b'fixture-app-id    web\\n')\n"
+    "else:\n"
+    "    sys.stderr.buffer.write(b'doctl stand-in: unsupported command\\n')\n"
+    "    sys.exit(2)\n"
+)
+
+
+def write_windows_launcher(bin_dir: Path, name: str, source: str) -> None:
+    """Give a stand-in a ``.cmd`` launcher on Windows, running a Python copy of it.
+
+    Oh My Pi's shell resolves commands through PATHEXT on Windows, so an
+    extensionless script never runs there. Batch arguments are quoted by the
+    launcher, so the Python copy still sees the exact argv.
+    """
+    if os.name != "nt":
+        return
+    _write(bin_dir / f"{name}.py", source)
+    launcher = f'@"{sys.executable}" -I "%~dp0{name}.py" %*\r\n'
+    (bin_dir / f"{name}.cmd").write_text(launcher, encoding="utf-8", newline="")
 
 
 def _write(path: Path, text: str, mode: int | None = None) -> None:
@@ -100,6 +137,8 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     package = {"name": "vite", "version": VITE_VERSION, "bin": {"vite": "bin/vite"}}
     _write(modules / "vite/package.json", json.dumps(package) + "\n")
     _write(modules / "vite/bin/vite", VITE_STUB, 0o755)
+    if os.name == "nt":
+        _write(modules / "vite/bin/vite.js", VITE_STUB_NODE)
     (modules / ".bin").mkdir()
     # npm links each bin relative to node_modules/.bin.
     (modules / ".bin/vite").symlink_to(Path("../vite/bin/vite"))
@@ -114,3 +153,4 @@ def borrow_main_modules(main: Path, worktree: Path) -> None:
 def add_home_tools(home: Path) -> None:
     """Install the read-only CLI stand-ins under the home ``.local/bin``."""
     _write(home / LOCAL_BIN / "doctl", DOCTL_STUB, 0o755)
+    write_windows_launcher(home / LOCAL_BIN, "doctl", DOCTL_STUB_PYTHON)

@@ -27,14 +27,12 @@ from tests.test_guard_bulk_allow_once import PASSWORD, _enable_gate
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages
 
 
-pytestmark = [
-    pytest.mark.usefixtures("bundle_first_cloud"),
-    pytest.mark.skipif(
-        sys.platform == "win32",
-        reason="mcp-stdio-session-v1 native feature is Unix-only; resident cannot open MCP stdio sessions on Windows",
-    ),
-]
+pytestmark = [pytest.mark.usefixtures("bundle_first_cloud")]
 
+# Windows binds the launch executable by content and file ID but proves no
+# entrypoint, so every launch identity carries a fresh reuse nonce. No
+# approval can then match a later launch, and every retry must stay refused.
+LAUNCH_REUSABLE = sys.platform != "win32"
 
 
 def _save_rule(store, request, action):
@@ -142,10 +140,15 @@ def test_fresh_opencode_reapproval_runs_exactly_once(
         "shebang_status": launch_identity.get("shebang_status"),
         "differing_stat_fields": differing_stat_fields,
     }
-    assert entrypoint.get("status") != "unproven", {
+    entrypoint_evidence = {
         "entrypoint_status": entrypoint.get("status"),
         "entrypoint_reason": entrypoint.get("reason"),
     }
+    if LAUNCH_REUSABLE:
+        assert entrypoint.get("status") != "unproven", entrypoint_evidence
+    else:
+        assert entrypoint_evidence == {"entrypoint_status": "unproven", "entrypoint_reason": "unsupported_platform"}
+        assert entrypoint.get("reuse_nonce")
     proxy = OpenCodeMcpGuardProxy(
         server_name="synthetic-no-network",
         command=command,
@@ -309,6 +312,11 @@ def test_fresh_opencode_reapproval_runs_exactly_once(
             arguments=arguments,
             fresh_authority_provider=fresh_authority,
         )
+        if not LAUNCH_REUSABLE:
+            assert artifact_hash != request["artifact_hash"]
+            assert decision.action != "allow", decision.approval_reuse_status
+            assert not marker.exists()
+            return
         assert decision.action == "allow", {
             "action": decision.action,
             "reuse_status": decision.approval_reuse_status,
@@ -329,9 +337,11 @@ def test_fresh_opencode_reapproval_runs_exactly_once(
         assert not marker.exists()
         return
     second = proxy.run_session(messages)
-    if mutation not in {"none", "older-allow"} or grant_kind == "retained":
+    if not LAUNCH_REUSABLE or mutation not in {"none", "older-allow"} or grant_kind == "retained":
         assert not marker.exists(), second["events"][2]
         assert "error" in second["responses"][2]
+        if not LAUNCH_REUSABLE:
+            return
         if mutation in {"deny-after-claim", "final-catalog", "postclaim-config"}:
             assert mutation_applied == [True], {
                 "event": second["events"][2],

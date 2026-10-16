@@ -191,11 +191,44 @@ fn failed_recovery_retry_is_reported() {
 }
 
 #[test]
+fn a_daemon_the_recovery_starts_later_answers_the_hook_once() {
+    let (home, daemon) = home_with_daemon(
+        "started-later",
+        vec![
+            Exchange::ProveIdentity,
+            Exchange::Hook(200, ALLOW.to_owned()),
+        ],
+    );
+    // The recovery command only schedules the start: the daemon's state
+    // appears a little after the command has already exited.
+    let pending = home.scratch("pending-state.json");
+    std::fs::rename(&home.state_path, &pending).unwrap();
+    let marker = home.scratch("recovery-ran");
+    let config = config_for(
+        &home,
+        fallback_exiting(3),
+        shell(&format!(": > '{}'", marker.display())),
+    );
+    let state_path = home.state_path.clone();
+    let publisher = std::thread::spawn(move || {
+        while !marker.exists() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        std::fs::rename(pending, state_path).unwrap();
+    });
+    assert_eq!(respond(&config, PRE_TOOL_USE), ALLOW);
+    publisher.join().unwrap();
+    assert_eq!(daemon.join().unwrap().len(), 1);
+}
+
+#[test]
 fn recovered_daemon_answers_the_retry() {
     let (home, daemon) = home_with_daemon(
         "recovered",
         vec![
             Exchange::RefuseChallenge(503, "down"),
+            Exchange::ProveIdentity,
             Exchange::Hook(200, ALLOW.to_owned()),
         ],
     );

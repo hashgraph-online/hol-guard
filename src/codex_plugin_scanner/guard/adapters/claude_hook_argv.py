@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -32,14 +31,15 @@ def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
-def _native_bridge_executable() -> Path | None:
+def _native_bridge_executable(guard_home: Path) -> Path | None:
     """The validated native runtime when it can proxy Claude hooks itself.
 
     The native bridge ports ``claude_daemon_hook_bridge`` so each hook call
-    skips the Python interpreter start.
+    skips the Python interpreter start. A frozen build names the runtime's
+    durable copy under ``guard_home``.
     """
 
-    return native_hook_bridge_executable(NATIVE_CLAUDE_HOOK_FEATURE)
+    return native_hook_bridge_executable(NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home)
 
 
 def run_session_start_from_argv(
@@ -130,7 +130,7 @@ def daemon_hook_command_parts(
 ) -> tuple[str, ...]:
     package_root = Path(__file__).resolve().parents[3]
     query = urlencode(_hook_query(context, cursor_hook_query_extras()))
-    native_bridge = None if _is_frozen() else _native_bridge_executable()
+    native_bridge = _native_bridge_executable(context.guard_home)
     template = bridge_config_template(context, query, native=native_bridge is not None)
     bridge_config = bridge_config_text(template, fallback_daemon_url)
     if native_bridge is not None:
@@ -164,14 +164,13 @@ def _native_session_start_command_parts(
     The runtime prints the context only when the daemon is verified live and
     the managed entries already equal what the Python refresh would write;
     otherwise it execs ``python_argv`` unchanged. The lane reproduces the
-    refresh only for the installing user's own home, so other homes and
-    Windows keep the Python command.
+    refresh only for the installing user's own home, so other homes keep the
+    Python command. Windows has no ``exec``, so there the runtime runs
+    ``python_argv`` as a child with the same stdio and exits with its status.
     """
 
-    if _is_frozen() or os.name == "nt":
-        return None
-    runtime = native_hook_bridge_executable(NATIVE_CLAUDE_SESSION_START_FEATURE)
-    if runtime is None or runtime != _native_bridge_executable():
+    runtime = native_hook_bridge_executable(NATIVE_CLAUDE_SESSION_START_FEATURE, guard_home=context.guard_home)
+    if runtime is None or runtime != _native_bridge_executable(context.guard_home):
         return None
     home = Path.home()
     if context.home_dir.resolve() != home.resolve():

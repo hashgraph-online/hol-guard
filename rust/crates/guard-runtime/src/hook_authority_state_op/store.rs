@@ -27,11 +27,25 @@ impl Env<'_> {
         }
     }
 
-    pub(super) fn delete(&self, state_key: &str) {
-        let _ = self.connection.execute(
-            "delete from sync_state where state_key = ?1",
-            params![state_key],
-        );
+    /// `false` when the delete statement fails.
+    pub(super) fn delete(&self, state_key: &str) -> bool {
+        self.connection
+            .execute(
+                "delete from sync_state where state_key = ?1",
+                params![state_key],
+            )
+            .is_ok()
+    }
+
+    /// Deletes every key in one statement; `false` when the statement fails.
+    pub(super) fn delete_all(&self, state_keys: &[String]) -> bool {
+        let placeholders = vec!["?"; state_keys.len()].join(",");
+        self.connection
+            .execute(
+                &format!("delete from sync_state where state_key in ({placeholders})"),
+                rusqlite::params_from_iter(state_keys),
+            )
+            .is_ok()
     }
 
     pub(super) fn add_event(&self, name: &str, payload: &Value) {

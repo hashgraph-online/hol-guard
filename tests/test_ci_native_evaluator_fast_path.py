@@ -6,12 +6,14 @@ from pathlib import Path
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _jobs() -> dict:
     document = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
-    return document["jobs"]
+    return expand_ci_job_actions(document)["jobs"]
 
 
 def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> None:

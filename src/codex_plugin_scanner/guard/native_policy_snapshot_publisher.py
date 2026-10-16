@@ -16,7 +16,7 @@ from .native_policy_snapshot_constants import (
     _PUBLISH_TIMEOUT_SECONDS,
     _RENEWAL_JITTER_MAX_SECONDS,
     _RENEWAL_LEAD_SECONDS,
-    POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
+    POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_direct_lane_mcp_relay import NativePolicySnapshotMcpRelayMixin
@@ -478,9 +478,10 @@ class NativePolicySnapshotPublisher(
                 self._mark_expired_locked()
                 if self._acked and self._snapshot is not None and candidate not in self._pending_workspace_paths:
                     return True
-                # Known unavailable authority wakes the caller promptly. Keep
-                # bounded retries for lost ACKs and resident recovery.
-                if self._last_error in POLICY_SNAPSHOT_UNAVAILABLE_ERRORS:
+                # Known unavailable authority, and an install the publisher
+                # cannot repair, wake the caller promptly. Keep bounded retries
+                # for lost ACKs and resident recovery.
+                if self._last_error in POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS:
                     return False
                 remaining = deadline - self._monotonic_clock()
                 if remaining <= 0:

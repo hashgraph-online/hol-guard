@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import inspect
 import json
 import os
 import shlex
-import stat
 import subprocess
 import threading
 import time
@@ -29,6 +27,7 @@ from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
+from .native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_external_archive_bind
 from .native_package_approval_hash import native_package_approval_hash
 from .native_package_audit_projection import (
     native_batch_url,
@@ -36,6 +35,7 @@ from .native_package_audit_projection import (
     native_managed_workspaces,
 )
 from .native_package_policy_resolve import native_resolve_stored_package_policy
+from .native_package_protect_finalize import native_finalize_package_protect, package_protect_stored_policy
 from .native_package_protect_projection import (
     NativePackageProtectProjection,
     native_package_protect_projection,
@@ -46,18 +46,11 @@ from .native_workspace_inventory import native_workspace_inventory
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
 from .redaction import redact_text
 from .runtime.approval_context import (
-    approval_context_tokens_validation_reason,
     build_runtime_launch_identity,
     resolved_runtime_launch_argv,
     runtime_launch_identity_is_reusable,
 )
-from .runtime.approval_reuse import (
-    APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-    ApprovalReuseDecision,
-    ApprovalReuseValidationFailure,
-    evaluate_approval_reuse,
-)
+from .runtime.approval_reuse import evaluate_approval_reuse
 from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -156,13 +149,6 @@ def _native_supply_chain_eval_module():
     return importlib.import_module(".native_supply_chain_eval", __package__)
 
 
-def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
-    """Resident-owned package verdict rewrite; raises when the resident cannot answer."""
-
-    module = importlib.import_module(".native_package_evaluation_compose", __package__)
-    return module.compose_package_evaluation(kind, evaluation, **facts)
-
-
 def compose_blocking_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
     """Resident-owned rewrite on a blocking path; a resident failure yields a terminal block."""
 
@@ -224,21 +210,27 @@ def _parse_package_intent_native(
     workspace: Path | None,
     guard_home: Path,
 ) -> PackageIntent | None:
-    """Try the resident ``package_intent_parse`` op.
+    """Ask the resident ``package_intent_parse`` op for the command's intent.
 
-    ``None`` means the resident was unreachable or found no intent —
-    ``parse_package_intent`` is resident-sole-authority, so no Python
-    re-parse exists to fall back to."""
+    ``None`` means the resident found no package intent. An unreachable
+    resident or an unusable answer raises ``NativeProtectRequestError``, so
+    the wrapped install fails closed instead of skipping the package firewall.
+    """
+    from .native_protect_request import NativeProtectRequestError
+
     try:
         intent = _native_package_authority_module().package_intent_parse_native(
             raw_command,
             workspace=workspace,
             environment=dict(environment) if environment is not None else None,
             guard_home=guard_home,
+            require_answer=True,
         )
-    except Exception:
-        return None
-    return intent if isinstance(intent, PackageIntent) else None
+    except Exception as error:
+        raise NativeProtectRequestError("native_package_intent_unavailable") from error
+    if intent is None or isinstance(intent, PackageIntent):
+        return intent
+    raise NativeProtectRequestError("native_package_intent_malformed")
 
 
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
@@ -450,71 +442,28 @@ def _package_evaluation_requires_external_archive_binding(evaluation: object) ->
     )
 
 
-def _verified_external_archive_replacements(evaluation: object) -> dict[str, str] | None:
-    replacements: dict[str, str] = {}
-    for download in _external_archive_downloads(evaluation):
-        descriptor = -1
-        try:
-            path_stat = download.path.lstat()
-            descriptor = os.open(
-                download.path,
-                os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0),
-            )
-            file_stat = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(path_stat.st_mode)
-                or not stat.S_ISREG(file_stat.st_mode)
-                or path_stat.st_dev != file_stat.st_dev
-                or path_stat.st_ino != file_stat.st_ino
-                or file_stat.st_nlink != 1
-                or file_stat.st_size != download.size
-                or stat.S_IMODE(file_stat.st_mode) & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-            ):
-                return None
-            digest = hashlib.sha256()
-            size = 0
-            with os.fdopen(descriptor, "rb", closefd=True) as archive_file:
-                descriptor = -1
-                while True:
-                    chunk = archive_file.read(min(64 * 1024, download.size - size + 1))
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > download.size:
-                        return None
-                    digest.update(chunk)
-        except OSError:
-            return None
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        if size != download.size or digest.hexdigest() != download.sha256:
-            return None
-        replacements[download.source_url] = str(download.path)
-    return replacements
-
-
 def _bound_external_archive_launch_command(
     launch_command: Sequence[str],
     *,
     evaluation: object,
+    guard_home: Path,
 ) -> list[str] | None:
-    replacements = _verified_external_archive_replacements(evaluation)
-    if replacements is None:
+    """The launch argv bound to the resident-verified archives, or ``None`` (deny)."""
+
+    downloads = _external_archive_downloads(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
+    if not downloads:
+        return None if requires_binding else list(launch_command)
+    try:
+        bound = native_external_archive_bind(
+            [str(item) for item in launch_command],
+            downloads,
+            requires_binding=requires_binding,
+            guard_home=guard_home,
+        )
+    except NativeMcpProxyDecisionError:
         return None
-    if not replacements:
-        return None if _package_evaluation_requires_external_archive_binding(evaluation) else list(launch_command)
-    bound_command = [str(item) for item in launch_command]
-    for source_url, replacement in replacements.items():
-        replacement_count = 0
-        for index, argument in enumerate(bound_command):
-            if source_url not in argument:
-                continue
-            bound_command[index] = argument.replace(source_url, replacement)
-            replacement_count += 1
-        if replacement_count == 0:
-            return None
-    return bound_command
+    return bound if isinstance(bound, list) else None
 
 
 def _package_manager_launch_environment(
@@ -745,120 +694,36 @@ def _final_package_protect_authority(
         external_archive_network_authorized=saved_approval_claimed,
         invoking_harness=initial.invoking_harness,
     )
-    if current is None:
-        reuse = evaluate_approval_reuse(
-            "review",
-            "allow",
-            saved_decision_present=True,
-            validation_reason="approval_reuse_identity_changed",
-        )
-        if reuse is None:
-            # Resident unreachable: preserve the initial evaluation unchanged —
-            # no saved approval is claimed.
-            return initial, initial.evaluation
-        return initial, _package_evaluation_with_rejected_reuse(initial.evaluation, reuse)
-    validation_reason: ApprovalReuseValidationFailure | None
-    if current.artifact.artifact_id != initial.artifact.artifact_id:
-        validation_reason = "approval_reuse_identity_changed"
-    else:
-        validation_reason = cast(
-            ApprovalReuseValidationFailure | None,
-            approval_context_tokens_validation_reason(initial.artifact_hash, current.artifact_hash),
-        )
-    current_evaluation = _package_evaluation_with_current_policy_action(
-        current.evaluation,
-        current_action=current.current_action,
-    )
-    if saved_approval_claim_failure is not None:
-        return current, _package_evaluation_with_current_policy_action(
-            saved_approval_claim_failure,
-            current_action=current.current_action,
-        )
-    if current.observe_mode:
-        return current, current_evaluation
-    if saved_approval_claimed:
-        if validation_reason is not None:
-            reuse = evaluate_approval_reuse(
-                current.current_action,
-                "allow",
-                saved_decision_present=True,
-                validation_reason=validation_reason,
-            )
-            if reuse is None:
-                return current, current_evaluation
-            return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
-        refreshed_saved_policy = _apply_stored_package_policy_override(
-            current_evaluation,
-            store=store,
+    stored_policy = None
+    if (
+        current is not None
+        and saved_approval_claim_failure is None
+        and not current.observe_mode
+        and current.artifact.artifact_id == initial.artifact.artifact_id
+    ):
+        stored_policy = package_protect_stored_policy(
+            store,
             artifact=current.artifact,
             artifact_hash=current.artifact_hash,
             workspace_dir=workspace_dir,
             now=now,
-            execution_context=current.execution_context,
-            current_action=current.current_action,
-            claim_saved_approval=False,
+            policy_workspaces=_package_policy_workspace_candidates(
+                artifact=current.artifact,
+                artifact_hash=current.artifact_hash,
+                workspace_dir=workspace_dir,
+                execution_context=current.execution_context,
+            ),
         )
-        if _evaluation_uses_saved_package_approval(refreshed_saved_policy):
-            return current, refreshed_saved_policy
-        if _package_approval_reuse_evidence(refreshed_saved_policy):
-            return current, refreshed_saved_policy
-        if saved_approval_claim_disposition != "consumed":
-            reuse = evaluate_approval_reuse(
-                current.current_action,
-                "allow",
-                saved_decision_present=True,
-                validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            )
-            if reuse is None:
-                return current, current_evaluation
-            return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
-        reuse = evaluate_approval_reuse(
-            current.current_action,
-            "allow",
-            saved_decision_present=True,
-            fresh_local_approval=True,
-        )
-        if reuse is None:
-            return current, current_evaluation
-        if reuse.accepted and reuse.saved_action == "allow":
-            return current, compose_package_evaluation(
-                "saved_allow",
-                current_evaluation,
-                variant="claimed_revalidated",
-                approval_reuse=reuse.to_evidence(),
-            )
-        return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
-    if validation_reason is not None:
-        reuse = evaluate_approval_reuse(
-            current.current_action,
-            "require-reapproval",
-            saved_decision_present=True,
-            validation_reason=validation_reason,
-        )
-        if reuse is None:
-            return current, current_evaluation
-        return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
-    resolved = _apply_stored_package_policy_override(
-        current_evaluation,
+    final_evaluation = native_finalize_package_protect(
+        initial=initial,
+        current=current,
+        claim_failure=saved_approval_claim_failure,
+        saved_approval_claimed=saved_approval_claimed,
+        claim_disposition=saved_approval_claim_disposition,
+        stored_policy=stored_policy,
         store=store,
-        artifact=current.artifact,
-        artifact_hash=current.artifact_hash,
-        workspace_dir=workspace_dir,
-        now=now,
-        execution_context=current.execution_context,
-        current_action=current.current_action,
-        claim_saved_approval=False,
     )
-    if _evaluation_uses_saved_package_approval(resolved):
-        reuse = evaluate_approval_reuse(
-            current.current_action,
-            "allow",
-            saved_decision_present=True,
-            validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-        )
-        if reuse is not None:
-            resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
-    return current, resolved
+    return (initial if current is None else current), final_evaluation
 
 
 def _persist_projection(*, projection: NativePackageProtectProjection, store: Any, now: str) -> None:
@@ -1000,6 +865,7 @@ def build_package_protect_payload(
     bound_launch_command = _bound_external_archive_launch_command(
         launch_command,
         evaluation=final_evaluation,
+        guard_home=store.guard_home,
     )
     if bound_launch_command is None:
         return deny(package_external_archive_override(final_evaluation, variant="launch_unbound"))
@@ -1060,31 +926,6 @@ def apply_stored_package_policy_override(
 ) -> Any:
     """Apply a saved package approval when the content hash still matches."""
 
-    return _apply_stored_package_policy_override(
-        evaluation,
-        store=store,
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        now=now,
-        execution_context=execution_context,
-        current_action=current_action,
-        claim_saved_approval=claim_saved_approval,
-    )
-
-
-def _apply_stored_package_policy_override(
-    evaluation: Any,
-    *,
-    store: Any,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    execution_context: PackageExecutionContext | None = None,
-    current_action: object | None = None,
-    claim_saved_approval: bool = True,
-) -> Any:
     return _resolve_stored_package_policy_override(
         evaluation,
         store=store,
@@ -1138,30 +979,6 @@ def _resolve_stored_package_policy_override(
         approval_reuse_decision=reused_decision,
         claim_disposition=cast(_PackageApprovalClaimDisposition | None, claim_disposition),
     )
-
-
-def _package_evaluation_with_current_policy_action(
-    evaluation: Any,
-    *,
-    current_action: GuardAction,
-) -> Any:
-    """Apply current package policy before consulting remembered user state.
-
-    The resident owns the rewrite; an unavailable resident raises.
-    """
-
-    if current_action == evaluation.policy_action:
-        return evaluation
-    return compose_package_evaluation("current_policy_action", evaluation, current_action=current_action)
-
-
-def _package_evaluation_with_rejected_reuse(
-    evaluation: Any,
-    reuse: ApprovalReuseDecision,
-) -> Any:
-    """Retain current package evidence while recording rejected saved state."""
-
-    return compose_package_evaluation("rejected_reuse", evaluation, approval_reuse=reuse.to_evidence())
 
 
 def package_external_archive_override(evaluation: Any, *, variant: str) -> Any:
@@ -1246,18 +1063,6 @@ def package_request_policy_hash(
 
 def _evaluation_uses_saved_package_approval(evaluation: Any) -> bool:
     return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
-
-
-def _package_approval_reuse_evidence(evaluation: Any) -> tuple[dict[str, object], ...]:
-    evidence_items: list[dict[str, object]] = []
-    for reason in evaluation.reasons:
-        reuse_evidence = reason.get("approval_reuse")
-        if not isinstance(reuse_evidence, dict):
-            continue
-        evidence: dict[str, object] = {"source": "approval_reuse"}
-        evidence.update({str(key): value for key, value in reuse_evidence.items()})
-        evidence_items.append(evidence)
-    return tuple(evidence_items)
 
 
 def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:

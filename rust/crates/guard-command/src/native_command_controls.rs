@@ -391,6 +391,7 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
+        floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
             .layers
@@ -459,6 +460,7 @@ mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
+pub(crate) use unmodeled::{python_is_builtin_only, python_stdin, unread_file_interpreter};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]

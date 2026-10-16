@@ -177,6 +177,47 @@ def kubernetes_secret_read_source(command: str | None) -> str | None:
     return cast("str | None", call("kubernetes_secret_read_source", command))
 
 
+_EVIDENCE_STATUS = {"executed": True, "not_executed": False, "indeterminate": None}
+
+
+def _count(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _valid_evidence_entry(entry: Any) -> bool:
+    if type(entry) is not dict or entry.get("source") != "embedded_script":
+        return False
+    if entry.get("kind") == "summary":
+        return set(entry) == {"source", "kind", "truncated", "total_heredocs"} and (
+            entry["truncated"] is True and _count(entry["total_heredocs"])
+        )
+    keys = {"source", "kind", "index", "delimiter", "quoted", "executable", "executed", "execution_status"}
+    keys |= {"sha256", "bytes", "lines", "span"}
+    if set(entry) != keys or entry["kind"] != "heredoc":
+        return False
+    span = entry["span"]
+    status = entry["execution_status"]
+    sha = entry["sha256"]
+    return (
+        _count(entry["index"])
+        and type(entry["delimiter"]) is str
+        and type(entry["quoted"]) is bool
+        and (entry["executable"] is None or type(entry["executable"]) is str)
+        and status in _EVIDENCE_STATUS
+        and entry["executed"] is _EVIDENCE_STATUS[status]
+        and type(sha) is str
+        and len(sha) == 64
+        and all(c in "0123456789abcdef" for c in sha)
+        and _count(entry["bytes"])
+        and _count(entry["lines"])
+        and type(span) is dict
+        and set(span) == {"start", "end"}
+        and _count(span["start"])
+        and _count(span["end"])
+        and span["start"] <= span["end"]
+    )
+
+
 def _valid(action: str, value: Any) -> bool:
     if action == "option_advance":
         return value is None or (type(value) is int and value >= 0)
@@ -210,6 +251,8 @@ def _valid(action: str, value: Any) -> bool:
         return value is None or (type(value) is str and bool(value))
     if action in {"trusted_path", "top_level", "matches_subcommands", "flags_all", "long_flag"}:
         return type(value) is bool
+    if action == "embedded_script_evidence":
+        return type(value) is list and all(_valid_evidence_entry(v) for v in value)
     if action in {"segments", "redirects", "pipe_segments"}:
         return type(value) is list and all(type(v) is str for v in value)
     shapes = {

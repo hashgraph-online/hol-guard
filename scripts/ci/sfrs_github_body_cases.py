@@ -1,18 +1,22 @@
-"""Record parity vectors for the PR body-file, ephemeral-body and Actions read checks.
+"""Record parity vectors for the PR body-file check.
+
+Ephemeral-body and Actions read cases are carried forward unchanged from the
+existing fixture; their Python implementation is retired.
 
 Usage: ``SFRS_GH_CLASSIFIER=<guard-command-source binary> sfrs_github_body_cases.py
 FIXTURE_DIR`` with the repository ``src`` on ``PYTHONPATH``. GitHub CLI
 classification is answered by the Rust classifier, as in production. A fixed tree is built under a fresh root; every case runs with a
 recorded environment (``PATH``, ``TMPDIR``, ``HOME``, ...) and stores the result
 with the ``{ROOT}`` token so the Rust port can rebuild the tree and replay it.
-Secret-content classification and executable trust are replaced by fixed stubs
-that the replay host mirrors. Retired with the Python implementation.
+Secret-content classification is replaced by a fixed stub that the replay
+host mirrors. Retired with the Python implementation.
 """
 
 # ruff: noqa
 from __future__ import annotations
 
 import gzip
+import json
 import os
 import sys
 import tempfile
@@ -28,23 +32,6 @@ for _module in (_tree, _data):
 def _segments(text: str):
     masked = mask_complete_heredocs(text, extract_heredocs(text))
     return sqt.shell_token_segments(sqt.shell_tokens_preserving_quote_context(masked))
-
-
-def _ephemeral_cases(add) -> None:
-    for text in _body_texts():
-        add("eph_safe", [text], eph.gh_pr_create_uses_safe_ephemeral_body(text))
-        for position, segment in enumerate(_segments(text)):
-            add("eph_assignment", [text, position], eph._assignment_variable(segment))
-            for variable in ("f", "body"):
-                add("eph_writer", [text, position, variable], eph._heredoc_writer_is_safe(segment, variable=variable))
-                add("eph_cat", [text, position, variable], eph._body_cat_is_safe(segment, variable=variable))
-                add("eph_grep", [text, position, variable], eph._body_grep_is_safe(segment, variable=variable))
-                add("eph_echo", [text, position, variable], eph._echo_is_safe(segment, variable=variable))
-                add("eph_pr_create", [text, position, variable], eph._pr_create_is_safe(segment, variable=variable))
-    for raw in QUOTED_WORDS:
-        add("eph_quoted_word", [raw], eph._is_one_fully_quoted_word(raw))
-        for allow in (True, False):
-            add("eph_static_argument", [raw, allow], eph._static_shell_argument(raw, allow_unquoted=allow))
 
 
 def _body_file_cases(root: Path, add) -> None:
@@ -274,176 +261,14 @@ def _run_with_env(root: Path, env: dict[str, str], function):
         tempfile.tempdir = None
 
 
-def _actions_cases(root: Path, add_env) -> None:
-    base = _env_base(root)
-    proj = root / "home" / "proj"
-    for env_extra in ENV_VARIANTS:
-        env = {**base, **env_extra}
-        add_env(env, "aw_env_safe", [str(root)], lambda: aw.shell_read_execution_environment_is_safe(cwd=root))
-        for text in (
-            "gh run view 1 --repo o/r",
-            "echo hi",
-            "id=1\ngh run view $id --repo o/r --log\n",
-            "gh run view 1 --repo o/r | head -5",
-        ):
-            add_env(
-                env,
-                "aw_workflow",
-                [text, None],
-                lambda text=text: aw.is_nonexecuting_github_actions_read_workflow(text),
-            )
-            add_env(
-                env,
-                "aw_workflow",
-                [text, str(root)],
-                lambda text=text: aw.is_nonexecuting_github_actions_read_workflow(text, cwd=root),
-            )
-    for value in LOADER_VALUES:
-        value = _expand(value, root)
-        for key in ("LD_LIBRARY_PATH", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "LD_AUDIT", "LD_FOO"):
-            env = {**base, key: value}
-            add_env(env, "aw_env_safe", [str(root)], lambda: aw.shell_read_execution_environment_is_safe(cwd=root))
-            add_env(env, "aw_env_safe", [str(proj)], lambda: aw.shell_read_execution_environment_is_safe(cwd=proj))
-        env = dict(base)
-        for cwd in (root, proj, root / "bin"):
-            add_env(
-                env,
-                "aw_loader_paths",
-                [value, str(cwd)],
-                lambda cwd=cwd, value=value: aw._trusted_loader_paths(value, cwd=cwd),
-            )
-    for template in PATH_VARIANTS:
-        env = {**base, "PATH": _expand(template, root)}
-        for name in PATH_NAMES:
-            for cwd in (root, proj):
-                add_env(
-                    env,
-                    "aw_path_command",
-                    [name, str(cwd)],
-                    lambda name=name, cwd=cwd: aw._path_command_for_cwd(name, cwd=cwd),
-                )
-            add_env(
-                env,
-                "aw_trusted_exec",
-                [[name], str(root)],
-                lambda name=name: aw._trusted_pipeline_executables((name,), cwd=root),
-            )
-        for names in (["gh", "grep", "sort", "head"], ["gh", "rg", "tail"], ["gh"], []):
-            add_env(
-                env,
-                "aw_trusted_exec",
-                [names, str(root)],
-                lambda names=names: aw._trusted_pipeline_executables(tuple(names), cwd=root),
-            )
-    no_path = {key: value for key, value in base.items() if key != "PATH"}
-    add_env(no_path, "aw_path_command", ["gh", str(root)], lambda: aw._path_command_for_cwd("gh", cwd=root))
-    add_env(
-        no_path, "aw_trusted_exec", [["gh"], str(root)], lambda: aw._trusted_pipeline_executables(("gh",), cwd=root)
-    )
-    for item, within in (
-        (root / "tmp", root / "tmp"),
-        (root / "tmp" / "lib", root / "tmp"),
-        (root / "bin", root / "tmp"),
-        (root / "tmp", root / "missing"),
-        (root / "tmp" / "work", root / "tmp" / "lib"),
-        (root, root / "tmp"),
-        (root / "tmp" / "lib", root / "tmp" / "lib"),
-    ):
-        add_env(
-            base,
-            "aw_within",
-            [str(item), str(within)],
-            lambda item=item, within=within: aw._path_is_within(item, within),
-        )
-    texts = list(WORKFLOWS)
-    for text in texts:
-        for cwd in (None, root, proj):
-            add_env(
-                base,
-                "aw_workflow",
-                [text, str(cwd) if cwd else None],
-                lambda text=text, cwd=cwd: aw.is_nonexecuting_github_actions_read_workflow(text, cwd=cwd),
-            )
-        segments = aw._pipeline_segments(text)
-        add_env(base, "aw_segments", [text], lambda text=text: aw._pipeline_segments(text))
-        for values in VALUE_SETS:
-            add_env(
-                base,
-                "aw_pipeline",
-                [text, values, None],
-                lambda text=text, values=values: aw._safe_github_read_pipeline(text, dict(values)),
-            )
-            add_env(
-                base,
-                "aw_text_pipeline",
-                [text, values],
-                lambda text=text, values=values: aw._safe_text_filter_pipeline(text, dict(values)),
-            )
-            add_env(base, "aw_echo", [text, values], lambda text=text, values=values: aw._safe_echo(text, dict(values)))
-        if segments:
-            add_env(
-                base,
-                "aw_metadata_pipeline",
-                [segments, str(root)],
-                lambda s=segments: aw._safe_actions_log_metadata_pipeline(s, cwd=root),
-            )
-            add_env(
-                base,
-                "aw_failed_pipeline",
-                [segments, str(root)],
-                lambda s=segments: aw._safe_failed_log_filter_pipeline(s, cwd=root),
-            )
-            add_env(
-                {**base, "PATH": str(root / "badbin")},
-                "aw_metadata_pipeline",
-                [segments, str(root)],
-                lambda s=segments: aw._safe_actions_log_metadata_pipeline(s, cwd=root),
-            )
-            add_env(
-                {**base, "PATH": str(root / "badbin")},
-                "aw_failed_pipeline",
-                [segments, str(root)],
-                lambda s=segments: aw._safe_failed_log_filter_pipeline(s, cwd=root),
-            )
-            if all(segments):
-                add_env(base, "aw_bound_matches", [segments], lambda s=segments: aw._filters_bound_emitted_matches(s))
-                if len(segments) > 1:
-                    add_env(
-                        base,
-                        "aw_bound_matches",
-                        [segments[1:]],
-                        lambda s=segments: aw._filters_bound_emitted_matches(s[1:]),
-                    )
-    for tokens in TOKEN_LISTS:
-        add_env(base, "aw_stderr", [tokens], lambda tokens=tokens: aw._without_safe_stderr_redirect(tokens))
-        add_env(base, "aw_github_cmd", [tokens], lambda tokens=tokens: aw._safe_actions_github_command(tokens))
-        add_env(base, "aw_output_kind", [tokens], lambda tokens=tokens: aw._github_output_kind(tokens))
-        add_env(base, "aw_filter", [tokens], lambda tokens=tokens: aw._safe_emitted_output_filter(tokens))
-        add_env(base, "aw_log_args", [tokens], lambda tokens=tokens: aw._safe_run_log_metadata_args(tokens))
-        add_env(base, "aw_log_grep", [tokens], lambda tokens=tokens: aw._safe_log_metadata_grep(tokens))
-        for values in VALUE_SETS:
-            add_env(
-                base,
-                "aw_substitute",
-                [tokens, values],
-                lambda tokens=tokens, values=values: aw._substitute_number_variables(tokens, dict(values)),
-            )
-            add_env(
-                base,
-                "aw_echo_tokens",
-                [tokens, values],
-                lambda tokens=tokens, values=values: aw._safe_echo_tokens(tokens, dict(values)),
-            )
-        if tokens:
-            add_env(
-                base, "aw_bound_matches", [[tokens]], lambda tokens=tokens: aw._filters_bound_emitted_matches([tokens])
-            )
-    for args in ARG_VARIANTS:
-        add_env(base, "aw_run_view", [args], lambda args=args: aw._safe_run_view_args(args))
-        add_env(base, "aw_api_options", [args], lambda args=args: aw._safe_api_options(args))
-    for value in COUNT_VALUES:
-        add_env(base, "aw_bounded_count", [value, 100], lambda value=value: aw._bounded_count(value))
-        add_env(base, "aw_bounded_count", [value, 120], lambda value=value: aw._bounded_count(value, maximum=120))
+def _retired_cases(fixture_dir: Path) -> list[dict[str, object]]:
+    """Ephemeral-body and Actions-read cases, frozen when their Python owner retired."""
+
+    document = json.loads(gzip.decompress((fixture_dir / "github_body.json.gz").read_bytes()))
+    return [case for case in document["cases"] if str(case["fn"]).startswith(_RETIRED_PREFIXES)]
+
+
+_RETIRED_PREFIXES = ("aw_", "eph_")
 
 
 def main() -> None:
@@ -455,8 +280,6 @@ def main() -> None:
         root = Path(scratch).resolve()
         _build(root)
         bf.classify_secret_content = _fake_secret
-        eph.classify_secret_content = _fake_secret
-        aw.git_binary_path_is_trusted = _trust_factory(root)
         os.chdir(root)
         os.environ.update(_env_base(root))
 
@@ -481,17 +304,15 @@ def main() -> None:
 
         tempfile.tempdir = None
         with_env = _run_with_env
-        # Body-file and ephemeral cases run under the default environment.
+        # Body-file cases run under the default environment.
         saved = dict(os.environ)
         os.environ.clear()
         os.environ.update(_env_base(root))
         tempfile.tempdir = None
-        _ephemeral_cases(add_body)
         _body_file_cases(root, add_body)
         os.environ.clear()
         os.environ.update(saved)
         tempfile.tempdir = None
-        _actions_cases(root, add_env)
         # A second temp location: the sticky world-writable directory.
         stk_env = {**_env_base(root), "TMPDIR": str(root / "stk")}
         for operand in (
@@ -510,6 +331,7 @@ def main() -> None:
                 )
         del with_env
         os.chdir(saved_cwd)
+        cases.extend(_retired_cases(fixture_dir))
         document = {"schema": "sfrs-github-body.v1", "tree": TREE, "cases": cases}
     raises = sum(1 for case in cases if isinstance(case["result"], dict) and "$raises" in case["result"])
     out = fixture_dir / "github_body.json.gz"

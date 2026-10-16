@@ -14,7 +14,8 @@ import argparse
 from collections.abc import Iterable
 from pathlib import Path
 
-# Keep aligned with verify_native_runtime_release.EXPECTED_TARGETS. Stable
+# Keep aligned with verify_native_runtime_release.EXPECTED_TARGETS, except for
+# Windows ARM64: releases before it shipped are complete without that wheel. Stable
 # versions are canonical X.Y.Z; wheel tags still use PEP 427's dash-to-underscore
 # normalization so a pre-release form cannot miss its filename.
 _NATIVE_PLATFORM_TAGS = (

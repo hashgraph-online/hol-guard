@@ -124,6 +124,12 @@ fn contain(
     {
         return Contained::Unchanged;
     }
+    // This port cannot yet reproduce the PowerShell-quoted Windows sink
+    // command or its process lookup, so the denial stands. The Codex update
+    // hint would mislead, because the Codex version is not the obstacle.
+    if cfg!(windows) {
+        return Contained::Unchanged;
+    }
     if !launching_codex_applies(deadline) {
         return Contained::Hint;
     }
@@ -220,15 +226,29 @@ struct Target<'a> {
 }
 
 /// `isolated_guard_cli_command(python, package_root, ())`, read from the
-/// isolated fallback command the bridge was installed with.
+/// isolated fallback command the bridge was installed with. A frozen Guard
+/// installs `<guard> hook --harness codex ...` instead, and that executable
+/// takes the sink's `guard execute-contained-test` arguments itself.
 fn sink_prefix(fallback: &[String]) -> Option<&[String]> {
+    if !fallback
+        .first()
+        .is_some_and(|program| Path::new(program).is_absolute())
+    {
+        return None;
+    }
     let isolated = fallback.len() > 4
-        && Path::new(&fallback[0]).is_absolute()
         && fallback[1] == "-I"
         && fallback[2] == "-c"
         && fallback[3].starts_with("import sys;sys.path.insert(0, ")
         && fallback[4] == "guard";
-    isolated.then(|| &fallback[..4])
+    if isolated {
+        return Some(&fallback[..4]);
+    }
+    let frozen = fallback.len() > 3
+        && fallback[1] == "hook"
+        && fallback[2] == "--harness"
+        && fallback[3] == "codex";
+    frozen.then(|| &fallback[..1])
 }
 
 /// The value of the first of `names` the payload carries, as a chained

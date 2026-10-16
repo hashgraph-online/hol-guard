@@ -13,11 +13,13 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import secrets
 import shutil
 import signal
 import subprocess
 import threading
+from collections import deque
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -45,6 +47,10 @@ def parse_backend(value: str) -> tuple[str, str]:
 
 
 STARTUP_SECONDS = 60.0
+STDERR_LINES = 20
+STDERR_LINE_CHARS = 1024
+# Long opaque runs (tokens, keys, JWTs) and bearer values never reach an error message.
+_SECRET = re.compile(r"(?i)bearer\s+\S+|[A-Za-z0-9_\-+=]{24,}")
 STOP_SECONDS = 5.0
 # Only what Bun and Oh My Pi's auth discovery need. Provider keys are not forwarded.
 _ENVIRONMENT_KEYS = ("PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "XDG_CONFIG_HOME", "XDG_DATA_HOME")
@@ -113,6 +119,23 @@ def validate_ready(line: str, effort: str = DEFAULT_EFFORT, backend: tuple[str, 
     return ready
 
 
+def _drain(stream: Any, sink: deque[str], done: threading.Event) -> None:
+    """Keep the last lines of a stream until it closes, each cut to a bounded length."""
+    with suppress(OSError, ValueError):
+        partial = False
+        while chunk := stream.readline(STDERR_LINE_CHARS):
+            # A short chunk without a newline is the end of the stream, not a cut.
+            cut = len(chunk) >= STDERR_LINE_CHARS and not chunk.endswith("\n")
+            if not partial:
+                # Drop the word a cut line ends on: it may be the start of a secret
+                # too short for redaction to recognize.
+                sink.append(chunk.rpartition(" ")[0] + " ..." if cut else chunk)
+            partial = cut
+    with suppress(OSError):
+        stream.close()
+    done.set()
+
+
 class NativeLunaRoute:
     """Own one adapter process in its own process group and always reap it."""
 
@@ -137,6 +160,8 @@ class NativeLunaRoute:
         self._token = secrets.token_urlsafe(32)
         self.process: subprocess.Popen[str] | None = None
         self._job: Any = None
+        self._stderr: deque[str] = deque(maxlen=STDERR_LINES)
+        self._stderr_done = threading.Event()
         self.port = 0
 
     def provider(self, *, max_rounds: int, timeout: float) -> dict[str, Any]:
@@ -163,10 +188,13 @@ class NativeLunaRoute:
         streams = {
             "stdin": subprocess.PIPE,
             "stdout": subprocess.PIPE,
-            "stderr": subprocess.DEVNULL,
+            "stderr": subprocess.PIPE,
             "env": environment,
             "cwd": self.sdk_root,
             "text": True,
+            # A byte the locale cannot decode must not end the stderr drain early.
+            "encoding": "utf-8",
+            "errors": "replace",
         }
         if os.name == "nt":
             from . import windows_job
@@ -189,19 +217,34 @@ class NativeLunaRoute:
             self.process = subprocess.Popen(command, start_new_session=True, **streams)
         try:
             lines: queue.Queue[str] = queue.Queue()
-            assert self.process.stdout is not None
+            assert self.process.stdout is not None and self.process.stderr is not None
+            # Drain stderr for the adapter's whole life so it never blocks on a full pipe.
+            drain = (self.process.stderr, self._stderr, self._stderr_done)
+            threading.Thread(target=_drain, args=drain, daemon=True).start()
             threading.Thread(target=lambda: lines.put(self.process.stdout.readline()), daemon=True).start()
             try:
                 line = lines.get(timeout=STARTUP_SECONDS)
             except queue.Empty as exc:
-                raise RuntimeError("Luna adapter did not start in time") from exc
+                raise RuntimeError("Luna adapter did not start in time" + self._stderr_tail()) from exc
             if not line:
-                raise RuntimeError("Luna adapter exited before it was ready; check the Oh My Pi ChatGPT login")
+                with suppress(subprocess.TimeoutExpired):
+                    self.process.wait(timeout=STOP_SECONDS)
+                raise RuntimeError(
+                    "Luna adapter exited before it was ready; check the Oh My Pi ChatGPT login" + self._stderr_tail()
+                )
             self.port = validate_ready(line, self.effort, self.backend)["port"]
         except BaseException:
             self.stop()
             raise
         return self
+
+    def _stderr_tail(self) -> str:
+        """The adapter's last stderr lines, redacted, for a startup failure message."""
+        # Give the drain a moment to read what a just-exited adapter wrote.
+        self._stderr_done.wait(1.0)
+        lines = [_SECRET.sub("[redacted]", line.rstrip())[:300] for line in list(self._stderr)]
+        lines = [line for line in lines if line]
+        return "\nadapter stderr:\n" + "\n".join(lines) if lines else ""
 
     def __exit__(self, *_args: object) -> None:
         """Stop the adapter even after a failed or cancelled run."""
@@ -243,6 +286,7 @@ class NativeLunaRoute:
         finally:
             if job is not None:
                 job.__exit__()
+        # The stderr drain closes its own stream; closing it here could wait on that reader.
         for stream in (process.stdin, process.stdout):
             if stream is not None:
                 with suppress(OSError):

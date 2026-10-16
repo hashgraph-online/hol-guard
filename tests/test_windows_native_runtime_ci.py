@@ -136,11 +136,20 @@ def test_required_aggregate_includes_the_windows_native_lane() -> None:
 
 
 def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> None:
-    """Run both Windows shim contract families, fail closed and require both."""
+    """Partition the complete Windows contract inventory without weakening it."""
     job = load_ci_workflow()["jobs"]["windows-shim-admin"]
     assert job["runs-on"] == "windows-latest"
     assert job["strategy"]["fail-fast"] is False
-    assert job["strategy"]["matrix"]["shim-gate"] == ["vectors", "native-op"]
+    assert job["strategy"]["matrix"]["shim-gate"] == ["vectors", "native-op", "mcp"]
+    assert job["env"]["CARGO_PROFILE_TEST_DEBUG"] == "line-tables-only"
+    assert not any(
+        key in job["env"]
+        for key in (
+            "CARGO_PROFILE_TEST_OPT_LEVEL",
+            "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS",
+            "CARGO_PROFILE_TEST_OVERFLOW_CHECKS",
+        )
+    )
     assert job["timeout-minutes"] >= 10
     # load_ci_workflow() deliberately expands in-tree composites, so inspect
     # the raw YAML when checking the call-site binding.
@@ -152,13 +161,13 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
     steps = composite_action_steps("ci-job-windows-shim-admin")
     check = next(step for step in steps if step.get("name") == "Validate the selected Windows shim contract gate")
     assert check["env"]["SHIM_GATE"] == "${{ inputs.shim-gate }}"
-    assert "'vectors', 'native-op'" in check["run"]
+    assert "'vectors', 'native-op', 'mcp'" in check["run"]
     assert "throw" in check["run"]
     assert not check.get("continue-on-error", False)
 
     rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
     assert rust["with"]["cache-key"] == "windows-shim-${{ inputs.shim-gate }}"
-    assert rust["with"]["cache-fallback-key"] == "native-wheel"
+    assert "cache-fallback-key" not in rust["with"]
     vector = next(step for step in steps if step.get("name") == "Replay the recorded Windows shim vectors")
     native_op = next(
         step for step in steps if step.get("name") == "Install and report shims through the native op on Windows"
@@ -167,12 +176,76 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
     assert native_op["if"] == "inputs.shim-gate == 'native-op'"
     assert not vector.get("continue-on-error", False)
     assert not native_op.get("continue-on-error", False)
-    assert "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors" in vector["run"]
-    assert "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op" in native_op["run"]
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors"
+        in vector["run"]
+    )
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op"
+        in native_op["run"]
+    )
+    child_tree = next(
+        step for step in steps if step.get("name") == "Contain MCP server process trees in a JobObject on Windows"
+    )
+    assert child_tree["if"] == "inputs.shim-gate == 'mcp'"
+    assert not child_tree.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test child_tree"
+        in child_tree["run"]
+    )
+    probe = next(step for step in steps if step.get("name") == "Probe an MCP server catalog natively on Windows")
+    assert probe["if"] == "inputs.shim-gate == 'mcp'"
+    assert not probe.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test mcp_stdio_probe_windows"
+        in probe["run"]
+    )
+    launch = next(step for step in steps if step.get("name") == "Verify MCP launch executables natively on Windows")
+    assert launch["if"] == "inputs.shim-gate == 'mcp'"
+    assert not launch.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test launch_identity_windows"
+        in launch["run"]
+    )
 
     required = load_ci_workflow()["jobs"]["required"]
     assert "windows-shim-admin" in required["needs"]
     assert '"windows-shim-admin"' in "\n".join(step.get("run", "") for step in required["steps"])
+
+
+def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
+    prefix = "cargo test --manifest-path rust/Cargo.toml --locked -p "
+    expected = {
+        "vectors": ["guard-command --test shim_admin_vectors"],
+        "native-op": [
+            "hol-guard-runtime --bin hol-guard-runtime shim_op",
+            "hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests",
+            "hol-guard-runtime --bin hol-guard-runtime storage_gate",
+            "hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold",
+            "hol-guard-runtime --bin hol-guard-runtime windows_expanded_home",
+            "guard-runtime-windows-process --test process_liveness",
+        ],
+        "mcp": [
+            "guard-runtime-windows-process --test child_tree",
+            "guard-command --test mcp_stdio_probe_windows",
+            "guard-command --test launch_identity_windows",
+        ],
+    }
+    steps = composite_action_steps("ci-job-windows-shim-admin")
+    selected = {}
+    for gate, commands in expected.items():
+        steps_for_gate = [step for step in steps if step.get("if") == f"inputs.shim-gate == '{gate}'"]
+        assert all(not step.get("continue-on-error", False) for step in steps_for_gate)
+        assert all("$PSNativeCommandUseErrorActionPreference = $true" in step["run"] for step in steps_for_gate)
+        selected[gate] = [
+            line.strip().removeprefix(prefix)
+            for step in steps_for_gate
+            for line in step["run"].splitlines()
+            if line.strip().startswith(prefix)
+        ]
+        assert selected[gate] == commands
+    flattened = [command for commands in selected.values() for command in commands]
+    assert len(flattened) == len(set(flattened)) == 10
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

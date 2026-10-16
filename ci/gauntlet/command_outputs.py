@@ -11,6 +11,7 @@ from typing import Any
 from .business_policy import BUSINESS_ORDINARY_READ
 from .catalog import Scenario
 from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
+from .script_cases import REPORT_CASES, report_output
 
 OUTPUT_SCENARIOS = frozenset(
     {
@@ -26,6 +27,7 @@ OUTPUT_SCENARIOS = frozenset(
         "quoted-workspace-copy",
         "routed-git-inspection",
         "stdin-sed-transformation",
+        *REPORT_CASES,
     }
 )
 
@@ -163,6 +165,8 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
             and set(listing) == expected
             and texts[2] == first + "\n"
         )
+    if identifier in REPORT_CASES:
+        return texts == [report_output()]
     if identifier == "bounded-source-discovery":
         return _discovery(texts)
     if identifier == "quoted-workspace-copy":

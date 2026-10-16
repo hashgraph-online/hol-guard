@@ -44,6 +44,32 @@ fn build_database(home: &std::path::Path, vectors: &Value, scenario: &Value) {
     }
 }
 
+/// The recorder ran on POSIX. A directory scope taken from a manifest path
+/// (`evaluated from /srv/app/package.json`) is that path's `Path.parent`, which
+/// a Windows host spells with `\\`; a rooted path without a drive is then no
+/// scope path there. Only that one recorded field is respelled.
+fn host_scope_path(actual: &Value, expected: &Value) -> Value {
+    let mut expected = expected.clone();
+    let recorded = expected["source_scope_path"].as_str().map(str::to_owned);
+    if let (true, Some(recorded)) = (cfg!(windows), recorded) {
+        let respelled = recorded.replace('/', "\\");
+        let fields = expected.as_object_mut().unwrap();
+        match actual["source_scope_path"].as_str() {
+            Some(found) if found == respelled => {
+                fields.insert("source_scope_path".to_owned(), Value::String(respelled));
+            }
+            None if respelled.starts_with('\\') && !respelled.starts_with("\\\\") => {
+                fields.remove("source_scope_path");
+                if fields.is_empty() {
+                    return Value::Null;
+                }
+            }
+            _ => {}
+        }
+    }
+    expected
+}
+
 #[test]
 fn replays_every_recorded_policy_source_context_scenario() {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
@@ -63,6 +89,7 @@ fn replays_every_recorded_policy_source_context_scenario() {
         let actual = reply["payload"].as_array().unwrap();
         assert_eq!(actual.len(), expected.len(), "{name}");
         for (position, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+            let expected = &host_scope_path(actual, expected);
             assert_eq!(
                 actual, expected,
                 "{name} item {position}: {}",

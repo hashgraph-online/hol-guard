@@ -1,0 +1,171 @@
+use super::*;
+use std::os::unix::fs::{symlink, PermissionsExt};
+
+static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// A scratch tree under the first base whose ancestry is sealed. `/tmp` is
+/// world-writable on Linux, so the crate directory serves there; with no
+/// sealed base, every grant below must be refused instead.
+struct Tree {
+    root: PathBuf,
+    sealed: bool,
+}
+
+impl Tree {
+    fn new() -> Self {
+        let bases = [
+            std::env::temp_dir(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        ];
+        let base = bases
+            .iter()
+            .filter_map(|base| base.canonicalize().ok())
+            .find(|base| sealed_ancestry(base))
+            .unwrap_or_else(|| std::env::temp_dir().canonicalize().unwrap());
+        let root = base.join(format!(
+            ".guard-user-tools-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+        Self {
+            sealed: sealed_ancestry(&base),
+            root,
+        }
+    }
+
+    /// `relative`, creating each missing directory with `mode`.
+    fn dir(&self, relative: &str, mode: u32) -> PathBuf {
+        let mut path = self.root.clone();
+        for component in Path::new(relative).components() {
+            path.push(component);
+            if !path.exists() {
+                fs::create_dir(&path).unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+            }
+        }
+        path.canonicalize().unwrap()
+    }
+}
+
+impl Drop for Tree {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+#[test]
+fn a_sealed_user_bin_directory_is_granted() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    let workspace = tree.dir("repo", 0o755);
+    for tool in [".local/bin", "sdk/google-cloud-sdk/bin", "bin"] {
+        let entry = tree.dir(&format!("home/{tool}"), 0o755);
+        let granted = tool_root(&entry, std::slice::from_ref(&home), &workspace);
+        assert_eq!(granted, tree.sealed.then(|| entry.clone()), "{tool}");
+    }
+}
+
+#[test]
+fn writable_ancestors_are_refused() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    let workspace = tree.dir("repo", 0o755);
+    for (directory, mode) in [
+        ("home/open", 0o777),
+        ("home/shared", 0o775),
+        ("home/group", 0o770),
+    ] {
+        let parent = tree.dir(directory, mode);
+        let entry = parent.join("bin");
+        fs::create_dir(&entry).unwrap();
+        fs::set_permissions(&entry, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(
+            tool_root(&entry, std::slice::from_ref(&home), &workspace),
+            None,
+            "{directory}"
+        );
+    }
+    let entry = tree.dir("home/writable/bin", 0o755);
+    fs::set_permissions(&entry, fs::Permissions::from_mode(0o757)).unwrap();
+    assert_eq!(
+        tool_root(&entry, std::slice::from_ref(&home), &workspace),
+        None
+    );
+}
+
+#[test]
+fn workspace_agent_state_and_credential_directories_are_refused() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    let workspace = tree.dir("repo", 0o755);
+    let homes = std::slice::from_ref(&home);
+    for refused in [
+        "repo/bin",
+        "repo/node_modules/.bin",
+        "home/.hol-guard/package-shims/bin",
+        "home/.hol-guard/bin",
+        "home/.claude/plugins/cache/tool/bin",
+        "home/.codex/bin",
+        "home/.omp/bin",
+        "home/.ssh/bin",
+        "home/.config/tool/bin",
+        "home/Library/Keychains/bin",
+        "home/tools",
+    ] {
+        let entry = tree.dir(refused, 0o755);
+        assert_eq!(tool_root(&entry, homes, &workspace), None, "{refused}");
+    }
+    // A directory that holds the workspace exposes it whole.
+    let outer = tree.dir("outer/bin", 0o755);
+    let nested = tree.dir("outer/bin/project", 0o755);
+    assert_eq!(tool_root(&outer, homes, &nested), None);
+    // HOME itself is never a tool directory, whatever its name.
+    let bin_home = tree.dir("bin", 0o755);
+    assert_eq!(
+        tool_root(&bin_home, std::slice::from_ref(&bin_home), &workspace),
+        None
+    );
+    // Without a known HOME nothing is granted.
+    let entry = tree.dir("home/.local/bin", 0o755);
+    assert_eq!(tool_root(&entry, &[], &workspace), None);
+}
+
+#[test]
+fn package_manager_homes_are_granted_below_library() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    let workspace = tree.dir("repo", 0o755);
+    for tool in ["Library/pnpm", ".local/share/pnpm"] {
+        let entry = tree.dir(&format!("home/{tool}"), 0o755);
+        let granted = tool_root(&entry, std::slice::from_ref(&home), &workspace);
+        assert_eq!(granted, tree.sealed.then(|| entry.clone()), "{tool}");
+    }
+    let nested = tree.dir("home/Library/pnpm/global", 0o755);
+    assert_eq!(
+        tool_root(&nested, std::slice::from_ref(&home), &workspace),
+        None
+    );
+}
+
+#[test]
+fn corepack_cache_is_granted_only_when_sealed_and_inside_home() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    assert_eq!(corepack_home(&home), None);
+    let cache = tree.dir("home/.cache/node/corepack", 0o755);
+    assert_eq!(corepack_home(&home), tree.sealed.then(|| cache.clone()));
+    fs::set_permissions(home.join(".cache/node"), fs::Permissions::from_mode(0o777)).unwrap();
+    assert_eq!(corepack_home(&home), None);
+
+    let other = tree.dir("other", 0o755);
+    let elsewhere = tree.dir("elsewhere/node/corepack", 0o755);
+    symlink(
+        elsewhere.parent().unwrap().parent().unwrap(),
+        other.join(".cache"),
+    )
+    .unwrap();
+    assert_eq!(corepack_home(&other), None);
+}

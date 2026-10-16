@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import local_cli_grant_decision as decision
-from codex_plugin_scanner.guard.local_cli_hook import apply_local_cli_grant
 from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
 from codex_plugin_scanner.guard.native_local_cli_grant import NativeLocalCliGrant
 from codex_plugin_scanner.guard.native_local_cli_identity import LocalCliIdentityUnavailableError
@@ -43,17 +42,6 @@ def test_native_failure_is_unavailable_never_no_grant(
     with pytest.raises(LocalCliIdentityUnavailableError):
         matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
 
-    # A stored block rule exists, so an allowed command is held for review
-    # instead of being waved through or silently treated as ungranted.
-    assert (
-        apply_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
-        == "review"
-    )
-    assert (
-        apply_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="block")
-        == "block"
-    )
-
 
 def test_native_answer_is_presented_not_recomputed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     store, command, identity = _blocked_store(tmp_path)
@@ -66,10 +54,10 @@ def test_native_answer_is_presented_not_recomputed(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(decision, "native_local_cli_grant", answer)
 
     # The store row says blocked; only the resident's answer decides.
-    assert (
-        apply_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="review")
-        == "allow"
+    matched = matching_local_cli_grant(
+        store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="review"
     )
+    assert matched is not None and matched[1] == "allowed"
     assert calls[0]["current_action"] == "review"
     assert calls[0]["source"] == identity.identity_source
 
@@ -165,7 +153,3 @@ def test_catalog_read_failure_holds_instead_of_dropping_a_block(
 
     with pytest.raises(LocalCliIdentityUnavailableError, match="native_local_cli_grant_catalog_unavailable"):
         matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
-    assert (
-        apply_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
-        == "review"
-    )

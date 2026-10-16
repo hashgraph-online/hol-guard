@@ -7,12 +7,15 @@ import sys
 from pathlib import Path
 
 from .adapters.base import HarnessContext
+from .adapters.cursor_hook_command_line import split_cursor_hook_command
 from .adapters.cursor_hook_config import (
     _hooks_state_path,
     _is_managed_hook_script,
     isolated_cursor_hook_python,
     live_cursor_hooks_use_frozen_control_plane,
+    managed_cursor_hook_commands,
 )
+from .adapters.cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, native_cursor_hook_bridge
 from .adapters.cursor_hooks import (
     cursor_hook_script_path,
     cursor_hook_script_source,
@@ -119,16 +122,12 @@ def rebind_stale_cursor_hooks(guard_home: Path, *, home_dir: Path) -> dict[str, 
         needs_rebind = (
             needs_rebind or managed_source != expected_source or cursor_hook_script_bakes_ephemeral_cli(managed_source)
         )
-    if isolated_cursor_hook_python() is not None:
-        try:
-            payload = json.loads(cursor_hooks_path(context).read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            payload = None
-        if isinstance(payload, dict):
-            nested = payload.get("hooks")
-            hooks_obj = nested if isinstance(nested, dict) else payload
-            if live_cursor_hooks_use_frozen_control_plane(hooks_obj):
-                needs_rebind = True
+    hooks_obj = _live_hooks(context)
+    if hooks_obj is not None:
+        if isolated_cursor_hook_python() is not None and live_cursor_hooks_use_frozen_control_plane(hooks_obj):
+            needs_rebind = True
+        if _live_hooks_skip_native_bridge(hooks_obj, guard_home):
+            needs_rebind = True
     if not needs_rebind and _state_matches_attested_cli(context):
         return {"rebound": False, "reason": "cursor_hook_script_current"}
     try:
@@ -136,6 +135,30 @@ def rebind_stale_cursor_hooks(guard_home: Path, *, home_dir: Path) -> dict[str, 
     except (OSError, RuntimeError, UnicodeError) as error:
         return {"rebound": False, "reason": "cursor_hook_script_rebind_failed", "error": str(error)}
     return {"rebound": True, "reason": "cursor_hook_script_rebound"}
+
+
+def _live_hooks(context: HarnessContext) -> dict[str, object] | None:
+    try:
+        payload = json.loads(cursor_hooks_path(context).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    nested = payload.get("hooks")
+    return nested if isinstance(nested, dict) else payload
+
+
+def _live_hooks_skip_native_bridge(hooks: dict[str, object], guard_home: Path) -> bool:
+    """True when a managed command starts the client directly although the native bridge can answer."""
+
+    commands = managed_cursor_hook_commands(hooks)
+    if not commands or native_cursor_hook_bridge(guard_home) is None:
+        return False
+    for command in commands:
+        tokens = split_cursor_hook_command(command) or []
+        if len(tokens) < 2 or tokens[1] != NATIVE_CURSOR_HOOK_COMMAND:
+            return True
+    return False
 
 
 __all__ = [

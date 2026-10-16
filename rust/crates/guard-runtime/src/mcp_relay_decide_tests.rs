@@ -115,22 +115,23 @@ fn route_accepts_forward_terminal_and_stored_block() {
         "pass_approval_decision": true,
     }));
     assert_eq!(
-        route(&forward, &allow),
+        route(&forward, &allow, None),
         Ok(Routed::Forward {
             source: "policy".to_owned(),
             policy_action: "allow".to_owned(),
+            remember: false,
         })
     );
     let block = decision(GuardAction::Block);
     let terminal = proxy(json!({"kind": "terminal", "policy_action": "block"}));
     assert_eq!(
-        route(&terminal, &block),
+        route(&terminal, &block, None),
         Ok(Routed::Terminal {
             policy_action: "block".to_owned(),
         })
     );
     let stored = proxy(json!({"kind": "stored_block"}));
-    assert_eq!(route(&stored, &block), Ok(Routed::StoredBlock));
+    assert_eq!(route(&stored, &block, None), Ok(Routed::StoredBlock));
 }
 
 #[test]
@@ -142,26 +143,26 @@ fn route_defers_everything_else() {
         "policy_action": "allow",
         "remember": true,
     }));
-    assert_eq!(route(&remembered, &allow), Err(ROUTE_UNSUPPORTED));
+    assert_eq!(route(&remembered, &allow, None), Err(ROUTE_UNSUPPORTED));
     for kind in ["observe", "inline_approval", "package"] {
         assert_eq!(
-            route(&proxy(json!({"kind": kind})), &allow),
+            route(&proxy(json!({"kind": kind})), &allow, None),
             Err(ROUTE_UNSUPPORTED)
         );
     }
     let mut disabled = proxy(json!({"kind": "stored_block"}));
     disabled["gate"]["disable"] = Value::Bool(true);
-    assert_eq!(route(&disabled, &allow), Err(ROUTE_UNSUPPORTED));
+    assert_eq!(route(&disabled, &allow, None), Err(ROUTE_UNSUPPORTED));
     let mut needs = proxy(json!({"kind": "stored_block"}));
     needs["route"]["need"] = json!({"kind": "grant_lookup"});
-    assert_eq!(route(&needs, &allow), Err(ROUTE_UNSUPPORTED));
+    assert_eq!(route(&needs, &allow, None), Err(ROUTE_UNSUPPORTED));
     let mut overridden = proxy(json!({"kind": "stored_block"}));
     overridden["route"]["decision_override"] = json!({"action": "review"});
-    assert_eq!(route(&overridden, &allow), Err(ROUTE_UNSUPPORTED));
+    assert_eq!(route(&overridden, &allow, None), Err(ROUTE_UNSUPPORTED));
     let mut pending = decision(GuardAction::Review);
     pending.pending = Some(Map::new());
     assert_eq!(
-        route(&proxy(json!({"kind": "stored_block"})), &pending),
+        route(&proxy(json!({"kind": "stored_block"})), &pending, None),
         Err(ROUTE_UNSUPPORTED)
     );
     // A pending approval forwards only once it is claimed, and only when the
@@ -176,6 +177,7 @@ fn route_defers_everything_else() {
                 "pass_approval_decision": pass,
             })),
             &pending,
+            None,
         )
     };
     assert_eq!(

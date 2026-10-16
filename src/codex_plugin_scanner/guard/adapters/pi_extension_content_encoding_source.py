@@ -273,12 +273,17 @@ function sourceFileRefForPostToolUse(
   // but a directory is not a source file the daemon can re-read. Keep the
   // bounded names-only result inline so Rust scans the actual listing.
   const details = event.details;
-  if (
-    details !== null &&
-    typeof details === 'object' &&
-    !Array.isArray(details) &&
-    (details as Record<string, unknown>).isDirectory === true
-  ) return null;
+  const detailsRecord = details !== null && typeof details === 'object' && !Array.isArray(details)
+    ? (details as Record<string, unknown>) : undefined;
+  // Details that are present but not an object cannot say whether the
+  // output is one file, so the result stays inline.
+  if (details !== undefined && details !== null && detailsRecord === undefined) return null;
+  if (detailsRecord?.isDirectory === true) return null;
+  // When the whole path is not a file, OMP also splits it on commas or
+  // spaces (`a.ts:1-5,b.ts`) and reads each part, naming every part in
+  // `displayReadTargets`. That output is not one file's bytes either.
+  const readTargets = detailsRecord?.displayReadTargets;
+  if (Array.isArray(readTargets) && readTargets.length > 1) return null;
   if (!digest.sha256 || digest.traversalTruncated) return null;
   if (digest.chars > GUARD_SOURCE_REF_MAX_OUTPUT_CHARS) return null;
   const path = sourcePathFromToolInput(toolInput);

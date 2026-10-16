@@ -52,6 +52,8 @@ fn api_write_accepts_only_comment_and_reply_posts() {
         "-X POST repos/example-org/app-portal/issues/12/comments --raw-field body=text",
         "--method=post repos/example-org/app-portal/issues/12/comments -F body=text",
         "repos/example-org/app-portal/issues/12/comments -fbody=text --jq .id --silent",
+        "repos/example-org/app-portal/issues/12/comments -f body=text -q .id",
+        "repos/example-org/app-portal/issues/12/comments -f body=text -q.html_url",
         "-XPOST repos/example-org/app-portal/issues/12/comments --field=body=text",
     ] {
         let args = words(command);

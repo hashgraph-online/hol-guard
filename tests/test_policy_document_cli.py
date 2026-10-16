@@ -189,7 +189,7 @@ def test_policy_show_and_explain_active_document(
     assert explanation["scopes"] == {}
 
 
-def test_policy_import_is_feature_gated_and_dry_run_by_default(
+def test_policy_import_is_dry_run_by_default_without_any_environment_gate(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -212,21 +212,6 @@ def test_policy_import_is_feature_gated_and_dry_run_by_default(
     )
     capsys.readouterr()
 
-    disabled_rc = main(
-        [
-            "guard",
-            "policy",
-            "import",
-            str(policy_file),
-            "--home",
-            str(home),
-            "--replace",
-            "--json",
-        ]
-    )
-    disabled_payload = json.loads(capsys.readouterr().out)
-
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
     dry_run_rc = main(
         [
             "guard",
@@ -241,8 +226,6 @@ def test_policy_import_is_feature_gated_and_dry_run_by_default(
     )
     dry_run_payload = json.loads(capsys.readouterr().out)
 
-    assert disabled_rc == 4
-    assert disabled_payload["error"] == "policy_import_disabled"
     assert dry_run_rc == 0
     assert dry_run_payload["dry_run"] is True
     assert dry_run_payload["changed"] is False
@@ -290,7 +273,6 @@ def test_policy_import_reports_authority_errors(
         == 0
     )
     capsys.readouterr()
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.commands_dispatch_policy_document.prompt_for_approval_gate",
         lambda *_args, **_kwargs: object(),
@@ -313,6 +295,7 @@ def test_policy_import_reports_authority_errors(
             str(policy_file),
             "--replace",
             "--apply",
+            "--yes",
             "--home",
             str(home),
             "--json",

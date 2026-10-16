@@ -178,13 +178,6 @@ impl Session {
     }
 }
 
-// Workspace containment is macOS-only; elsewhere the same alias stays at review.
-const ALIAS_SANDBOX: &str = if cfg!(target_os = "macos") {
-    "native_workspace_containment_required"
-} else {
-    "native_command_review_required"
-};
-
 const LOCAL_WRITE: &str = "native_exact_safe_git_local_write";
 
 fn write_global(session: &Session, text: &str) {
@@ -213,16 +206,13 @@ fn escaped_quote_alias_does_not_block_ordinary_git_operations() {
         &session,
         "[alias]\n\tcommit = !bash \\\"/opt/hooks/commit.sh\\\"\n",
     );
-    // On macOS the workspace sandbox takes both before the proof does.
-    let add_reason = if cfg!(target_os = "macos") {
-        ALIAS_SANDBOX
-    } else {
-        LOCAL_WRITE
-    };
+    // The workspace sandbox never takes these on any host: `-C` names a
+    // linked worktree outside the session directory, and the sandbox cannot
+    // reach its shared Git directory.
     for command in &commands {
-        assert_reason(&session, command, add_reason);
+        assert_reason(&session, command, LOCAL_WRITE);
     }
-    assert_reason(&session, &commit, ALIAS_SANDBOX);
+    assert_reason(&session, &commit, "native_command_review_required");
     // Backticks keep the aliased command at review, with or without escapes.
     write_global(&session, "[alias]\n\tcommit = !bash \\\"`id`\\\"\n");
     for command in &commands {

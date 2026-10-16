@@ -72,6 +72,7 @@ fn coalesce_string(values: &[Option<&str>]) -> String {
 /// anything else routes through the MCP server prefix.
 const CLAUDE_BUILTIN_HOOK_TOOL_NAMES: &[&str] = &[
     "bash",
+    "powershell",
     "shell",
     "sh",
     "zsh",

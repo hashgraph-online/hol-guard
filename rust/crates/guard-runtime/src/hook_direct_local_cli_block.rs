@@ -22,6 +22,9 @@ const MAX_DEPTH: usize = 4;
 const MANAGERS: [&str; 4] = ["npm", "pnpm", "yarn", "bun"];
 const KINDS: [&str; 2] = ["script", "executable"];
 const BLOCKED_REASON_CODE: &str = "local_cli_extension_blocked";
+const UNVERIFIED_REASON_CODE: &str = "local_cli_extension_unverified";
+const UNVERIFIED_REASON: &str =
+    "Guard could not check this command against your custom extension rules.";
 /// The keys of a grant answer, as `_decode_payload` requires them.
 const ANSWER_KEYS: [&str; 3] = ["state", "cli_id", "identity_hash"];
 const WATCH_REASON: &str = "Watch recorded this action without stopping it.";
@@ -56,7 +59,7 @@ pub(super) fn command_selector(
 }
 
 /// `match_command_id`: the longest token prefix that names a catalog command.
-pub(super) fn match_command_id(tokens: &[String], catalog: &BTreeSet<String>) -> String {
+pub(crate) fn match_command_id(tokens: &[String], catalog: &BTreeSet<String>) -> String {
     if tokens.is_empty() {
         return ROOT_COMMAND_ID.to_owned();
     }
@@ -76,7 +79,7 @@ pub(super) enum Verdict {
     Unchanged,
     /// A block naming the CLI.
     Blocked(String),
-    /// The daemon blocks as unverified; the resident leaves that to it.
+    /// No trustworthy grant answer: the daemon blocks as unverified.
     Unverified,
 }
 
@@ -147,7 +150,7 @@ pub(super) fn launch(
 }
 
 /// `_parse_native_scripts`' checks on the resident's package answer.
-fn valid_package(found: &PackageJsonScriptsV1) -> bool {
+pub(crate) fn valid_package(found: &PackageJsonScriptsV1) -> bool {
     let source_valid = matches!(
         &found.source,
         LocalCliIdentitySourceV1::PackageJson { content_sha256, .. } if sha256_hex(content_sha256)
@@ -158,7 +161,7 @@ fn valid_package(found: &PackageJsonScriptsV1) -> bool {
 }
 
 /// `_valid_unlisted_cli`'s checks on one unlisted CLI record.
-fn valid_unlisted(record: &UnlistedCliV1) -> bool {
+pub(crate) fn valid_unlisted(record: &UnlistedCliV1) -> bool {
     valid_identity(&LocalCliIdentityV1 {
         cli_id: record.cli_id.clone(),
         name: record.name.clone(),
@@ -225,6 +228,39 @@ pub(super) fn block_response(
     name: &str,
     recording_only: bool,
 ) -> Option<Value> {
+    rendered_block(
+        harness,
+        result,
+        BLOCKED_REASON_CODE,
+        &blocked_reason(name),
+        recording_only,
+    )
+}
+
+/// `block_response` for a launch whose grant the daemon could not check:
+/// `native_local_cli_block_response` blocks it as unverified while some custom
+/// block rule exists, and Watch records it as the custom block.
+pub(super) fn unverified_response(
+    harness: &str,
+    result: &Object,
+    recording_only: bool,
+) -> Option<Value> {
+    rendered_block(
+        harness,
+        result,
+        UNVERIFIED_REASON_CODE,
+        UNVERIFIED_REASON,
+        recording_only,
+    )
+}
+
+fn rendered_block(
+    harness: &str,
+    result: &Object,
+    reason_code: &str,
+    reason: &str,
+    recording_only: bool,
+) -> Option<Value> {
     if recording_only {
         return Some(Value::Object(recording_only_pre_tool(
             harness,
@@ -232,7 +268,7 @@ pub(super) fn block_response(
             WATCH_REASON,
         )));
     }
-    let verdict = block_verdict(result, BLOCKED_REASON_CODE, &blocked_reason(name));
+    let verdict = block_verdict(result, reason_code, reason);
     let encoded = serde_json::to_vec(&verdict).ok()?.len() + harness.len();
     if encoded * RENDER_ESCAPE_FACTOR + RENDER_ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
         return None;

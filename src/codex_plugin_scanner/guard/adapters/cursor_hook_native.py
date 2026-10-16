@@ -10,20 +10,21 @@ NATIVE_CURSOR_HOOK_COMMAND = "cursor-hook-bridge"
 NATIVE_CURSOR_HOOK_FEATURE = "cursor-hook-bridge-v1"
 
 
-def native_cursor_hook_bridge() -> Path | None:
+def native_cursor_hook_bridge(guard_home: Path | None = None) -> Path | None:
     """The native runtime that answers Cursor hooks before Python starts, or None.
 
-    The runtime answers a hook a live resident allows and runs the client argv
-    that follows its subcommand for everything else.
+    The runtime answers each hook from the daemon and fails closed without
+    one; it reads the client script the argv after its subcommand names.
     HOL_GUARD_CURSOR_HOOK_BRIDGE=python keeps the client argv, so a subprocess
-    install and its verifier agree.
+    install and its verifier agree. A frozen build names the runtime's durable
+    copy under ``guard_home``.
     """
 
     if os.environ.get("HOL_GUARD_CURSOR_HOOK_BRIDGE") == "python":
         return None
     from .native_hook_bridge import native_hook_bridge_executable
 
-    return native_hook_bridge_executable(NATIVE_CURSOR_HOOK_FEATURE)
+    return native_hook_bridge_executable(NATIVE_CURSOR_HOOK_FEATURE, guard_home=guard_home)
 
 
 def client_hook_tokens(tokens: Sequence[str]) -> list[str]:

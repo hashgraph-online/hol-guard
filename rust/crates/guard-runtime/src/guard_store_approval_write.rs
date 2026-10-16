@@ -1,12 +1,12 @@
-//! `add_native_review_approval_request`: the daemon's approval queue write
-//! (`add_approval_request` in `store_approval_writes.py` plus the outbox bind
-//! of `GuardStore.add_approval_request`) for a review the resident queues
-//! itself.
+//! The approval queue write (`GuardStore.add_approval_request`, once a
+//! Python writer plus its outbox bind).
 //!
 //! The canonical surfaces and the queue identity are derived in process, so
-//! the whole write runs under the store op's one immediate transaction. A
-//! home whose legacy rows still wait for the daemon's identity backfill
-//! answers `null` before any write, and the daemon queues the review.
+//! the whole write runs under the store op's one immediate transaction.
+//! `add_approval_request` backfills legacy rows first, as the Python writer
+//! did. `add_native_review_approval_request`, for a review the resident
+//! queues itself, answers `null` while legacy rows wait, and the daemon
+//! queues the review through `add_approval_request`.
 
 use std::collections::HashSet;
 
@@ -15,6 +15,8 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::approval_queue_identity_op::identify;
+use crate::guard_store_approval_backfill;
+use crate::guard_store_approval_created::record_created_events;
 use crate::guard_store_approval_request::ApprovalRequest;
 use crate::guard_store_approval_row::{insert, update, Derived};
 use crate::guard_store_args::Args;
@@ -32,6 +34,10 @@ const REQUEST_ID_CHUNK: usize = 500;
 const PROJECTION_ROW_BYTES: usize = 3 * 1024 * 1024;
 const FRESH_REVIEW_REQUIRED: &str = "fresh_review_request_id_required";
 const SUPERSEDED: &str = "superseded_by_fresh_review:";
+const IDENTITY_INVALID: &str = "native_approval_queue_identity_invalid";
+/// `ApprovalQueueIdentityUnavailableError`'s message.
+const IDENTITY_UNAVAILABLE: &str = "native_approval_queue_identity_unavailable";
+const INVALID_ARGS: &str = "native_guard_store_args_invalid";
 
 pub(crate) fn add_native_review_approval_request(
     connection: &Connection,
@@ -44,13 +50,83 @@ pub(crate) fn add_native_review_approval_request(
     if legacy_rows_pending(connection)? {
         return Ok(Value::Null);
     }
-    let oauth_source = match py_strip(source).to_lowercase() {
+    persist(connection, source, &request, &derived, now).map(Value::String)
+}
+
+/// `GuardStore.add_approval_request`: the queue write of every caller. Legacy
+/// rows are backfilled in the same transaction first, and a request the
+/// resident cannot identify answers Python's
+/// `ApprovalQueueIdentityUnavailableError` message.
+pub(crate) fn add_approval_request(
+    connection: &Connection,
+    source: &str,
+    args: &Args,
+) -> StoreResult<Value> {
+    // `queue_blocked_approvals` records the creation events; other writers
+    // leave `prompt_shown` out.
+    let prompt_shown = match args.raw("prompt_shown") {
+        None | Some(Value::Null) => None,
+        Some(value) => Some(value.as_bool().ok_or(StoreError::Invalid(INVALID_ARGS))?),
+    };
+    add_request(
+        connection,
+        source,
+        args.raw("request"),
+        args.str("now")?,
+        prompt_shown,
+    )
+    .map(Value::String)
+}
+
+/// The queue write of one `GuardApprovalRequest.to_dict()`: its persisted
+/// request id.
+pub(crate) fn add_request(
+    connection: &Connection,
+    source: &str,
+    request: Option<&Value>,
+    now: &str,
+    prompt_shown: Option<bool>,
+) -> StoreResult<String> {
+    let request = ApprovalRequest::decode(request)?;
+    let derived = derive(&request).map_err(|error| match error {
+        StoreError::Invalid(IDENTITY_INVALID) => StoreError::Value(IDENTITY_UNAVAILABLE.to_owned()),
+        other => other,
+    })?;
+    let backfill = guard_store_approval_backfill::pending(connection);
+    if backfill {
+        guard_store_approval_backfill::backfill(connection)?;
+    }
+    let request_id = persist(connection, source, &request, &derived, now)?;
+    if let Some(prompt_shown) = prompt_shown.filter(|_| request_id == request.request_id) {
+        record_created_events(connection, &request, prompt_shown, now)?;
+    }
+    if backfill {
+        guard_store_approval_backfill::mark_complete(connection);
+    }
+    Ok(request_id)
+}
+
+/// The write and outbox bind under the caller's OAuth source.
+/// `_normalize_source_name` for a source the caller already validated: the
+/// `oauth_source` a request from it carries.
+pub(crate) fn oauth_source(source: &str) -> String {
+    match py_strip(source).to_lowercase() {
         normalized if normalized.is_empty() => "default".to_owned(),
         normalized => normalized,
-    };
-    let request_id = write(connection, &request, &derived, &oauth_source, now)?;
+    }
+}
+
+fn persist(
+    connection: &Connection,
+    source: &str,
+    request: &ApprovalRequest,
+    derived: &Derived,
+    now: &str,
+) -> StoreResult<String> {
+    let oauth_source = oauth_source(source);
+    let request_id = write(connection, request, derived, &oauth_source, now)?;
     bind_events_for_request(connection, &request_id, &oauth_source)?;
-    Ok(Value::String(request_id))
+    Ok(request_id)
 }
 
 fn derive(request: &ApprovalRequest) -> StoreResult<Derived> {
@@ -71,9 +147,7 @@ fn derive(request: &ApprovalRequest) -> StoreResult<Derived> {
         action_identity: request.action_identity.clone(),
         queue_group_id: request.queue_group_id.clone(),
     };
-    let identity = identify(&item).ok_or(StoreError::Invalid(
-        "native_approval_queue_identity_invalid",
-    ))?;
+    let identity = identify(&item).ok_or(StoreError::Invalid(IDENTITY_INVALID))?;
     let field = |name: &str| identity[name].as_str().unwrap_or_default().to_owned();
     Ok(Derived {
         policy_action: canonical["policy_action"].clone(),
@@ -85,7 +159,7 @@ fn derive(request: &ApprovalRequest) -> StoreResult<Derived> {
     })
 }
 
-/// `_legacy_queue_rows`: rows `backfill_queue_identities_once` has yet to
+/// `_legacy_queue_rows`: rows the write-time backfill has yet to
 /// identify, or rejected and left as they are.
 fn legacy_rows_pending(connection: &Connection) -> StoreResult<bool> {
     Ok(query_one(

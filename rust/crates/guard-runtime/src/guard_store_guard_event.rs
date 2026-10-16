@@ -88,7 +88,7 @@ pub(crate) fn approval_created_event(
 }
 
 /// A decoded scalar or list as the Python value `json.loads` produced.
-fn from_json(value: &Value) -> Option<PyVal> {
+pub(crate) fn from_json(value: &Value) -> Option<PyVal> {
     Some(match value {
         Value::Null => PyVal::Null,
         Value::Bool(flag) => PyVal::Bool(*flag),

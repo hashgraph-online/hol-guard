@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from tests import guard_daemon_acceptance_fixtures as workloads
 from tests.guard_daemon_acceptance_fixtures import WorkloadSpec, _mark_resident_request_log, run_workload
 
 # Native round trips each pi PostToolUse hook may spend: route facts, hook edge
@@ -36,16 +39,42 @@ def _measured_resident_requests(log_path: Path) -> int:
     return len(measured)
 
 
-def _round_trips(monkeypatch: pytest.MonkeyPatch, root: Path, requests: int) -> tuple[int, Counter[str]]:
+def _round_trip_samples(monkeypatch: pytest.MonkeyPatch, root: Path) -> list[Counter[str]]:
     log_path = root / "resident-requests.log"
     monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
-    result = run_workload(_pi_workload(requests), root=root)
-    assert result.requests == requests
-    assert _measured_resident_requests(log_path) > 0
-    hook_operations = [
-        operation for operation in _measured_operations(log_path) if operation not in _BACKGROUND_OPERATIONS
-    ]
-    return len(hook_operations), Counter(hook_operations)
+    run_clients = workloads._run_client_reviews
+    samples: list[Counter[str]] = []
+
+    def measured_batches(clients, review, *, timeout_seconds):
+        (client,) = clients
+        assert client["requests"] == 72
+        for start in range(0, 72, 24):
+            run_clients(
+                [{**client, "requests": 24}],
+                lambda harness, session, index, offset=start: review(harness, session, offset + index),
+                timeout_seconds=timeout_seconds,
+            )
+            # Every client response is complete, but this daemon has not stopped.
+            # One lifecycle makes startup traffic common to all sample prefixes.
+            samples.append(
+                Counter(
+                    operation for operation in _measured_operations(log_path) if operation not in _BACKGROUND_OPERATIONS
+                )
+            )
+
+    with monkeypatch.context() as scope:
+        scope.setattr(workloads, "_run_client_reviews", measured_batches)
+        result = run_workload(_pi_workload(72), root=root)
+    assert result.requests == result.routine_allowed + result.secrets_denied == 72
+    assert result.generic_failures == 0
+    assert len(samples) == 3 and sum(samples[0].values()) > 0
+    return samples
+
+
+def _assert_round_trip_growth(samples: list[Counter[str]]) -> None:
+    for before, after in pairwise(samples):
+        growth = after - before
+        assert sum(growth.values()) <= 24 * _RESIDENT_ROUND_TRIPS_PER_PI_HOOK, growth
 
 
 def test_measured_resident_requests_ignore_warmup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,16 +93,47 @@ def test_pi_post_tool_hook_resident_round_trips_per_request_are_bounded(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    small_root = tmp_path / "small"
-    large_root = tmp_path / "large"
-    small_root.mkdir()
-    large_root.mkdir()
-    small, small_operations = _round_trips(monkeypatch, small_root, 24)
-    assert small > 0
-    large, large_operations = _round_trips(monkeypatch, large_root, 48)
-    # The difference isolates per-request cost from daemon start-up traffic.
-    per_request = large_operations - small_operations
-    assert (large - small) <= 24 * _RESIDENT_ROUND_TRIPS_PER_PI_HOOK, (small, large, per_request)
+    _assert_round_trip_growth(_round_trip_samples(monkeypatch, tmp_path))
+
+
+@pytest.mark.parametrize("extra", ["none", "one", "per-request"])
+def test_rpc_growth_excludes_lifecycle_traffic_but_detects_extra_measured_calls(tmp_path, monkeypatch, extra):
+    log_path = tmp_path / "resident-requests.log"
+    observed = []
+
+    def clients(clients, review, *, timeout_seconds):
+        for client in clients:
+            for index in range(client["requests"]):
+                review(client["harness"], client["client"], index)
+
+    def workload(spec, *, root):
+        log_path.write_bytes(b"W\nhook_direct\n")
+
+        def review(harness, session, index):
+            observed.append(index)
+            with log_path.open("ab") as output:
+                output.write(b"hook_direct\ndaemon_route\n1\n")
+                if extra == "per-request" or (extra == "one" and index == 35):
+                    output.write(b"hook_direct\n")
+
+        workloads._run_client_reviews(spec["clients"], review, timeout_seconds=1)
+        # Teardown work must not change a measurement of completed hook calls.
+        with log_path.open("ab") as output:
+            output.write(b"hook_direct\n" * 17)
+        return SimpleNamespace(requests=72, routine_allowed=64, secrets_denied=8, generic_failures=0)
+
+    monkeypatch.setattr(workloads, "_run_client_reviews", clients)
+    monkeypatch.setattr(__name__ + ".run_workload", workload)
+    samples = _round_trip_samples(monkeypatch, tmp_path)
+    assert observed == list(range(72))
+    assert [sum(sample.values()) for sample in samples] == (
+        [73, 145, 217] if extra == "none" else [97, 193, 289] if extra == "per-request" else [73, 146, 218]
+    )
+    if extra == "none":
+        _assert_round_trip_growth(samples)
+    else:
+        with pytest.raises(AssertionError):
+            _assert_round_trip_growth(samples)
 
 
 def _measured_operations(log_path: Path) -> list[str]:

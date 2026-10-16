@@ -1,0 +1,80 @@
+name: Build verified Linux native command evaluators
+description: Share the exact native producer build with trusted cache warming.
+runs:
+  using: composite
+  steps:
+    - name: Stage native build trust bindings
+      shell: bash
+      run: python3 scripts/refresh_extension_artifacts.py --trust-only
+    - name: Identify native evaluator build inputs
+      id: evaluator-platform
+      shell: bash
+      run: |
+        echo "image=${ImageOS:?}" >> "$GITHUB_OUTPUT"
+        python3 -m scripts.ci.native_cache_environment >> "$GITHUB_OUTPUT"
+    - name: Restore exact native command evaluators
+      id: evaluator-cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: |
+          rust/target/release/guard-command-source
+          rust/target/release/hol-guard-runtime
+        # Include the two CI profile overrides ignored by the shipping helper.
+        # Resolve the exact key before restoring any Cargo target outputs.
+        key: linux-native-evaluators-v1-${{ runner.arch }}-${{ steps.evaluator-platform.outputs.image }}-${{ steps.evaluator-platform.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'src/codex_plugin_scanner/guard/contracts/**', '.cargo/**', '.github/actions/setup-rust/action.yml', '.github/actions/ci-job-native-command-build/action.yml', 'scripts/ci/native_cache_environment.py', 'scripts/refresh_extension_artifacts.py') }}
+    - uses: ./.github/actions/setup-rust
+      if: steps.evaluator-cache.outputs.cache-hit != 'true'
+      with:
+        cache-key: pytest-native-command
+        components: rustfmt
+    - name: Check native formatting before compilation
+      shell: bash
+      env:
+        EVALUATOR_CACHE_HIT: ${{ steps.evaluator-cache.outputs.cache-hit }}
+      run: |
+        toolchain="$(python3 -c 'import tomllib; print(tomllib.load(open("rust/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
+        if [[ "$EVALUATOR_CACHE_HIT" == true ]]; then
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt
+        fi
+        cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check
+    - name: Install content-addressed compiler cache
+      if: steps.evaluator-cache.outputs.cache-hit != 'true'
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+      with:
+        version: v0.18.0
+    - name: Build native command evaluators once for pytest shards
+      if: steps.evaluator-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        RUSTC_WORKSPACE_WRAPPER: sccache
+        SCCACHE_GHA_ENABLED: 'on'
+        SCCACHE_GHA_VERSION: pytest-native-command
+        SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+        SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+      run: |
+        cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+        "$SCCACHE_PATH" --show-stats
+    - name: Require both executable native evaluators
+      shell: bash
+      run: |
+        test -x rust/target/release/guard-command-source
+        test -x rust/target/release/hol-guard-runtime
+    - name: Verify generated native command catalogs before pytest fan-out
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        arguments=(--compiler rust/target/release/guard-command-source)
+        if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          arguments+=(--changed-from "$BASE_SHA")
+        fi
+        python3 scripts/ci/verify_native_command_program.py "${arguments[@]}"
+    - name: Save verified native command evaluators
+      if: steps.evaluator-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: |
+          rust/target/release/guard-command-source
+          rust/target/release/hol-guard-runtime
+        key: ${{ steps.evaluator-cache.outputs.cache-primary-key }}

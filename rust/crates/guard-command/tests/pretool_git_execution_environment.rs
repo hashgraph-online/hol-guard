@@ -45,6 +45,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
             Some(context),
         )
@@ -91,17 +92,19 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     // The config probe clears the environment, but an allowed `git` still
     // runs in the caller environment, so a search path of `.` or an empty
     // entry can load a library the probe never saw. A search path declared by
-    // name only, without a stamped value, stays unproven.
-    for name in [
-        "LD_LIBRARY_PATH",
-        "DYLD_LIBRARY_PATH",
-        "DYLD_FALLBACK_LIBRARY_PATH",
-        "DYLD_FRAMEWORK_PATH",
-        "DYLD_FALLBACK_FRAMEWORK_PATH",
-        "LD_PRELOAD",
-        "LD_AUDIT",
-        "DYLD_INSERT_LIBRARIES",
-    ] {
+    // name only, without a stamped value, stays unproven. The Windows loader
+    // never reads these search paths, so there they leave the proof intact.
+    for name in guard_contracts::LIBRARY_SEARCH_PATH_NAMES {
+        let mut loader = context.clone();
+        loader.environment_names.push((*name).into());
+        assert_eq!(
+            evaluate(&loader).decision == "allow",
+            cfg!(windows),
+            "{name}"
+        );
+    }
+    // Injection variables are refused on every platform.
+    for name in ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"] {
         let mut loader = context.clone();
         loader.environment_names.push(name.into());
         assert_ne!(evaluate(&loader).decision, "allow", "{name}");
@@ -441,6 +444,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
             context,
         )

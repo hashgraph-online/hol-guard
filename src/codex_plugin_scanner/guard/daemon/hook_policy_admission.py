@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_PERSISTENT_ERRORS
 from .hook_fail_closed import unmanaged_passthrough
 from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
 
@@ -13,10 +14,16 @@ from .hook_managed_install_state import _canonical_managed_harness, _hook_harnes
 def _native_policy_not_ready_reason(daemon_server: Any) -> str:
     reason = "HOL Guard could not prepare the native policy safely."
     retry = "This is usually temporary. Retry this action."
+    # An install whose files disagree rejects every snapshot, so telling the
+    # agent to retry sends it around the same failure until the user repairs
+    # the install.
+    repair = "Guard's installed files disagree, so retrying will not clear it. Ask the user to run `hol-guard doctor`."
     publisher = getattr(getattr(daemon_server, "hook_worker", None), "policy_snapshot_publisher", None)
     last_error = getattr(publisher, "last_error", None)
     if isinstance(last_error, str) and last_error.strip():
-        return f"{reason} {last_error.strip()}. {retry}"
+        code = last_error.strip()
+        advice = repair if code in POLICY_SNAPSHOT_PERSISTENT_ERRORS else retry
+        return f"{reason} {code}. {advice}"
     return f"{reason} {retry}"
 
 

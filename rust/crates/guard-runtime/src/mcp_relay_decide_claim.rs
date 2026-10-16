@@ -17,13 +17,22 @@
 //!
 //! The resident runs steps 2 to 4 in one write transaction and commits the
 //! claim only once it has an answer the relay can give as the proxy would:
-//! a forward, a stored block or a terminal block, with its evidence queued or
-//! held. Every other outcome rolls the claim back and defers, so no deferred
-//! call ever leaves an approval spent: a declined claim (which the proxy
-//! queues for re-approval, 2570-2582), a post-claim re-approval queue
-//! (2670-2680), a package intent the fresh resolve now finds (which the proxy
-//! sends through its package policy), and any lane, store, policy or
-//! evidence failure.
+//! a forward, a stored block, a terminal block or a post-claim re-approval
+//! queue (2674-2684), with its evidence queued or held. Every other outcome
+//! rolls the claim back and defers, so the call is answered "no native
+//! decision" with the approval unspent: a declined claim (which the proxy
+//! queues for re-approval, 2570-2582), a package intent the fresh resolve now
+//! finds (which the proxy sends through its package policy), and any lane,
+//! store, policy or evidence failure.
+//!
+//! A post-claim re-approval spends the claim, as the proxy's does, and then
+//! answers by the bound blocked-request mode. The safe-alternative block is
+//! settled inside the transaction. The `ask` request is checked and shaped
+//! there too, but written only once the claim commits: its store write takes
+//! the storage gate and a connection of its own, which must not wait on the
+//! claim's write lock. A write that then fails defers with the approval
+//! spent, where the proxy raises; the retried call no longer finds the spent
+//! approval and queues through the decision's own route.
 //!
 //! Declared divergences from the proxy:
 //!
@@ -39,12 +48,13 @@
 //!   inside the relay's wait; a reply lost after the commit still leaves the
 //!   approval spent with the call answered "no native decision";
 //! - a policy-bundle row, whose identities the resident does not derive,
-//!   defers.
+//!   defers. The decision lookup never selects one, since the relay gives it
+//!   no bundle identities, so this only guards the claim itself.
 
 use super::store::{self, STORE_UNREADABLE};
 use super::{
-    admit, encode, resolve, settle, Answer, ClaimContext, Claimed, Resolved, Routed,
-    IDENTITY_FAILED,
+    admit, ask, encode, queue, resolve, settle, Answer, ClaimContext, Claimed, Resolved, Routed,
+    ASK_MODE, IDENTITY_FAILED,
 };
 use crate::approval_proof_op::{
     fresh_tool_approval, lookup_preserves_claim, postclaim_review_authorized, Disposition,
@@ -74,7 +84,6 @@ const CLAIM_DECLINED: &str = "mcp_relay_claim_declined";
 const CLAIM_STORE: &str = "mcp_relay_claim_store_failed";
 const CLAIM_LATE: &str = "mcp_relay_claim_late";
 const POSTCLAIM_FAILED: &str = "mcp_relay_postclaim_failed";
-const POSTCLAIM_REAPPROVAL: &str = "mcp_relay_postclaim_reapproval";
 
 /// Spend one held claim and answer the call.
 pub(crate) fn claim(
@@ -153,10 +162,34 @@ fn spend(
         },
     );
     match claimed {
-        Ok(Some(answer)) => Ok(answer),
+        Ok(Some(Spent::Answer(answer))) => Ok(answer),
+        Ok(Some(Spent::Ask(requeue))) => {
+            let Requeue {
+                fresh,
+                prepared,
+                append,
+            } = *requeue;
+            let routed = prepared.write(&context.request)?;
+            settle(&context.request, &fresh, routed, Some(append), policy_store)
+        }
         Ok(None) => Err(refused.unwrap_or(CLAIM_DECLINED)),
         Err(_) => Err(CLAIM_STORE),
     }
+}
+
+/// What a committed claim answers with.
+enum Spent {
+    /// An answer settled inside the claim's transaction.
+    Answer(Answer),
+    /// A re-approval request to write once the claim commits.
+    Ask(Box<Requeue>),
+}
+
+/// The fresh call and the re-approval request a committed claim writes.
+struct Requeue {
+    fresh: Resolved,
+    prepared: ask::Prepared,
+    append: Vec<Value>,
 }
 
 /// Whether a lane admission is the very one a decision was made under: the
@@ -189,7 +222,7 @@ fn after_claim(
     context: &ClaimContext,
     policy_store: &PolicySnapshotStore,
     started: Instant,
-) -> Result<Answer, &'static str> {
+) -> Result<Spent, &'static str> {
     // The fresh resolve only reads, as on the decision's read-only snapshot.
     connection
         .execute_batch("PRAGMA query_only = ON")
@@ -200,10 +233,41 @@ fn after_claim(
         .map_err(|_| STORE_UNREADABLE)?;
     let fresh = fresh?;
     let (routed, append) = postclaim(&context.claimed, &fresh)?;
+    let routed = match routed {
+        // `_queue_approval_center_response`, straight to the queue: the
+        // proxy raises no native prompt or inline elicitation here.
+        Routed::Queue { policy_action } => {
+            let mode = context
+                .admitted
+                .binding
+                .review
+                .blocked_request_mode
+                .as_deref();
+            if mode == Some(ASK_MODE) {
+                let prepared = ask::prepare(
+                    &context.request,
+                    &context.admitted,
+                    &fresh,
+                    policy_action,
+                    &append,
+                )?;
+                if started.elapsed() >= CLAIM_BUDGET {
+                    return Err(CLAIM_LATE);
+                }
+                return Ok(Spent::Ask(Box::new(Requeue {
+                    fresh,
+                    prepared,
+                    append,
+                })));
+            }
+            queue::safe_alternative(mode, fresh.redaction_level.as_deref(), policy_action)?
+        }
+        routed => routed,
+    };
     if started.elapsed() >= CLAIM_BUDGET {
         return Err(CLAIM_LATE);
     }
-    settle(&context.request, &fresh, routed, Some(append), policy_store)
+    settle(&context.request, &fresh, routed, Some(append), policy_store).map(Spent::Answer)
 }
 
 /// `tool_postclaim` for the fresh decision (2608-2690), as a route.
@@ -253,6 +317,8 @@ fn postclaim(claimed: &Claimed, fresh: &Resolved) -> Result<(Routed, Vec<Value>)
         Some("forward") => Routed::Forward {
             source: claimed.source.clone(),
             policy_action: claimed.policy_action.clone(),
+            // A claimed saved approval is already saved policy.
+            remember: false,
         },
         Some("stored_block") => Routed::StoredBlock,
         Some("terminal") => Routed::Terminal {
@@ -261,8 +327,12 @@ fn postclaim(claimed: &Claimed, fresh: &Resolved) -> Result<(Routed, Vec<Value>)
                 .ok_or(POSTCLAIM_FAILED)?
                 .to_owned(),
         },
-        // The proxy queues an approval request, which the resident cannot.
-        Some("queue_reapproval") => return Err(POSTCLAIM_REAPPROVAL),
+        Some("queue_reapproval") => Routed::Queue {
+            policy_action: disposition["policy_action"]
+                .as_str()
+                .ok_or(POSTCLAIM_FAILED)?
+                .to_owned(),
+        },
         _ => return Err(POSTCLAIM_FAILED),
     };
     Ok((routed, append))

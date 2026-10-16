@@ -29,7 +29,7 @@ def _network_secret_dump_command() -> str:
     return (
         "# Check the actual decoded values for the network-related keys\n"
         "kubectl --kubeconfig /Users/example/workspace/kubeconfig \\\n"
-        "  -n hol-points-portal-staging get secret hol-points-portal-env -o jsonpath='{.data}' 2>&1 | python3 -c \"\n"
+        "  -n cloud-portal-staging get secret cloud-portal-env -o jsonpath='{.data}' 2>&1 | python3 -c \"\n"
         "import json, sys, base64\n"
         "data = json.loads(sys.stdin.read())\n"
         "network_keys = ['HEDERA_NETWORK', 'HOL_HEDERA_NETWORK', 'NEXT_PUBLIC_NETWORK', 'LEDGER_DEMO_NETWORK']\n"

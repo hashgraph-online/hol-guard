@@ -423,6 +423,8 @@ fn codex_multi_file_cat_proves_every_operand() {
         "cat -n README.md pyproject.toml",
         "cat -- README.md pyproject.toml",
         "cat README.md pyproject.toml",
+        // The bounded print Codex uses to page the guide is the same read.
+        "sed -n '1,240p' ~/.hol-support/SAFETY.md",
     ] {
         assert_eq!(decide(command).minimum_action, "allow", "{command}");
     }
@@ -433,6 +435,8 @@ fn codex_multi_file_cat_proves_every_operand() {
         "cat README.md credentials.txt",
         "cat README.md /etc/passwd",
         "cat README.md -",
+        "sed -n '1,240p' ~/.ssh/id_rsa",
+        "sed -n '1,240p' ~/.hol-support/../.ssh/id_rsa",
         too_many.as_str(),
     ] {
         assert_ne!(decide(command).minimum_action, "allow", "{command}");

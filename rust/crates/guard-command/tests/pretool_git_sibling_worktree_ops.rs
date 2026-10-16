@@ -61,9 +61,11 @@ fn sibling_worktree_add_keeps_unproven_shapes_reviewed() {
     let primary = session.primary.display().to_string();
     let fresh = session.home.join("app-portal-ga4").display().to_string();
     let home_name = session.home.file_name().unwrap().to_str().unwrap();
-    let outside = session
-        .home
-        .parent()
+    // Outside home and outside every temporary root. On macOS the session
+    // home sits in `/tmp`, whose sticky shared root admits a fresh checkout
+    // beside home (`pretool_git_worktree_session`), so the build directory
+    // stands in for an ordinary directory outside home on every host.
+    let outside = std::fs::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"))
         .unwrap()
         .join(format!("{home_name}-outside"));
     std::fs::create_dir_all(session.home.join(".config")).unwrap();

@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def workflow(name: str) -> dict:
     """Load declarative workflow metadata without executing repository runtime code."""
-    return yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"))
+    return expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8")))
 
 
 @pytest.mark.skipif(os.name == "nt", reason="The required aggregate executes on Ubuntu with Bash")
@@ -60,10 +62,10 @@ def test_shipped_native_size_gate_uses_cargo_release_profile() -> None:
 
     size_job = document["jobs"]["native-release-size"]
     assert size_job["timeout-minutes"] >= 40
-    measure = next(
-        step for step in size_job["steps"] if step.get("name") == "Measure the shipped fat-LTO runtime size"
+    build = next(
+        step for step in size_job["steps"] if step.get("name") == "Build the shipped fat-LTO runtime"
     )
-    script = measure["run"]
+    script = build["run"]
     unset_at = script.index("unset CARGO_PROFILE_RELEASE_LTO")
     codegen_at = script.index("unset CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
     build_at = script.index(
@@ -71,17 +73,80 @@ def test_shipped_native_size_gate_uses_cargo_release_profile() -> None:
         "-p hol-guard-runtime --bin hol-guard-runtime"
     )
     assert "--bin guard-command-source" not in script
-    check_at = script.index(
+    measure = next(
+        step for step in size_job["steps"] if step.get("name") == "Measure the shipped fat-LTO runtime size"
+    )
+    assert (
         "python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release "
         "--platform manylinux_2_17_x86_64"
-    )
-    assert unset_at < codegen_at < build_at < check_at
-    assert "CARGO_PROFILE_RELEASE_LTO" not in measure.get("env", {})
+    ) in measure["run"]
+    assert unset_at < codegen_at < build_at
+    assert size_job["steps"].index(build) < size_job["steps"].index(measure)
+    assert "if" not in measure
+    assert "CARGO_PROFILE_RELEASE_LTO" not in build.get("env", {})
 
     required = document["jobs"]["required"]
     assert "native-release-size" in required["needs"]
     aggregate = "\n".join(step.get("run", "") for step in required["steps"])
     assert '"native-release-size"' in aggregate
+
+
+def test_shipped_runtime_cache_is_exact_and_only_main_can_write() -> None:
+    """Reuse only matching shipped builds, and always measure the restored binary."""
+    steps = workflow("ci.yml")["jobs"]["native-release-size"]["steps"]
+    restore = next(step for step in steps if step.get("id") == "shipped-runtime-cache")
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    stage = next(step for step in steps if step.get("name") == "Stage shipped runtime trust bindings")
+    platform = next(step for step in steps if step.get("id") == "shipping-platform")
+    save = next(step for step in steps if step.get("name") == "Save the verified shipped runtime")
+    measure = next(step for step in steps if step.get("name") == "Measure the shipped fat-LTO runtime size")
+    assert steps.index(stage) < steps.index(restore) < steps.index(setup)
+    assert steps.index(platform) < steps.index(restore)
+    assert "${ImageOS:?}-${ImageVersion:?}" in platform["run"]
+    assert "restore-keys" not in restore["with"]
+    for token in (
+        "runner.os", "runner.arch", "steps.shipping-platform.outputs.image",
+        "'rust/**'", "'contributions/**'", "'contracts/**'", "'spec/**'",
+        "'src/codex_plugin_scanner/guard/contracts/**'",
+        "'.github/actions/setup-rust/action.yml'", "'.github/actions/ci-job-native-release-size/action.yml'",
+        "'scripts/ci/native_cache_environment.py'", "'scripts/refresh_extension_artifacts.py'", "'.cargo/**'",
+        "steps.shipping-platform.outputs.compiler-env",
+    ):
+        assert token in restore["with"]["key"]
+    assert "'.github/workflows/ci.yml'" not in restore["with"]["key"]
+    assert "python3 -m scripts.ci.native_cache_environment" in platform["run"]
+    miss = "steps.shipped-runtime-cache.outputs.cache-hit != 'true'"
+    for name in ("Install content-addressed compiler cache", "Build the shipped fat-LTO runtime"):
+        assert next(step for step in steps if step.get("name") == name)["if"] == miss
+    assert setup["if"] == miss
+    assert "if" not in measure
+    assert "continue-on-error" not in measure
+    assert save["if"] == f"{miss} && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert save["with"]["key"] == "${{ steps.shipped-runtime-cache.outputs.cache-primary-key }}"
+    assert save["with"]["path"] == restore["with"]["path"] == "rust/target/release/hol-guard-runtime"
+    assert steps.index(measure) < steps.index(save)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="The shipped size gate executes on Ubuntu with Bash")
+@pytest.mark.parametrize("extra_bytes", [0, 1, None])
+def test_restored_runtime_still_fails_the_size_gate(tmp_path: Path, extra_bytes: int | None) -> None:
+    """A cache hit cannot hide an oversized or missing artifact."""
+    platform = "manylinux_2_17_x86_64"
+    budgets = json.loads((ROOT / "ci/package_size/budgets.json").read_text(encoding="utf-8"))
+    if extra_bytes is not None:
+        with (tmp_path / "hol-guard-runtime").open("wb") as binary:
+            binary.truncate(budgets[platform]["runtime"] + extra_bytes)
+    steps = workflow("ci.yml")["jobs"]["native-release-size"]["steps"]
+    measure = next(step for step in steps if step.get("name") == "Measure the shipped fat-LTO runtime size")
+    # Execute the real workflow command with only its artifact directory redirected.
+    script = measure["run"].replace("rust/target/release", str(tmp_path))
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", script],
+        cwd=ROOT, capture_output=True, text=True, check=False, timeout=5,
+    )
+    assert (result.returncode == 0) is (extra_bytes == 0)
+    if extra_bytes == 1:
+        assert "exceeds budget" in result.stdout
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux workspace profile uses Bash")
@@ -112,19 +177,26 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux workspace validation uses Bash")
+@pytest.mark.parametrize("archive_hit", [False, True])
 @pytest.mark.parametrize(
-    ("check", "packages"),
+    ("check", "packages", "partition"),
     [
-        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"]),
-        ("test-command", ["--package", "guard-command"]),
-        ("test-runtime", ["--package", "hol-guard-runtime"]),
+        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"], []),
+        ("test-command", ["--package", "guard-command"], []),
+        ("test-runtime-1", ["--package", "hol-guard-runtime"], ["--partition", "hash:1/2"]),
+        ("test-runtime-2", ["--package", "hol-guard-runtime"], ["--partition", "hash:2/2"]),
     ],
 )
-def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, packages: list[str]) -> None:
+def test_rust_shards_preserve_full_target_selection(
+    tmp_path: Path, check: str, packages: list[str], partition: list[str], archive_hit: bool
+) -> None:
     """Execute each shard's shell branch and inspect the exact Cargo arguments."""
     job = workflow("ci.yml")["jobs"]["native-workspace"]
-    assert job["strategy"]["matrix"]["check"] == ["clippy", "test-core", "test-command", "test-runtime"]
+    assert job["strategy"]["matrix"]["check"] == [
+        "clippy", "test-core", "test-command", "test-runtime-1", "test-runtime-2",
+    ]
     assert job["strategy"]["fail-fast"] is False
+    assert "continue-on-error" not in job
     validate = next(step["run"] for step in job["steps"] if step.get("name") == "Validate the locked Rust workspace")
     assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in validate
     assert "-- -D warnings" in validate
@@ -150,14 +222,22 @@ def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, 
             **os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
             "CARGO_CHECK": check, "FAKE_BIN": str(bindir), "CAPTURE": str(capture),
             "CARGO_PROFILE_TEST_OPT_LEVEL": "1",
+            "RUNTIME_ARCHIVE_HIT": str(archive_hit).lower(),
+            "RUNNER_TEMP": str(tmp_path), "GITHUB_WORKSPACE": str(ROOT),
         },
         check=True, capture_output=True, timeout=5,
     )
     invocation = json.loads(capture.read_text())
     assert invocation["opt"] == "1"
+    if archive_hit and check.startswith("test-runtime-"):
+        build_args = [
+            "--archive-file", str(tmp_path / "runtime-test-archive.tar.zst"),
+            "--workspace-remap", str(ROOT / "rust"),
+        ]
+    else:
+        build_args = ["--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets", *packages]
     assert invocation["args"] == [
-        "nextest", "run", "--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets",
-        *packages, "--profile", "ci",
+        "nextest", "run", *build_args, "--profile", "ci", *partition,
         "--test-threads", "4", "--retries", "0", "--no-fail-fast",
     ]
 

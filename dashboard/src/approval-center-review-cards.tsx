@@ -217,7 +217,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
                     onChange={props.onUseCooldownChange}
                     className="h-4 w-4 accent-brand-blue"
                   />
-                  Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
+                  Skip the password for the next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (uncheck to be asked every time)
                 </label>
               )}
             </>

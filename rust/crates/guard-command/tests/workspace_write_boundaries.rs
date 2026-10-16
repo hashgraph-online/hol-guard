@@ -17,7 +17,7 @@ impl TestRoot {
         loop {
             let root = base.join(format!("run-{}-{nonce}-{attempt}", std::process::id()));
             match std::fs::create_dir(&root) {
-                Ok(()) => return Self(root.canonicalize().unwrap()),
+                Ok(()) => return Self(crate::git_helper_fixture::canonical_spelling(root)),
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
                 Err(error) => panic!("failed to create test root: {error}"),
             }
@@ -226,7 +226,7 @@ fn routine_workspace_writes_keep_sensitive_and_destructive_boundaries() {
     std::fs::create_dir_all(workspace.join("Library/LaunchAgents")).unwrap();
     std::fs::write(workspace.join("src/example.py"), "fixture").unwrap();
     std::fs::write(root.join("outside.py"), "fixture").unwrap();
-    let workspace = std::fs::canonicalize(workspace).unwrap();
+    let workspace = crate::git_helper_fixture::canonical_spelling(workspace);
     for (tool, path, allowed) in [
         ("edit", "src/example.py".to_owned(), true),
         ("write", "src/new.py".to_owned(), true),

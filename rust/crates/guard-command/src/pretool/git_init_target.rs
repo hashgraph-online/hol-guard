@@ -9,6 +9,7 @@
 //! conditional include that could set one for the new repository, a target
 //! that already exists and every other `init` option keep their review.
 
+use super::git_remote_config::GitConfig;
 use crate::CanonicalCommandV1;
 use std::path::{Component, Path};
 use std::time::Instant;
@@ -59,11 +60,27 @@ pub(in crate::pretool) fn exact_safe_command(
     let [segment] = model.segments.as_slice() else {
         return None;
     };
+    if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
+        return None;
+    }
+    fresh(segment, context, deadline, execution_environment)?;
+    Some((
+        REASON,
+        "The Rust command authority proved this Git command creates a new repository in a fresh directory under the user's own temporary directory, with no configured template.",
+    ))
+}
+
+/// The effective and repository configuration the session's Git reads for
+/// one `git init` step of the form above, or `None` when the step is not
+/// that form or a template directory could apply.
+pub(in crate::pretool) fn fresh(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<(GitConfig, GitConfig)> {
     let executable = segment.executable.as_deref()?;
-    if model.confidence != "exact"
-        || model.path_overridden
-        || !model.wrapper_chain.is_empty()
-        || super::executable_basename(executable) != "git"
+    if super::executable_basename(executable) != "git"
         || segment.pipeline_index != 0
         || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
@@ -103,13 +120,10 @@ pub(in crate::pretool) fn exact_safe_command(
         deadline,
         execution_environment,
     )?;
-    let (effective, _) = probe.config()?;
+    let (effective, repository) = probe.config()?;
     let templated = effective.keys().any(|key| {
         let key = key.to_ascii_lowercase();
         key == "init.templatedir" || key.starts_with("includeif.")
     });
-    (!templated).then_some((
-        REASON,
-        "The Rust command authority proved this Git command creates a new repository in a fresh directory under the user's own temporary directory, with no configured template.",
-    ))
+    (!templated).then_some((effective, repository))
 }

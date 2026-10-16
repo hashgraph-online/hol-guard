@@ -7,11 +7,15 @@ from typing import ClassVar
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-
-import summarize_warm_path_latency as summary_module
-import warm_path_probes as probes
-import warm_path_services as services
+_SCRIPTS = str(Path(__file__).resolve().parents[1] / "scripts")
+sys.path.insert(0, _SCRIPTS)
+try:
+    import summarize_warm_path_latency as summary_module
+    import warm_path_probes as probes
+    import warm_path_services as services
+finally:
+    # Other modules on this worker assert the scripts directory stays off the import path.
+    sys.path[:] = [entry for entry in sys.path if entry != _SCRIPTS]
 
 
 @pytest.mark.parametrize(

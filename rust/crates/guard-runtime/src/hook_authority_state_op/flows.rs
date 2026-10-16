@@ -171,7 +171,71 @@ impl Env<'_> {
         self.store_index(&CLAUDE_FAMILY, session_id, &remaining);
     }
 
+    /// `_discard_claude_pending_permissions`: drops every indexed pending
+    /// permission and the index itself; the count is zero when the delete fails.
+    pub(super) fn claude_discard_session(&self, session_id: &str) -> usize {
+        let mut keys = self.load_index(&CLAUDE_FAMILY, session_id);
+        if keys.is_empty() {
+            return 0;
+        }
+        let discarded = keys.len();
+        keys.push(format!("{}{session_id}", CLAUDE_FAMILY.index_prefix));
+        if self.delete_all(&keys) {
+            discarded
+        } else {
+            0
+        }
+    }
+
     // ---- Cursor ------------------------------------------------------------
+
+    /// `_load_cursor_pending_shell_permission`: the direct lookup, then every
+    /// indexed key against the same expected key. An indexed key that is not
+    /// the expected one fails the context check and is invalidated, as before.
+    pub(super) fn cursor_find_pending(
+        &self,
+        conversation_id: &str,
+        command: &str,
+        expected_key: &str,
+    ) -> Option<Object> {
+        if let Some(pending) =
+            self.cursor_load_pending_state(conversation_id, command, expected_key, expected_key)
+        {
+            return Some(pending);
+        }
+        self.load_index(&CURSOR_FAMILY, conversation_id)
+            .iter()
+            .find_map(|indexed_key| {
+                self.cursor_load_pending_state(conversation_id, command, indexed_key, expected_key)
+            })
+    }
+
+    /// Deletes the pending state and rewrites the index without it. A failed
+    /// write is a store error, so the caller rolls the whole removal back.
+    pub(super) fn cursor_remove_pending(
+        &self,
+        conversation_id: &str,
+        pending_key: &str,
+    ) -> Result<(), &'static str> {
+        if !self.delete(pending_key) {
+            return Err(ERROR_STORE);
+        }
+        let remaining: Vec<String> = self
+            .load_index(&CURSOR_FAMILY, conversation_id)
+            .into_iter()
+            .filter(|key| key != pending_key)
+            .collect();
+        let stored = if remaining.is_empty() {
+            self.delete(&format!("{}{conversation_id}", CURSOR_FAMILY.index_prefix))
+        } else {
+            self.store_index(&CURSOR_FAMILY, conversation_id, &remaining)
+        };
+        if stored {
+            Ok(())
+        } else {
+            Err(ERROR_STORE)
+        }
+    }
 
     pub(super) fn cursor_load_pending_state(
         &self,

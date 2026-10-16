@@ -133,9 +133,20 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             harness: context.harness,
             artifact_id: &artifact_id,
         };
-        // A custom grant answers before any saved decision or approval.
-        if !store.base()? {
+        if !store.supported()? {
             return Err(HookDirectDefer::SavedDecision);
+        }
+        // A custom grant answers before any saved decision or approval, but
+        // the daemon reads one only for a command that launches a local CLI.
+        if store.grants()?
+            && super::local_cli::launches_local_cli(
+                context.payload,
+                context.workspace,
+                context.home_dir,
+            )
+            .unwrap_or(true)
+        {
+            return Err(HookDirectDefer::LocalCliRules);
         }
         match &token {
             Ok(token) if store.decided(Some(token))? => {
@@ -189,7 +200,7 @@ fn saved_response(
     let Some(has_local_policy) = store.readable(&integrity_state)? else {
         return Err(HookDirectDefer::SavedDecision);
     };
-    let identity = portable::identity(store, context.workspace)?;
+    let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
     let request = PolicyDecisionLookupRequestV1 {
@@ -226,10 +237,17 @@ fn saved_response(
         crate::policy_decision_lookup_op::evaluate_non_consuming(&request, store.connection)
             .map_err(|_| HookDirectDefer::SavedDecision)
     };
-    let local = lookup(context.workspace)?;
-    let lookup = match identity {
-        None => local,
-        Some(identity) => portable::compose(local, lookup(&identity)?)?,
+    // A workspace that already names its identity reads that lookup alone, so
+    // the local lookup is never run for it: it would answer nothing, and a row
+    // it matched with invalid integrity would defer the hook over an audit
+    // write this read-only connection cannot take.
+    let lookup = match composition {
+        portable::Composition::Local => lookup(context.workspace)?,
+        portable::Composition::Named(identity) => portable::restrictive_only(lookup(&identity)?),
+        portable::Composition::Both(identity) => {
+            let local = lookup(context.workspace)?;
+            portable::compose(local, lookup(&identity)?)?
+        }
     };
     match saved_verdict(result, &lookup, store.artifact_id, token) {
         Some((verdict, status)) => render(context.harness, &verdict, status)
@@ -341,21 +359,26 @@ struct StoreShape<'a> {
 
 impl StoreShape<'_> {
     /// Whether the daemon reads this store's decisions as the resident does:
-    /// a schema it supports and no custom grants.
-    fn base(&self) -> Result<bool, HookDirectDefer> {
+    /// a schema it supports.
+    fn supported(&self) -> Result<bool, HookDirectDefer> {
         let unavailable = |_| HookDirectDefer::SavedDecision;
-        match schema_version(self.connection).map_err(unavailable)? {
-            Some(version) if version <= SUPPORTED_SCHEMA_VERSION => {}
-            _ => return Ok(false),
-        }
+        Ok(matches!(
+            schema_version(self.connection).map_err(unavailable)?,
+            Some(version) if version <= SUPPORTED_SCHEMA_VERSION
+        ))
+    }
+
+    /// Whether the store holds any custom grant or block rule.
+    fn grants(&self) -> Result<bool, HookDirectDefer> {
+        let unavailable = |_| HookDirectDefer::SavedDecision;
         for table in ["local_cli_grant", "local_cli_command_grant"] {
             if table_exists(self.connection, table).map_err(unavailable)?
                 && self.any(&format!("select 1 from {table} limit 1"), &[])?
             {
-                return Ok(false);
+                return Ok(true);
             }
         }
-        Ok(true)
+        Ok(false)
     }
 
     /// The daemon's decision probe for `token`, or for any token when the
@@ -381,7 +404,7 @@ impl StoreShape<'_> {
     /// identities come from a synced payload the resident does not validate,
     /// and the published state still stored. `None` otherwise.
     /// Portable decisions are read through the workspace's identity
-    /// (`portable::identity`).
+    /// (`portable::composition`).
     fn readable(&self, integrity_state: &Value) -> Result<Option<bool>, HookDirectDefer> {
         if self.any(
             "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
@@ -424,7 +447,7 @@ impl StoreShape<'_> {
 mod query;
 
 #[path = "hook_direct_saved_consume.rs"]
-mod consume;
+pub(crate) mod consume;
 
 #[path = "hook_direct_saved_portable.rs"]
 mod portable;
