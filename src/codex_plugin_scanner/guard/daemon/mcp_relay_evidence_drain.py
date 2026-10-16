@@ -289,9 +289,7 @@ def _open_approval_center(store: Any, guard_home: Path, harness: str, queued: _Q
     from ..approvals import approval_prompt_flow, build_approval_browser_url
     from ..browser_opener import open_browser_url
     from ..config import load_guard_config
-    from ..proxy.runtime_mcp import (  # pyright: ignore[reportPrivateUsage]
-        _approval_surface_policy_for_browser,
-    )
+    from ..proxy.stdio import _approval_surface_policy_for_browser  # pyright: ignore[reportPrivateUsage]
     from ..runtime.surface_server import GuardSurfaceRuntime
     from .manager import load_guard_daemon_auth_token
 

@@ -149,13 +149,11 @@ fn a_profile_that_did_not_load_refuses_the_network() {
 }
 
 #[test]
-fn a_machine_whose_authority_this_runtime_cannot_read_still_exchanges() {
+fn a_machine_whose_authority_this_runtime_cannot_read_exchanges_nothing() {
     // Every Windows machine reports an unreadable authority, because the
-    // registry is the authority and this runtime does not read it yet. Refusing
-    // here would refuse every Windows evaluation, managed or not, where the
-    // Python path reads the registry and exchanges under what it finds. On a
-    // managed Windows machine this is a gap the native registry read closes,
-    // not a rule: see `caller_network_policy`.
+    // registry is the authority and this runtime does not read it yet. An
+    // administrator's proxy, CA, or public-registry rule lives there, so the
+    // unmanaged default would exchange outside all of them.
     let registry = ManagedPolicySource {
         system: MachineSystem::Windows,
         policy_path: None,
@@ -163,9 +161,11 @@ fn a_machine_whose_authority_this_runtime_cannot_read_still_exchanges() {
         machine_root: None,
     };
 
-    let policy = caller_network_policy(&registry).expect("an unread authority is not a refusal");
-
-    assert_eq!(policy, ManagedNetworkPolicy::unmanaged_default());
+    assert_eq!(
+        caller_network_policy(&registry).err(),
+        Some(CallerEgressFulfilment::policy_unhonoured()),
+        "an authority this runtime cannot read is not the unmanaged network"
+    );
 }
 
 #[test]

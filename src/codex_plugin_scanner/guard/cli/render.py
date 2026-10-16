@@ -1536,6 +1536,10 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_safe_decode_results(console, safe_decode_risks)
     if sandbox_analysis:
         _render_sandbox_results(console, sandbox_analysis)
+    if payload.get("native_resident_retired") is False:
+        console.print(
+            "[yellow]Could not stop the Guard native runtime. It may keep running until it goes idle.[/yellow]"
+        )
 
 
 def _render_apps(console: Console, payload: dict[str, object]) -> None:

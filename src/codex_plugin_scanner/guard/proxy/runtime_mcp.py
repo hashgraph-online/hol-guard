@@ -86,6 +86,7 @@ from .native_mcp_child_io import _ChildOutputFrame, _NativeChildProcess, _Native
 from .runtime_mcp_projection import McpCallProjector, review_artifact_payload
 from .stdio import (
     ProxyIoTimeoutError,
+    _approval_surface_policy_for_browser,
     _blocked_tool_response,
     _is_timeout_response,
     _quarantine_process,
@@ -120,17 +121,6 @@ def _bound_external_archive_mcp_request(
     if not downloads:
         return message, params
     return {**message, "params": bound_params}, bound_params
-
-
-def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
-    if approval_flow.get("tier") != "approval-center":
-        return "notify-only"
-    if approval_flow.get("auto_open_browser") is False:
-        return "never-auto-open"
-    policy = str(configured_policy or "auto-open-once")
-    if policy == "native-only":
-        return "never-auto-open"
-    return policy
 
 
 def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: str) -> ToolCallDecision:

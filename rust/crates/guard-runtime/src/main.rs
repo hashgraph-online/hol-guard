@@ -459,6 +459,7 @@ mod mcp_relay_host;
 mod mcp_relay_lane;
 mod mcp_relay_launch;
 mod mcp_relay_order;
+mod mcp_relay_package_eval;
 mod mcp_relay_pending;
 mod mcp_relay_ready;
 mod mcp_relay_resident;
