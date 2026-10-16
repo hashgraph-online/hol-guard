@@ -55,6 +55,31 @@ pub(crate) fn resolve(workspace: &str) -> PortableIdentity {
     }
 }
 
+/// `is_portable_project_identity(value)` (`project_identity.py`): the
+/// prefix followed by exactly the 64 lowercase hex digits of a digest.
+pub(crate) fn is_portable_project_identity(value: &str) -> bool {
+    value
+        .strip_prefix(PORTABLE_PROJECT_IDENTITY_PREFIX)
+        .is_some_and(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
+/// `_portable_project_workspace(workspace)`
+/// (`store_portable_project_memory.py`): the workspace itself when it
+/// already names a portable identity, and the identity its Git metadata
+/// derives otherwise.
+pub(crate) fn portable_workspace(workspace: &str) -> PortableIdentity {
+    let stripped = python_strip(workspace);
+    if is_portable_project_identity(stripped) {
+        return PortableIdentity::Identity(stripped.to_owned());
+    }
+    resolve(stripped)
+}
+
 /// The errors `pathlib._ignore_error` reads as a false predicate; Python
 /// 3.12 raises every other one (3.14 swallows them all).
 fn ignorable(error: &io::Error) -> bool {

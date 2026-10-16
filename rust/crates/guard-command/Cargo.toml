@@ -13,6 +13,7 @@ autotests = false
 base64.workspace = true
 caseless.workspace = true
 mailparse.workspace = true
+guard-scanner = { path = "../guard-scanner" }
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }

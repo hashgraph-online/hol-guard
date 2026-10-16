@@ -2,14 +2,16 @@
 //!
 //! Claude's `Grep` searches hidden files, honors ignore files, and skips
 //! `.git`. A directory search is allowed only after a bounded metadata walk
-//! shows that no sensitive file is reachable. File contents are never read;
-//! only ignore files are parsed. Any ambiguity falls back to normal review.
+//! shows that no sensitive file is reachable. Contents are read only for a
+//! tracked, sensitive-named file (see `search_scope_tracked`); otherwise only
+//! ignore files are parsed. Any ambiguity falls back to normal review.
 
 use super::search_scope_filter::{Override, SearchFilter};
 use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
+use super::search_scope_tracked::TrackedFiles;
 use serde_json::{Map, Value};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -40,6 +42,8 @@ enum Ignores {
 }
 const MAX_SCOPE_DEPTH: usize = 64;
 const MAX_ANCESTORS: usize = 64;
+/// Nested repositories (such as linked worktrees) one walk may enter.
+const MAX_NESTED_REPOSITORIES: usize = 8;
 
 /// Keys Claude Code documents for `Grep`. Unknown keys could change scope.
 const CLAUDE_GREP_KEYS: &[&str] = &[
@@ -462,7 +466,9 @@ fn walk_scope_with(
         tiers: Rc::new(tiers),
     }];
     let mut inspected = 0_usize;
-    let entry_limit = if names {
+    let mut tracked = TrackedFiles::default();
+    let mut nested_repositories = 0_usize;
+    let mut entry_limit = if names {
         MAX_NAME_SCOPE_ENTRIES
     } else {
         MAX_SCOPE_ENTRIES
@@ -479,6 +485,17 @@ fn walk_scope_with(
             if directory.depth > 0 && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
             {
                 tiers.git.clear();
+                // The host walks a nested checkout too, so it stays in the
+                // proof; each one brings its own entry budget, a few at most.
+                nested_repositories += 1;
+                if nested_repositories > MAX_NESTED_REPOSITORIES {
+                    return Err(ScopeUnproven);
+                }
+                entry_limit += if names {
+                    MAX_NAME_SCOPE_ENTRIES
+                } else {
+                    MAX_SCOPE_ENTRIES
+                };
             }
             load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
@@ -529,6 +546,10 @@ fn walk_scope_with(
             }
             let is_directory = metadata.is_dir();
             if !is_directory && !metadata.is_file() {
+                // A socket or pipe has no names to list and no text to search.
+                if names {
+                    continue;
+                }
                 return Err(ScopeUnproven);
             }
             let searched = match filter.override_for(name, is_directory) {
@@ -548,7 +569,11 @@ fn walk_scope_with(
                     depth: directory.depth + 1,
                     tiers: Rc::clone(&tiers),
                 });
-            } else if searched && !names && sensitive_scope_file(&path) {
+            } else if searched
+                && !names
+                && sensitive_scope_file(&path)
+                && !tracked.non_secret(&path)
+            {
                 *blocker = Some(path);
                 return Err(ScopeUnproven);
             }

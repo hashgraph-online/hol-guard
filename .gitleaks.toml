@@ -13,9 +13,10 @@ id = "aws-access-token"
 description = "Audited synthetic scanner or cryptographic interoperability test vector"
 condition = "AND"
 regexTarget = "line"
-paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''']
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''', '''(?:^|/)rust/crates/guard\-command/tests/pretool_omp_tracked_search\.rs$''']
 regexes = [
   '''^[\t\r\n ]*std::fs::write\(dir\.join\("\.env"\), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\.unwrap\(\);[\t\r\n ]*$''',
+  '''^[\t\r\n ]*&\[\("\.env", "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\],[\t\r\n ]*$''',
 ]
 
 [[rules]]

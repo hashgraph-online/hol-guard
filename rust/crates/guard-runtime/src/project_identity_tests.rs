@@ -204,3 +204,30 @@ fn reflog_lines_split_like_splitlines() {
         "a line whose first field is not all zeros records no clone"
     );
 }
+
+#[test]
+fn a_workspace_already_naming_an_identity_is_its_own() {
+    // `is_portable_project_identity`: the prefix and exactly 64 lowercase
+    // hex digits, which `_portable_project_workspace` answers with itself.
+    let identity = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{}", "a".repeat(64));
+    assert!(is_portable_project_identity(&identity));
+    assert_eq!(
+        portable_workspace(&format!("  {identity}\n")),
+        PortableIdentity::Identity(identity.clone())
+    );
+    // One hex digit short, one too many, an uppercase digit and a digit
+    // outside the alphabet are each an ordinary workspace path instead.
+    for digest in [
+        "a".repeat(63),
+        "a".repeat(65),
+        format!("{}A", "a".repeat(63)),
+        format!("{}g", "a".repeat(63)),
+    ] {
+        let value = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{digest}");
+        assert!(!is_portable_project_identity(&value), "{value}");
+        // A relative path is a workspace this resolver does not reproduce.
+        assert_eq!(portable_workspace(&value), PortableIdentity::Unknown);
+    }
+    assert!(!is_portable_project_identity(&"a".repeat(64)));
+    assert_eq!(portable_workspace("   "), PortableIdentity::Absent);
+}
