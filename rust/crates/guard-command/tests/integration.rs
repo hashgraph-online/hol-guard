@@ -142,6 +142,7 @@ pub mod pretool_pi_tools;
 pub mod pretool_private_temp_cd;
 pub mod pretool_private_temporary_workspace;
 pub mod pretool_process_probe_chains;
+pub mod pretool_process_stops;
 pub mod pretool_prompt_negation_scope;
 pub mod pretool_prompt_secret_requests;
 pub mod pretool_pytest_contained_route;

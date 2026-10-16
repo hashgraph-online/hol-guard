@@ -541,8 +541,8 @@ fn interpreter_launch_reads_a_file(shell: &str) -> bool {
 }
 
 fn command_reads_a_program_file(piece: &str) -> bool {
-    let words: Vec<&str> = piece
-        .split_whitespace()
+    let words: Vec<&str> = without_redirections(piece)
+        .into_iter()
         .map(|word| word.trim_matches(['\'', '"']))
         .filter(|word| !word.is_empty() && !is_assignment(word))
         .skip_while(|word| SHELL_PREFIXES.contains(word))
@@ -555,6 +555,25 @@ fn command_reads_a_program_file(piece: &str) -> bool {
         return INTERPRETERS.contains(&program.as_str());
     }
     !python_module_launch(&words[1..])
+}
+
+/// The words of `piece` with every redirection and its target dropped, so a
+/// leading `</dev/null` cannot hide the program it feeds.
+fn without_redirections(piece: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut target_follows = false;
+    for word in piece.split_whitespace() {
+        if std::mem::take(&mut target_follows) {
+            continue;
+        }
+        let operator = word.trim_start_matches(|character: char| character.is_ascii_digit());
+        if operator.starts_with(['<', '>']) {
+            target_follows = operator.trim_start_matches(['<', '>', '&', '|']).is_empty();
+            continue;
+        }
+        words.push(word);
+    }
+    words
 }
 
 fn command_basename(word: &str) -> String {
