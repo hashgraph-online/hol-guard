@@ -942,6 +942,7 @@ dependencies = [
  "pbkdf2",
  "regex",
  "ring",
+ "roxmltree 0.21.1",
  "rsa",
  "rusqlite",
  "saphyr-parser",
