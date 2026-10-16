@@ -325,6 +325,7 @@ pub mod shell_secret_reads;
 mod shell_structure;
 pub mod source_cli;
 pub mod typescript_launch_evidence;
+mod unmodeled_shell_artifact;
 
 pub mod package_context_environment;
 
@@ -699,6 +700,7 @@ pub mod detectors;
 pub mod direct_vitest;
 mod egress_archive;
 pub mod egress_broker;
+pub mod egress_caller;
 mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;

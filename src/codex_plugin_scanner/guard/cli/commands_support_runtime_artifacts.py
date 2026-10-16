@@ -12,24 +12,16 @@ from ..native_path_anchor import anchor_to_process_directory
 from ..native_rich_command_model import NativeCommandModelError
 from ..native_sensitive_request import (
     NativeSensitiveRequestError,
-    native_benign_github_shell,
     native_compound_artifact,
+    native_unmodeled_shell_artifact,
 )
 from ..runtime.command_decision_adapter import effect_decision_to_dict
-from ..runtime.command_model import parse_shell_command
-from ..runtime.direct_vitest import (
-    direct_local_typescript_execution_context,
-    direct_local_vitest_execution_context,
-)
+from ..runtime.direct_vitest import direct_local_typescript_execution_context
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.jsonc import loads_jsonc
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
-from ..runtime.shell_execution_context import (
-    model_shell_execution_context,
-    shell_execution_context_metadata,
-)
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import _codex_post_tool_command_texts
@@ -276,63 +268,10 @@ def _unmodeled_shell_runtime_artifact(
     workspace: Path | None,
     home_dir: Path,
 ) -> GuardArtifact | None:
-    canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home_dir)
-    execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
-    if canonical_command.confidence == "exact" and execution_context.complete:
+    review = native_unmodeled_shell_artifact(command_text, workspace=workspace, home_dir=home_dir)
+    if review is None:
         return None
-    if native_benign_github_shell(command_text):
-        return None
-    if canonical_command.confidence == "exact" and not execution_context.complete:
-        home_execution_context = (
-            direct_local_vitest_execution_context(
-                command_text,
-                cwd=workspace,
-                home_dir=home_dir,
-            )
-            or direct_local_typescript_execution_context(
-                command_text,
-                cwd=workspace,
-                home_dir=home_dir,
-            )
-            or literal_cd_execution_context(
-                command_text,
-                home_dir=home_dir,
-            )
-            or low_risk_compound_developer_execution_context(
-                command_text,
-                home_dir=home_dir,
-            )
-        )
-        if home_execution_context is not None:
-            return None
-        home_execution_context = model_shell_execution_context(
-            command_text, cwd=home_dir, workspace_root=home_dir, home_dir=home_dir
-        )
-        github_assessment = classify_github_shell_capabilities(command_text, home_dir=home_dir)
-        if (
-            github_assessment is not None
-            and not github_capability_requires_confirmation(github_assessment)
-            and shell_execution_context_starts_with_literal_cd(home_execution_context)
-        ):
-            return None
-    context_metadata = shell_execution_context_metadata(execution_context)
-    reason_code = canonical_command.uncertainty_reason
-    if reason_code is None:
-        reason_code = _optional_string(context_metadata.get("shell_execution_context_reason_code"))
-    if reason_code is None:
-        raw_reason_codes = context_metadata.get("shell_execution_context_reason_codes")
-        if isinstance(raw_reason_codes, list):
-            reason_code = next((value for value in raw_reason_codes if isinstance(value, str) and value), None)
-    reason_code = reason_code or "compound_command_incomplete"
-    identity_payload = {
-        "version": 1,
-        "command_security_identity": canonical_command.security_identity,
-        "shell_execution_context_hash": execution_context.context_hash,
-        "reason_code": reason_code,
-    }
-    fingerprint = hashlib.sha256(
-        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    fingerprint, metadata = review
     return GuardArtifact(
         artifact_id=f"{harness}:{source_scope}:unmodeled-shell:{fingerprint}",
         name="unmodeled compound shell command",
@@ -340,22 +279,7 @@ def _unmodeled_shell_runtime_artifact(
         artifact_type="tool_action_request",
         source_scope=source_scope,
         config_path=config_path,
-        metadata={
-            "action_class": "unmodeled shell command",
-            "guard_default_action": "require-reapproval",
-            "risk_classes": ["execution"],
-            "request_summary": "Requested a shell command that Guard could not model completely.",
-            "runtime_request_signals": [f"cannot completely model the shell command: {reason_code}"],
-            "runtime_request_summary": "Guard requires one review because part of this shell command is unresolved.",
-            "runtime_request_reason": (
-                "Guard could not prove the complete compound command structure, so it kept the whole command in "
-                "one fail-closed review."
-            ),
-            "command_security_identity": canonical_command.security_identity,
-            "command_parse_confidence": canonical_command.confidence,
-            "command_uncertainty_reason": reason_code,
-            **context_metadata,
-        },
+        metadata=metadata,
     )
 
 

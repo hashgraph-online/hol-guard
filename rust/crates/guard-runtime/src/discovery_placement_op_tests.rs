@@ -1,5 +1,5 @@
 //! Shared semantic vectors for the native discovery validator. These mirror
-//! the TypeScript vectors in hol-points-portal `__tests__/guard-extension-discovery.test.ts`
+//! the TypeScript vectors in cloud-portal `__tests__/guard-extension-discovery.test.ts`
 //! (T06) so cross-language agreement is a reviewed contract.
 
 use super::*;

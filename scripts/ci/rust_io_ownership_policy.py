@@ -129,7 +129,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Gathers ambient facts for and decodes the resident package-shim admin envelope; results stay Rust.
         "src/codex_plugin_scanner/guard/native_shim_admin.py",
@@ -224,7 +223,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Gathers ambient facts for and decodes the resident package-shim admin envelope; results stay Rust.
@@ -389,7 +387,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
         "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py",
         "src/codex_plugin_scanner/guard/runtime/git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/runtime/git_index_inspection.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",

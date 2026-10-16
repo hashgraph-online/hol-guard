@@ -16,6 +16,9 @@ _FAILURES = (
     "native_policy_snapshot_protocol_unsupported",
     "native_policy_snapshot_integrity_key_unavailable",
     "native_policy_snapshot_ack_mismatch",
+    # A runtime and a command catalog from different builds reject every
+    # snapshot, so the wait must not spend the publish timeout on each call.
+    "native_command_program_binding_mismatch",
 )
 
 

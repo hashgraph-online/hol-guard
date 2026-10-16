@@ -15,6 +15,7 @@ from dataclasses import fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from . import native_git_execution_safety
 from .native_direct_tool_context import _facts
 from .native_git_execution_safety import _environment_snapshot
 from .native_request_context import NativeRequestContextFailure, _call
@@ -323,13 +324,31 @@ def native_benign_file_read(tool_name: object, arguments: object, *, cwd: Path |
     return _bool(_ask("benign_file_read", {"tool_name": tool_name, "arguments": arguments}, cwd=cwd, home_dir=home_dir))
 
 
-def native_benign_github_shell(command_text: str) -> bool:
-    """A read-only Actions workflow or a static ephemeral PR body (resident-owned)."""
+def native_unmodeled_shell_artifact(
+    command_text: str, *, workspace: Path | None, home_dir: Path
+) -> tuple[str, dict[str, object]] | None:
+    """The fingerprint and metadata of the one review an incompletely modeled shell command needs."""
 
-    # Both shapes run a `gh` command, so text without one never needs the resident.
-    if "gh" not in command_text:
-        return False
-    return _bool(_ask("benign_github_shell", {"command_text": command_text}, cwd=None, home_dir=None))
+    result = _ask(
+        "unmodeled_shell_artifact",
+        {
+            "command_text": command_text,
+            "workspace": _path_text(workspace),
+            "home": str(home_dir),
+            "account_home": native_git_execution_safety._account_home_directory(),
+        },
+        cwd=None,
+        home_dir=None,
+    )
+    if result is None:
+        return None
+    wire = _object(result, frozenset({"fingerprint", "metadata"}))
+    pairs = wire["metadata"]
+    if not isinstance(pairs, list) or not all(
+        isinstance(pair, list) and len(pair) == 2 and isinstance(pair[0], str) for pair in pairs
+    ):
+        raise _invalid()
+    return _text(wire["fingerprint"]), dict(pairs)
 
 
 # The finding fields the resident reads when it binds findings to one command.

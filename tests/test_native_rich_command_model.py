@@ -303,7 +303,6 @@ def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
             raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
         raise client.NativeCommandModelError("native_rich_command_model_unavailable")
 
-    monkeypatch.setattr(artifacts, "parse_shell_command", forbidden)
     monkeypatch.setattr(artifacts, "_hook_runtime_artifact_with_native", forbidden)
     result = artifacts._hook_runtime_artifact(
         harness=harness,

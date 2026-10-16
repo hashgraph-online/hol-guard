@@ -75,11 +75,6 @@ def run_scenario(scenario: dict[str, Any], root: str) -> dict[str, Any]:
         hooks.append({"hook": "digest", "text": text})
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def opaque(value: str, unbound_label: str = "") -> str:
-        text = value.replace(root, ROOT_TOKEN)
-        hooks.append({"hook": "opaque", "text": text})
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
     def env_values(manager: str, environment: Any, names: Any) -> dict[str, str | None]:
         normalized = norm(dict(environment))
         listed = list(names)
@@ -130,7 +125,6 @@ def run_scenario(scenario: dict[str, Any], root: str) -> dict[str, Any]:
         with (
             mock.patch.object(context_module, "context_sha256_digest", digest),
             mock.patch.object(configuration_module, "context_sha256_digest", digest),
-            mock.patch.object(inputs_module, "context_opaque_digest", opaque),
             mock.patch.object(configuration_module, "context_package_environment_values", env_values),
             mock.patch.object(inputs_module, "build_runtime_launch_identity", launch),
             mock.patch.object(inputs_module, "runtime_launch_identity_is_reusable", reusable),

@@ -208,7 +208,7 @@ fn is_extension_id(value: &str) -> bool {
 /// Plain-text bound shared by creative fields and creative versions: no
 /// C0/C1 controls, no bidi/format marks, no line/paragraph separators, and
 /// no markup-significant code points. Mirrors the Cloud contract's stricter
-/// creative class (see points-portal discovery contracts).
+/// creative class (see cloud portal discovery contracts).
 fn is_safe_text(value: &str) -> bool {
     value.chars().all(|c| {
         !matches!(c,

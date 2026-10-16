@@ -8,7 +8,7 @@
 //! one approval cannot cover a command it never saw. Python sends the
 //! findings and applies the reply; it never decides whether binding applies.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -17,17 +17,14 @@ use crate::codex_output_env::Ctx;
 use crate::command_action_risk_classes::risk_classes_for_command_action;
 use crate::command_model::{parse_shell_command, CanonicalCommand};
 use crate::sfrs_quote_parsing::literal_cd_execution_context;
-use crate::shell_execution_context::{
-    model_shell_execution_context_bounded, shell_execution_context_metadata, ShellExecutionContext,
-    ShellModelLimits,
-};
+use crate::shell_execution_context::shell_execution_context_metadata;
+use crate::unmodeled_shell_artifact::request_shell_context;
 
 #[cfg(all(test, unix))]
 #[path = "compound_artifact_tests.rs"]
 mod tests;
 
 const INVALID: &str = "native_sensitive_request_input_invalid";
-const SHELL_CWD_NATIVE_UNAVAILABLE: &str = "shell_cwd_native_unavailable";
 
 struct Finding<'a> {
     artifact_id: &'a str,
@@ -114,51 +111,6 @@ fn requires_full_command_binding(findings: usize, command: Option<&CanonicalComm
                 || !command.wrapper_chain.is_empty()
                 || command.confidence != "exact"
         })
-}
-
-/// `model_shell_execution_context(command, cwd=workspace,
-/// workspace_root=workspace)` as the request-context op answers it: an
-/// undeclared cwd is the caller's process cwd, and a model past the request
-/// bounds is the unavailable context.
-fn workspace_context(
-    command_text: &str,
-    workspace: Option<&Path>,
-    ctx: &Ctx,
-) -> ShellExecutionContext {
-    let process_cwd = PathBuf::from(ctx.process_cwd.to_string());
-    let limits = ShellModelLimits {
-        max_segments: guard_contracts::MAX_REQUEST_CONTEXT_SEGMENTS,
-        max_segment_proofs: guard_contracts::MAX_REQUEST_CONTEXT_SEGMENT_PROOFS,
-        max_total_proofs: guard_contracts::MAX_REQUEST_CONTEXT_TOTAL_PROOFS,
-        deadline: None,
-    };
-    let modeled = model_shell_execution_context_bounded(
-        command_text,
-        Some(workspace.unwrap_or(&process_cwd)),
-        workspace,
-        None,
-        &limits,
-    );
-    let Ok(mut context) = modeled else {
-        return ShellExecutionContext {
-            command_text: command_text.to_owned(),
-            initial_cwd: None,
-            workspace_root: None,
-            workspace_identity: None,
-            segments: Vec::new(),
-            complete: false,
-            reason_code: Some(SHELL_CWD_NATIVE_UNAVAILABLE.to_owned()),
-            directory_change_present: true,
-        };
-    };
-    if workspace.is_none() {
-        for segment in &mut context.segments {
-            if segment.cwd_source == "workspace" {
-                segment.cwd_source = "process".to_owned();
-            }
-        }
-    }
-    context
 }
 
 /// Compose the findings. `primary` is the finding the reply binds; a `null`
@@ -276,7 +228,7 @@ pub fn compound_artifact(
         .is_some_and(|command| command.confidence == "exact");
     let mut context_metadata = Vec::new();
     if let Some(text) = command_text {
-        let mut context = workspace_context(text, workspace, ctx);
+        let mut context = request_shell_context(text, workspace, workspace, None, ctx);
         if !context.complete {
             context = literal_cd_execution_context(text, home, ctx).unwrap_or(context);
         }
