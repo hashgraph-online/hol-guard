@@ -203,22 +203,19 @@ function VacantSlotCard(props: {
       data-full={props.full ? "true" : undefined}
       aria-labelledby="spotlight-slot-heading"
     >
-      <div className="flex items-start gap-3">
-        <span className="guard-spotlight-slot-mark" aria-hidden="true">
-          <HiMiniPlus className="size-5" />
+      <div className="flex items-center gap-2">
+        <span className="guard-spotlight-slot-mark guard-spotlight-slot-mark-sm" aria-hidden="true">
+          <HiMiniPlus className="size-4" />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue">
-            {props.state === "open" ? "This slot is open" : "Promote your extension"}
-          </p>
-          <h3 id="spotlight-slot-heading" className="mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark">
-            Put your extension on this shelf.
-          </h3>
-        </div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue">
+          {props.state === "open" ? "This slot is open" : "Promote your extension"}
+        </p>
       </div>
+      <h3 id="spotlight-slot-heading" className="text-base font-semibold leading-snug tracking-tight text-brand-dark">
+        Put your extension on this shelf.
+      </h3>
       <p className="text-sm leading-5 text-brand-dark/75">
-        This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own
-        headline, and never change anyone’s protection.
+        Labeled Sponsored. Never changes anyone’s protection.
         {props.inventory ? <span className="font-semibold text-brand-dark"> {props.inventory}</span> : null}
       </p>
       <div className="mt-auto">

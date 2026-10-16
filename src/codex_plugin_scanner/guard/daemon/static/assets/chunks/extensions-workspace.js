@@ -1,4 +1,4 @@
-import { bk as fetchLocalCliApi, r as reactExports, bl as fetchExtensionCatalog, bm as normalizeExtensionCatalogSummary, bn as normalizeExtensionPermission, bo as ExtensionControlProtocolError, bp as ExtensionControlApiError, bq as normalizeExtensionCatalogItem, br as guardApiCacheScope, bs as fetchExtensionCatalogV2Api, bt as localPermissionDraftState, bu as setLocalPermissionDraftState, bv as newExtensionPolicyDraftIdentity, bw as extensionPolicyDraftIsDirty, bx as setLocalPermissionDraftStates, by as buildExtensionPolicyDraftMutation, bz as previewExtensionMutation, bA as isCurrentExtensionPolicyDraft, bB as applyExtensionMutation, bC as fetchEffectiveExtensionControls, bD as fetchExtensionControlHistory, j as jsxRuntimeExports, I as HiMiniSparkles, s as HiMiniCheckCircle, bE as HiMiniNoSymbol, az as HiMiniLockClosed, T as HiMiniExclamationTriangle, aH as isApprovalProofSubmitDisabled, J as HiMiniXMark, aG as ApprovalProofFieldInputs, bF as useResolvedApprovalGate, aF as HiMiniArrowPath, y as HiMiniShieldCheck, bG as HiMiniInformationCircle, aI as buildApprovalProofCredentials, bH as GenIcon, U as HiMiniBolt, bI as HiMiniGlobeAlt, bJ as HiMiniCube, N as HiMiniCloud, bK as HiMiniServerStack, b as HiMiniCommandLine, bL as HiMiniFolder, bM as FaWindows, bN as FaAws, c as HiMiniChevronRight, L as HiMiniChevronDown, bO as approvalProofRecentlySatisfied, bP as isBulkApproveGateReady, bQ as HiMiniArrowLeft, bR as HiMiniPlus, bS as startGuardCloudConnect, bT as HiMiniArrowTopRightOnSquare, bU as fetchExtensionControlApi, aq as HiMiniClipboardDocumentCheck, ar as HiMiniClipboard, at as ApprovalProofModal, bV as fetchExtensionDiscoveryApi, bW as HiMiniArrowRight, bX as HiMiniClock, d as createCommandActivityClient, f as fetchCommandActivityApi, b3 as guardAwareHref, b1 as HiMiniMagnifyingGlass, aB as HiMiniAdjustmentsHorizontal, bY as HiMiniCheck, b0 as WorkspacePageHeader, bZ as HiMiniFunnel, b_ as acknowledgeDegradedExtensionControlAuthority, b$ as recoverExtensionControlAuthority } from "../guard-dashboard.js";
+import { bk as fetchLocalCliApi, r as reactExports, bl as fetchExtensionCatalog, bm as normalizeExtensionCatalogSummary, bn as normalizeExtensionPermission, bo as ExtensionControlProtocolError, bp as ExtensionControlApiError, bq as normalizeExtensionCatalogItem, br as guardApiCacheScope, bs as fetchExtensionCatalogV2Api, bt as localPermissionDraftState, bu as setLocalPermissionDraftState, bv as newExtensionPolicyDraftIdentity, bw as extensionPolicyDraftIsDirty, bx as setLocalPermissionDraftStates, by as buildExtensionPolicyDraftMutation, bz as previewExtensionMutation, bA as isCurrentExtensionPolicyDraft, bB as applyExtensionMutation, bC as fetchEffectiveExtensionControls, bD as fetchExtensionControlHistory, j as jsxRuntimeExports, I as HiMiniSparkles, s as HiMiniCheckCircle, bE as HiMiniNoSymbol, az as HiMiniLockClosed, T as HiMiniExclamationTriangle, aH as isApprovalProofSubmitDisabled, J as HiMiniXMark, aG as ApprovalProofFieldInputs, bF as useResolvedApprovalGate, aF as HiMiniArrowPath, y as HiMiniShieldCheck, bG as HiMiniInformationCircle, aI as buildApprovalProofCredentials, bH as GenIcon, U as HiMiniBolt, bI as HiMiniGlobeAlt, bJ as HiMiniCube, N as HiMiniCloud, bK as HiMiniServerStack, b as HiMiniCommandLine, bL as HiMiniFolder, bM as FaWindows, bN as FaAws, c as HiMiniChevronRight, L as HiMiniChevronDown, bO as approvalProofRecentlySatisfied, bP as isBulkApproveGateReady, bQ as HiMiniArrowLeft, bR as HiMiniPlus, bS as startGuardCloudConnect, bT as HiMiniArrowTopRightOnSquare, bU as fetchExtensionControlApi, aq as HiMiniClipboardDocumentCheck, ar as HiMiniClipboard, at as ApprovalProofModal, bV as fetchExtensionDiscoveryApi, bW as HiMiniArrowRight, bX as HiMiniClock, d as createCommandActivityClient, f as fetchCommandActivityApi, b3 as guardAwareHref, b1 as HiMiniMagnifyingGlass, aB as HiMiniAdjustmentsHorizontal, bY as HiMiniCheck, bZ as HiMiniFunnel, b0 as WorkspacePageHeader, b_ as acknowledgeDegradedExtensionControlAuthority, b$ as recoverExtensionControlAuthority } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -7564,15 +7564,13 @@ function VacantSlotCard(props) {
       "data-full": props.full ? "true" : void 0,
       "aria-labelledby": "spotlight-slot-heading",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-spotlight-slot-mark", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-5" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue", children: props.state === "open" ? "This slot is open" : "Promote your extension" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "spotlight-slot-heading", className: "mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark", children: "Put your extension on this shelf." })
-          ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-spotlight-slot-mark guard-spotlight-slot-mark-sm", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue", children: props.state === "open" ? "This slot is open" : "Promote your extension" })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "spotlight-slot-heading", className: "text-base font-semibold leading-snug tracking-tight text-brand-dark", children: "Put your extension on this shelf." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-5 text-brand-dark/75", children: [
-          "This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own headline, and never change anyone’s protection.",
+          "Labeled Sponsored. Never changes anyone’s protection.",
           props.inventory ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-dark", children: [
             " ",
             props.inventory
@@ -8281,9 +8279,15 @@ function CustomExtensionEmptyState(props) {
         props.filteredOut ? props.onClearFilters ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onClearFilters, className: "guard-extensions-chip mt-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
           "Clear filters"
-        ] }) : null : props.search ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onClearSearch, className: "guard-extensions-chip mt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
-          "Clear search"
+        ] }) : null : props.search ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onClearSearch, className: "guard-extensions-chip", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+            "Clear search"
+          ] }),
+          props.addWithSearch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
+            "Add custom extension"
+          ] }) : null
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
@@ -8382,7 +8386,8 @@ function CustomExtensionsSection(props) {
         discovering: props.discovering,
         onAdd: props.onAdd,
         onClearFilters: props.onClearFilters,
-        onClearSearch: handleClearSearch
+        onClearSearch: handleClearSearch,
+        addWithSearch: props.embedded === true && props.addInEmptyState === true
       }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", id: rowsId, children: [
       grouped && visibleNeedsReview.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-semibold text-brand-dark/55", children: [
@@ -9426,6 +9431,20 @@ function CatalogPostureSummary(props) {
     ] })
   ] });
 }
+function ConnectorDiscoveryNotice(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "status", className: props.error ? "mt-3 flex flex-wrap items-center gap-x-3 gap-y-1" : void 0, children: props.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: props.error }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        className: "inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-brand-blue hover:text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+        onClick: props.onRetry,
+        children: "Check for connectors again"
+      }
+    )
+  ] }) : null });
+}
 function ExtensionsOverview(props) {
   const fetchPlacements = reactExports.useCallback(
     () => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements"),
@@ -9585,15 +9604,24 @@ function ExtensionsOverview(props) {
   }, []);
   const onAddCustom = props.onAddCustom;
   const handleAddCustom = reactExports.useCallback(() => {
+    setListView("custom");
     onAddCustom();
+  }, [onAddCustom]);
+  const handleSetUpCustom = reactExports.useCallback((command) => {
+    setListView("custom");
+    onAddCustom(command);
   }, [onAddCustom]);
   const allCustomItems = connectorWorkspaceItems(props.localCliItems, "", props.seededItems);
   const addedCustomItems = allCustomItems.filter(
     (item) => customItemMatchesFilters(item, filters)
   );
   const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
-  const customNeedsReviewCount = addedCustomItems.filter(customExtensionNeedsReview).length;
-  const switchOffersAdd = listView === "builtin" || allCustomItems.length > 0;
+  const customNeedsReviewCount = allCustomItems.filter(customExtensionNeedsReview).length;
+  const customEmptyOwnsAdd = listView === "custom" && allCustomItems.length === 0;
+  const switchOffersAdd = !searching && !customEmptyOwnsAdd;
+  const searchOffersAdd = searching && !customEmptyOwnsAdd;
+  const discoveryMessage = [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null;
+  const retryDiscovery = reactExports.useCallback(() => setDiscoveryAttempt((attempt) => attempt + 1), []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
@@ -9660,7 +9688,7 @@ function ExtensionsOverview(props) {
               onQueryChange: setQuery,
               onRefresh: props.onRefresh,
               onOpenExtension: props.onOpenExtension,
-              actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: handleAddCustom }) : null,
+              actionSlot: searchOffersAdd ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: handleAddCustom }) : null,
               toolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsx(
                 CatalogFilterTrigger,
                 {
@@ -9687,43 +9715,45 @@ function ExtensionsOverview(props) {
           )
         }
       ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ExtensionListSwitch,
+        {
+          view: listView,
+          onViewChange: setListView,
+          builtinCount: visibleCatalog.length,
+          customCount: addedCustomItems.length,
+          customNeedsReviewCount,
+          builtinPanelId: searching ? void 0 : builtinPanelId,
+          customPanelId,
+          onAddCustom: switchOffersAdd ? handleAddCustom : void 0
+        }
+      ),
+      props.active && listView === "builtin" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectorDiscoveryNotice, { error: discoveryMessage, onRetry: retryDiscovery }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: customPanelId, hidden: listView !== "custom", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CustomExtensionsSection,
+        {
+          embedded: true,
+          addInEmptyState: customEmptyOwnsAdd,
+          items: addedCustomItems,
+          onOpen: props.onOpenLocalCli,
+          seededItems: addedCustomItems.filter((item) => item.seeded === true),
+          onSetUp: handleSetUpCustom,
+          onAdd: handleAddCustom,
+          discovering,
+          filteredOut: customItemsFilteredOut,
+          onClearFilters: handleClearFilters,
+          discoveryControl: props.active && listView === "custom" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ConnectorDiscoveryControl,
+            {
+              discovering,
+              showProgress: addedCustomItems.length > 0 || customItemsFilteredOut,
+              error: discoveryMessage,
+              onRetry: retryDiscovery
+            }
+          ) : null
+        }
+      ) }),
       searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ExtensionListSwitch,
-          {
-            view: listView,
-            onViewChange: setListView,
-            builtinCount: visibleCatalog.length,
-            customCount: addedCustomItems.length,
-            customNeedsReviewCount,
-            builtinPanelId,
-            customPanelId,
-            onAddCustom: switchOffersAdd ? handleAddCustom : void 0
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: customPanelId, hidden: listView !== "custom", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CustomExtensionsSection,
-          {
-            embedded: true,
-            items: addedCustomItems,
-            onOpen: props.onOpenLocalCli,
-            seededItems: addedCustomItems.filter((item) => item.seeded === true),
-            onSetUp: props.onAddCustom,
-            onAdd: handleAddCustom,
-            discovering,
-            filteredOut: customItemsFilteredOut,
-            onClearFilters: handleClearFilters,
-            discoveryControl: props.active ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-              ConnectorDiscoveryControl,
-              {
-                discovering,
-                showProgress: addedCustomItems.length > 0 || customItemsFilteredOut,
-                error: [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null,
-                onRetry: () => setDiscoveryAttempt((attempt) => attempt + 1)
-              }
-            ) : null
-          }
-        ) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: builtinPanelId, hidden: listView !== "builtin", className: "mt-4", "aria-labelledby": "all-tools-heading", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [

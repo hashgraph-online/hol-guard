@@ -9718,6 +9718,7 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
   background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
+  gap: 0.625rem;
 }
 
 .guard-spotlight-slot[data-state="sold-out"] {
@@ -9734,6 +9735,14 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   border-radius: 0.75rem;
   color: var(--brand-blue);
   background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+/* The open slot's mark sits in the eyebrow row, so it stays small enough not to
+   make the card taller than the organic cards beside it. */
+.guard-spotlight-slot-mark-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.5rem;
 }
 
 /* The on/off pill reports effective protection state and nothing else; it is

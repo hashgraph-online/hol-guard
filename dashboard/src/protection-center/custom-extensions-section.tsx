@@ -58,6 +58,8 @@ function CustomExtensionEmptyState(props: {
   onAdd: () => void;
   onClearFilters?: () => void;
   onClearSearch: () => void;
+  /** Offer Add beside Clear search when nothing has been added to search. */
+  addWithSearch?: boolean;
 }) {
   let title = "No custom extensions yet.";
   let detail = "Add a tool you run yourself or connect an MCP server. Connectors in your host apps appear here automatically.";
@@ -84,10 +86,18 @@ function CustomExtensionEmptyState(props: {
           </button>
         ) : null
       ) : props.search ? (
-        <button type="button" onClick={props.onClearSearch} className="guard-extensions-chip mt-3">
-          <HiMiniXMark className="size-4" aria-hidden="true" />
-          Clear search
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={props.onClearSearch} className="guard-extensions-chip">
+            <HiMiniXMark className="size-4" aria-hidden="true" />
+            Clear search
+          </button>
+          {props.addWithSearch ? (
+            <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
+              <HiMiniPlus className="size-4" aria-hidden="true" />
+              Add custom extension
+            </button>
+          ) : null}
+        </div>
       ) : (
         <>
           <button type="button" onClick={props.onAdd} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
@@ -129,6 +139,11 @@ interface CustomExtensionsSectionProps {
    * own top margin, Add button and repeated title.
    */
   embedded?: boolean;
+  /**
+   * Embedded only: nothing has been added, so this list's empty state is where
+   * Add lives, including while a search typed here is still set.
+   */
+  addInEmptyState?: boolean;
 }
 
 export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
@@ -205,6 +220,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
           onAdd={props.onAdd}
           onClearFilters={props.onClearFilters}
           onClearSearch={handleClearSearch}
+          addWithSearch={props.embedded === true && props.addInEmptyState === true}
         />
       ) : (
         <div className="mt-4" id={rowsId}>

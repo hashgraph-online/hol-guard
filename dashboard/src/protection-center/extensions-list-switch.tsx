@@ -9,7 +9,8 @@ interface ExtensionListSwitchProps {
   customCount: number;
   /** Custom extensions waiting on a permission decision. */
   customNeedsReviewCount: number;
-  builtinPanelId: string;
+  /** Absent while a search replaces the built-in list, so nothing points at a missing panel. */
+  builtinPanelId?: string;
   customPanelId: string;
   /** The one Add entry point; omitted when the custom empty state carries it. */
   onAddCustom?: () => void;
@@ -28,7 +29,7 @@ export function ExtensionListSwitch(props: ExtensionListSwitchProps) {
     view: ExtensionListView;
     label: string;
     count: number;
-    panelId: string;
+    panelId: string | undefined;
     attention: number;
   }[] = [
     { view: "builtin", label: "All tools", count: props.builtinCount, panelId: props.builtinPanelId, attention: 0 },
