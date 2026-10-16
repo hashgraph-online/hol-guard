@@ -1472,20 +1472,16 @@
     max-width: 46ch;
   }
 
-  .max-w-\[52ch\] {
-    max-width: 52ch;
-  }
-
   .max-w-\[55\%\] {
     max-width: 55%;
   }
 
-  .max-w-\[60ch\] {
-    max-width: 60ch;
-  }
-
   .max-w-\[70vw\] {
     max-width: 70vw;
+  }
+
+  .max-w-\[72ch\] {
+    max-width: 72ch;
   }
 
   .max-w-\[320px\] {
@@ -1586,6 +1582,10 @@
 
   .flex-1 {
     flex: 1;
+  }
+
+  .flex-\[1_1_16rem\] {
+    flex: 16rem;
   }
 
   .shrink {
@@ -5017,6 +5017,16 @@
     }
   }
 
+  .text-white\/55 {
+    color: #ffffff8c;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-white\/55 {
+      color: color-mix(in oklab, var(--color-white) 55%, transparent);
+    }
+  }
+
   .text-white\/60 {
     color: #fff9;
   }
@@ -6733,10 +6743,6 @@
     .sm\:text-xl {
       font-size: var(--text-xl);
       line-height: var(--tw-leading, var(--text-xl--line-height));
-    }
-
-    .sm\:text-\[1\.75rem\] {
-      font-size: 1.75rem;
     }
 
     .sm\:break-normal {
@@ -9659,44 +9665,84 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   border-color: rgb(255 255 255 / 0.28);
 }
 
-.guard-discover-hero {
-  position: relative;
-  isolation: isolate;
+.guard-spotlight-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .guard-spotlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Equal cells only once they sit side by side; stacked, a card is its own
+     height so a short one never opens a well of dead space on a phone. */
+  .guard-spotlight-card { min-height: 16rem; }
+}
+
+/* One card shape for the whole shelf, so a bought cell is the same object as
+   an organic one and a maker can judge the placement in context. */
+.guard-spotlight-card {
   display: flex;
-  min-height: 15rem;
   flex-direction: column;
-  overflow: hidden;
-  border-radius: 1.5rem;
-  padding: 1.5rem;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: #fff;
+  border: 1px solid rgb(63 65 116 / 0.1);
+  animation: guard-discover-rise 420ms var(--ease-out-quint) both;
+}
+
+/* Paid cells are the only dark cards on the page: unmistakable, and always
+   carrying the Sponsored label rather than relying on the treatment alone. */
+.guard-spotlight-card-paid {
   color: #fff;
+  border-color: transparent;
   background:
     radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--brand-purple) 55%, transparent) 0%, transparent 55%),
     radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--brand-blue) 45%, transparent) 0%, transparent 60%),
     var(--brand-dark);
   box-shadow: 0 24px 60px -32px rgb(63 65 116 / 0.65);
-  animation: guard-discover-rise 420ms var(--ease-out-quint) both;
 }
 
-@media (min-width: 640px) {
-  .guard-discover-hero { padding: 2rem; }
+.guard-spotlight-slot {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
 }
 
-.guard-discover-tile {
-  display: flex;
-  flex-direction: column;
-  border-radius: 1.25rem;
-  padding: 1.25rem;
+.guard-spotlight-slot[data-state="sold-out"] {
+  border-color: rgb(63 65 116 / 0.18);
   background: #fff;
-  border: 1px solid color-mix(in srgb, var(--brand-purple) 22%, rgb(63 65 116 / 0.1));
-  box-shadow: 0 1px 0 rgb(63 65 116 / 0.04);
-  transition: border-color 180ms var(--ease-out-quart), transform 180ms var(--ease-out-quart), box-shadow 180ms var(--ease-out-quart);
-  animation: guard-discover-rise 420ms var(--ease-out-quint) both;
 }
 
-.guard-discover-tile:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--brand-purple) 45%, transparent);
-  box-shadow: 0 16px 36px -24px rgb(63 65 116 / 0.45);
+.guard-spotlight-slot-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  color: var(--brand-blue);
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+.guard-spotlight-skeleton {
+  border-color: transparent;
+  background: linear-gradient(100deg, rgb(63 65 116 / 0.05) 30%, rgb(63 65 116 / 0.1) 50%, rgb(63 65 116 / 0.05) 70%);
+  background-size: 200% 100%;
+  animation: guard-discover-shimmer 1.4s linear infinite;
+}
+
+/* The bookable row keeps the catalog's rhythm and never imitates a row that
+   represents real protection state. */
+.guard-catalog-slot-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px dashed color-mix(in srgb, var(--brand-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
 }
 
 .guard-discover-cta {
@@ -9774,12 +9820,9 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .guard-discover-hero,
-  .guard-discover-tile,
-  .guard-discover-skeleton { animation: none; }
-  .guard-discover-tile,
+  .guard-spotlight-card,
+  .guard-spotlight-skeleton { animation: none; }
   .guard-discover-cta { transition: none; }
-  .guard-discover-tile:hover { transform: none; }
 }
 /*
  * Responsive corrections inside Guard workspaces.

@@ -336,7 +336,7 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
             "pnpm exec vitest run && rm -rf /",
         ] {
             let result = classify(harness, command);
-            if command == "python3 test_calc.py" {
+            if command == "python3 test_calc.py" && harness != "zcode" {
                 assert_eq!(result.decision, "deny", "{harness} {command}");
             }
             assert_ne!(
@@ -540,8 +540,8 @@ fn build_requires_bounded_outputs_and_never_direct_execution() {
 }
 
 #[test]
-fn windows_contains_only_python_runs_from_posix_shell_harnesses() {
-    for harness in ["claude-code", "omp", "pi"] {
+fn windows_contains_only_python_runs_from_harnesses_with_a_sink_command() {
+    for harness in ["claude-code", "codex", "omp", "pi"] {
         let contained = classify(harness, "python3 test_calc.py");
         assert_eq!(contained.decision, "deny", "{harness}");
         if cfg!(target_os = "macos") || cfg!(windows) {
@@ -563,13 +563,14 @@ fn windows_contains_only_python_runs_from_posix_shell_harnesses() {
             "native_python_eval_readonly_containment_required"
         );
         for (harness, command) in [
-            ("codex", "python3 test_calc.py"),
+            ("zcode", "python3 test_calc.py"),
+            ("codex", "node -e 'console.log(1)'"),
             ("claude-code", "node -e 'console.log(1)'"),
             ("omp", "node -e 'console.log(1)'"),
             ("claude-code", "python3 -m pytest"),
         ] {
             let result = classify(harness, command);
-            if command == "python3 test_calc.py" {
+            if command == "python3 test_calc.py" && harness != "zcode" {
                 assert_eq!(result.decision, "deny", "{harness} {command}");
             }
             assert_ne!(

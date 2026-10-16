@@ -210,7 +210,13 @@ class Harness:
         )
 
 
+# A full task leaves every step to the model, so Claude gets its ordinary coding tools.
+FULL_TASK_CLAUDE_TOOLS = "Bash,Read,Write,Edit,Glob,Grep,TodoWrite"
+
+
 def _claude_tools(scenario: Scenario) -> str:
+    if scenario.oracle == "full-task":
+        return FULL_TASK_CLAUDE_TOOLS
     if scenario.oracle == "home-copy-task":
         return "Bash,Read"
     if scenario.commands:

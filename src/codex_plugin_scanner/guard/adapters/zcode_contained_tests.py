@@ -35,6 +35,7 @@ _PROFILES = {
 _ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
 # Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
 _SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
+_WINDOWS_SINK_HARNESSES = frozenset({"claude-code", "codex"})
 
 
 def cleanup_stale_zcode_requests() -> None:
@@ -168,9 +169,10 @@ def contained_zcode_response(
     if (
         not platform_contains(response)
         or config.get("harness") not in _SINK_HARNESSES
-        # The sink command is POSIX-quoted; on Windows only Claude Code runs
-        # it through Git Bash.
-        or (sys.platform == "win32" and config.get("harness") != "claude-code")
+        # The sink command is POSIX-quoted for Git Bash and the Pi shell; on
+        # Windows Codex gets a PowerShell command. Any other harness there
+        # keeps its single review.
+        or (sys.platform == "win32" and config.get("harness") not in _WINDOWS_SINK_HARNESSES)
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
         or response.get("observe_mode") is True
@@ -245,13 +247,21 @@ def contained_zcode_response(
         if "--home" in cli_args:
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
         command = (*_sink_command_prefix(config), *args)
+        if sys.platform == "win32" and config.get("harness") == "codex":
+            from ..windows_powershell_quote import powershell_join
+
+            shell_command = powershell_join(command)
+        else:
+            shell_command = shlex.join(command)
+        if shell_command is None:
+            raise ValueError("sink command cannot be quoted for this shell")
         return {
             "policy_action": "allow",
             "reason_code": "native_contained_execution_routed",
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "allow",
-                "updatedInput": {**original, "command": shlex.join(command)},
+                "updatedInput": {**original, "command": shell_command},
             },
         }
     except (OSError, ValueError, KeyError, IndexError, TypeError):

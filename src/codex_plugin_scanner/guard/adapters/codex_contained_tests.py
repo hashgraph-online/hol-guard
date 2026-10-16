@@ -38,6 +38,8 @@ _RELEASE_TARGETS = frozenset(
         "x86_64-unknown-linux-gnu",
         "aarch64-unknown-linux-musl",
         "x86_64-unknown-linux-musl",
+        "aarch64-pc-windows-msvc",
+        "x86_64-pc-windows-msvc",
     }
 )
 UPDATE_HINT = "Update Codex to 0.131 or later so HOL Guard can run this command inside its contained runner."
@@ -97,6 +99,10 @@ def launching_codex_executable() -> Path | None:
 
     if sys.platform == "linux":
         return _linux_codex_ancestor()
+    if sys.platform == "win32":
+        from .codex_contained_tests_windows import windows_codex_ancestor
+
+        return windows_codex_ancestor(is_codex_binary_name, _MAX_ANCESTORS)
     try:
         libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
     except OSError:
@@ -127,6 +133,10 @@ def is_codex_binary_name(name: str) -> bool:
     ``bun`` process is never taken for Codex.
     """
 
+    if sys.platform == "win32":
+        name = name.lower()
+        if name.endswith(".exe"):
+            name = name[: -len(".exe")]
     prefix, separator, target = name.partition("-")
     return prefix == "codex" and (not separator or target in _RELEASE_TARGETS)
 
@@ -168,7 +178,7 @@ def codex_applies_updated_input(executable: Path, *, deadline: float | None = No
             timeout=timeout,
             check=False,
             stdin=subprocess.DEVNULL,
-            env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())},
+            env=_probe_environment(),
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -180,6 +190,14 @@ def codex_applies_updated_input(executable: Path, *, deadline: float | None = No
         return version >= _MIN_VERSION
     # A pre-release sorts before its base, so 0.131.0-alpha.N can predate the rewrite support.
     return version > _MIN_VERSION
+
+
+def _probe_environment() -> dict[str, str]:
+    if sys.platform != "win32":
+        return {"PATH": "/usr/bin:/bin", "HOME": str(Path.home())}
+    # Windows programs need the system root to start; nothing else is passed on.
+    system_root = os.environ.get("SYSTEMROOT", r"C:\Windows")
+    return {"SYSTEMROOT": system_root, "PATH": rf"{system_root}\System32", "USERPROFILE": str(Path.home())}
 
 
 def _version_probe_timeout(deadline: float | None) -> float | None:

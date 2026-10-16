@@ -124,6 +124,12 @@ fn contain(
     {
         return Contained::Unchanged;
     }
+    // This port cannot yet reproduce the PowerShell-quoted Windows sink
+    // command or its process lookup, so the denial stands. The Codex update
+    // hint would mislead, because the Codex version is not the obstacle.
+    if cfg!(windows) {
+        return Contained::Unchanged;
+    }
     if !launching_codex_applies(deadline) {
         return Contained::Hint;
     }

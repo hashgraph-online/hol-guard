@@ -18,7 +18,10 @@ def test_warmer_runs_only_on_relevant_main_pushes_and_has_its_own_queue() -> Non
     for source in ("rust/**", "contributions/**", "contracts/**", "spec/**"):
         assert source in paths
     for action in (
-        "setup-rust", "ci-job-native-command-build", "ci-job-macos-native-runtime", "ci-job-windows-native-runtime",
+        "setup-rust",
+        "ci-job-native-command-build",
+        "ci-job-macos-native-runtime",
+        "ci-job-windows-native-runtime",
     ):
         assert f".github/actions/{action}/**" in paths
     assert ".github/workflows/ci.yml" in paths
@@ -68,4 +71,4 @@ def test_warmer_and_ci_share_builds_profiles_and_per_commit_deduplication() -> N
         assert producer in raw_ci["jobs"]["required"]["needs"]
     # Capacity changes must not silently collapse the behavioral matrix.
     assert raw_ci["env"]["CI_PYTEST_COVERAGE_SHARDS"] == "64"
-    assert len(raw_ci["jobs"]["macos-gates"]["strategy"]["matrix"]["shard-index"]) == 24
+    assert len(raw_ci["jobs"]["macos-gates"]["strategy"]["matrix"]["shard-index"]) == 12

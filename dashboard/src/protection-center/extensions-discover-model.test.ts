@@ -5,23 +5,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ExtensionCatalogSummary } from "../extension-controls-normalize";
 import {
   advertiseUrl,
-  chooseSponsoredCard,
-  chooseStableCard,
   joinDiscoveryPlacements,
   parseDiscoveryProjection,
-  shouldShowPurchasePrompt,
   sponsoredCardLabel,
-  DISCOVERY_PRODUCT_LABEL,
   featuredWindowLabel,
-  formatOfferPrice,
   orderFeaturedFirst,
-  MIN_ORGANIC_ROWS_BEFORE_IN_FEED,
   type DiscoveryPlacement,
 } from "./extensions-discover-model";
 
 /**
- * Shared semantic vectors for the Discover selection model (mirrors the
- * TypeScript vectors in points-portal and the native Rust suite): local
+ * Shared semantic vectors for the Discover selection model (mirroring the
+ * native Rust suite): local
  * catalog join with unknown-id suppression, one featured and one in-feed
  * position, visit-stable selection, prompt conditions, and the safe
  * advertise URL labels.
@@ -101,73 +95,6 @@ const CATALOG = Array.from({ length: 10 }, (_, index) =>
   );
   assert.equal(joined.featured.length, 1);
   assert.equal(joined.sponsored.length, 2);
-  const featured = chooseStableCard(joined.featured, null, 0.99);
-  assert.equal(featured?.placement.publicPlacementId, "33333333-3333-4333-8333-333333333333");
-  const sponsored = chooseSponsoredCard(joined.sponsored, null, 0.99, featured?.placement.extensionId ?? null);
-  assert.equal(sponsored?.placement.publicPlacementId, "55555555-5555-4555-8555-555555555555");
-  assert.notEqual(sponsored?.placement.extensionId, featured?.placement.extensionId);
-}
-
-// Visit-stable selection: the current card survives a recompute unchanged
-// and polls never shuffle a valid visible card (UX-07).
-{
-  const entries = joinDiscoveryPlacements(
-    [
-      placement({ publicPlacementId: "66666666-6666-4666-8666-666666666666", product: "always", extensionId: "command.tool-03" }),
-      placement({ publicPlacementId: "77777777-7777-4777-8777-777777777777", product: "always", extensionId: "command.tool-04" }),
-    ],
-    CATALOG,
-    NOW_MS,
-  ).featured;
-  const first = chooseStableCard(entries, null, 0.1);
-  assert.ok(first);
-  const again = chooseStableCard(entries, first.placement.publicPlacementId, 0.9);
-  assert.equal(again?.placement.publicPlacementId, first.placement.publicPlacementId);
-  // The selected card left the snapshot, so the next choice is the card that remains.
-  const remaining = entries.filter(
-    (entry) => entry.placement.publicPlacementId !== first.placement.publicPlacementId,
-  );
-  const afterWithdrawal = chooseStableCard(remaining, first.placement.publicPlacementId, 0.9);
-  assert.equal(afterWithdrawal?.placement.publicPlacementId, remaining[0]?.placement.publicPlacementId);
-  assert.notEqual(afterWithdrawal?.placement.publicPlacementId, first.placement.publicPlacementId);
-}
-
-// The purchase prompt appears only for a ready, empty, authoritatively open
-// feed with at least eight organic rows (UX-05/UX-06).
-{
-  const openOffer = {
-    product: "sponsored" as const,
-    availability: "open" as const,
-    indicativeAmountCents: 20000,
-    currency: "usd",
-    checkedAt: END,
-    quoteRequired: true as const,
-  };
-  const empty = { featured: [], sponsored: [] };
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: openOffer, organicCount: 10 }),
-    true,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: { ...openOffer, availability: "sold_out" }, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: { ...openOffer, availability: "unknown" }, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: null, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "unavailable", joined: empty, sponsoredOffer: openOffer, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: openOffer, organicCount: MIN_ORGANIC_ROWS_BEFORE_IN_FEED - 1 }),
-    false,
-  );
 }
 
 // Paid labels: every paid card says Sponsored; featured is Sponsored · Featured (UX-04).
@@ -229,15 +156,6 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   );
   assert.ok(markup.includes("Sponsored"));
   assert.ok(markup.includes("Featured"));
-}
-
-// Offer prices come only from the server quote; a missing quote shows none.
-{
-  const offer = { product: "always" as const, availability: "open" as const, indicativeAmountCents: 50_000, currency: "usd", checkedAt: END, quoteRequired: true };
-  assert.equal(formatOfferPrice(offer), "from $500 / month");
-  assert.equal(formatOfferPrice({ ...offer, indicativeAmountCents: 1_250 }), "from $12.50 / month");
-  assert.equal(formatOfferPrice({ ...offer, indicativeAmountCents: null }), null);
-  assert.equal(DISCOVERY_PRODUCT_LABEL.sponsored, "Sponsored listing");
 }
 
 // Only a time-window feature names its end; featured rows lead, the rest keep order.

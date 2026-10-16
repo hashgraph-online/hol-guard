@@ -342,6 +342,24 @@ python -m ci.gauntlet run --profile full-tasks --full-task-mode discover --full-
 - `--full-task-mode enforce` (the default) passes a task only when it completed with no approval request and no interruption under the core judge's rule, exempting only bound contained runs.
 - `--native-route PROVIDER/MODEL` runs a pinned native Oh My Pi backend through the same adapter as `--native-luna-route`. Tasks run one at a time; `--jobs`, `--fail-fast`, `--host-slots` and `--max-load` are rejected.
 
+#### Local tasks on the host, through any supported harness
+
+Local tasks (`python-cli-with-tests`, `fix-failing-node-test`, `add-validation-dependency`, `worktree-report-branch`, `flappy-bird-game`, `todo-app-local`) need no GitHub, so they also run on the host without Docker against the installed Guard. `flappy-bird-game` and `todo-app-local` start from an empty Git repository and pass only when the committed app (a canvas game loop with gravity, flapping and pipes, or a todo app), committed tests that import it, and a passing test run (at least one test; `npm test`, `node --test`, `unittest` or `pytest`) all exist on a clean tree.
+
+```sh
+# Oh My Pi, OpenAI Luna medium through the existing omp login
+python -m ci.gauntlet run --profile full-tasks --full-task-mode discover --native-luna-route \
+  --case flappy-bird-game --case todo-app-local --timeout 900 --work-root /tmp/gft \
+  --expected-source-sha "$(git rev-parse HEAD)" --output /absolute/path/outside-the-checkout/ft-omp
+# Claude Code or Codex, each through its own login and Guard's installed hooks
+python -m ci.gauntlet run --profile full-tasks --full-task-mode discover --harness claude-code \
+  --case flappy-bird-game --case todo-app-local --timeout 900 --work-root /tmp/gft \
+  --expected-source-sha "$(git rev-parse HEAD)" --output /absolute/path/outside-the-checkout/ft-claude
+```
+
+- `--harness claude-code|codex` reuses the core harness lane: Guard's managed install in a disposable HOME, the CLI's own login, and the daemon-side `GuardTap` as evidence. Claude Code gets `Bash,Read,Write,Edit,Glob,Grep,TodoWrite`; Codex runs `exec` with its approvals and sandbox off. Every hooked tool call needs a native PreToolUse receipt (bound by tool-use id for Claude Code, by count for Codex), and would-have-stopped verdicts come from the same receipts as the omp lane.
+- With `--harness` other than omp, GitHub tasks, `--full-task-docker`, `--github-owner`, the `--full-task-canary`/seed/account options and `--jobs` are rejected, as are `cursor` and the provider and Luna options. Without `--case` the harness lane runs every local task. Evidence uses `hol.guard-gauntlet.full-tasks.v1` with the harness and its version, and is never merge-qualifying.
+
 ## Publish evidence in the pull request
 
 The contribution path is:

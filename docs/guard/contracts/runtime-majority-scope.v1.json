@@ -614,7 +614,9 @@
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
           "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py"
+          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
+          "src/codex_plugin_scanner/guard/adapters/codex_contained_tests_windows.py",
+          "src/codex_plugin_scanner/guard/windows_powershell_quote.py"
         ],
         "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, capability_report, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope."
       },

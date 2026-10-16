@@ -140,7 +140,9 @@ def main() -> int:
     qualify.add_argument("--candidate-sha", help="PR head when qualifying its exact two-parent test merge")
     qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-3)")
     qualify.add_argument(
-        "--jobs", type=int, default=qualification_jobs(),
+        "--jobs",
+        type=int,
+        default=qualification_jobs(),
         help="Concurrent isolated cases (default: half the host CPUs, bounded to 1-8)",
     )
     qualify.add_argument(
@@ -393,30 +395,36 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
     if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
         raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
-    if args.profile != "core":
-        raise ValueError("--harness supports only the core profile")
-    if args.full_task_mode != "enforce":
-        raise ValueError("--full-task-mode is not supported with --harness")
+    if args.profile not in {"core", "full-tasks"}:
+        raise ValueError("--harness supports only the core and full-tasks profiles")
+    if args.profile == "core" and args.full_task_mode != "enforce":
+        raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
         raise ValueError("host timeout is outside supported bounds")
-    from .harness_suite import run_harness_suite
+    if args.profile == "full-tasks":
+        from .full_task_cli import run_harness_profile
 
-    report = run_harness_suite(
-        harness=args.harness,
-        expected_source_sha=args.expected_source_sha,
-        output=args.output,
-        model_timeout=args.timeout,
-        selected_ids=args.cases,
-        executable=args.harness_cli,
-        model=args.harness_model,
-        work_root=args.work_root,
-        candidate_sha=args.candidate_sha,
-        jobs=args.jobs,
-    )
+        report = run_harness_profile(args)
+    else:
+        from .harness_suite import run_harness_suite
+
+        report = run_harness_suite(
+            harness=args.harness,
+            expected_source_sha=args.expected_source_sha,
+            output=args.output,
+            model_timeout=args.timeout,
+            selected_ids=args.cases,
+            executable=args.harness_cli,
+            model=args.harness_model,
+            work_root=args.work_root,
+            candidate_sha=args.candidate_sha,
+            jobs=args.jobs,
+        )
     print(
         json.dumps(
             {
                 "harness": args.harness,
+                "profile": args.profile,
                 "pass": report["pass"],
                 "merge_qualified": False,
                 "scenarios": len(report["cases"]),
