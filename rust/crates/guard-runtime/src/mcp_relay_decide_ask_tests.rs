@@ -122,3 +122,21 @@ fn the_queue_timestamp_matches_an_isoformat_utc_now() {
         "{now}"
     );
 }
+
+#[test]
+fn post_claim_evidence_follows_the_decision_evidence_in_the_row() {
+    let decided = json!({"source": "approval_reuse", "reason_code": "decided"});
+    let appended = json!({"source": "approval_reuse", "reason_code": "appended"});
+    let mut item = Map::new();
+    item.insert("scanner_evidence".to_owned(), json!([decided]));
+    append_scanner_evidence(&mut item, std::slice::from_ref(&appended));
+    assert_eq!(item["scanner_evidence"], json!([decided, appended]));
+    // A decision with no evidence of its own still carries the appended one.
+    let mut item = Map::new();
+    append_scanner_evidence(&mut item, std::slice::from_ref(&appended));
+    assert_eq!(item["scanner_evidence"], json!([appended]));
+    // Nothing to append leaves the key out, as the proxy does.
+    let mut item = Map::new();
+    append_scanner_evidence(&mut item, &[]);
+    assert!(!item.contains_key("scanner_evidence"));
+}

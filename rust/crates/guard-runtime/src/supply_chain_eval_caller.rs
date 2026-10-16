@@ -98,6 +98,7 @@ impl PrivateSpool {
         let mut name = [0u8; SPOOL_NAME_BYTES];
         getrandom::fill(&mut name).ok()?;
         let dir = std::env::temp_dir().join(format!("{SPOOL_PREFIX}{}", hex::encode(name)));
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {

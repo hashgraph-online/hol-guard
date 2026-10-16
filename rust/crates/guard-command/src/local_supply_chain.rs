@@ -5821,8 +5821,7 @@ fn package_policy_gate_context(
 /// local mirror does not model yet (`artifact_actions`, `publisher_actions`,
 /// `harness_actions`, `sandbox_analysis`, `resolve_action_override`, `mode`)
 /// ride through `config.extra` until the full config port lands.
-#[allow(dead_code)]
-fn package_config_policy_context(
+pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {
