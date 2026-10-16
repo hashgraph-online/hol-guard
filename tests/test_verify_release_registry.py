@@ -605,3 +605,14 @@ def test_verify_release_cli_wheels_only(tmp_path: Path, capsys: pytest.CaptureFi
     argv = ["verify-release", "--registry", "pypi", "--version", VERSION, "--dist-dir", str(dist), "--wheels-only"]
     assert main(argv, fetcher=fetcher) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "exact"
+
+
+def test_wheels_only_verification_ignores_github_only_native_wheels(tmp_path: Path) -> None:
+    dist = _local_full_dist(tmp_path)
+    (dist / WHEEL.replace("-any.whl", "-win_arm64.whl")).write_bytes(b"windows-arm64")
+    fetcher = FakeFetcher({_release_url(Registry.PYPI): _release_payload(Registry.PYPI, {WHEEL: (WHEEL_BYTES, None)})})
+
+    result = verify_registry_release(Registry.PYPI, VERSION, dist, fetcher=fetcher, wheels_only=True)
+
+    assert result.status == "exact"
+    assert result.files == (WHEEL,)

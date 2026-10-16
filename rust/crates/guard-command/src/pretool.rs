@@ -426,9 +426,11 @@ pub(super) fn credential_keyword_text(value: &str) -> bool {
 }
 
 /// Credential locations and environment reads: `.env`, `~/.ssh`,
-/// `process.env` and the like.
+/// `process.env` and the like. A dotted read of a port variable such as
+/// `process.env.PORT` reads no secret.
 fn sensitive_location_text(value: &str) -> bool {
     let lowered = normalized_haystack(value);
+    let lowered = crate::environment_secret_dump::without_node_port_reads(&lowered);
     let needles = [
         "/.ssh/",
         "~/.ssh",
@@ -846,11 +848,7 @@ fn evaluate_single_command(
     if let Some((reason_code, reason)) = pipe_attacks::pipe_attack(&model) {
         return Ok(pretool_decision(model, "block", reason_code, reason));
     }
-    if model
-        .wrapper_chain
-        .iter()
-        .any(|wrapper| wrapper != "timeout")
-    {
+    if !model.wrapper_chain.is_empty() {
         return Ok(pretool_decision(
             model,
             "require-reapproval",

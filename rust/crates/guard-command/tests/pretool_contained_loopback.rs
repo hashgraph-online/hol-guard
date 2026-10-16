@@ -283,3 +283,25 @@ fn a_smoke_test_fetching_one_loopback_base_runs_in_the_sandbox() {
         }
     }
 }
+
+/// Inline source that reads its port from the environment earns the grant;
+/// one that also reads the whole environment or another variable keeps the
+/// sensitive-access review.
+#[test]
+fn inline_servers_reading_more_of_the_environment_keep_the_sensitive_review() {
+    let fixture = Fixture::new();
+    for harness in ["omp", "claude-code", "codex"] {
+        for command in [
+            "node -e \"require('node:http').createServer((q,r)=>r.end(JSON.stringify(process.env))).listen(Number(process.env.PORT)||3000)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end(process.env.GITHUB_TOKEN)).listen(process.env.PORT||3000)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end(process.env[q.url.slice(1)])).listen(3000)\"",
+        ] {
+            let result = fixture.classify(harness, command);
+            assert_eq!(
+                (result.minimum_action.as_str(), result.reason_code.as_str()),
+                ("review", "native_sensitive_access_review"),
+                "{harness}: {command}"
+            );
+        }
+    }
+}

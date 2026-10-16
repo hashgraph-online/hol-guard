@@ -47,7 +47,7 @@ pub use windows::{
 pub use drives::local_drive_letters;
 
 #[cfg(windows)]
-pub use known_folders::trusted_install_roots;
+pub use known_folders::{trusted_install_roots, windows_directory};
 
 #[cfg(windows)]
 pub use secure_storage::{

@@ -179,11 +179,13 @@ impl CompiledNativeCommandControls {
             Some((shell, _)) => shell.clone(),
             None => shell_text(text).to_owned(),
         };
+        // A redirection such as `;2>&1` is not a program. It goes before the
+        // awk pass, which rejoins words with spaces: `2>&1` became `2 >& 1`,
+        // and the lone fd then read as the program hiding the interpreter.
+        let bare = without_plain_awk(&without_redirections(&shell));
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
-        // A redirection such as `;2>&1` is not a program: left in, its fd
-        // number reads as one and hides the interpreter after it.
-        let interpreted = named_words(&joined_quotes(&without_redirections(shell)));
+        let interpreted = named_words(&joined_quotes(&bare));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -223,7 +225,7 @@ impl CompiledNativeCommandControls {
                 // launch such as `python3 -m http.server` looks like a script
                 // that was never read. The module name is already in the
                 // command.
-                None if !interpreter_launch_reads_a_file(shell) => {}
+                None if !interpreter_launch_reads_a_file(&bare) => {}
                 None => return None,
             }
         }

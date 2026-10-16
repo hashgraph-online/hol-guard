@@ -24,6 +24,8 @@ const SENSITIVE_PATHS: [&str; 9] = [
 /// A credential location named anywhere in the value, even inside prose.
 fn sensitive_path(value: &str) -> bool {
     let value = value.to_ascii_lowercase().replace('\\', "/");
+    // A dotted read of a port variable (`process.env.PORT`) names no `.env` file.
+    let value = crate::environment_secret_dump::without_node_port_reads(&value);
     SENSITIVE_PATHS.iter().any(|needle| value.contains(needle))
 }
 

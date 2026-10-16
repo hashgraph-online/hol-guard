@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::os::windows::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -76,10 +76,34 @@ fn cmd(cwd: &str, line: &str) -> String {
 }
 
 fn environment() -> BTreeMap<String, String> {
-    ["PATH", "PATHEXT", "SystemRoot", "USERPROFILE"]
+    let mut env: BTreeMap<String, String> = ["PATH", "PATHEXT", "SystemRoot", "USERPROFILE"]
         .into_iter()
         .filter_map(|name| Some((name.to_owned(), std::env::var(name).ok()?)))
-        .collect()
+        .collect();
+    if let Some(path) = env.get_mut("PATH") {
+        *path = without_build_dirs(path);
+    }
+    env
+}
+
+/// Drop the toolchain and target directories cargo prepends to the test
+/// process `PATH`: their DLLs would exceed the binding caps of every launch.
+fn without_build_dirs(path: &str) -> String {
+    let exe = std::env::current_exe().unwrap();
+    let target = exe
+        .ancestors()
+        .find(|dir| dir.file_name().is_some_and(|name| name == "target"))
+        .map(|dir| dir.to_string_lossy().to_ascii_lowercase());
+    path.split(';')
+        .filter(|entry| {
+            let lowered = entry.to_ascii_lowercase();
+            !lowered.contains("\\.rustup\\")
+                && !target
+                    .as_ref()
+                    .is_some_and(|dir| lowered.starts_with(dir.as_str()))
+        })
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 fn query(
@@ -246,24 +270,7 @@ fn windows_paths_outside_the_workspace_are_broad() {
     }
 }
 
-#[test]
-fn windows_launches_stay_one_time() {
-    // The launch identity of a Windows executable is never reusable yet
-    // (`launch_identity_stub.rs`), so a shell "Always" stays a one-time allow.
-    let tree = Tree::new();
-    let system = std::env::var("SystemRoot").unwrap();
-    let where_exe = PathBuf::from(system).join("System32").join("where.exe");
-    assert!(where_exe.is_file());
-    for command in [
-        "where.exe where",
-        "where where",
-        "git status",
-        "cd src && where where",
-    ] {
-        let reason = shell(&tree, command);
-        assert!(
-            matches!(reason, Err("unproven_launch" | "compound_command")),
-            "{command}: {reason:?}"
-        );
-    }
-}
+#[path = "windows_git_tests.rs"]
+mod git;
+#[path = "windows_launch_tests.rs"]
+mod launch;

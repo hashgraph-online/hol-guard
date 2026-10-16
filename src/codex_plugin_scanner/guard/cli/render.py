@@ -1049,6 +1049,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         supply_chain = payload.get("supply_chain")
         if isinstance(supply_chain, dict):
             console.print(_build_supply_chain_posture_panel(supply_chain))
+    _print_bundled_runtime_warning(console, payload)
     trust = payload.get("trust")
     if isinstance(trust, dict):
         console.print(_build_trust_doctor_panel(trust))
@@ -1069,6 +1070,18 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             )
         console.print(perf_table)
     console.print(_build_diagnostic_command_panel())
+
+
+def _print_bundled_runtime_warning(console: Console, payload: dict[str, object]) -> None:
+    native_runtime = payload.get("native_runtime")
+    bundled = native_runtime.get("bundled") if isinstance(native_runtime, dict) else None
+    if not isinstance(bundled, dict) or bundled.get("status") != "missing" or not bundled.get("message"):
+        return
+    lines = [str(bundled["message"]), "Or run `hol-guard doctor --repair`."]
+    manual = bundled.get("manual_install")
+    if isinstance(manual, str) and manual:
+        lines.append(f"If the download is blocked, install it by hand: {manual}")
+    console.print(Panel(Text("\n".join(lines)), title="Native runtime missing", border_style="red"))
 
 
 def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:

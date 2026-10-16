@@ -44,8 +44,14 @@ const BRANCH_FLAGS: [&str; 11] = [
 ];
 const WORKTREE_LIST_FLAGS: [&str; 3] = ["--porcelain", "-v", "--verbose"];
 
-/// `git_readonly_identity`.
-pub(super) fn git_readonly_identity(arguments: &[String], cwd: &str, ctx: &Ctx) -> Proof<Value> {
+/// `git_readonly_identity`; `system` lists the machine-wide config and
+/// attribute files the bound git reads.
+pub(super) fn git_readonly_identity(
+    arguments: &[String],
+    cwd: &str,
+    system: &[String],
+    ctx: &Ctx,
+) -> Proof<Value> {
     let mut target = cwd.to_owned();
     let mut index = 0;
     let mut changed_dir = false;
@@ -74,12 +80,14 @@ pub(super) fn git_readonly_identity(arguments: &[String], cwd: &str, ctx: &Ctx) 
         return Err(MUTABLE_LAUNCHER);
     }
     let (root, git_dir, common_dir) = repository(&target)?;
+    let invocation = &arguments[index..];
+    let config_digest = git_config_digest(&root, &git_dir, &common_dir, system, invocation, ctx)?;
     Ok(json!({
         "kind": "git-readonly",
         "subcommand": subcommand,
         "target": target,
         "repository": root,
-        "config_digest": git_config_digest(&root, &git_dir, &common_dir, ctx)?,
+        "config_digest": config_digest,
     }))
 }
 

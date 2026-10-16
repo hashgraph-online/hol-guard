@@ -42,7 +42,9 @@ pub(crate) trait Engines {
         env: &BTreeMap<String, String>,
     ) -> Value;
     fn launch_reusable(&self, identity: &Value) -> bool;
-    /// The machine-wide git config file git would read.
+    /// The machine-wide git config file git would read. Windows reads the
+    /// install's own files instead (`git_windows`).
+    #[cfg_attr(windows, allow(dead_code))]
     fn system_git_config(&self) -> String {
         "/etc/gitconfig".to_owned()
     }

@@ -12,7 +12,8 @@ use std::path::Path;
 
 #[cfg(windows)]
 pub(super) use super::fs_path_windows::{
-    expand_tilde, is_abs, is_anchored, is_sep, join, name, norm, parent, resolve, resolve_strict,
+    expand_tilde, is_abs, is_anchored, is_literal, is_sep, join, name, norm, parent, resolve,
+    resolve_strict,
 };
 
 #[cfg(not(windows))]

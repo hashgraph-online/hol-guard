@@ -227,7 +227,7 @@ from .install_dry_run import build_managed_install_plan
 from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
 from .uninstall_commands import retire_native_resident_after_last_harness, run_guard_self_uninstall
-from .update_commands import run_guard_update
+from .update_commands import bundled_native_runtime_report, repair_native_runtime_if_missing, run_guard_update
 
 DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
 
