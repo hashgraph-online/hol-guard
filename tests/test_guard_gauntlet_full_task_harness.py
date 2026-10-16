@@ -281,7 +281,7 @@ def _cli(monkeypatch, capsys, *extra: str) -> tuple[int, str]:
         (("--harness", "codex", "--case", "todo-app-to-github"), "real GitHub"),
         (("--harness", "codex", "--github-owner", "someone"), "need --harness omp"),
         (("--harness", "claude-code", "--full-task-canary", "x"), "need --harness omp"),
-        (("--harness", "codex", "--jobs", "2"), "one at a time"),
+        (("--harness", "codex", "--jobs", "9"), "--jobs must be"),
         (("--harness", "codex", "--native-luna-route"), "own login"),
     ],
 )

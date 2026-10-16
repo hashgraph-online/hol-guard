@@ -331,8 +331,8 @@ def main(argv: list[str] | None = None) -> int:
         from .parallel import MAX_SLOTS, validate_jobs
 
         validate_jobs(args.jobs)
-        if args.profile != "core" and args.jobs != 1:
-            raise ValueError("--jobs is only supported by the core profile")
+        if args.profile not in ("core", "full-tasks") and args.jobs != 1:
+            raise ValueError("--jobs is only supported by the core and full-tasks profiles")
         if args.profile != "full-tasks" and args.full_task_mode != "enforce":
             raise ValueError("--full-task-mode requires --profile full-tasks")
         if args.profile == "full-tasks" and (
