@@ -302,3 +302,62 @@ fn memory_index_globs_over_links_and_hidden_projects_keep_review() {
     std::fs::write(memory.join("MEMORY.md"), "# Hidden\n").unwrap();
     assert_ne!(action(&hidden, "claude-code", command), "allow");
 }
+
+#[test]
+fn a_harness_note_that_does_not_exist_yet_reads_as_nothing() {
+    let home = memory_home("memory-missing");
+    let absolute = format!(
+        "ls -la; node --version; cat {}/.claude/projects/no-index/memory/MEMORY.md 2>/dev/null",
+        home.display()
+    );
+    for harness in ["claude-code", "codex", "omp"] {
+        for command in [
+            "cat ~/.claude/projects/-Users-dev-new/memory/MEMORY.md 2>/dev/null",
+            "cat ~/.claude/projects/p/memory/missing.md",
+            "head -20 ~/.codex/plans/missing.md",
+            absolute.as_str(),
+        ] {
+            assert_eq!(
+                action(&home, harness, command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_structured_read_of_a_missing_note_stays_unproved() {
+    let home = memory_home("memory-structured");
+    let cwd = home.join("work/project");
+    let path = home.join(".claude/projects/no-index/memory/MEMORY.md");
+    assert!(!path.exists());
+    let result = evaluate_pre_tool_envelope_with_context(
+        "claude-code",
+        "PreToolUse",
+        &json!({"tool_name": "view", "tool_input": {"file_path": path}}),
+        None,
+        None,
+        home.to_str(),
+        cwd.to_str(),
+    );
+    assert_ne!(result.minimum_action, "allow");
+}
+
+#[test]
+fn missing_notes_outside_harness_documents_keep_review() {
+    let home = memory_home("memory-missing-review");
+    let memory = home.join(".claude/projects/p/memory");
+    std::os::unix::fs::symlink(home.join(".ssh/new_key"), memory.join("dangling.md")).unwrap();
+    std::os::unix::fs::symlink(home.join(".config"), home.join(".claude/projects/linked")).unwrap();
+    for command in [
+        "cat ~/.claude/sessions/a/missing.md",
+        "cat ~/.claude/projects/p/.hidden/missing.md",
+        "cat ~/.claude/projects/p/memory/missing.json",
+        "cat ~/.config/app-portal/missing.md",
+        "cat ~/.claude/projects/p/memory/dangling.md",
+        "cat ~/.claude/projects/linked/missing.md",
+    ] {
+        assert_ne!(action(&home, "claude-code", command), "allow", "{command}");
+    }
+}

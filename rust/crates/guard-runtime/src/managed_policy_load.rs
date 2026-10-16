@@ -77,6 +77,10 @@ pub(crate) struct ManagedPolicyState {
     pub(crate) detail: Option<String>,
 }
 
+/// The reason a Windows machine reports: the registry is the authority and
+/// this runtime does not read it.
+pub(crate) const REGISTRY_UNREADABLE: &str = "managed_policy_registry_unreadable";
+
 impl ManagedPolicyState {
     fn new(status: ManagedPolicyStatus, source: &str, reason_code: &'static str) -> Self {
         Self {
@@ -86,6 +90,18 @@ impl ManagedPolicyState {
             reason_code: Some(reason_code),
             detail: None,
         }
+    }
+
+    /// Whether this runtime could not read the machine's authority at all, as
+    /// opposed to reading it and finding it unusable.
+    ///
+    /// A Windows machine's authority is the registry, which this runtime does
+    /// not read, so every Windows machine reports this. Its policy is unknown
+    /// rather than broken: the settings floor still governs the decision, but a
+    /// caller cannot conclude from this status that an administrator installed
+    /// a policy this machine is failing to honour.
+    pub(crate) fn authority_unreadable(&self) -> bool {
+        self.reason_code == Some(REGISTRY_UNREADABLE)
     }
 
     fn with_detail(mut self, detail: &str) -> Self {
@@ -206,7 +222,7 @@ pub(crate) fn load_managed_policy(source: &ManagedPolicySource) -> ManagedPolicy
         return ManagedPolicyState::new(
             ManagedPolicyStatus::Inaccessible,
             r"HKLM\Software\Policies\HOL\Guard",
-            "managed_policy_registry_unreadable",
+            REGISTRY_UNREADABLE,
         );
     }
     let Some(native_path) = source.native_policy_path() else {
