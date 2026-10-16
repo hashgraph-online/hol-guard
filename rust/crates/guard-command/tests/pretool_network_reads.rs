@@ -79,6 +79,27 @@ fn public_curl_reads_are_allowed() {
 }
 
 #[test]
+fn local_dev_server_reads_are_allowed() {
+    let (space, _cleanup) = space("curl-loopback");
+    for command in [
+        "curl -s http://localhost:8080/health",
+        "curl -s http://127.0.0.1:8080/health | head -20",
+        "curl -fsS http://127.0.0.1:4173/ && curl -fsS http://127.0.0.1:4173/game.js && curl -fsS http://127.0.0.1:4173/main.js",
+    ] {
+        let result = decide(&space, command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+        assert_eq!(
+            result.reason_code, "native_exact_safe_network_read",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn risky_curl_requests_stay_reviewed() {
     let (space, _cleanup) = space("curl-review");
     for command in [
@@ -94,8 +115,9 @@ fn risky_curl_requests_stay_reviewed() {
         "curl -s -d @notes.txt https://example.com/api/items",
         "curl -s -H 'Authorization: Bearer abc' https://example.com/api",
         "curl -s -K curl.conf https://example.com/",
-        "curl -s http://localhost:8080/health",
-        "curl -s http://127.0.0.1:8080/health",
+        "curl -s http://localhost:2375/containers/json",
+        "curl -s http://127.0.0.1:8001/api/v1/secrets",
+        "curl -s http://127.0.0.1:8080/health > health.json",
         "curl -s http://169.254.169.254/latest/meta-data/",
         "curl -s \"$URL\"",
         "curl -s \"https://example.com/$(whoami)\"",

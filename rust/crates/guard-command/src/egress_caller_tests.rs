@@ -398,3 +398,39 @@ fn the_per_read_bound_is_never_widened() {
     assert_eq!(per_read_seconds(-1.0), MAX_EXCHANGE_SECONDS);
     assert_eq!(per_read_seconds(f64::NAN), MAX_EXCHANGE_SECONDS);
 }
+
+#[test]
+fn a_caller_without_archives_refuses_every_truthy_descriptor() {
+    let spool = spool_dir("claim");
+    let mut fulfilment = EgressFulfilment::new(&spool, &UnmanagedEgressPolicy);
+
+    // Absent, null and the empty containers claim nothing, exactly like
+    // Python's `elif descriptors:` falling through.
+    assert!(fulfilment.claim_archives(None).expect("absent").is_empty());
+    assert!(fulfilment
+        .claim_archives(Some(&serde_json::Value::Null))
+        .expect("null")
+        .is_empty());
+    assert!(fulfilment
+        .claim_archives(Some(&serde_json::json!([])))
+        .expect("empty list")
+        .is_empty());
+    assert!(fulfilment
+        .claim_archives(Some(&serde_json::json!({})))
+        .expect("empty object")
+        .is_empty());
+
+    // A malformed container still names blobs this caller never held.
+    for malformed in [
+        serde_json::json!({"sha256": "a".repeat(64)}),
+        serde_json::json!("sha256:deadbeef"),
+        serde_json::json!(1),
+        serde_json::json!([{"sha256": "b".repeat(64)}]),
+    ] {
+        assert_eq!(
+            fulfilment.claim_archives(Some(&malformed)),
+            Err(crate::egress_caller_archive::UNHELD_ARCHIVE),
+            "{malformed}"
+        );
+    }
+}

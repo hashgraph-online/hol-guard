@@ -6,7 +6,7 @@ use flate2::read::GzDecoder;
 use guard_contracts::PolicyLookupProbeGroupsV1;
 use serde_json::{json, Value};
 
-use super::{compose_groups, with_current_token, with_memory_candidates};
+use super::{compose_each, most_severe_group, with_current_token, with_memory_candidates};
 use crate::memory_pattern::{verdict, MemoryRequest};
 
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/generic_saved_decision_vectors.json.gz");
@@ -44,7 +44,7 @@ fn recorded_generic_saved_decisions_replay() {
         .unwrap_or_else(|error| panic!("{name}: {error}"));
         let table = &case["table"];
         let is_degraded = case["degraded"].as_bool().unwrap();
-        let actual = compose_groups(&groups, case["workspace"].as_str(), |id, hash, at| {
+        let composed = compose_each(&groups, case["workspace"].as_str(), |id, hash, at| {
             if is_degraded {
                 return Ok(degraded());
             }
@@ -55,7 +55,7 @@ fn recorded_generic_saved_decisions_replay() {
                 .ok_or_else(|| format!("{name}: missing probe {key}"))
         })
         .unwrap_or_else(|error| panic!("{name}: {error}"));
-        assert_eq!(actual, case["expected"], "{name}");
+        assert_eq!(most_severe_group(&composed), case["expected"], "{name}");
     }
 }
 
@@ -63,17 +63,17 @@ fn recorded_generic_saved_decisions_replay() {
 fn group_and_candidate_counts_are_bounded() {
     let probe = |_: &str, _: &str, _: Option<&str>| Ok(degraded());
     let empty: PolicyLookupProbeGroupsV1 = serde_json::from_value(json!({"groups": []})).unwrap();
-    assert!(compose_groups(&empty, None, probe).is_err());
+    assert!(compose_each(&empty, None, probe).is_err());
     let no_ids: PolicyLookupProbeGroupsV1 = serde_json::from_value(json!({
         "groups": [{"artifact_hash": "h", "candidate_artifact_ids": []}],
     }))
     .unwrap();
-    assert!(compose_groups(&no_ids, None, probe).is_err());
+    assert!(compose_each(&no_ids, None, probe).is_err());
     let many: PolicyLookupProbeGroupsV1 = serde_json::from_value(json!({
         "groups": vec![json!({"artifact_hash": "h", "candidate_artifact_ids": ["a"]}); 5],
     }))
     .unwrap();
-    assert!(compose_groups(&many, None, probe).is_err());
+    assert!(compose_each(&many, None, probe).is_err());
 }
 
 #[test]
@@ -167,4 +167,30 @@ fn memory_inputs_append_each_direct_ids_remembered_candidates() {
         .candidate_artifact_ids
         .push("extra".to_owned());
     assert!(with_memory_candidates(&two_ids).is_err());
+}
+
+#[test]
+fn a_group_composes_its_full_lookup_result_most_restrictive() {
+    let groups: PolicyLookupProbeGroupsV1 = serde_json::from_value(json!({
+        "groups": [{"artifact_hash": "h", "candidate_artifact_ids": ["direct", "remembered"]}],
+    }))
+    .unwrap();
+    let probe = |id: &str, _: &str, _: Option<&str>| {
+        Ok(json!({
+            "decision": if id == "remembered" { json!({"action": "block", "artifact_id": id}) } else { json!({"action": "allow", "artifact_id": id}) },
+            "ignored_local_integrity": null,
+            "trust_status": {"trusted": true},
+            "authority_revision": 7,
+        }))
+    };
+    let composed = compose_each(&groups, None, probe).unwrap();
+    assert_eq!(
+        composed,
+        vec![json!({
+            "decision": {"action": "block", "artifact_id": "remembered", "_approval_authority_revision": 7},
+            "ignored_local_integrity": null,
+            "trust_status": {"trusted": true},
+            "authority_revision": 7,
+        })]
+    );
 }

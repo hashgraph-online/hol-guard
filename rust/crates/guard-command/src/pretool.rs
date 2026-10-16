@@ -34,6 +34,7 @@ pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
 pub(crate) mod kubectl_reads;
+mod loopback_ports;
 pub(crate) mod port_probes;
 mod workspace_contained;
 #[cfg(unix)]

@@ -8,6 +8,9 @@
 
 use std::path::{Component, Path};
 
+/// The harness homes below the user's home directory.
+pub(in crate::pretool) const HARNESS_HOMES: [&str; 2] = [".claude", ".codex"];
+
 /// Top-level harness entries that hold transcripts, logs or shell snapshots.
 const TRANSCRIPT_TREES: [&str; 6] = [
     "archived_sessions",
@@ -32,7 +35,7 @@ pub(in crate::pretool) fn harness_home_document(canonical: &Path, home_dir: Opti
     {
         return false;
     }
-    [".claude", ".codex"].iter().any(|name| {
+    HARNESS_HOMES.iter().any(|name| {
         let root = home.join(name);
         std::fs::canonicalize(&root).is_ok_and(|resolved| resolved == root)
             && canonical.strip_prefix(&root).is_ok_and(|relative| {

@@ -142,10 +142,75 @@ class StorePortableProjectMemoryMixin:
         evidence = self.policy_lookup_evidence()
         if evidence.degraded_trust_status is not None:
             return None
-        groups = [
-            {"artifact_hash": artifact_hash, "candidate_artifact_ids": [artifact_id]}
-            for artifact_id, artifact_hash in probes
-        ]
+        reuse = {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)}
+        memory = (memory_command, memory_artifact_type, memory_artifact_name)
+        return self._send_memory_probe_groups(
+            evidence, harness, probes, workspace, publisher, runtime_exact_match_context, memory, reuse
+        )
+
+    def resolve_policy_decision_lookup_with_memory_pattern(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None = None,
+        workspace: str | None = None,
+        publisher: str | None = None,
+        now: str | None = None,
+        runtime_exact_match_context: str | None = None,
+        *,
+        memory_command: str | None = None,
+        memory_artifact_type: str | None = None,
+        memory_artifact_name: str | None = None,
+        consume_one_shot: bool = True,
+    ) -> PolicyDecisionLookupResult:
+        """Peek the direct, exact-command and memory candidates in one resident call.
+
+        The resident composes them most restrictive with the portable Git
+        workspace, as the consuming path below does one probe at a time.
+        """
+        if consume_one_shot or not artifact_id or not artifact_hash:
+            return super().resolve_policy_decision_lookup_with_memory_pattern(
+                harness,
+                artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=publisher,
+                now=now,
+                runtime_exact_match_context=runtime_exact_match_context,
+                memory_command=memory_command,
+                memory_artifact_type=memory_artifact_type,
+                memory_artifact_name=memory_artifact_name,
+                consume_one_shot=consume_one_shot,
+            )
+        evidence = self.policy_lookup_evidence(now=now)
+        if evidence.degraded_trust_status is not None:
+            return {
+                "decision": None,
+                "ignored_local_integrity": None,
+                "trust_status": evidence.degraded_trust_status,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
+            }
+        memory = (memory_command, memory_artifact_type, memory_artifact_name)
+        return self._send_memory_probe_groups(
+            evidence, harness, [(artifact_id, artifact_hash)], workspace, publisher, runtime_exact_match_context, memory
+        )
+
+    def _send_memory_probe_groups(
+        self,
+        evidence: Any,
+        harness: str,
+        probes: Sequence[tuple[str, str | None]],
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        memory: tuple[str | None, str | None, str | None],
+        reuse: Mapping[str, object] | None = None,
+    ) -> Any:
+        """Send direct-id probe groups for the resident to expand and compose.
+
+        Without ``reuse`` the request names one probe and answers its full
+        ``lookup_result``.
+        """
         request = self.policy_decision_lookup_request(
             evidence,
             harness=harness,
@@ -156,20 +221,21 @@ class StorePortableProjectMemoryMixin:
             runtime_exact_match_context=runtime_exact_match_context,
             consume_one_shot=False,
         )
+        command, artifact_type, artifact_name = memory
         request["probe_groups"] = {
             "portable_workspace": self._portable_project_workspace(workspace),
-            "groups": groups,
-            "reuse": {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)},
+            "groups": [{"artifact_hash": h, "candidate_artifact_ids": [i]} for i, h in probes],
+            **({"reuse": reuse} if reuse is not None else {}),
             "memory": {
-                "command": memory_command,
-                "artifact_type": memory_artifact_type,
-                "artifact_name": memory_artifact_name,
+                "command": command,
+                "artifact_type": artifact_type,
+                "artifact_name": artifact_name,
                 "harness": harness,
             },
         }
         # Gated on the expansion capability, not the lookup's: the groups above
         # carry only their direct id, so a runtime that does not expand them
-        # would answer a narrower question than the hook asked, and the
+        # would answer a narrower question than was asked, and the
         # probe-groups contract would reject the ``memory`` field anyway. The
         # named missing capability says that; a serde error would not.
         return self.send_policy_decision_lookup(request, required_feature=_MEMORY)

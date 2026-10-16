@@ -361,6 +361,13 @@ impl ArchiveEgress for ArchiveFulfilment<'_> {
         self.elapsed += started.elapsed().as_secs_f64();
         outcome
     }
+
+    fn claim(
+        &mut self,
+        descriptors: &Value,
+    ) -> Result<Vec<RestrictedArchiveDownload>, &'static str> {
+        ArchiveFulfilment::claim(self, descriptors)
+    }
 }
 
 impl Drop for ArchiveFulfilment<'_> {

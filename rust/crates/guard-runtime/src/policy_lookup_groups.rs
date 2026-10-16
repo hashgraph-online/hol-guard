@@ -54,7 +54,7 @@ pub(crate) fn evaluate(
     let groups = &with_memory_candidates(groups)?;
     let groups = &with_current_token(groups, current_token.as_deref())?;
     let connection = open_lookup_connection(&request.store_path)?;
-    let saved = compose_groups(
+    let mut composed = compose_each(
         groups,
         request.workspace.as_deref(),
         |artifact_id, artifact_hash, workspace| {
@@ -66,18 +66,22 @@ pub(crate) fn evaluate(
             evaluate_non_consuming(&probe, &connection)
         },
     )?;
-    Ok(match (&groups.reuse, current_token) {
-        (Some(reuse), Some(token)) => {
-            let mut miss = request.clone();
-            miss.artifact_hash = Some(token.clone());
-            let mut composed = compose_reuse(saved, &reuse.current_action, &token, || {
-                diagnose_miss(&miss, &connection)
-            });
-            composed["current_token"] = Value::String(token);
-            composed
-        }
-        _ => saved,
-    })
+    let (Some(reuse), Some(token)) = (&groups.reuse, current_token) else {
+        // Without a reuse verdict the request names one artifact and answers
+        // its full `lookup_result`.
+        return match composed.len() {
+            1 => Ok(composed.remove(0)),
+            _ => Err(ERR_INVALID.to_owned()),
+        };
+    };
+    let mut miss = request.clone();
+    miss.artifact_hash = Some(token.clone());
+    let saved = most_severe_group(&composed);
+    let mut composed = compose_reuse(saved, &reuse.current_action, &token, || {
+        diagnose_miss(&miss, &connection)
+    });
+    composed["current_token"] = Value::String(token);
+    Ok(composed)
 }
 
 /// With remembered-decision inputs, each group names only its direct id;
@@ -134,12 +138,12 @@ pub(crate) fn with_current_token(
     Ok(resolved)
 }
 
-/// Probe every group and return `{decision, ignored_local_integrity}`.
-pub(crate) fn compose_groups<F>(
+/// Each group's candidates composed most restrictive, in group order.
+fn compose_each<F>(
     groups: &PolicyLookupProbeGroupsV1,
     workspace: Option<&str>,
     mut probe: F,
-) -> Result<Value, String>
+) -> Result<Vec<Value>, String>
 where
     F: FnMut(&str, &str, Option<&str>) -> Result<Value, String>,
 {
@@ -168,7 +172,7 @@ where
         }
         composed.push(most_restrictive(&lookups).ok_or(ERR_INVALID)?);
     }
-    Ok(most_severe_group(&composed))
+    Ok(composed)
 }
 
 /// The empty answer of a home that serves no authority.

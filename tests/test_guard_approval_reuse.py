@@ -933,7 +933,7 @@ def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
 
 
 def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_block(
-    tmp_path, native_context_digest: Path
+    tmp_path, native_context_digest: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:shell"
@@ -963,6 +963,14 @@ def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_b
         ),
         "2026-07-17T12:01:00+00:00",
     )
+    send = store.send_policy_decision_lookup
+    requests: list[dict[str, object]] = []
+
+    def counted_send(request: dict[str, object], **kwargs: str) -> object:
+        requests.append(request)
+        return send(request, **kwargs)
+
+    monkeypatch.setattr(store, "send_policy_decision_lookup", counted_send)
 
     lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         "codex",
@@ -978,6 +986,9 @@ def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_b
     assert lookup["decision"] is not None
     assert lookup["decision"]["action"] == "block"
     assert lookup["decision"]["artifact_id"] == exact_command_id
+    assert lookup["authority_revision"] == lookup["decision"]["_approval_authority_revision"]
+    # One resident request expands and composes every remembered candidate.
+    assert len(requests) == 1
 
 
 def test_atomic_claim_rejects_changed_expected_local_once_identity_without_consuming(tmp_path) -> None:

@@ -209,3 +209,96 @@ fn file_reports_the_type_of_an_existing_executable_outside_the_workspace() {
         );
     }
 }
+
+/// A home with a memory index in two Claude Code projects, beside a session
+/// transcript and a project that has no index.
+fn memory_home(name: &str) -> PathBuf {
+    let home = home(name);
+    for project in ["p", "-Users-dev-work-api"] {
+        let memory = home.join(".claude/projects").join(project).join("memory");
+        std::fs::create_dir_all(&memory).unwrap();
+        std::fs::write(memory.join("MEMORY.md"), "# Memory\n").unwrap();
+    }
+    std::fs::write(home.join(".claude/projects/p/session.jsonl"), "{}\n").unwrap();
+    std::fs::create_dir_all(home.join(".claude/projects/no-index")).unwrap();
+    home
+}
+
+#[test]
+fn claude_memory_indexes_read_across_projects() {
+    let home = memory_home("memory-glob");
+    let absolute = format!("cat {}/.claude/projects/*/memory/MEMORY.md", home.display());
+    for harness in ["claude-code", "codex", "omp"] {
+        for command in [
+            "cat ~/.claude/projects/*/memory/MEMORY.md",
+            "cat ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null",
+            "ls -la; node --version; cat ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null",
+            "cat ~/.claude/projects/*/memory/*.md",
+            "cat ~/.claude/projects/?/memory/note.md",
+            absolute.as_str(),
+        ] {
+            assert_eq!(
+                action(&home, harness, command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn wildcard_directories_outside_harness_notes_keep_review() {
+    let home = memory_home("memory-glob-review");
+    for (path, contents) in [
+        (".config/app-portal/x.md", "# Notes\n"),
+        (".ssh/keys/x", "key\n"),
+        ("projects/api/secret.md", "# Secret\n"),
+        (".claude/projects/settings.json", "{}\n"),
+        (".claude/sessions/a/MEMORY.md", "# Transcript\n"),
+    ] {
+        std::fs::create_dir_all(home.join(path).parent().unwrap()).unwrap();
+        std::fs::write(home.join(path), contents).unwrap();
+    }
+    for command in [
+        "cat ~/.config/*/x.md",
+        "cat ~/.ssh/*/x",
+        "cat /etc/*/x.md",
+        "cat ~/projects/*/secret.md",
+        "cat ~/.claude/projects/*/*.jsonl",
+        "cat ~/.claude/*/settings.json",
+        "cat ~/.claude/s*/*/MEMORY.md",
+        "cat ~/.claude/**/MEMORY.md",
+        "cat ~/.claude/projects/[p-]*/memory/MEMORY.md",
+        "cat ~/.claude/projects/*/missing/MEMORY.md",
+    ] {
+        assert_ne!(action(&home, "claude-code", command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn memory_index_globs_over_links_and_hidden_projects_keep_review() {
+    let command = "cat ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null";
+
+    let outside = memory_home("memory-glob-outside");
+    let elsewhere = outside.parent().unwrap().join("elsewhere");
+    std::fs::create_dir_all(elsewhere.join("memory")).unwrap();
+    std::fs::write(elsewhere.join("memory/MEMORY.md"), "# Elsewhere\n").unwrap();
+    std::os::unix::fs::symlink(&elsewhere, outside.join(".claude/projects/linked")).unwrap();
+    assert_ne!(action(&outside, "claude-code", command), "allow");
+
+    let transcript = memory_home("memory-glob-transcript");
+    let memory = transcript.join(".claude/projects/q/memory");
+    std::fs::create_dir_all(&memory).unwrap();
+    std::os::unix::fs::symlink(
+        transcript.join(".claude/projects/p/session.jsonl"),
+        memory.join("MEMORY.md"),
+    )
+    .unwrap();
+    assert_ne!(action(&transcript, "claude-code", command), "allow");
+
+    let hidden = memory_home("memory-glob-hidden");
+    let memory = hidden.join(".claude/projects/.archive/memory");
+    std::fs::create_dir_all(&memory).unwrap();
+    std::fs::write(memory.join("MEMORY.md"), "# Hidden\n").unwrap();
+    assert_ne!(action(&hidden, "claude-code", command), "allow");
+}

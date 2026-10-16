@@ -129,6 +129,17 @@ pub struct EgressProxyCredentials {
 /// blob under bounded acquisition and inspects it offline.
 pub trait ArchiveEgress {
     fn fulfil(&mut self, need: &EgressNeedV1) -> EgressOutcomeV1;
+
+    /// Hand over the retained blobs the resident's answer names and remove
+    /// every other blob this acquisition holds.
+    ///
+    /// An answer that names a blob the caller does not hold is a protocol
+    /// failure, not an empty claim: nothing may launch against bytes nobody
+    /// inspected.
+    fn claim(
+        &mut self,
+        descriptors: &serde_json::Value,
+    ) -> Result<Vec<crate::restricted_archive::RestrictedArchiveDownload>, &'static str>;
 }
 
 /// No managed network policy applies. Only correct where the caller has
@@ -181,6 +192,33 @@ impl<'a> EgressFulfilment<'a> {
     /// Every outcome the next request must carry, in the order asked.
     pub fn supplied(&self) -> &[EgressSuppliedV1] {
         &self.supplied
+    }
+
+    /// Where a spooled body is written, which the next request must name so
+    /// the resident reads the body from the same directory.
+    pub fn spool_dir(&self) -> &Path {
+        &self.spool_dir
+    }
+
+    /// The retained archive blobs the resident's answer names.
+    ///
+    /// A caller with no archive acquisition wired holds nothing, so an answer
+    /// that names a blob is the same protocol failure as one that names a blob
+    /// an acquisition never retained.
+    pub fn claim_archives(
+        &mut self,
+        descriptors: Option<&serde_json::Value>,
+    ) -> Result<Vec<crate::restricted_archive::RestrictedArchiveDownload>, &'static str> {
+        let nothing = serde_json::Value::Null;
+        let descriptors = descriptors.unwrap_or(&nothing);
+        match self.archives.as_mut() {
+            Some(archives) => archives.claim(descriptors),
+            // Python's `elif descriptors:` refuses any truthy descriptor here,
+            // not just a non-empty list: a malformed container still names
+            // blobs this caller never held.
+            None if truthy(descriptors) => Err(crate::egress_caller_archive::UNHELD_ARCHIVE),
+            None => Ok(Vec::new()),
+        }
     }
 
     /// Perform one answer's needs. The resident replays the whole evaluation
@@ -642,6 +680,18 @@ fn scheme_of(url: &str) -> Option<String> {
         return None;
     }
     Some(scheme.to_ascii_lowercase())
+}
+
+/// CPython's truth value for a decoded JSON value.
+fn truthy(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Bool(flag) => *flag,
+        serde_json::Value::Number(number) => number.as_f64() != Some(0.0),
+        serde_json::Value::String(text) => !text.is_empty(),
+        serde_json::Value::Array(items) => !items.is_empty(),
+        serde_json::Value::Object(fields) => !fields.is_empty(),
+    }
 }
 
 fn inline_text(body: &[u8]) -> Option<String> {
