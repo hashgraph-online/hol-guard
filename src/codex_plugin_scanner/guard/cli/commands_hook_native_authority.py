@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from contextlib import suppress
 from functools import wraps
 from pathlib import Path
 from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..daemon.diagnostics import DaemonDiagnostics
 from ..daemon.hook_availability_policy import availability_harness_response
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.hook_worker import HookWorker
@@ -21,6 +23,29 @@ from .commands_hook_native_availability import _native_unavailable_exit_code
 from .commands_support_interaction import _emit
 
 _NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS = 0.25
+_DIAGNOSTIC_DRAIN_TIMEOUT_SECONDS = 0.25
+
+
+def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name: str) -> None:
+    """Write the swallowed hook exception to Guard's own log.
+
+    The fail-closed response deliberately carries no detail: it travels the
+    harness wire and would leak local paths. Without this the operator sees a
+    deny with no stderr, no reason beyond the generic message, and nothing in
+    any log to explain it. Diagnostics never change the returned verdict, so
+    every failure here is suppressed. Call this from inside the ``except``
+    block, where ``sys.exc_info()`` still holds the exception.
+    """
+
+    with suppress(Exception):
+        diagnostics = DaemonDiagnostics(guard_home, start_worker=False, rotate=False)
+        try:
+            diagnostics.record_exception(
+                "native_hook_worker_exception",
+                detail=f"harness={harness} event={event_name}",
+            )
+        finally:
+            diagnostics.close(timeout_seconds=_DIAGNOSTIC_DRAIN_TIMEOUT_SECONDS)
 
 
 def try_native_hook_authority(
@@ -62,6 +87,11 @@ def try_native_hook_authority(
             workspace=workspace,
         )
     except Exception:
+        _record_native_hook_exception(
+            guard_home,
+            harness=harness,
+            event_name=runtime_hook_event_name(payload),
+        )
         return availability_harness_response(
             payload,
             harness=harness,
@@ -170,6 +200,11 @@ def route_native_hook(
         # (per-harness deny code, recording-only allows keep 0).
         return _native_unavailable_exit_code(args, native_result, runtime_hook_event_name(payload))
     except Exception:
+        _record_native_hook_exception(
+            context.guard_home,
+            harness=args.harness,
+            event_name=runtime_hook_event_name(payload),
+        )
         response = availability_harness_response(
             payload,
             harness=args.harness,

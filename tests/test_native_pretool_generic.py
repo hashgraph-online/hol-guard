@@ -258,6 +258,39 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
     assert output["permissionDecision"] == "deny"
 
 
+def test_supported_cli_pretool_worker_exception_is_recorded_in_the_guard_log(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class BrokenWorker:
+        def __init__(self, *, store: object, **_kwargs: object) -> None:
+            del store
+            del _kwargs
+
+        def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("worker fixture failure")
+
+    monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
+    guard_home = tmp_path / "guard-home"
+    response = commands_hook_native_authority.try_native_hook_authority(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
+        harness="codex",
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+        store=GuardStore(guard_home),
+    )
+
+    assert isinstance(response, dict)
+    assert response["reason_code"] == "native_hook_worker_exception"
+    record = json.loads((guard_home / "logs" / "daemon.log").read_text(encoding="utf-8").splitlines()[-1])
+    assert record["event"] == "native_hook_worker_exception"
+    assert record["detail"] == "harness=codex event=PreToolUse"
+    assert "worker fixture failure" in record["exception"]
+    # The wire response stays free of local detail; the log carries it.
+    assert "worker fixture failure" not in json.dumps(response)
+
+
 def test_cli_frames_raw_payload_before_harness_normalization(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
