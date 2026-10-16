@@ -1,12 +1,18 @@
 //! Paths whose names mark credential data: the file's own name, or a
 //! directory that stores credentials.
 
-use super::{is_source_code_extension, sensitive_external_filename, EXTERNAL_SENSITIVE_PARTS};
+use super::{
+    is_source_code_extension, sensitive_external_filename, win32_name, EXTERNAL_SENSITIVE_PARTS,
+};
 use std::path::Path;
 
 pub fn credential_named_path(path: &Path) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/");
-    let Some(last) = normalized.rsplit('/').find(|part| !part.is_empty()) else {
+    let Some(last) = normalized
+        .rsplit('/')
+        .map(win32_name)
+        .find(|part| !part.is_empty())
+    else {
         return false;
     };
     let last = Path::new(last);
@@ -20,7 +26,10 @@ pub fn credential_named_path(path: &Path) -> bool {
     if is_source_code_extension(extension) || matches!(extension, "pyc" | "pyo") {
         return false;
     }
-    let mut parts = normalized.split('/').filter(|part| !part.is_empty());
+    let mut parts = normalized
+        .split('/')
+        .map(win32_name)
+        .filter(|part| !part.is_empty());
     parts
         .next_back()
         .is_some_and(|name| sensitive_external_filename(Path::new(name)))

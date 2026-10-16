@@ -158,11 +158,12 @@ def test_resolve_job_mirrors_build_alpha_version_rules() -> None:
 def test_windows_alpha_compile_lowers_only_workspace_opt_level() -> None:
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     expression = prepare["env"]["ALPHA_WORKSPACE_OPT_LEVEL"]
-    assert expression == "${{ matrix.target == 'x86_64-pc-windows-msvc' && '1' || '' }}"
+    assert expression == "${{ endsWith(matrix.target, '-pc-windows-msvc') && '1' || '' }}"
     legs = prepare["strategy"]["matrix"]["include"]
-    assert len(legs) == 4
+    assert len(legs) == 5
     targets = [leg["target"] for leg in legs]
     assert targets.count("x86_64-pc-windows-msvc") == 1
+    assert targets.count("aarch64-pc-windows-msvc") == 1
     step = next(s for s in prepare["steps"] if s.get("name") == "Compile canonical release inputs")
     script = step["run"]
     export = script.index("CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16")

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::*;
 use crate::claude_hook_bridge_fixture::GuardHome;
@@ -63,6 +63,17 @@ fn environment(home: &Path) -> SessionEnvironment {
 
 fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(5)
+}
+
+/// The lane's output where no daemon start may run.
+fn no_op_output(
+    config_text: &str,
+    environment: &SessionEnvironment,
+    deadline: Instant,
+) -> Result<String, String> {
+    session_output(config_text, environment, deadline, |command| {
+        panic!("the lane started the daemon with {command:?}")
+    })
 }
 
 /// A Claude home beside `guard`'s home.
@@ -266,4 +277,106 @@ fn unverified_daemon_hands_off() {
 
     assert!(output.is_err());
     assert_eq!(daemon.join().unwrap().len(), 1);
+}
+
+/// A Guard home whose signed state names a daemon of this package version
+/// whose pid no longer runs, and the URL that daemon listened on.
+fn stopped_home(label: &str, edit: impl FnOnce(&mut Map<String, Value>)) -> (GuardHome, String) {
+    let (guard, listener, _state) = live_home(label, |state| {
+        state.insert("pid".to_owned(), json!(i32::MAX));
+        edit(state);
+    });
+    let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    (guard, url)
+}
+
+fn recovery_command() -> Vec<String> {
+    serde_json::from_value(fixture()["bridge_config"]["recovery_command"].clone()).unwrap()
+}
+
+#[test]
+fn stopped_daemon_with_current_settings_is_started_and_prints_the_context() {
+    let (guard, url) = stopped_home("ss-stopped", |_| {});
+    let home = claude_home(&guard);
+    let settings = write_settings(&home, &guard.state_path, &url);
+    let before = fs::read(&settings).unwrap();
+    let mut started = Vec::new();
+
+    let output = session_output(
+        &config_text(&home, &guard.state_path, &runtime_build()),
+        &environment(&home),
+        deadline(),
+        |command| {
+            started.push(command.to_vec());
+            true
+        },
+    );
+
+    assert_eq!(output.as_deref(), Ok(CONTEXT));
+    assert_eq!(started, [recovery_command()]);
+    assert_eq!(fs::read(&settings).unwrap(), before);
+}
+
+#[test]
+fn stopped_daemon_whose_start_fails_hands_off() {
+    let (guard, url) = stopped_home("ss-stopped-start-failed", |_| {});
+    let home = claude_home(&guard);
+    write_settings(&home, &guard.state_path, &url);
+    let mut attempts = 0;
+
+    let output = session_output(
+        &config_text(&home, &guard.state_path, &runtime_build()),
+        &environment(&home),
+        deadline(),
+        |_| {
+            attempts += 1;
+            false
+        },
+    );
+
+    assert!(output.is_err());
+    assert_eq!(attempts, 1);
+}
+
+#[test]
+fn stopped_daemon_with_drifted_settings_hands_off_without_a_start() {
+    let (guard, _url) = stopped_home("ss-stopped-drift", |_| {});
+    let home = claude_home(&guard);
+    write_settings(&home, &guard.state_path, FIXTURE_URL);
+
+    let output = no_op_output(
+        &config_text(&home, &guard.state_path, &runtime_build()),
+        &environment(&home),
+        deadline(),
+    );
+
+    assert!(output.is_err());
+}
+
+#[test]
+fn stopped_daemon_of_another_version_or_host_hands_off_without_a_start() {
+    let edits: [fn(&mut Map<String, Value>); 3] = [
+        |state| {
+            state.insert("package_version".to_owned(), json!("0.0.0"));
+        },
+        |state| {
+            state.insert("host".to_owned(), json!("0.0.0.0"));
+        },
+        |state| {
+            state.insert("pid".to_owned(), json!(0));
+        },
+    ];
+    for (index, edit) in edits.into_iter().enumerate() {
+        let (guard, url) = stopped_home(&format!("ss-stopped-gate-{index}"), edit);
+        let home = claude_home(&guard);
+        write_settings(&home, &guard.state_path, &url);
+
+        let output = no_op_output(
+            &config_text(&home, &guard.state_path, &runtime_build()),
+            &environment(&home),
+            deadline(),
+        );
+
+        assert!(output.is_err(), "gate {index} did not hand off");
+    }
 }

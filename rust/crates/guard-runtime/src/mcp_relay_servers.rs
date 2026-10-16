@@ -7,7 +7,12 @@
 //! which decides those calls as it does without the relay. That holds for a
 //! tool the package parser reads as a shell (`_SHELL_TOOL_NAMES`), a tool
 //! whose input schema declares a key the proxy reads as the command
-//! (`_command_argument`), and a Composio tool.
+//! (`_command_argument`), and a Composio tool. A schema that composes its
+//! properties elsewhere - behind a reference, `allOf`, `anyOf`, `oneOf`, a
+//! conditional branch, a dependent subschema or a property name given as a
+//! pattern - declares them where the `properties` object cannot be read, and
+//! counts as a tool the proxy decides: the host fills the schema it resolved,
+//! so such a tool does carry the command argument it declares.
 //!
 //! The relay learns a catalog only after it started the server, so the
 //! resident remembers each server's catalog for later sessions:
@@ -42,6 +47,21 @@ const MAX_KEY_BYTES: usize = 8 * 1024;
 /// `_command_argument`: the argument keys the proxy reads as the command.
 const COMMAND_KEYS: [&str; 4] = ["command", "cmd", "shell_command", "shellCommand"];
 const SCHEMA_KEYS: [&str; 2] = ["inputSchema", "input_schema"];
+/// Schema keywords whose subschemas declare properties of the same object, so
+/// a command argument the tool declares is not in its `properties`.
+const COMPOSED_KEYS: [&str; 11] = [
+    "$ref",
+    "$dynamicRef",
+    "$recursiveRef",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "then",
+    "else",
+    "dependentSchemas",
+    "dependencies",
+    "patternProperties",
+];
 
 /// The server a session runs, as the relay and the proxy both name it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -143,10 +163,18 @@ pub(crate) fn composio_tool(name: &str) -> bool {
     tail.to_ascii_lowercase().starts_with("composio_")
 }
 
+/// Whether the tool's input schema names a command argument, or composes the
+/// properties it names where this cannot be read off `properties`.
 fn declares_command(tool: &Value) -> bool {
-    SCHEMA_KEYS.iter().any(|schema| {
-        tool.get(*schema)
-            .and_then(|schema| schema.get("properties"))
+    SCHEMA_KEYS.iter().any(|key| {
+        let Some(schema) = tool.get(*key).and_then(Value::as_object) else {
+            return false;
+        };
+        if COMPOSED_KEYS.iter().any(|key| schema.contains_key(*key)) {
+            return true;
+        }
+        schema
+            .get("properties")
             .and_then(Value::as_object)
             .is_some_and(|properties| COMMAND_KEYS.iter().any(|key| properties.contains_key(*key)))
     })

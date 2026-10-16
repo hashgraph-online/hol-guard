@@ -64,6 +64,8 @@ const GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS = false;
 const GUARD_HOME = "/tmp/guard-home 'quoted";
 const GUARD_HOME_DIR_IS_DEFAULT = true;
 const GUARD_HOME_DIR = "/tmp/home";
+const GUARD_CONTAINED_SINK_COMMAND = [];
+const GUARD_CONTAINED_REQUEST_ROOT = "";
 const toolCallIdKey = (value) => typeof value === 'string' ? value : null;
 """
         + CONTAINED_TEST_HELPERS_SOURCE
@@ -147,3 +149,67 @@ console.log(JSON.stringify(output));
     assert argv[argv.index("--request-sha256") + 1] == hashlib.sha256(result["raw"].encode()).hexdigest()
     assert json.loads(result["raw"])["payload"] == result["snapshot"]["payload"]
     assert result["snapshot"]["payload"]["tool_input"]["command"] == "python3 -m pytest -q"
+
+
+def test_windows_routes_only_python_through_the_fixed_sink_and_profile_temp(tmp_path: Path) -> None:
+    bun = shutil.which("bun")
+    if bun is None:
+        pytest.skip("requires the OMP Bun runtime")
+    request_root = tmp_path / "profile temp"
+    request_root.mkdir()
+    script = tmp_path / "contained-routing-windows.ts"
+    script.write_text(
+        """
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+Object.defineProperty(process, 'platform', { value: 'win32' });
+const handlers = {};
+const pi = { on(name, callback) { handlers[name] = callback; } };
+const GUARD_CLI_WRAPPER_COMMAND = "C:\\\\Python312\\\\python.exe";
+const GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS = true;
+const GUARD_HOME = "C:\\\\Users\\\\tester\\\\.hol-guard";
+const GUARD_HOME_DIR_IS_DEFAULT = true;
+const GUARD_HOME_DIR = "C:\\\\Users\\\\tester";
+const GUARD_CONTAINED_SINK_COMMAND = [
+  "C:\\\\Program Files\\\\Python312\\\\python.exe", "-I", "-c", "import sys; print('x')", "guard",
+];
+const GUARD_CONTAINED_REQUEST_ROOT = process.argv[2];
+const toolCallIdKey = (value) => typeof value === 'string' ? value : null;
+"""
+        + CONTAINED_TEST_HELPERS_SOURCE
+        + """
+const snapshot = (id, command) => ({
+  cwd: "C:\\\\Users\\\\tester\\\\project",
+  payload: { hook_event_name: 'PreToolUse', tool_name: 'bash', tool_call_id: id, tool_input: { command } },
+});
+const python = { decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_python_eval_readonly_containment_required',
+  required_execution_profile: 'python-eval-readonly-v1' };
+const pytest = { decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_pytest_readonly_containment_required', required_execution_profile: 'pytest-readonly-v2' };
+const input = prepareContainedTestInput(python, snapshot('python-call', 'python3 test_calc.py'));
+const directory = containedTestRequests.get('python-call');
+const raw = directory ? readFileSync(join(directory, 'request.json'), 'utf8') : null;
+const rejected = prepareContainedTestInput(pytest, snapshot('pytest-call', 'python3 -m pytest'));
+// A request root removed after install denies the route instead of throwing.
+rmSync(process.argv[2], { recursive: true, force: true });
+const gone = prepareContainedTestInput(python, snapshot('gone-call', 'python3 test_calc.py'));
+console.log(JSON.stringify({ input, directory, raw, rejected, gone }));
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [bun, str(script), str(request_root)], text=True, capture_output=True, timeout=30, check=False
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["rejected"] is None
+    assert result["gone"] is None
+    assert Path(result["directory"]).parent == request_root
+    argv = shlex.split(result["input"]["command"])
+    assert argv[:5] == ["C:\\Program Files\\Python312\\python.exe", "-I", "-c", "import sys; print('x')", "guard"]
+    assert argv[5] == "execute-contained-test"
+    assert argv[argv.index("--request-file") + 1] == str(Path(result["directory"]) / "request.json")
+    assert argv[argv.index("--request-sha256") + 1] == hashlib.sha256(result["raw"].encode()).hexdigest()

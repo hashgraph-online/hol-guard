@@ -61,10 +61,30 @@ fn pid_running(pid: i64) -> bool {
     pid > 0 && nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok()
 }
 
-#[cfg(not(unix))]
+/// `_guard_daemon_pid_is_running` on Windows: anything but a proven exit
+/// counts as running, so a probe error never passes the live gate as stopped.
+#[cfg(windows)]
+fn pid_running(pid: i64) -> bool {
+    windows_liveness(pid).is_some_and(|liveness| liveness != Some(false))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn pid_running(_pid: i64) -> bool {
     false
 }
+
+/// `windows_process_liveness` for a positive pid; `None` when the pid is out
+/// of range.
+#[cfg(windows)]
+fn windows_liveness(pid: i64) -> Option<Option<bool>> {
+    let pid = u32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    Some(guard_runtime_windows_process::process_liveness(pid))
+}
+
+#[cfg(windows)]
+const DAEMON_PLATFORM: DaemonPlatformV1 = DaemonPlatformV1::Nt;
+#[cfg(not(windows))]
+const DAEMON_PLATFORM: DaemonPlatformV1 = DaemonPlatformV1::Posix;
 
 /// `identity_binding` with the token read from the private token file.
 fn token_bound(state_path: &Path, state: &AuthenticatedState) -> Result<(), String> {
@@ -87,7 +107,7 @@ fn live_port(state: &AuthenticatedState) -> Result<u16, String> {
     if let Some(pid) = state.payload.get("pid").and_then(Value::as_i64) {
         facts.insert(format!("pid_running:{pid}"), Value::Bool(pid_running(pid)));
     }
-    let ctx = Ctx::new(DaemonPlatformV1::Posix, &facts);
+    let ctx = Ctx::new(DAEMON_PLATFORM, &facts);
     let query = DaemonPayloadQueryV1 {
         payload: fields(state, &["compatibility_version", "port", "pid"]),
     };
@@ -176,6 +196,28 @@ pub(crate) fn verified_daemon_url(
         return Err("daemon state changed during verification".to_owned());
     }
     Ok(format!("http://{LOOPBACK}:{port}"))
+}
+
+/// The loopback URL of a daemon that is provably down: its authenticated
+/// state names a daemon of this package version on `127.0.0.1` whose pid no
+/// longer runs, as after a reboot or a crash. A running pid, even one that
+/// does not answer, is not down, so the caller hands it to Python.
+pub(crate) fn stopped_daemon_url(state_path: &Path) -> Result<DaemonUrl, String> {
+    let state = authenticated_state(state_path)?;
+    current_daemon(&state)?;
+    let pid = state
+        .payload
+        .get("pid")
+        .and_then(Value::as_i64)
+        .filter(|pid| *pid > 0)
+        .ok_or("daemon state names no pid")?;
+    if pid_running(pid) {
+        return Err("daemon process is still running".to_owned());
+    }
+    match state.port() {
+        0 => Err("daemon port is invalid".to_owned()),
+        port => Ok(format!("http://{LOOPBACK}:{port}")),
+    }
 }
 
 #[cfg(all(test, unix))]

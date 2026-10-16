@@ -22,6 +22,10 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// What a `psql` read inherits from the session: startup files only a
+    /// read without `-X` runs, and the server libpq picks. Literal contexts
+    /// leave both false.
+    pub psql_environment: PsqlEnvironment,
 }
 
 mod contained_wrapper;
@@ -30,6 +34,7 @@ pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
 pub(crate) mod kubectl_reads;
+mod loopback_ports;
 pub(crate) mod port_probes;
 mod workspace_contained;
 #[cfg(unix)]
@@ -56,6 +61,7 @@ mod git_config;
 pub(crate) mod git_config_reads;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
+mod git_init_chain;
 pub(crate) mod git_init_target;
 pub(crate) mod git_object_reads;
 mod git_read_floor;
@@ -64,6 +70,7 @@ mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
 mod repo_create_reason;
+mod root_removal;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
 mod git_local_writes;
@@ -82,14 +89,17 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod postgres_reads;
+mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;
 mod trusted_location;
 pub(crate) use git_routes::{git_dir_route_within_scope, git_route_within_workspace};
 mod apply_patch_writes;
+mod data_heredocs;
 mod lockfile_install;
 mod omp_hashline_writes;
+mod pipe_attacks;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
@@ -102,11 +112,13 @@ mod safe_links;
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
+mod script_content;
 mod search;
 mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+mod search_scope_tracked;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
@@ -133,12 +145,15 @@ pub mod generic;
 mod package_scripts_disabled;
 pub use package_scripts_disabled::{held_command_installs, no_script_install_command};
 
-pub use generic::bounded_task_metadata_output;
-pub use generic::evaluate_pre_tool_envelope;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
+pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
+pub use safe_scalar::PsqlEnvironment;
+#[cfg_attr(not(unix), allow(unused_imports))]
+pub(crate) use script_content::launch_loopback_ports;
+pub(crate) use script_content::{sole_program_sources, sourced_program_sources};
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -193,12 +208,15 @@ pub(super) fn normalized_haystack(value: &str) -> String {
 
 /// Floors no extension permission can settle: Guard self-protection, secret
 /// exfiltration, a glob that could name a secret file, and Git configuration
-/// that runs a program Guard cannot read.
+/// that runs a program Guard cannot read. An unproven model has no segments
+/// to screen, so it is a floor itself rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .any(crate::command_compatibility::git_runs_configured_program)
+    model.confidence != "exact"
+        || model.segments.is_empty()
+        || model
+            .segments
+            .iter()
+            .any(crate::command_compatibility::git_runs_configured_program)
         || crate::command_critical_floors::guard_control_block_in_launcher_text(
             &model.normalized_text,
         )
@@ -408,9 +426,11 @@ pub(super) fn credential_keyword_text(value: &str) -> bool {
 }
 
 /// Credential locations and environment reads: `.env`, `~/.ssh`,
-/// `process.env` and the like.
+/// `process.env` and the like. A dotted read of a port variable such as
+/// `process.env.PORT` reads no secret.
 fn sensitive_location_text(value: &str) -> bool {
     let lowered = normalized_haystack(value);
+    let lowered = crate::environment_secret_dump::without_node_port_reads(&lowered);
     let needles = [
         "/.ssh/",
         "~/.ssh",
@@ -484,11 +504,7 @@ fn pathspec_magic_path(value: &str) -> &str {
 
 fn destructive_command(value: &str) -> bool {
     let lowered = normalized_haystack(value);
-    let rm_force = lowered.contains("rm -rf") || lowered.contains("rm -fr");
-    let rm_root = [" /", " -- /", " $home", " ~", " --/"]
-        .iter()
-        .any(|needle| lowered.contains(needle));
-    if rm_force && rm_root {
+    if root_removal::removes_a_root(&lowered) {
         return true;
     }
     let basename_tokens: Vec<&str> = lowered
@@ -679,6 +695,78 @@ fn ungrouped_decision(
     }
 }
 
+/// A redirect glued to a separator, as in `;2>&1`, `;&>/dev/null`, or `;</dev/null`.
+/// `cmd 2>&1` keeps its space, so an ordinary stderr copy is not this shape.
+fn separator_glued_redirect(command: &str) -> bool {
+    let chars: Vec<char> = command.chars().collect();
+    for index in 0..chars.len().saturating_sub(1) {
+        if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
+            continue;
+        }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator,
+        // so `python3 app.py &>log` stays the ordinary command it was.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
+        let next = chars[index + 1];
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
+            return true;
+        }
+        if !next.is_ascii_digit() {
+            continue;
+        }
+        let rest = &chars[index + 1..];
+        let end = rest
+            .iter()
+            .position(|value| value.is_whitespace())
+            .unwrap_or(rest.len());
+        if rest[..end].contains(&'>') || rest[..end].contains(&'<') {
+            return true;
+        }
+    }
+    false
+}
+
+fn interpreter_runs_unread_file(model: &CanonicalCommandV1) -> bool {
+    model.segments.iter().any(|segment| {
+        let Some(executable) = segment.executable.as_deref() else {
+            return false;
+        };
+        let base = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
+        let base = base
+            .strip_suffix(".exe")
+            .unwrap_or(base)
+            .to_ascii_lowercase();
+        if !matches!(
+            base.as_str(),
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "python"
+                | "python2"
+                | "python3"
+                | "node"
+                | "ruby"
+                | "perl"
+                | "php"
+        ) {
+            return false;
+        }
+        for argument in &segment.arguments {
+            if matches!(argument.as_str(), "-c" | "-m" | "-e") {
+                return false;
+            }
+            if argument.starts_with('-') {
+                continue;
+            }
+            return true;
+        }
+        false
+    })
+}
+
 fn evaluate_single_command(
     request: &CommandModelRequestV1,
     home_dir: Option<&str>,
@@ -695,6 +783,14 @@ fn evaluate_single_command(
             "block",
             "native_secret_exfiltration",
             "HOL Guard blocked a local script that combines credential access with outbound posting.",
+        ));
+    }
+    if script_content::exfiltrates(&model, context) {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_secret_exfiltration",
+            "HOL Guard blocked a script that reads a credential store and uses the network.",
         ));
     }
     if exact_safe_command_with_context(&model, false, context)
@@ -756,11 +852,10 @@ fn evaluate_single_command(
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
     }
-    if model
-        .wrapper_chain
-        .iter()
-        .any(|wrapper| wrapper != "timeout")
-    {
+    if let Some((reason_code, reason)) = pipe_attacks::pipe_attack(&model) {
+        return Ok(pretool_decision(model, "block", reason_code, reason));
+    }
+    if !model.wrapper_chain.is_empty() {
         return Ok(pretool_decision(
             model,
             "require-reapproval",
@@ -814,7 +909,7 @@ fn evaluate_single_command(
         ));
     }
     if exact_safe_command_with_context(&model, false, context)
-        && !bun_eval::node_inline_preload_configured(&model, execution_environment)
+        && !bun_eval::inherited_preload_configured(&model, execution_environment)
     {
         let reason_code = docker_start::proven_reason_code(&model)
             .unwrap_or_else(|| curl_reads::proven_reason_code(&model));
@@ -826,7 +921,7 @@ fn evaluate_single_command(
         ));
     }
     if git_search_text::sensitive_beyond_patterns(
-        normalized,
+        &data_heredocs::without_data_bodies(normalized),
         git_search_text::command_without_patterns(&model),
     ) || secret_aliases::names_secret_alias(&model, context)
     {
@@ -872,6 +967,21 @@ fn evaluate_single_command(
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
+    // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the
+    // simple parser from naming that interpreter, and reviewing the redirect
+    // would hide the launch. Only that glued form.
+    if cwd.is_none()
+        && separator_glued_redirect(&request.command)
+        && (interpreter_runs_unread_file(&model)
+            || crate::native_command_controls::unread_file_interpreter(&request.command))
+    {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_command_extension_evaluation_failed",
+            "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`.",
+        ));
+    }
     Ok(pretool_decision(
         model,
         "review",

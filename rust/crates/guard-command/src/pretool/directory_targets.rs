@@ -7,6 +7,12 @@
 
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
+#[path = "directory_targets_tmp_alias.rs"]
+pub(crate) mod tmp_alias;
+
+#[cfg(unix)]
+#[path = "path_trust.rs"]
+pub(in crate::pretool) mod path_trust;
 
 pub(crate) fn safe_directory_target(target: &str) -> bool {
     // Windows spells an absolute directory with backslash separators. Check
@@ -49,6 +55,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         value
     };
     let supplied = std::path::Path::new(value);
+    // Only a spelling the command anchors itself may name its target through
+    // a link; a relative operand follows the shell's logical `$PWD`.
+    let anchored = supplied.is_absolute();
     let joined;
     let supplied = if supplied.is_absolute() {
         supplied
@@ -58,7 +67,7 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     };
     let canonical = std::fs::canonicalize(supplied).ok()?;
     // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
-    if !absolute_path_spelling_matches(supplied, &canonical)
+    if !absolute_path_spelling_matches(supplied, &canonical, anchored)
         || !canonical.is_dir()
         || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
     {
@@ -108,35 +117,37 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     Some(joined)
 }
 
-fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
+fn absolute_path_spelling_matches(
+    supplied: &std::path::Path,
+    canonical: &std::path::Path,
+    anchored: bool,
+) -> bool {
     if canonical == supplied {
         return true;
     }
     // macOS exposes the root temporary directory through this fixed system
-    // alias. Permit only the exact canonical suffix; deeper symlink aliases
-    // remain rejected by the physical-cwd proof.
-    #[cfg(target_os = "macos")]
+    // alias. Permit the exact canonical suffix.
+    if tmp_alias::private_tmp_spelling(supplied).is_some_and(|spelling| spelling == canonical) {
+        return true;
+    }
+    // Other links count only when nobody but this user or root can retarget
+    // them, such as `/var -> private/var` or a link in the user's own
+    // directory. A link in a directory others can write stays rejected.
+    #[cfg(unix)]
     {
-        let alias = std::path::Path::new("/tmp");
-        let Ok(relative) = supplied.strip_prefix(alias) else {
-            return false;
-        };
-        let Ok(alias_canonical) = std::fs::canonicalize(alias) else {
-            return false;
-        };
-        alias_canonical == std::path::Path::new("/private/tmp")
-            && canonical == alias_canonical.join(relative)
+        anchored && path_trust::trusted_link_spelling(supplied, canonical)
     }
     // Windows canonical paths carry the verbatim prefix.
     #[cfg(windows)]
     {
+        let _ = anchored;
         supplied
             .to_str()
             .is_some_and(|text| exact_drive_spelling(text, canonical))
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(unix, windows)))]
     {
-        let _ = (supplied, canonical);
+        let _ = (supplied, canonical, anchored);
         false
     }
 }
@@ -390,6 +401,8 @@ impl<'a> super::PathContext<'a> {
         let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
             canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         });
+        let psql_environment =
+            super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
         Self {
             home_dir,
             cwd,
@@ -398,6 +411,7 @@ impl<'a> super::PathContext<'a> {
             npm_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            psql_environment,
         }
     }
 }

@@ -173,11 +173,6 @@ class StoreLocalCliMixin:
             ensure_local_cli_schema(connection)
             return local_cli_rules_exist(connection, blocks_only=True)
 
-    def has_local_cli_grant_rules(self) -> bool:
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return local_cli_rules_exist(connection, blocks_only=False)
-
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)

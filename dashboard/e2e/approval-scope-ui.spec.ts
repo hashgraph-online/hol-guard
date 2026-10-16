@@ -227,7 +227,8 @@ for (const totpEnabled of [false, true]) {
     await expect.poll(() => bodies.length).toBe(1);
     expect(bodies[0]).toMatchObject({
       request_ids: expect.arrayContaining(["bulk-enter-0", "bulk-enter-1"]),
-      approval_gate_use_cooldown: false,
+      // A configured cooldown is used by default; an Authenticator code never starts one.
+      approval_gate_use_cooldown: !totpEnabled,
       ...(totpEnabled ? { approval_totp_code: "123456" } : { approval_password: "test-password" }),
     });
     expect(bodies[0].request_ids).toHaveLength(2);

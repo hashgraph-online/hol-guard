@@ -204,3 +204,101 @@ fn reflog_lines_split_like_splitlines() {
         "a line whose first field is not all zeros records no clone"
     );
 }
+
+#[test]
+fn a_workspace_already_naming_an_identity_is_its_own() {
+    // `is_portable_project_identity`: the prefix and exactly 64 lowercase
+    // hex digits, which `_portable_project_workspace` answers with itself.
+    let identity = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{}", "a".repeat(64));
+    assert!(is_portable_project_identity(&identity));
+    assert_eq!(
+        portable_workspace(&format!("  {identity}\n")),
+        PortableIdentity::Identity(identity.clone())
+    );
+    // One hex digit short, one too many, an uppercase digit and a digit
+    // outside the alphabet are each an ordinary workspace path instead.
+    for digest in [
+        "a".repeat(63),
+        "a".repeat(65),
+        format!("{}A", "a".repeat(63)),
+        format!("{}g", "a".repeat(63)),
+    ] {
+        let value = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{digest}");
+        assert!(!is_portable_project_identity(&value), "{value}");
+        // A relative path is a workspace this resolver does not reproduce.
+        assert_eq!(portable_workspace(&value), PortableIdentity::Unknown);
+    }
+    assert!(!is_portable_project_identity(&"a".repeat(64)));
+    assert_eq!(portable_workspace("   "), PortableIdentity::Absent);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_relative_workspace_resolves_under_the_reported_directory() {
+    let root = scratch("relative");
+    repository(&root);
+    let nested = root.join("a");
+    fs::create_dir_all(&nested).expect("nested dir");
+    let cwd = nested.to_str().expect("utf-8");
+    let token = format!("package-request-workspace-exact:v1:{}", "b".repeat(64));
+
+    // `Path(token).resolve(strict=False)` names `a/<token>` under the
+    // checkout, whose identity the ancestor walk derives.
+    let PortableIdentity::Identity(joined) = resolve_relative(&token, cwd) else {
+        panic!("the reported directory resolves");
+    };
+    let PortableIdentity::Identity(outer) = resolve_relative(&token, root.to_str().expect("utf-8"))
+    else {
+        panic!("the checkout resolves");
+    };
+    // The relative workspace is read under the directory the caller reports,
+    // so one token names a different identity in each of them.
+    assert_ne!(joined, outer);
+
+    // An absolute workspace, a blank one and one already naming an identity
+    // are read exactly as the directory-less resolver reads them.
+    assert!(matches!(
+        resolve_relative(root.to_str().expect("utf-8"), cwd),
+        PortableIdentity::Identity(_)
+    ));
+    assert_eq!(resolve_relative("   ", cwd), PortableIdentity::Absent);
+    let identity = format!("{PORTABLE_PROJECT_IDENTITY_PREFIX}{}", "c".repeat(64));
+    assert_eq!(
+        resolve_relative(&format!(" {identity} "), cwd),
+        PortableIdentity::Identity(identity)
+    );
+    fs::remove_dir_all(&root).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_relative_workspace_python_would_rewrite_is_unknown() {
+    let root = scratch("relative-rewrite");
+    repository(&root);
+    let cwd = root.to_str().expect("utf-8").to_owned();
+    let token = format!("package-request-workspace-exact:v1:{}", "d".repeat(64));
+
+    // A directory `resolve` would rewrite, a relative directory and a name
+    // carrying a separator, a dot segment or a home prefix are each a
+    // resolution this reader does not reproduce.
+    assert_eq!(
+        resolve_relative(&token, &format!("{cwd}/")),
+        PortableIdentity::Unknown
+    );
+    assert_eq!(
+        resolve_relative(&token, "relative"),
+        PortableIdentity::Unknown
+    );
+    for name in ["a/token", "./token", "../token", "~token"] {
+        assert_eq!(
+            resolve_relative(name, &cwd),
+            PortableIdentity::Unknown,
+            "{name}"
+        );
+    }
+
+    // A name that already exists may be a link `resolve` follows.
+    fs::create_dir_all(root.join(&token)).expect("token dir");
+    assert_eq!(resolve_relative(&token, &cwd), PortableIdentity::Unknown);
+    fs::remove_dir_all(&root).ok();
+}

@@ -93,6 +93,9 @@ pub enum NativeExactActionQueryV1 {
         harness: String,
         #[serde(default)]
         command: Option<String>,
+        /// The payload's own `cwd`, which resolves files fed on standard input.
+        #[serde(default)]
+        cwd: Option<String>,
         workspace_bound: bool,
         facts: NativeReviewFactsV1,
         /// The verified decision receipt as Python decoded it.

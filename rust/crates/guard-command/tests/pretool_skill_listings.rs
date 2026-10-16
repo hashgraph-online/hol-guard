@@ -84,7 +84,7 @@ fn skill_directories_list_without_review() {
         // Other agent state, hidden entries inside a skill, actions and
         // content reads keep their review.
         "find ~/.agents ~/.codex -maxdepth 4 -name \"approve.sh\"",
-        "ls ~/.codex",
+        "ls -R ~/.codex",
         "find ~/.codex -name auth.json",
         "ls ~/.agents/skills/review-loop/.cache",
         "find ~/.agents -name approve.sh -exec cat {} +",

@@ -10,7 +10,7 @@ use super::*;
 use crate::cursor_hook_bridge_response::{FIXED_NOW, UNAVAILABLE_STDOUT};
 use crate::cursor_hook_bridge_script::{normalize, read_client_constants, ScriptConstants};
 
-fn client_text(guard_home: &str, hook_argv: &str, timeout: &str) -> String {
+pub(super) fn client_text(guard_home: &str, hook_argv: &str, timeout: &str) -> String {
     format!(
         "import os\nGUARD_HOME = {}\nGUARD_CLI = [\"/bin/hol-guard\"]\n\
          GUARD_RECOVERY_COMMAND = [\"/bin/hol-guard\", \"guard\", \"daemon\"]\n\
@@ -20,7 +20,8 @@ fn client_text(guard_home: &str, hook_argv: &str, timeout: &str) -> String {
     )
 }
 
-const HOOK_ARGV: &str = r#"["guard", "hook", "--harness", "cursor", "--home", "/home/u"]"#;
+pub(super) const HOOK_ARGV: &str =
+    r#"["guard", "hook", "--harness", "cursor", "--home", "/home/u"]"#;
 
 #[test]
 fn rendered_constants_are_read_back_from_the_client() {

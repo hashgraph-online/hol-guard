@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_runner_authority, native_signal_projection
+from codex_plugin_scanner.guard import native_runner_authority, native_signal_projection, store_review_event_outbox
 from codex_plugin_scanner.guard.decision_boundaries import (
     canonical_approval_decision,
     canonical_approval_surfaces,
@@ -85,63 +86,48 @@ def test_store_read_projections_use_the_connection_home(monkeypatch: pytest.Monk
         review_command="review",
         approval_url="",
     )
-    original = native_runner_authority.native_runner_authority
+    original = store_review_event_outbox.native_guard_store_call
     homes: list[Path] = []
 
-    def bound(kind: str, args: object, guard_home: Path | None = None):
-        if kind.startswith("projection_"):
-            if guard_home is None:
-                raise native_runner_authority.NativeRunnerAuthorityError("default_home_unavailable")
-            assert guard_home == home
-            homes.append(guard_home)
-        return original(kind, args, guard_home=guard_home)
+    def bound(**kwargs: Any) -> object:
+        if kwargs["method"] == "list_approval_request_page":
+            homes.append(kwargs["guard_home"])
+        return original(**kwargs)
 
-    monkeypatch.setattr(native_runner_authority, "native_runner_authority", bound)
-    # The resident projects the insert itself; the reads project through the
-    # store's home even when the default home is not set up.
+    monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", bound)
+    # The resident projects queue reads through the home of the store it reads.
     store.add_approval_request(request, "2026-01-01T00:00:00+00:00")
     store.add_approval_request(request, "2026-01-01T00:00:01+00:00")
     page = store.list_approval_request_page(include_totals=False)
-    detail = store.get_approval_request(request.request_id, derive_scope=False)
     assert page["items"][0]["request_id"] == request.request_id
-    assert detail is not None and detail["policy_action"] == "review"
-    assert len(homes) >= 2 and set(homes) == {home}
+    assert homes and set(homes) == {home}
 
 
 @pytest.mark.usefixtures("native_prompt_runtime")
-def test_listing_outage_reports_scope_unavailable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.models import GuardApprovalRequest
-    from codex_plugin_scanner.guard.native_approval_scope import ApprovalScopeUnavailableError
+@pytest.mark.parametrize("failure", ["store_outage", "scope_refusal"])
+def test_native_queue_read_failures_report_scope_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
+) -> None:
+    from codex_plugin_scanner.guard.native_approval_scope import UNAVAILABLE, ApprovalScopeUnavailableError
+    from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(tmp_path / "outage-home")
-    store.add_approval_request(
-        GuardApprovalRequest(
-            request_id="outage-request",
-            harness="codex",
-            artifact_id="artifact-1",
-            artifact_name="fixture",
-            artifact_hash="sha256:" + "a" * 64,
-            policy_action="review",
-            recommended_scope="artifact",
-            changed_fields=(),
-            source_scope="project",
-            config_path="config.toml",
-            review_command="review",
-            approval_url="",
-        ),
-        "2026-01-01T00:00:00+00:00",
-    )
 
-    def unavailable(*args: object, **kwargs: object) -> object:
-        raise native_runner_authority.NativeRunnerAuthorityError("native_runtime_unavailable")
+    def native_store_call(method: str, args: object, **kwargs: object) -> object:
+        del method, args, kwargs
+        if failure == "store_outage":
+            raise NativeGuardStoreUnavailable("native_guard_store_unavailable")
+        raise ValueError(UNAVAILABLE)
 
-    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
-    # Daemon polls and /requests treat this as the 503 scope outage, not a crash.
+    monkeypatch.setattr(store, "_native_store_call", native_store_call)
     with pytest.raises(ApprovalScopeUnavailableError):
         store.list_approval_requests(status="pending", limit=1)
+    # Daemon polls and /requests treat this as the 503 scope outage, not a crash.
     with pytest.raises(ApprovalScopeUnavailableError):
         store.list_approval_request_page(include_totals=False)
+    with pytest.raises(ApprovalScopeUnavailableError):
+        store.get_next_pending_request()
     # The approval write path reads the row with derive_scope=False; it must surface the same outage.
     with pytest.raises(ApprovalScopeUnavailableError):
         store.get_approval_request("outage-request", derive_scope=False)

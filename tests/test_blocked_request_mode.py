@@ -175,3 +175,19 @@ def test_bound_review_keeps_the_wait_for_approval_text() -> None:
     )
     assert "Do not retry the same action until it is approved" in text
     assert "will not let you run it" not in text
+
+
+def test_build_review_leaves_out_the_install_hint() -> None:
+    build = (
+        "HOL Guard requires review before this build or test command can execute, "
+        "because it can download dependencies and run their build scripts."
+    )
+    text = safe_alternative_reason(build, reason_code="native_package_review", approval_queued=True)
+    assert text.startswith(build)
+    assert "--ignore-scripts" not in text
+    install = safe_alternative_reason(
+        "HOL Guard requires review before this package or script command can execute.",
+        reason_code="native_package_review",
+        approval_queued=True,
+    )
+    assert "--ignore-scripts" in install

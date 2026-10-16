@@ -359,6 +359,8 @@ def _run_guard_fallback(
     guard_env: Mapping[str, str],
     deadline_monotonic: float,
 ) -> subprocess.CompletedProcess[str]:
+    if getattr(sys, "frozen", False):
+        raise RuntimeError("HOL Guard has no cold evaluator in a frozen build")
     if not _FALLBACK_LOCK.acquire(blocking=False):
         raise RuntimeError("HOL Guard fallback review is already in progress")
     try:

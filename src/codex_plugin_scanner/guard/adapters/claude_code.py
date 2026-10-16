@@ -74,6 +74,7 @@ def _claude_mcp_artifact_id(scope: str, server_name: str) -> str:
 _CLAUDE_BUILTIN_HOOK_TOOL_NAMES = frozenset(
     {
         "bash",
+        "powershell",
         "shell",
         "sh",
         "zsh",

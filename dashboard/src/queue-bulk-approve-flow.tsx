@@ -2,7 +2,7 @@ import { useMemo, type ChangeEvent } from "react";
 import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
 import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
 import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
-import { isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
+import { bulkApproveCooldownOpen, isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
 import {
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
@@ -25,6 +25,7 @@ import type {
 
 export {
   isBulkApproveGateReady,
+  bulkApproveCooldownOpen,
   validateBulkApproveCredentials,
   buildBulkGateCredentials,
 } from "./queue-bulk-approval-credentials";
@@ -393,7 +394,12 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
 
         {gateReady ? (
           <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-            {props.approvalGate?.totp_enabled !== true && (
+            {bulkApproveCooldownOpen(props.approvalGate) && (
+              <p className="text-sm text-brand-dark/80">
+                Your approval window is still open, so no password is needed.
+              </p>
+            )}
+            {props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && (
               <>
                 <div className="flex items-center gap-2">
               <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />

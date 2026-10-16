@@ -14302,6 +14302,11 @@ function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionC
   const blocked = `${retryBlockedActionCount} of them ${retryBlockedActionCount === 1 ? "is a command" : "are commands"} the agent will still be blocked on.`;
   return `Guard will record your decision for ${actionCount} ${actionCount === 1 ? "action" : "actions"} once and won't remember it. ${blocked} Mass approval skips opening each request, so an unexpected action is harder to catch.`;
 }
+const APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked";
+const APPROVAL_LEFT_STOPPED_LABEL = "Approved, still stopped";
+function approvalLeftActionStopped(receipt) {
+  return receipt.user_override === APPROVAL_RETRY_BLOCKED_OVERRIDE;
+}
 const AUTHORITATIVE_DECISION_INCONSISTENT = "authoritative_decision_inconsistent";
 const ACTION_PRESENTATIONS = {
   allow: {
@@ -14577,6 +14582,10 @@ function plainEnglishDescription(receipt) {
   const type = resolveActionType(receipt);
   const title = resolveActionTitle(receipt);
   const subtitle = resolveActionSubtitle(receipt);
+  if (approvalLeftActionStopped(receipt)) {
+    const outcome = `You approved it once, but a one-time approval could not let ${app} run it, so it stayed stopped.`;
+    return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${formatSubtitle(subtitle)}${outcome}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${outcome}`;
+  }
   const action = guardActionPresentation(receipt.policy_decision);
   if (action.disposition === "allowed") {
     const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
@@ -16998,7 +17007,7 @@ async function fetchLocalCliApi(input, init) {
   return fetchWithGuardAuth(input, init);
 }
 async function fetchExtensionDiscoveryApi(input, init) {
-  const approvedPath = /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+  const approvedPath = typeof input === "string" && /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid extension discovery API path");
   }
@@ -20300,36 +20309,6 @@ function TabBar(props) {
     tab.value
   )) });
 }
-function isBulkApproveGateReady(gate) {
-  return gate?.enabled === true && gate?.configured === true;
-}
-function validateBulkApproveCredentials(gate, credentials) {
-  if (!isBulkApproveGateReady(gate)) {
-    return "Set up an approval gate in Settings before bulk approval.";
-  }
-  if (gate?.totp_enabled === true) {
-    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
-  }
-  if (!credentials.password.trim()) {
-    return "Enter your approval password to continue.";
-  }
-  return null;
-}
-function buildBulkGateCredentials(gate, password, totpCode) {
-  if (!isBulkApproveGateReady(gate)) {
-    return void 0;
-  }
-  if (gate?.totp_enabled === true) {
-    return {
-      approval_totp_code: totpCode.trim(),
-      approval_gate_use_cooldown: false
-    };
-  }
-  return {
-    approval_password: password.trim(),
-    approval_gate_use_cooldown: false
-  };
-}
 function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
   if (gate?.enabled === false) return 0;
   if (!gate?.locked_until) return 0;
@@ -20358,11 +20337,73 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
+function defaultUseApprovalCooldown(gate) {
+  return (gate?.cooldown_seconds ?? 0) > 0 && gate?.totp_enabled !== true;
+}
+function isBulkApproveGateReady(gate) {
+  return gate?.enabled === true && gate?.configured === true;
+}
+function bulkApproveCooldownOpen(gate) {
+  return isBulkApproveGateReady(gate) && gate?.totp_enabled !== true && gate?.strict_all_decisions !== true && (gate?.cooldown_seconds ?? 0) > 0 && gate?.cooldown_active === true;
+}
+function validateBulkApproveCredentials(gate, credentials) {
+  if (!isBulkApproveGateReady(gate)) {
+    return "Set up an approval gate in Settings before bulk approval.";
+  }
+  if (gate?.totp_enabled === true) {
+    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
+  }
+  if (!credentials.password.trim() && !bulkApproveCooldownOpen(gate)) {
+    return "Enter your approval password to continue.";
+  }
+  return null;
+}
+function buildBulkGateCredentials(gate, password, totpCode) {
+  if (!isBulkApproveGateReady(gate)) {
+    return void 0;
+  }
+  if (gate?.totp_enabled === true) {
+    return {
+      approval_totp_code: totpCode.trim(),
+      approval_gate_use_cooldown: false
+    };
+  }
+  if (!password.trim() && bulkApproveCooldownOpen(gate)) {
+    return { approval_gate_use_cooldown: true };
+  }
+  return {
+    approval_password: password.trim(),
+    approval_gate_use_cooldown: defaultUseApprovalCooldown(gate)
+  };
+}
+function bulkApprovalProof(credentials) {
+  if (credentials?.approval_password?.trim() || credentials?.approval_totp_code?.trim()) {
+    return "secret";
+  }
+  return credentials?.approval_gate_use_cooldown === true ? "cooldown" : null;
+}
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
 function approvalProofRequiresPassword(gate) {
   return gate?.totp_enabled !== true;
+}
+function approvalGateNeedsSetup(gate) {
+  return gate !== null && gate !== void 0 && gate.enabled !== true;
+}
+function ApprovalGateRecommendationNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "note",
+      className: "mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 flex-1 text-sm text-slate-600", children: "Set an approval password or MFA so only you can approve blocked actions." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval" })
+      ]
+    }
+  );
 }
 function ApprovalGateSetupNotice() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -22566,7 +22607,13 @@ function EvidenceFilterBar({
 function hasMore(page, pageSize, total) {
   return (page + 1) * pageSize < total;
 }
-function DecisionBadge({ decision }) {
+function DecisionBadge({ decision, userOverride = null }) {
+  if (approvalLeftActionStopped({ user_override: userOverride })) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "attention", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3 w-3", "aria-hidden": "true" }),
+      APPROVAL_LEFT_STOPPED_LABEL
+    ] });
+  }
   const presentation = guardActionPresentation(decision);
   if (presentation.action === "allow") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: presentation.tone, children: [
@@ -22838,7 +22885,7 @@ function ActionRow({
             children: catInfo.label
           }
         ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision, userOverride: receipt.user_override }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400 whitespace-nowrap", children: formatRelativeTime(receipt.timestamp) }) })
       ]
     }
@@ -23099,6 +23146,9 @@ function DetailRow({ label, value, mono }) {
   ] });
 }
 function nextSafeStep(receipt) {
+  if (approvalLeftActionStopped(receipt)) {
+    return 'A one-time approval cannot let the agent run this command. Run it yourself, or approve the next request with "Always allow exact action" when that option is offered.';
+  }
   const action = guardActionPresentation(receipt.policy_decision).action;
   if (action === "block") {
     return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
@@ -23135,6 +23185,7 @@ function NextSafeCommandHint({ receipt }) {
 }
 function EvidenceTimeline({ receipt }) {
   const action = guardActionPresentation(receipt.policy_decision);
+  const stopped = approvalLeftActionStopped(receipt);
   const events = [
     {
       label: "Action received",
@@ -23142,9 +23193,9 @@ function EvidenceTimeline({ receipt }) {
       icon: "start"
     },
     {
-      label: action.label,
+      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action.label,
       time: receipt.timestamp,
-      icon: action.disposition
+      icon: stopped ? "blocked" : action.disposition
     }
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -23238,7 +23289,7 @@ function EvidenceActionDetail({
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto px-5 py-4 space-y-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision, userOverride: receipt.user_override }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: harnessDisplayName(receipt.harness) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "·" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: formatRelativeTime(receipt.timestamp) })
@@ -23282,7 +23333,7 @@ function EvidenceActionDetail({
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.diff_summary })
           ] }),
-          guardActionPresentation(receipt.policy_decision).disposition !== "allowed" && /* @__PURE__ */ jsxRuntimeExports.jsx(NextSafeCommandHint, { receipt }),
+          (guardActionPresentation(receipt.policy_decision).disposition !== "allowed" || approvalLeftActionStopped(receipt)) && /* @__PURE__ */ jsxRuntimeExports.jsx(NextSafeCommandHint, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection$1, { signals }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTimeline, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalSection, { receipt }),
@@ -26459,7 +26510,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
               )
             ] }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: harnessDisplayName(receipt.harness) }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision, userOverride: receipt.user_override }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400 whitespace-nowrap", children: formatRelativeTime(receipt.timestamp) }) })
           ] }, receipt.receipt_id);
         }) })
@@ -28922,7 +28973,8 @@ function QueueBulkDrawer(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
           ] }),
           gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
-            props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "Your approval window is still open, so no password is needed." }),
+            props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
@@ -29446,21 +29498,6 @@ function useQueueBulkApprove(props) {
     }
   };
 }
-function resolvedStateForItem(state, item) {
-  return item !== null && state?.requestId === item.request_id ? state : null;
-}
-function approvalGateRefreshNeeded(err) {
-  if (!(err instanceof GuardRequestResolutionError)) return false;
-  const code = err.payload?.["error"];
-  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
-}
-function useShownRequestCheck(requestId) {
-  const shown = reactExports.useRef(requestId);
-  reactExports.useLayoutEffect(() => {
-    shown.current = requestId;
-  }, [requestId]);
-  return reactExports.useCallback((expected) => shown.current === expected, []);
-}
 function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
   if (locked) return "Approval gate temporarily locked";
   if (recentlySatisfied) return "Recently confirmed";
@@ -29557,9 +29594,9 @@ function ApprovalPasswordModal(props) {
                 className: "h-4 w-4 accent-brand-blue"
               }
             ),
-            "Skip password for next ",
+            "Skip the password for the next ",
             approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
-            " (use cooldown)"
+            " (uncheck to be asked every time)"
           ] })
         ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
@@ -29586,35 +29623,6 @@ function ApprovalPasswordModal(props) {
       ] })
     }
   );
-}
-async function fetchResolvedApprovalGate(fetcher = fetchSettings) {
-  const payload = await fetcher();
-  return payload.settings.approval_gate ?? null;
-}
-function useResolvedApprovalGate(initialGate) {
-  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(initialGate);
-  reactExports.useEffect(() => {
-    setResolvedApprovalGate(initialGate);
-  }, [initialGate]);
-  const refreshApprovalGate = reactExports.useCallback(async (options) => {
-    try {
-      const gate = await fetchResolvedApprovalGate();
-      setResolvedApprovalGate(gate);
-      return gate;
-    } catch (error) {
-      if (options?.failClosed) {
-        throw error;
-      }
-      return resolvedApprovalGate;
-    }
-  }, [resolvedApprovalGate]);
-  const resolveApprovalGate = reactExports.useCallback(async (options) => {
-    if (resolvedApprovalGate !== null) {
-      return resolvedApprovalGate;
-    }
-    return refreshApprovalGate(options);
-  }, [refreshApprovalGate, resolvedApprovalGate]);
-  return { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate };
 }
 function ConsolidatedEvidenceAlert({ items }) {
   const [index, setIndex] = reactExports.useState(0);
@@ -31533,14 +31541,372 @@ function ApprovalExtensionRecommendationCard(props) {
     }
   );
 }
+function resolvedStateForItem(state, item) {
+  return item !== null && state?.requestId === item.request_id ? state : null;
+}
+function approvalGateRefreshNeeded(err) {
+  if (!(err instanceof GuardRequestResolutionError)) return false;
+  const code = err.payload?.["error"];
+  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
+}
+function useShownRequestCheck(requestId) {
+  const shown = reactExports.useRef(requestId);
+  reactExports.useLayoutEffect(() => {
+    shown.current = requestId;
+  }, [requestId]);
+  return reactExports.useCallback((expected) => shown.current === expected, []);
+}
+async function fetchResolvedApprovalGate(fetcher = fetchSettings) {
+  const payload = await fetcher();
+  return payload.settings.approval_gate ?? null;
+}
+function useResolvedApprovalGate(initialGate) {
+  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(initialGate);
+  reactExports.useEffect(() => {
+    setResolvedApprovalGate(initialGate);
+  }, [initialGate]);
+  const refreshApprovalGate = reactExports.useCallback(async (options) => {
+    try {
+      const gate = await fetchResolvedApprovalGate();
+      setResolvedApprovalGate(gate);
+      return gate;
+    } catch (error) {
+      if (options?.failClosed) {
+        throw error;
+      }
+      return resolvedApprovalGate;
+    }
+  }, [resolvedApprovalGate]);
+  const resolveApprovalGate = reactExports.useCallback(async (options) => {
+    if (resolvedApprovalGate !== null) {
+      return resolvedApprovalGate;
+    }
+    return refreshApprovalGate(options);
+  }, [refreshApprovalGate, resolvedApprovalGate]);
+  return { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate };
+}
+function approvalGateRefreshFailureMessage(message) {
+  return `${message} Unable to refresh approval settings. Retry to refresh.`;
+}
+function useReviewDecisionResolve(params) {
+  const {
+    item,
+    onResolve,
+    resolutionBlockReason,
+    allowScope,
+    blockScope,
+    setAllowScope,
+    availableScopeChoices,
+    blockScopeOptions,
+    hasAllowScope,
+    watchOnlyObservation,
+    rememberExactAction,
+    extensionDialogActive,
+    decisionContractKey,
+    decisionSubjectKey
+  } = params;
+  const [submitting, setSubmitting] = reactExports.useState(null);
+  const [resolvedState, setResolved] = reactExports.useState(null);
+  const resolved = resolvedStateForItem(resolvedState, item);
+  const isStillShown = useShownRequestCheck(item?.request_id ?? null);
+  const [lastAction, setLastAction] = reactExports.useState(null);
+  const [errorMessage, setErrorMessage] = reactExports.useState(null);
+  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
+  const [cooldownOptOut, setCooldownOptOut] = reactExports.useState(false);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
+  const [preflighting, setPreflighting] = reactExports.useState(false);
+  const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(params.approvalGate);
+  const approvalGate = effectiveApprovalGate;
+  const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
+  const decisionBusy = submitting !== null || preflighting;
+  reactExports.useEffect(() => {
+    setEffectiveApprovalGate(params.approvalGate);
+  }, [params.approvalGate]);
+  reactExports.useEffect(() => {
+    if (!item) return;
+    setResolved(null);
+    setSubmitting(null);
+    setPreflighting(false);
+    setLastAction(null);
+    setErrorMessage(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setCooldownOptOut(false);
+    setPendingAction(null);
+    setPendingContractKey(null);
+  }, [decisionSubjectKey]);
+  const handleResolve = reactExports.useCallback(
+    async (action, gateOverride) => {
+      if (!item || resolutionBlockReason !== null) return;
+      const requestId = item.request_id;
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = gateOverride ?? approvalGate;
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      if (gateRequired && approvalGateIsLocked(gate)) {
+        setErrorMessage(
+          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
+        );
+        return;
+      }
+      setSubmitting(action);
+      setErrorMessage(null);
+      try {
+        const persistExactAction = willPersistExactAction(
+          item,
+          action,
+          requestedScope,
+          action === "allow" ? rememberExactAction : watchOnlyObservation
+        );
+        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+          gate.cooldown_active,
+          gate.strict_all_decisions,
+          requestedScope
+        );
+        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
+        await onResolve({
+          ...buildDecisionPayload({
+            item,
+            action,
+            scope: requestedScope,
+            reason: action === "allow" ? "approved in review" : "blocked in review",
+            persistExactAction
+          }),
+          ...proof,
+          ...includeGateFields ? {
+            approval_gate_use_cooldown: defaultUseApprovalCooldown(gate) && !cooldownOptOut
+          } : {}
+        });
+        if (!isStillShown(requestId)) return;
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setCooldownOptOut(false);
+        setPendingAction(null);
+        setPendingContractKey(null);
+        if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0) {
+          void fetchResolvedApprovalGate().then((refreshed) => {
+            if (isStillShown(requestId)) setEffectiveApprovalGate(refreshed);
+          }).catch(() => {
+          });
+        }
+      } catch (err) {
+        if (!isStillShown(requestId)) return;
+        const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
+        setErrorMessage(message);
+        if (approvalGateRefreshNeeded(err)) {
+          setSubmitting(null);
+          try {
+            const refreshedGate = await fetchResolvedApprovalGate();
+            setEffectiveApprovalGate(refreshedGate);
+          } catch {
+            setErrorMessage(approvalGateRefreshFailureMessage(message));
+          }
+        }
+      } finally {
+        if (isStillShown(requestId)) setSubmitting(null);
+      }
+    },
+    [
+      item,
+      isStillShown,
+      allowScope,
+      blockScope,
+      watchOnlyObservation,
+      rememberExactAction,
+      onResolve,
+      approvalGate,
+      approvalPassword,
+      approvalTotpCode,
+      cooldownOptOut,
+      resolutionBlockReason
+    ]
+  );
+  const handleRequestResolve = reactExports.useCallback(
+    (action) => {
+      if (resolutionBlockReason !== null || decisionBusy) return;
+      if (action === "allow" && !hasAllowScope) {
+        setErrorMessage("This action has no eligible approval scope.");
+        return;
+      }
+      if (action === "block" && blockScopeOptions.length === 0) {
+        setErrorMessage("This action has no eligible block scope.");
+        return;
+      }
+      setLastAction(action);
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = approvalGate;
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      if (gateRequired && approvalGateIsLocked(gate)) {
+        setErrorMessage(
+          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
+        );
+        return;
+      }
+      const requestId = item?.request_id ?? null;
+      setPreflighting(true);
+      void (async () => {
+        try {
+          let current = gate;
+          if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0 && gate?.totp_enabled !== true) {
+            const fresh2 = await fetchResolvedApprovalGate().then(
+              (value) => ({ gate: value }),
+              () => null
+            );
+            if (requestId !== null && !isStillShown(requestId)) return;
+            if (fresh2) {
+              current = fresh2.gate;
+              setEffectiveApprovalGate(fresh2.gate);
+            }
+          }
+          if (approvalGateRequiredForResolution(current, action, requestedScope) && approvalGateIsLocked(current)) {
+            setErrorMessage(
+              `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(current)} seconds.`
+            );
+            return;
+          }
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && requiresApprovalPasswordPrompt(
+            current.cooldown_active,
+            current.strict_all_decisions,
+            requestedScope
+          );
+          if (!gateEnabled) {
+            void handleResolve(action, current);
+            return;
+          }
+          setErrorMessage(null);
+          if (!approvalProofRecentlySatisfied(current)) {
+            setPendingAction(action);
+            setPendingContractKey(decisionContractKey);
+            return;
+          }
+          const fresh = await fetchResolvedApprovalGate().catch(() => current);
+          if (requestId !== null && !isStillShown(requestId)) return;
+          if (approvalProofRecentlySatisfied(fresh ?? current)) {
+            void handleResolve(action, fresh ?? current);
+            return;
+          }
+          if (fresh) setEffectiveApprovalGate(fresh);
+          setPendingAction(action);
+          setPendingContractKey(decisionContractKey);
+        } finally {
+          setPreflighting(false);
+        }
+      })();
+    },
+    [
+      allowScope,
+      blockScope,
+      blockScopeOptions.length,
+      decisionBusy,
+      decisionContractKey,
+      handleResolve,
+      hasAllowScope,
+      isStillShown,
+      item,
+      approvalGate,
+      resolutionBlockReason
+    ]
+  );
+  const handleAllow = reactExports.useCallback(() => {
+    handleRequestResolve("allow");
+  }, [handleRequestResolve]);
+  const handleBlock = reactExports.useCallback(() => {
+    handleRequestResolve("block");
+  }, [handleRequestResolve]);
+  reactExports.useEffect(() => {
+    function handleKeyDown(event) {
+      if (decisionBusy || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
+        return;
+      }
+      const target2 = event.target;
+      if (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable) return;
+      if (event.key === "a" || event.key === "A") {
+        event.preventDefault();
+        handleRequestResolve("allow");
+      }
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        handleRequestResolve("block");
+      }
+      const scopeIndex = parseInt(event.key, 10);
+      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
+        event.preventDefault();
+        setAllowScope(availableScopeChoices[scopeIndex - 1].value);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    availableScopeChoices,
+    decisionBusy,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    setAllowScope
+  ]);
+  const handleModalSubmit = reactExports.useCallback(() => {
+    if (pendingAction === null || submitting !== null) {
+      return;
+    }
+    if (pendingContractKey !== decisionContractKey) {
+      setPendingAction(null);
+      setPendingContractKey(null);
+      setErrorMessage("This request changed while you were reviewing it. Review the current scopes and try again.");
+      return;
+    }
+    void handleResolve(pendingAction);
+  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey, submitting]);
+  const handleModalCancel = reactExports.useCallback(() => {
+    setPendingAction(null);
+    setPendingContractKey(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setCooldownOptOut(false);
+  }, []);
+  const handleRetryLastAction = reactExports.useCallback(() => {
+    setErrorMessage(null);
+    if (lastAction !== null) {
+      handleRequestResolve(lastAction);
+    }
+  }, [handleRequestResolve, lastAction]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setApprovalTotpCode(event.target.value);
+  }, []);
+  const handleUseCooldownChange = reactExports.useCallback((event) => {
+    setCooldownOptOut(!event.target.checked);
+  }, []);
+  return {
+    approvalGate,
+    approvalPassword,
+    approvalTotpCode,
+    errorMessage,
+    handleAllow,
+    handleApprovalPasswordChange,
+    handleApprovalTotpCodeChange,
+    handleBlock,
+    handleModalCancel,
+    handleModalSubmit,
+    handleRetryLastAction,
+    handleUseCooldownChange,
+    pendingAction,
+    resolved,
+    setResolved,
+    submitting,
+    useCooldown
+  };
+}
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
-}
-function approvalGateRefreshFailureMessage(message) {
-  return `${message} Unable to refresh approval settings. Retry to refresh.`;
 }
 function ReviewDecisionCard(props) {
   const detail = props.detail;
@@ -31548,24 +31914,11 @@ function ReviewDecisionCard(props) {
   const resolutionBlockReason = item ? requestResolutionBlockReason(item) : null;
   const [allowScope, setAllowScope] = reactExports.useState("artifact");
   const [blockScope, setBlockScope] = reactExports.useState("artifact");
-  const [submitting, setSubmitting] = reactExports.useState(null);
-  const [resolvedState, setResolved] = reactExports.useState(null);
-  const resolved = resolvedStateForItem(resolvedState, item);
-  const isStillShown = useShownRequestCheck(item?.request_id ?? null);
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
-  const [lastAction, setLastAction] = reactExports.useState(null);
-  const [errorMessage, setErrorMessage] = reactExports.useState(null);
-  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
-  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
-  const [useCooldown, setUseCooldown] = reactExports.useState(false);
-  const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [extensionDialogActive, setExtensionDialogActive] = reactExports.useState(false);
-  const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
-  const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(props.approvalGate);
   const allowButtonRef = reactExports.useRef(null);
-  const approvalGate = effectiveApprovalGate;
   const availableScopeChoices = reactExports.useMemo(
     () => item ? standardScopeChoicesForRequest(item, "allow") : [],
     [item]
@@ -31592,21 +31945,9 @@ function ReviewDecisionCard(props) {
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
   reactExports.useEffect(() => {
-    setEffectiveApprovalGate(props.approvalGate);
-  }, [props.approvalGate]);
-  reactExports.useEffect(() => {
     if (item) {
       setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
-      setResolved(null);
-      setSubmitting(null);
-      setLastAction(null);
-      setErrorMessage(null);
-      setApprovalPassword("");
-      setApprovalTotpCode("");
-      setUseCooldown(false);
-      setPendingAction(null);
-      setPendingContractKey(null);
       setRememberExactAction(false);
     }
   }, [decisionSubjectKey]);
@@ -31622,216 +31963,46 @@ function ReviewDecisionCard(props) {
       setRememberExactAction(false);
     }
   }, [decisionContractKey]);
-  const handleResolve = reactExports.useCallback(
-    async (action) => {
-      if (!item || resolutionBlockReason !== null) return;
-      const requestId = item.request_id;
-      const requestedScope = action === "allow" ? allowScope : blockScope;
-      const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
-      if (gateRequired && approvalGateIsLocked(gate)) {
-        setErrorMessage(
-          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
-        );
-        return;
-      }
-      setSubmitting(action);
-      setErrorMessage(null);
-      try {
-        const persistExactAction = willPersistExactAction(
-          item,
-          action,
-          requestedScope,
-          action === "allow" ? rememberExactAction : watchOnlyObservation
-        );
-        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
-          gate.cooldown_active,
-          gate.strict_all_decisions,
-          requestedScope
-        );
-        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
-        await props.onResolve({
-          ...buildDecisionPayload({
-            item,
-            action,
-            scope: requestedScope,
-            reason: action === "allow" ? "approved in review" : "blocked in review",
-            persistExactAction
-          }),
-          ...proof,
-          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
-        });
-        if (!isStillShown(requestId)) return;
-        setResolved({ requestId, action, persistedExactAction: persistExactAction });
-        setApprovalPassword("");
-        setApprovalTotpCode("");
-        setUseCooldown(false);
-        setPendingAction(null);
-        setPendingContractKey(null);
-      } catch (err) {
-        if (!isStillShown(requestId)) return;
-        const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
-        setErrorMessage(message);
-        if (approvalGateRefreshNeeded(err)) {
-          setSubmitting(null);
-          try {
-            const refreshedGate = await fetchResolvedApprovalGate();
-            setEffectiveApprovalGate(refreshedGate);
-          } catch {
-            setErrorMessage(approvalGateRefreshFailureMessage(message));
-          }
-        }
-      } finally {
-        if (isStillShown(requestId)) setSubmitting(null);
-      }
-    },
-    [
-      item,
-      isStillShown,
-      allowScope,
-      blockScope,
-      watchOnlyObservation,
-      rememberExactAction,
-      props.onResolve,
-      approvalGate,
-      approvalPassword,
-      approvalTotpCode,
-      useCooldown,
-      resolutionBlockReason
-    ]
-  );
-  const handleRequestResolve = reactExports.useCallback(
-    (action) => {
-      if (resolutionBlockReason !== null) return;
-      if (action === "allow" && !hasAllowScope) {
-        setErrorMessage("This action has no eligible approval scope.");
-        return;
-      }
-      if (action === "block" && blockScopeOptions.length === 0) {
-        setErrorMessage("This action has no eligible block scope.");
-        return;
-      }
-      setLastAction(action);
-      const requestedScope = action === "allow" ? allowScope : blockScope;
-      const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
-      if (gateRequired && approvalGateIsLocked(gate)) {
-        setErrorMessage(
-          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
-        );
-        return;
-      }
-      const gateEnabled = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
-        gate.cooldown_active,
-        gate.strict_all_decisions,
-        requestedScope
-      );
-      if (!gateEnabled) {
-        void handleResolve(action);
-        return;
-      }
-      setErrorMessage(null);
-      if (!approvalProofRecentlySatisfied(gate)) {
-        setPendingAction(action);
-        setPendingContractKey(decisionContractKey);
-        return;
-      }
-      void (async () => {
-        const fresh = await fetchResolvedApprovalGate().catch(() => gate);
-        if (approvalProofRecentlySatisfied(fresh ?? gate)) {
-          void handleResolve(action);
-          return;
-        }
-        if (fresh) setEffectiveApprovalGate(fresh);
-        setPendingAction(action);
-        setPendingContractKey(decisionContractKey);
-      })();
-    },
-    [
-      allowScope,
-      blockScope,
-      blockScopeOptions.length,
-      decisionContractKey,
-      handleResolve,
-      hasAllowScope,
-      approvalGate,
-      resolutionBlockReason
-    ]
-  );
-  const handleAllow = reactExports.useCallback(() => {
-    handleRequestResolve("allow");
-  }, [handleRequestResolve]);
-  const handleBlock = reactExports.useCallback(() => {
-    handleRequestResolve("block");
-  }, [handleRequestResolve]);
-  reactExports.useEffect(() => {
-    function handleKeyDown(event) {
-      if (submitting !== null || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
-        return;
-      }
-      const target2 = event.target;
-      if (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable) return;
-      if (event.key === "a" || event.key === "A") {
-        event.preventDefault();
-        handleRequestResolve("allow");
-      }
-      if (event.key === "b" || event.key === "B") {
-        event.preventDefault();
-        handleRequestResolve("block");
-      }
-      const scopeIndex = parseInt(event.key, 10);
-      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
-        event.preventDefault();
-        setAllowScope(availableScopeChoices[scopeIndex - 1].value);
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    availableScopeChoices,
-    extensionDialogActive,
-    handleRequestResolve,
+  const {
+    approvalGate,
+    approvalPassword,
+    approvalTotpCode,
+    errorMessage,
+    handleAllow,
+    handleApprovalPasswordChange,
+    handleApprovalTotpCodeChange,
+    handleBlock,
+    handleModalCancel,
+    handleModalSubmit,
+    handleRetryLastAction,
+    handleUseCooldownChange,
     pendingAction,
-    resolutionBlockReason,
     resolved,
-    submitting
-  ]);
-  const handleModalSubmit = reactExports.useCallback(() => {
-    if (pendingAction === null || submitting !== null) {
-      return;
-    }
-    if (pendingContractKey !== decisionContractKey) {
-      setPendingAction(null);
-      setPendingContractKey(null);
-      setErrorMessage("This request changed while you were reviewing it. Review the current scopes and try again.");
-      return;
-    }
-    void handleResolve(pendingAction);
-  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey, submitting]);
-  const handleModalCancel = reactExports.useCallback(() => {
-    setPendingAction(null);
-    setPendingContractKey(null);
-    setApprovalPassword("");
-    setApprovalTotpCode("");
-    setUseCooldown(false);
-  }, []);
+    setResolved,
+    submitting,
+    useCooldown
+  } = useReviewDecisionResolve({
+    item,
+    approvalGate: props.approvalGate,
+    onResolve: props.onResolve,
+    resolutionBlockReason,
+    allowScope,
+    blockScope,
+    setAllowScope,
+    availableScopeChoices,
+    blockScopeOptions,
+    hasAllowScope,
+    watchOnlyObservation,
+    rememberExactAction,
+    extensionDialogActive,
+    decisionContractKey,
+    decisionSubjectKey
+  });
   const handleToggleConsequences = reactExports.useCallback(() => {
     setShowConsequences((visible) => !visible);
   }, []);
   const handleToggleEvidence = reactExports.useCallback(() => {
     setShowEvidence((visible) => !visible);
-  }, []);
-  const handleRetryLastAction = reactExports.useCallback(() => {
-    setErrorMessage(null);
-    if (lastAction !== null) {
-      handleRequestResolve(lastAction);
-    }
-  }, [handleRequestResolve, lastAction]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
-    setApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
-    setApprovalTotpCode(event.target.value);
   }, []);
   const reviewedRequestId = item?.request_id ?? null;
   const handleExtensionApproved = reactExports.useCallback(
@@ -31841,9 +32012,6 @@ function ReviewDecisionCard(props) {
     },
     [reviewedRequestId]
   );
-  const handleUseCooldownChange = reactExports.useCallback((event) => {
-    setUseCooldown(event.target.checked);
-  }, []);
   if (!detail || !item) {
     if (props.detailError) {
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { role: "alert", className: "rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5", children: [
@@ -32046,7 +32214,8 @@ function ReviewDecisionCard(props) {
             ] })
           }
         )
-      ] })
+      ] }),
+      resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateRecommendationNotice, {})
     ] }),
     evidenceItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -32066,14 +32235,18 @@ function ReviewDecisionCard(props) {
     ] }),
     detail.receipt && receiptDescribesRequest(item, detail.receipt) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: approvalLeftActionStopped(detail.receipt) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        "You approved a similar action once ",
+        formatRelativeTime(detail.receipt.timestamp),
+        ", but it stayed stopped."
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         "You previously ",
         pastDecisionVerb(detail.receipt.policy_decision),
         " a similar action",
         " ",
         formatRelativeTime(detail.receipt.timestamp),
         "."
-      ] }),
+      ] }) }),
       detail.diff && detail.diff.changed_fields.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What changed since then:" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: detail.diff.changed_fields.map((field) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
@@ -34492,15 +34665,35 @@ function App() {
     const updated = await retryResume(resolvedRequestId);
     setCodexResume(updated);
   }, [resolvedRequestId]);
+  const refreshApprovalGate = reactExports.useCallback(async () => {
+    try {
+      const payload = await fetchSettings();
+      const gate = payload.settings.approval_gate;
+      if (gate === void 0) {
+        return null;
+      }
+      setApprovalGate(gate);
+      return gate;
+    } catch {
+      return null;
+    }
+  }, []);
   const handleBulkApprove = reactExports.useCallback(async (ids, gateCredentials) => {
     if (bulkApproveInFlight.current) {
       return;
     }
-    if (!gateCredentials?.approval_password?.trim() && !gateCredentials?.approval_totp_code?.trim()) {
+    const proof = bulkApprovalProof(gateCredentials);
+    if (gateCredentials === void 0 || proof === null) {
       throw new Error("Bulk approval requires approval proof.");
     }
     bulkApproveInFlight.current = true;
     try {
+      if (proof === "cooldown") {
+        const freshGate = await refreshApprovalGate();
+        if (!bulkApproveCooldownOpen(freshGate)) {
+          throw new Error("Your approval window has closed. Enter your approval password to continue.");
+        }
+      }
       const result = await bulkAllowReadOnce({
         requestIds: ids,
         approval_password: gateCredentials.approval_password,
@@ -34517,10 +34710,13 @@ function App() {
       }
       const label = `${result.resolved_count} item${result.resolved_count !== 1 ? "s" : ""} approved.`;
       setResolutionMessage(label);
+    } catch (error) {
+      await refreshApprovalGate();
+      throw error;
     } finally {
       bulkApproveInFlight.current = false;
     }
-  }, [refreshStateAfterAction, setResolutionMessage]);
+  }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
   const handleRetry = reactExports.useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -34742,248 +34938,249 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  hasRepairableProtectionGap as $,
+  HiMiniExclamationCircle as $,
   ActionButton as A,
   formatRelativeTime as B,
-  guardActionActivityCopy as C,
+  approvalLeftActionStopped as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  HiMiniSparkles as F,
+  guardActionActivityCopy as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  HiMiniXMark as I,
-  HiMiniChevronUp as J,
-  HiMiniChevronDown as K,
-  resolveCloudIntelCopy as L,
-  HiMiniCloud as M,
-  HiMiniQuestionMarkCircle as N,
+  HiMiniSparkles as I,
+  HiMiniXMark as J,
+  HiMiniChevronUp as K,
+  HiMiniChevronDown as L,
+  resolveCloudIntelCopy as M,
+  HiMiniCloud as N,
   OperatorHealthCard as O,
-  useFocusTrap as P,
-  approvalProofRequiresPassword as Q,
-  HiMiniExclamationTriangle as R,
+  HiMiniQuestionMarkCircle as P,
+  useFocusTrap as Q,
+  approvalProofRequiresPassword as R,
   SectionLabel as S,
-  HiMiniBolt as T,
-  Badge as U,
-  HiMiniMinusCircle as V,
+  HiMiniExclamationTriangle as T,
+  HiMiniBolt as U,
+  Badge as V,
   WatchProtectionBanner as W,
-  isUnsupportedPlatformCheck as X,
-  RECHECK_UNAVAILABLE_SIGNATURE as Y,
-  protectionReasonText as Z,
-  HiMiniExclamationCircle as _,
+  HiMiniMinusCircle as X,
+  isUnsupportedPlatformCheck as Y,
+  RECHECK_UNAVAILABLE_SIGNATURE as Z,
+  protectionReasonText as _,
   EvidenceActivityHeatmapMini as a,
-  WorkspacePageHeader as a$,
-  remainingProtectionRepairParts as a0,
-  protectionGapSignature as a1,
-  repairOutcomeIsStalled as a2,
-  ProtectionRepairFlowError as a3,
-  nextProtectionRepairOutcome as a4,
-  waitForAuthorizeUrl as a5,
-  startOrRecoverCloudConnect as a6,
-  safeCloudConnectUrl as a7,
-  openPackageFirewallAuthorizeFallback as a8,
-  waitForCloudConnection as a9,
-  HiMiniAdjustmentsHorizontal as aA,
-  HiMiniCircleStack as aB,
-  TabBar as aC,
-  fetchCloudReviewSettings as aD,
-  HiMiniArrowPath as aE,
-  ApprovalProofFieldInputs as aF,
-  isApprovalProofSubmitDisabled as aG,
-  buildApprovalProofCredentials as aH,
-  changeCloudReviewSettings as aI,
-  resolveProtectionLevelCopy as aJ,
-  fetchRuntimeSnapshot as aK,
-  clearHarnessWatchOverrides as aL,
-  withHarnessPosturePatch as aM,
-  clearPolicy as aN,
-  clearReviewQueue as aO,
-  revokeApprovalGateCooldown as aP,
-  disableApprovalGateTotp as aQ,
-  importSettings as aR,
-  resetSettings as aS,
-  enrollApprovalGateTotp as aT,
-  verifyApprovalGateTotp as aU,
-  clearEvidence as aV,
-  exportDiagnostics as aW,
-  repairApprovalCenter as aX,
-  exportSettings as aY,
-  setupDesktopNotifications as aZ,
-  settingsWatchBannerModel as a_,
-  activeFailedHarnesses as aa,
-  resetRepairOutcomeTracker as ab,
-  HiMiniWrenchScrewdriver as ac,
-  fetchSettings as ad,
-  harnessPostureRows as ae,
-  selectHarnessPosture as af,
-  harnessPosturePatch as ag,
-  harnessRowTone as ah,
-  harnessPostureOptions as ai,
-  HiMiniEye as aj,
-  harnessRowStatus as ak,
-  PROTECTION_POSTURE_COPY as al,
-  globalPosture as am,
-  ProofStrip as an,
-  HiMiniXCircle as ao,
-  HiMiniClipboardDocumentCheck as ap,
-  HiMiniClipboard as aq,
-  fetchResolvedApprovalGate as ar,
-  ApprovalProofModal as as,
-  Tag as at,
-  POSTURE_OUTCOME_COLUMNS as au,
-  getDefaultExportFromCjs as av,
-  React as aw,
-  HiMiniSquares2X2 as ax,
-  HiMiniLockClosed as ay,
-  HiMiniBellAlert as az,
+  settingsWatchBannerModel as a$,
+  hasRepairableProtectionGap as a0,
+  remainingProtectionRepairParts as a1,
+  protectionGapSignature as a2,
+  repairOutcomeIsStalled as a3,
+  ProtectionRepairFlowError as a4,
+  nextProtectionRepairOutcome as a5,
+  waitForAuthorizeUrl as a6,
+  startOrRecoverCloudConnect as a7,
+  safeCloudConnectUrl as a8,
+  openPackageFirewallAuthorizeFallback as a9,
+  HiMiniBellAlert as aA,
+  HiMiniAdjustmentsHorizontal as aB,
+  HiMiniCircleStack as aC,
+  TabBar as aD,
+  fetchCloudReviewSettings as aE,
+  HiMiniArrowPath as aF,
+  ApprovalProofFieldInputs as aG,
+  isApprovalProofSubmitDisabled as aH,
+  buildApprovalProofCredentials as aI,
+  changeCloudReviewSettings as aJ,
+  resolveProtectionLevelCopy as aK,
+  fetchRuntimeSnapshot as aL,
+  clearHarnessWatchOverrides as aM,
+  withHarnessPosturePatch as aN,
+  clearPolicy as aO,
+  clearReviewQueue as aP,
+  revokeApprovalGateCooldown as aQ,
+  disableApprovalGateTotp as aR,
+  importSettings as aS,
+  resetSettings as aT,
+  enrollApprovalGateTotp as aU,
+  verifyApprovalGateTotp as aV,
+  clearEvidence as aW,
+  exportDiagnostics as aX,
+  repairApprovalCenter as aY,
+  exportSettings as aZ,
+  setupDesktopNotifications as a_,
+  waitForCloudConnection as aa,
+  activeFailedHarnesses as ab,
+  resetRepairOutcomeTracker as ac,
+  HiMiniWrenchScrewdriver as ad,
+  fetchSettings as ae,
+  harnessPostureRows as af,
+  selectHarnessPosture as ag,
+  harnessPosturePatch as ah,
+  harnessRowTone as ai,
+  harnessPostureOptions as aj,
+  HiMiniEye as ak,
+  harnessRowStatus as al,
+  PROTECTION_POSTURE_COPY as am,
+  globalPosture as an,
+  ProofStrip as ao,
+  HiMiniXCircle as ap,
+  HiMiniClipboardDocumentCheck as aq,
+  HiMiniClipboard as ar,
+  fetchResolvedApprovalGate as as,
+  ApprovalProofModal as at,
+  Tag as au,
+  POSTURE_OUTCOME_COLUMNS as av,
+  getDefaultExportFromCjs as aw,
+  React as ax,
+  HiMiniSquares2X2 as ay,
+  HiMiniLockClosed as az,
   HiMiniCommandLine as b,
-  HiMiniRocketLaunch as b$,
-  HiMiniMagnifyingGlass as b0,
-  commitDashboardLocation as b1,
-  guardAwareHref as b2,
-  humanizeList as b3,
-  isProtectionPosture as b4,
-  deriveProtectionPosture as b5,
-  normalizeHarnessPostures as b6,
-  approvalGateCooldownLabel as b7,
-  isGuardDemoMode as b8,
-  isRecord$3 as b9,
-  applyExtensionMutation as bA,
-  fetchEffectiveExtensionControls as bB,
-  fetchExtensionControlHistory as bC,
-  HiMiniNoSymbol as bD,
-  useResolvedApprovalGate as bE,
-  HiMiniInformationCircle as bF,
-  GenIcon as bG,
-  HiMiniGlobeAlt as bH,
-  HiMiniCube as bI,
-  HiMiniServerStack as bJ,
-  HiMiniFolder as bK,
-  FaWindows as bL,
-  FaAws as bM,
-  approvalProofRecentlySatisfied as bN,
-  isBulkApproveGateReady as bO,
-  HiMiniArrowLeft as bP,
-  HiMiniPlus as bQ,
-  startGuardCloudConnect as bR,
-  HiMiniArrowTopRightOnSquare as bS,
-  fetchExtensionControlApi as bT,
-  HiMiniCheck as bU,
+  recoverExtensionControlAuthority as b$,
+  WorkspacePageHeader as b0,
+  HiMiniMagnifyingGlass as b1,
+  commitDashboardLocation as b2,
+  guardAwareHref as b3,
+  humanizeList as b4,
+  isProtectionPosture as b5,
+  deriveProtectionPosture as b6,
+  normalizeHarnessPostures as b7,
+  approvalGateCooldownLabel as b8,
+  isGuardDemoMode as b9,
+  isCurrentExtensionPolicyDraft as bA,
+  applyExtensionMutation as bB,
+  fetchEffectiveExtensionControls as bC,
+  fetchExtensionControlHistory as bD,
+  HiMiniNoSymbol as bE,
+  useResolvedApprovalGate as bF,
+  HiMiniInformationCircle as bG,
+  GenIcon as bH,
+  HiMiniGlobeAlt as bI,
+  HiMiniCube as bJ,
+  HiMiniServerStack as bK,
+  HiMiniFolder as bL,
+  FaWindows as bM,
+  FaAws as bN,
+  approvalProofRecentlySatisfied as bO,
+  isBulkApproveGateReady as bP,
+  HiMiniArrowLeft as bQ,
+  HiMiniPlus as bR,
+  startGuardCloudConnect as bS,
+  HiMiniArrowTopRightOnSquare as bT,
+  fetchExtensionControlApi as bU,
   fetchExtensionDiscoveryApi as bV,
-  acknowledgeDegradedExtensionControlAuthority as bW,
-  recoverExtensionControlAuthority as bX,
-  GuardModalLayer as bY,
-  runHarnessAction as bZ,
-  GuardHarnessActionError as b_,
-  fetchWithGuardAuth as ba,
-  overrideRows as bb,
-  harnessPostureSummary as bc,
-  joinNames as bd,
-  sortHarnessRows as be,
-  restartHarnessWatch as bf,
-  harnessWatchPrompt as bg,
-  canRestartHarnessWatch as bh,
-  HiMiniKey as bi,
-  fetchLocalCliApi as bj,
-  fetchExtensionCatalog as bk,
-  normalizeExtensionCatalogSummary as bl,
-  normalizeExtensionPermission as bm,
-  ExtensionControlProtocolError as bn,
-  ExtensionControlApiError as bo,
-  normalizeExtensionCatalogItem as bp,
-  guardApiCacheScope as bq,
-  fetchExtensionCatalogV2Api as br,
-  localPermissionDraftState as bs,
-  setLocalPermissionDraftState as bt,
-  newExtensionPolicyDraftIdentity as bu,
-  extensionPolicyDraftIsDirty as bv,
-  setLocalPermissionDraftStates as bw,
-  buildExtensionPolicyDraftMutation as bx,
-  previewExtensionMutation as by,
-  isCurrentExtensionPolicyDraft as bz,
+  HiMiniArrowRight as bW,
+  HiMiniClock as bX,
+  HiMiniCheck as bY,
+  HiMiniFunnel as bZ,
+  acknowledgeDegradedExtensionControlAuthority as b_,
+  isRecord$3 as ba,
+  fetchWithGuardAuth as bb,
+  overrideRows as bc,
+  harnessPostureSummary as bd,
+  joinNames as be,
+  sortHarnessRows as bf,
+  restartHarnessWatch as bg,
+  harnessWatchPrompt as bh,
+  canRestartHarnessWatch as bi,
+  HiMiniKey as bj,
+  fetchLocalCliApi as bk,
+  fetchExtensionCatalog as bl,
+  normalizeExtensionCatalogSummary as bm,
+  normalizeExtensionPermission as bn,
+  ExtensionControlProtocolError as bo,
+  ExtensionControlApiError as bp,
+  normalizeExtensionCatalogItem as bq,
+  guardApiCacheScope as br,
+  fetchExtensionCatalogV2Api as bs,
+  localPermissionDraftState as bt,
+  setLocalPermissionDraftState as bu,
+  newExtensionPolicyDraftIdentity as bv,
+  extensionPolicyDraftIsDirty as bw,
+  setLocalPermissionDraftStates as bx,
+  buildExtensionPolicyDraftMutation as by,
+  previewExtensionMutation as bz,
   HiMiniChevronRight as c,
-  HiMiniArrowDownTray as c$,
-  HiMiniTrash as c0,
-  fetchGuardApi as c1,
-  formatHarnessCommand as c2,
-  fetchApprovalPage as c3,
-  fetchPolicy as c4,
-  HiMiniHome as c5,
-  appSetupTarget as c6,
-  guardActionPresentation as c7,
-  DEFAULT_FILTER_STATE as c8,
-  filterEvidence as c9,
-  startPackageFirewallConnect as cA,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as cB,
-  repairSupplyChainProtection as cC,
-  runPackageFirewallAction as cD,
-  parseInterceptProofSnapshot as cE,
-  activatePackageFirewallRuntime as cF,
-  EntitlementNotice as cG,
-  chooseSupplyChainAuditFolder as cH,
-  fetchReceipts as cI,
-  lazyWorkspace as cJ,
-  __vitePreload as cK,
-  scopeLabel as cL,
-  HiMiniDocumentText as cM,
-  HiMiniCloudArrowUp as cN,
-  HiMiniCodeBracket as cO,
-  HiMiniClipboardDocument as cP,
-  HiMiniUsers as cQ,
-  HiMiniIdentification as cR,
-  policyActionLabel as cS,
-  createCloudExceptionRequest as cT,
-  HiMiniArrowRight as cU,
-  HiMiniPuzzlePiece as cV,
-  fetchCloudExceptions as cW,
-  fetchCloudExceptionRequests as cX,
-  downloadBlob as cY,
-  PolicyStatField as cZ,
-  PaginationControls as c_,
-  sortEvidence as ca,
-  computeMetrics as cb,
-  CommandActivityWorkspace as cc,
-  EvidenceFilterBar as cd,
-  EvidenceInsightStrip as ce,
-  EvidenceActionList as cf,
-  EvidenceActionDetail as cg,
-  policyIdentityKey as ch,
-  clearLabelForScope as ci,
-  HiMiniChartBar as cj,
-  isSupplyChainAuditIncomplete as ck,
-  isSupplyChainAuditEvidence as cl,
-  readString$1 as cm,
-  HiMiniClock as cn,
-  IconActionButton as co,
-  HiMiniBeaker as cp,
-  ActivationSummary as cq,
-  ActionResultPanel as cr,
-  HiMiniBugAnt as cs,
-  ConnectFlowCard as ct,
-  ApprovalProofInline as cu,
-  HiMiniCloudArrowDown as cv,
-  fetchPackageFirewallStatus as cw,
-  runPackageAudit as cx,
-  resolveSupplyChainAuditFailure as cy,
-  runPackageSync as cz,
+  PolicyStatField as c$,
+  GuardModalLayer as c0,
+  runHarnessAction as c1,
+  GuardHarnessActionError as c2,
+  HiMiniRocketLaunch as c3,
+  HiMiniTrash as c4,
+  fetchGuardApi as c5,
+  formatHarnessCommand as c6,
+  fetchApprovalPage as c7,
+  fetchPolicy as c8,
+  HiMiniHome as c9,
+  runPackageAudit as cA,
+  resolveSupplyChainAuditFailure as cB,
+  runPackageSync as cC,
+  startPackageFirewallConnect as cD,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as cE,
+  repairSupplyChainProtection as cF,
+  runPackageFirewallAction as cG,
+  parseInterceptProofSnapshot as cH,
+  activatePackageFirewallRuntime as cI,
+  EntitlementNotice as cJ,
+  chooseSupplyChainAuditFolder as cK,
+  fetchReceipts as cL,
+  lazyWorkspace as cM,
+  __vitePreload as cN,
+  scopeLabel as cO,
+  HiMiniDocumentText as cP,
+  HiMiniCloudArrowUp as cQ,
+  HiMiniCodeBracket as cR,
+  HiMiniClipboardDocument as cS,
+  HiMiniUsers as cT,
+  HiMiniIdentification as cU,
+  policyActionLabel as cV,
+  createCloudExceptionRequest as cW,
+  HiMiniPuzzlePiece as cX,
+  fetchCloudExceptions as cY,
+  fetchCloudExceptionRequests as cZ,
+  downloadBlob as c_,
+  appSetupTarget as ca,
+  guardActionPresentation as cb,
+  DEFAULT_FILTER_STATE as cc,
+  filterEvidence as cd,
+  sortEvidence as ce,
+  computeMetrics as cf,
+  CommandActivityWorkspace as cg,
+  EvidenceFilterBar as ch,
+  EvidenceInsightStrip as ci,
+  EvidenceActionList as cj,
+  EvidenceActionDetail as ck,
+  policyIdentityKey as cl,
+  clearLabelForScope as cm,
+  HiMiniChartBar as cn,
+  isSupplyChainAuditIncomplete as co,
+  isSupplyChainAuditEvidence as cp,
+  readString$1 as cq,
+  IconActionButton as cr,
+  HiMiniBeaker as cs,
+  ActivationSummary as ct,
+  ActionResultPanel as cu,
+  HiMiniBugAnt as cv,
+  ConnectFlowCard as cw,
+  ApprovalProofInline as cx,
+  HiMiniCloudArrowDown as cy,
+  fetchPackageFirewallStatus as cz,
   createCommandActivityClient as d,
-  HiMiniQueueList as d0,
-  Surface as d1,
-  HiMiniCheckBadge as d2,
-  fetchMcpPolicyRequest as d3,
-  resolveMcpPolicyRequest as d4,
-  HiMiniDocumentPlus as d5,
-  HiMiniDocumentMagnifyingGlass as d6,
-  fetchSupplyChainBundle as d7,
-  isSupplyChainScannerEvidence as d8,
-  isBlockedGuardAction as d9,
-  HiMiniShieldExclamation as da,
-  HiMiniComputerDesktop as db,
-  HiMiniChevronLeft as dc,
-  HiMiniFunnel as dd,
-  HiMiniArrowDown as de,
-  HiMiniArrowUp as df,
-  runAuditRemediation as dg,
-  HiMiniSignal as dh,
+  PaginationControls as d0,
+  HiMiniArrowDownTray as d1,
+  HiMiniQueueList as d2,
+  Surface as d3,
+  HiMiniCheckBadge as d4,
+  fetchMcpPolicyRequest as d5,
+  resolveMcpPolicyRequest as d6,
+  HiMiniDocumentPlus as d7,
+  HiMiniDocumentMagnifyingGlass as d8,
+  fetchSupplyChainBundle as d9,
+  isSupplyChainScannerEvidence as da,
+  isBlockedGuardAction as db,
+  HiMiniShieldExclamation as dc,
+  HiMiniComputerDesktop as dd,
+  HiMiniChevronLeft as de,
+  HiMiniArrowDown as df,
+  HiMiniArrowUp as dg,
+  runAuditRemediation as dh,
+  HiMiniSignal as di,
   updateSettings as e,
   fetchCommandActivityApi as f,
   getHeatmapLevel as g,

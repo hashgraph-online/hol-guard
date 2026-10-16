@@ -37,7 +37,7 @@ def test_install_config_hooks_rejects_foreign_owner_without_mutation(tmp_path: P
     }
     before = deepcopy(payload)
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
-        CodexHarnessAdapter._install_config_hooks(payload, context)
+        CodexHarnessAdapter._install_config_hooks(payload, context, config_path=tmp_path / "config.toml")
     assert payload == before
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)

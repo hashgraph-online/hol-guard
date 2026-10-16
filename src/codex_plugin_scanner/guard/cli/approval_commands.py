@@ -161,7 +161,7 @@ def run_approval_command(
                 "exit_code": 2,
             }
         gate_input = (
-            prompt_for_approval_gate(store.guard_home)
+            prompt_for_approval_gate(store.guard_home, strict=str(args.scope) == "global")
             if _approval_resolution_needs_gate(
                 store,
                 action=str(args.approval_action),

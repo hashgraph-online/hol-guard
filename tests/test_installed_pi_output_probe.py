@@ -21,7 +21,6 @@ from ci.native_runtime.probe_installed_pi_output import (
     ProbeError,
     _assert_fetch_evidence,
     _assert_native_route_metrics,
-    _assert_negative_results,
     _assert_no_positive_cli_fallback,
     _assert_real_results,
     _canonical_content_digest,
@@ -40,27 +39,6 @@ from ci.native_runtime.probe_installed_pi_output import (
 )
 from codex_plugin_scanner.guard import store as store_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server
-
-
-def _record(
-    case: dict[str, object],
-    response: dict[str, object] | None,
-    *,
-    returncode: int = 0,
-) -> dict[str, object]:
-    payload = {
-        "hook_event_name": "PostToolUse",
-        "tool_call_id": case["id"],
-        "tool_response": case["content"],
-    }
-    stdout = b"" if response is None else (json.dumps(response) + "\n").encode("utf-8")
-    return {
-        "case_id": case["id"],
-        "returncode": returncode,
-        "stdin_b64": base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii"),
-        "stdout_b64": base64.b64encode(stdout).decode("ascii"),
-        "stderr_b64": base64.b64encode(b"").decode("ascii"),
-    }
 
 
 def _preserved_result(case: dict[str, object]) -> dict[str, object]:
@@ -367,6 +345,7 @@ def test_real_validation_requires_status_zero_and_exact_full_proof() -> None:
     result = _preserved_result(case)
     valid_fetch = {
         "case_id": case["id"],
+        "transport": "fetch",
         "method": "POST",
         "pathname": "/v1/hooks/omp",
         "status": 200,
@@ -414,6 +393,7 @@ def test_large_non_source_accepts_only_bounded_reviewed_excerpt() -> None:
     )
     fetch = {
         "case_id": case["id"],
+        "transport": "fetch",
         "method": "POST",
         "pathname": "/v1/hooks/omp",
         "status": 200,
@@ -444,13 +424,6 @@ def test_result_validators_reject_duplicate_case_ids() -> None:
     with pytest.raises(ProbeError, match="duplicate real case IDs"):
         _assert_real_results(duplicate_real, real_cases)
 
-    negative_cases = _negative_cases()
-    duplicate_negative = [
-        {"id": negative_cases[0]["id"], "preserved": False, "result": {"isError": True}} for _ in negative_cases
-    ]
-    with pytest.raises(ProbeError, match="duplicate malformed-result case IDs"):
-        _assert_negative_results(duplicate_negative, {})
-
 
 def test_fetch_evidence_correlates_case_ids_instead_of_position() -> None:
     cases = _cases()[:2]
@@ -459,6 +432,7 @@ def test_fetch_evidence_correlates_case_ids_instead_of_position() -> None:
     fetches = [
         {
             "case_id": cases[0]["id"],
+            "transport": "fetch",
             "method": "POST",
             "pathname": "/v1/hooks/omp",
             "status": 200,
@@ -468,6 +442,7 @@ def test_fetch_evidence_correlates_case_ids_instead_of_position() -> None:
         },
         {
             "case_id": cases[0]["id"],
+            "transport": "fetch",
             "method": "POST",
             "pathname": "/v1/hooks/omp",
             "status": 200,
@@ -978,40 +953,3 @@ def test_cleanup_failure_does_not_write_success_receipt(tmp_path: Path, monkeypa
     assert not receipt_path.exists()
     assert (root / "cleanup-failure.json").exists()
     assert not (root / "real-cli.jsonl").exists()
-
-
-def test_malformed_results_are_visible_blocks_but_observe_remains_preserved() -> None:
-    cases = _negative_cases()
-    results = []
-    records = {}
-    for case in cases:
-        observe = case["id"] == "negative-observe"
-        response = {"decision": "allow", "observe_mode": True} if observe else None
-        results.append(
-            {
-                "id": case["id"],
-                "preserved": observe,
-                "result": None if observe else {"isError": True},
-            }
-        )
-        records[str(case["id"])] = [
-            _record(case, response, returncode=2 if case["id"] == "negative-nonzero-allow" else 0)
-        ]
-
-    evidence = _assert_negative_results(results, records)
-    assert evidence["negative-observe"]["preserved"] is True
-    assert evidence["negative-empty"]["is_error"] is True
-
-    malformed_allow = next(result for result in results if result["id"] == "negative-malformed")
-    malformed_allow["preserved"] = True
-    with pytest.raises(ProbeError, match="silently preserved"):
-        _assert_negative_results(results, records)
-
-    observe_case = next(case for case in cases if case["id"] == "negative-observe")
-    for malformed in ({"decision": "allow"}, {"decision": "allow", "observe_mode": "yes"}):
-        malformed_records = deepcopy(records)
-        malformed_results = deepcopy(results)
-        next(result for result in malformed_results if result["id"] == "negative-malformed")["preserved"] = False
-        malformed_records["negative-observe"] = [_record(observe_case, malformed)]
-        with pytest.raises(ProbeError, match="canonical allow metadata"):
-            _assert_negative_results(malformed_results, malformed_records)

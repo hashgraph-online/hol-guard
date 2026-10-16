@@ -1,11 +1,14 @@
 """Check the native Luna route's readiness validation, process lifecycle and CLI guards."""
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import pytest
@@ -124,6 +127,32 @@ def test_route_fails_closed_when_the_adapter_exits_or_misreports(tmp_path, monke
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 3\n")) + os.pathsep + os.environ["PATH"])
     with pytest.raises(RuntimeError):
         NativeLunaRoute(omp=str(omp)).__enter__()
+
+
+def test_startup_failure_reports_the_adapter_stderr_without_secrets(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    secret = "rt_" + "a1B2" * 12
+    script = f"echo 'error: refresh token rejected {secret}' >&2\necho 'Authorization: Bearer abc.def' >&2\nexit 3\n"
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, script)) + os.pathsep + os.environ["PATH"])
+    with pytest.raises(RuntimeError) as failure:
+        NativeLunaRoute(omp=str(omp)).__enter__()
+    message = str(failure.value)
+    assert "exited before it was ready" in message and "refresh token rejected [redacted]" in message
+    assert secret not in message and "abc.def" not in message
+
+
+def test_stderr_drain_bounds_long_lines_and_keeps_reading(tmp_path, monkeypatch):
+    monkeypatch.setattr(luna_route, "STDERR_LINE_CHARS", 32)
+    stream = io.StringIO("short\n" + "word " * 20 + "rt_" + "a1B2" * 12 + "\nnext \ufffd line\nlast error")
+    sink: deque[str] = deque(maxlen=luna_route.STDERR_LINES)
+    done = threading.Event()
+    luna_route._drain(stream, sink, done)
+    assert done.is_set() and list(sink) == [
+        "short\n",
+        "word word word word word word ...",
+        "next \ufffd line\n",
+        "last error",
+    ]
 
 
 def test_environment_forwards_no_provider_keys():

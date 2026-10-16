@@ -458,3 +458,45 @@ class TestEvaluatorRule:
 
         assert evaluation.decision != "allow"
         assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
+
+
+def test_the_safety_guide_install_reaches_the_evaluator_and_settles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The managed safety guide names this install as the one that continues.
+
+    Codex ran a bare `npm install` for a Vite game, which runs package install
+    scripts and is rightly reviewed. The script-free form the guide gives must
+    reach the evaluator intact and be settled by a script-free verdict.
+    """
+
+    guide = (Path(package_review.__file__).parents[1] / "agent-safety-guidance.md").read_text(encoding="utf-8")
+    command = "npm install --ignore-scripts"
+    # The npm ci form is proven by the Rust lockfile install tests.
+    for named in (command, "npm ci --ignore-scripts"):
+        assert f"`{named}`" in " ".join(guide.split())
+    seen: list[list[str]] = []
+    monkeypatch.setattr(package_review.os, "name", "posix")
+    monkeypatch.setattr(package_review, "verified_npm_version", lambda *_args, **_kwargs: "11.6.2")
+    monkeypatch.setattr(
+        package_review,
+        "_evaluate",
+        lambda *_args, tokens, **_kwargs: (
+            seen.append(tokens) or SimpleNamespace(decision="allow", reasons=(), packages=(SCRIPT_FREE,))
+        ),
+    )
+    monkeypatch.setattr(
+        package_review, "render_pre_tool", lambda _harness, verdict, **_kwargs: {"rendered": verdict["decision"]}
+    )
+
+    response = package_review.native_package_review_response(
+        object(),
+        harness="codex",
+        payload={"tool_input": {"command": command}},
+        native_result={"reason_code": "native_package_review", "minimum_action": "review"},
+        workspace=tmp_path,
+        guard_home=tmp_path / "guard",
+    )
+
+    assert seen == [command.split()]
+    assert response == {"rendered": "allow"}

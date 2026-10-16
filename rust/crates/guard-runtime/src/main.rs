@@ -40,6 +40,7 @@ mod archive_acquisition_op;
 mod archive_inspect;
 mod archive_inspect_containment;
 mod archive_verdict_seam;
+mod artifact_risk_op;
 #[cfg(unix)]
 mod binding_capture_capture;
 #[cfg(unix)]
@@ -103,11 +104,8 @@ mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
-#[cfg(unix)]
 mod claude_session_start;
-#[cfg(unix)]
 mod claude_session_start_contract;
-#[cfg(unix)]
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
@@ -127,6 +125,7 @@ mod codex_detect;
 mod codex_hook_artifacts;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
+mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
 mod codex_hook_identity;
 mod codex_hook_response;
@@ -264,8 +263,18 @@ mod guard_store_advisory_cache;
 mod guard_store_advisory_cache_vectors_tests;
 mod guard_store_approval_backfill;
 mod guard_store_approval_created;
+mod guard_store_approval_metadata;
+mod guard_store_approval_page_reads;
+mod guard_store_approval_queue;
+mod guard_store_approval_queue_item;
+mod guard_store_approval_queue_result;
+mod guard_store_approval_read_rows;
+mod guard_store_approval_read_scope;
+mod guard_store_approval_reads;
 mod guard_store_approval_request;
+mod guard_store_approval_resolve;
 mod guard_store_approval_row;
+mod guard_store_approval_sweep;
 mod guard_store_approval_write;
 mod guard_store_args;
 mod guard_store_claude_review;
@@ -364,6 +373,7 @@ mod guard_store_wfcap_state;
 mod guard_store_wfcap_wire;
 #[cfg(test)]
 mod guard_store_workflow_capability_vectors_tests;
+mod guard_store_write_cache;
 mod hardening;
 mod hermes_detect;
 mod hermes_inspect;
@@ -381,8 +391,6 @@ mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
-// Only the unix Claude session-start bridge records a fallback.
-#[cfg(unix)]
 mod hook_bridge_fallback;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
@@ -403,19 +411,29 @@ mod hook_process_spawn;
 mod hook_render_op;
 mod kimi_detect;
 mod local_cli_grant_op;
+mod local_cli_hook_op;
 mod local_cli_identify;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
 mod local_store_read;
+mod local_tool_eligibility_op;
 mod managed_controls_policy_fields;
+mod managed_policy;
+mod managed_policy_file_trust;
+mod managed_policy_floor;
+mod managed_policy_load;
+mod managed_policy_plist;
 mod managed_resident;
 mod mcp_probe_op;
 mod mcp_proxy_actions;
 mod mcp_proxy_archive;
 #[cfg(test)]
 mod mcp_proxy_archive_vectors_tests;
+mod mcp_proxy_archive_verify;
+#[cfg(all(test, unix))]
+mod mcp_proxy_archive_verify_tests;
 mod mcp_proxy_catalog;
 mod mcp_proxy_decision_op;
 #[cfg(test)]
@@ -431,27 +449,19 @@ mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
 mod mcp_relay;
-#[cfg(unix)]
 mod mcp_relay_args;
-#[cfg(unix)]
 mod mcp_relay_authority;
-#[cfg(unix)]
 mod mcp_relay_catalog;
 mod mcp_relay_claims;
-#[cfg(unix)]
 mod mcp_relay_core;
 mod mcp_relay_decide;
-#[cfg(unix)]
 mod mcp_relay_host;
-#[cfg(unix)]
 mod mcp_relay_lane;
-#[cfg(unix)]
 mod mcp_relay_launch;
-#[cfg(unix)]
 mod mcp_relay_order;
+mod mcp_relay_package_eval;
 mod mcp_relay_pending;
 mod mcp_relay_ready;
-#[cfg(unix)]
 mod mcp_relay_resident;
 mod mcp_relay_servers;
 mod mcp_runtime_evidence_op;
@@ -501,9 +511,11 @@ mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
+mod package_protect_finalize_op;
 mod package_protect_projection_op;
 mod pi_detect;
 mod pi_glob;
+mod pi_hook_bridge;
 #[cfg(all(test, unix))]
 mod pi_vectors_tests;
 mod policy_bundle_crypto;
@@ -535,11 +547,13 @@ mod policy_decision_lookup_op;
 mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
+mod policy_integrity_generation;
 mod policy_integrity_resolver;
 mod policy_integrity_rows_op;
 mod policy_lookup_groups;
 mod policy_lookup_reuse;
 mod policy_runtime_saved;
+mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
 mod policy_store;
 mod project_identity;
@@ -608,8 +622,13 @@ mod strict_json;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
 mod supply_chain_egress;
+mod supply_chain_eval_caller;
+mod supply_chain_eval_rounds;
 mod supply_chain_eval_seams;
+mod supply_chain_eval_transport;
 mod totp;
+#[cfg(windows)]
+mod windows_node_build;
 #[cfg(windows)]
 mod windows_readonly;
 mod workspace_inventory_files;

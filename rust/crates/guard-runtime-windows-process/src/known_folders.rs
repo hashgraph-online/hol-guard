@@ -7,7 +7,7 @@ use winapi::shared::guiddef::GUID;
 use winapi::shared::winerror::S_OK;
 use winapi::um::combaseapi::CoTaskMemFree;
 use winapi::um::knownfolders::{
-    FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86,
+    FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86, FOLDERID_Windows,
 };
 use winapi::um::shlobj::{SHGetKnownFolderPath, KF_FLAG_DEFAULT};
 
@@ -55,4 +55,10 @@ pub fn trusted_install_roots() -> Vec<PathBuf> {
         }
     }
     roots
+}
+
+/// Return the Windows directory as the system reports it, never as the
+/// requesting environment spells it (`SystemRoot`, `windir`).
+pub fn windows_directory() -> Option<PathBuf> {
+    known_folder(&FOLDERID_Windows)
 }

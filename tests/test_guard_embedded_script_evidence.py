@@ -16,12 +16,13 @@ from codex_plugin_scanner.guard.cli.commands_dispatch_records import (
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.embedded_script_evidence import (
-    _MAX_EMBEDDED_SCRIPT_EVIDENCE_ENTRIES,
     EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE,
     command_has_embedded_script,
     embedded_script_evidence_entries,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+_MAX_EMBEDDED_SCRIPT_EVIDENCE_ENTRIES = 8
 
 
 def _store_with_command_receipt(tmp_path: Path, command: str, receipt_id: str) -> GuardStore:

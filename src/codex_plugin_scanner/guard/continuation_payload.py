@@ -59,12 +59,6 @@ def mapping_value(value: object) -> Mapping[str, object]:
     return {key: item for key, item in mapping.items() if isinstance(key, str)}
 
 
-def string_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in cast(list[object], value) if isinstance(item, str)]
-
-
 def text_value(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 

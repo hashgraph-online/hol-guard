@@ -28,7 +28,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
-    get_approval_extension_allow_hint,
     get_approval_request,
     list_approval_requests,
 )
@@ -121,14 +120,21 @@ def _connection() -> sqlite3.Connection:
     return native_approval_connection()
 
 
+def _stored_hint(connection: sqlite3.Connection, request_id: str) -> object:
+    row = connection.execute(
+        "select extension_allow_hint_json from approval_requests where request_id = ?", (request_id,)
+    ).fetchone()
+    return json.loads(row[0]) if row is not None and row[0] is not None else None
+
+
 def test_store_round_trips_and_refreshes_hint_on_dedupe() -> None:
     connection = _connection()
     add_approval_request(connection, _request("req-1", hint=None), "2026-10-09T10:00:00+00:00")
-    assert get_approval_extension_allow_hint(connection, "req-1") is None
+    assert _stored_hint(connection, "req-1") is None
 
     add_approval_request(connection, _request("req-2", hint=_hint(GIT_ADD)), "2026-10-09T10:01:00+00:00")
 
-    assert get_approval_extension_allow_hint(connection, "req-1") == _hint(GIT_ADD)
+    assert _stored_hint(connection, "req-1") == _hint(GIT_ADD)
     stored = get_approval_request(connection, "req-1")
     assert stored is not None
     assert "extension_allow_hint" not in stored

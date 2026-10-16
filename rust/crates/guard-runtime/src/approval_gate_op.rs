@@ -41,7 +41,7 @@ fn gate_factor_generation(state: &Value) -> i64 {
 /// `ApprovalGateGrants` supplies the `_APPROVAL_GATE_LOCK` discipline.
 static APPROVAL_GATE_GRANTS: OnceLock<ApprovalGateGrants> = OnceLock::new();
 
-fn grants() -> &'static ApprovalGateGrants {
+pub(crate) fn grants() -> &'static ApprovalGateGrants {
     APPROVAL_GATE_GRANTS.get_or_init(ApprovalGateGrants::new)
 }
 

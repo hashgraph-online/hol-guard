@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .extension_adapters import extension_adapter
 from .fixtures import digest_file
+from .remote_code import REMOTE_CODE_CASES
 from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
@@ -140,6 +141,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             extension_adapter(scenario.commands[0])
         if (scenario.oracle == "blocked-package") != (scenario.id in PACKAGE_BLOCK_REASONS):
             raise ValueError("package protection cases must name their package evaluator verdict")
+        if scenario.id in REMOTE_CODE_CASES and scenario.oracle != "blocked-command":
+            raise ValueError("remote-code cases are single-command protection cases")
         if scenario.oracle == "commands" and not scenario.commands:
             raise ValueError("command cases cannot be empty")
         if scenario.oracle == "watch-command" and (

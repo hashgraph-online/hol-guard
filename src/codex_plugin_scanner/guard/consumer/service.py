@@ -25,7 +25,7 @@ from ..models import (
 )
 from ..native_consumer_artifact_compose import native_consumer_compose
 from ..receipts import build_receipt
-from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
+from ..risk import NO_RISK_SIGNAL_SUMMARY, artifact_risk_profile
 from ..runtime.approval_context import (
     build_approval_context_token,
     build_runtime_launch_identity,
@@ -650,11 +650,9 @@ def evaluate_detection(
             artifact.artifact_id,
             artifact.publisher,
         )
-        structured_signals = artifact_risk_signals_typed(artifact)
-        risk_signals_v2 = _merge_risk_signals(
-            tuple(RiskSignalV2.from_guard_signal(signal) for signal in structured_signals),
-            runtime_risk_signals_v2,
-        )
+        artifact_risk = artifact_risk_profile(artifact)
+        structured_signals = artifact_risk.signals
+        risk_signals_v2 = _merge_risk_signals(artifact_risk.signals_v2, runtime_risk_signals_v2)
         skill_directory_identity_reusable = _skill_directory_identity_reusable(
             artifact_type=artifact.artifact_type,
             metadata=artifact.metadata,
@@ -724,9 +722,9 @@ def evaluate_detection(
         risk_summary = (
             authoritative_decision.decision_v2.dashboard_primary_detail
             if authoritative_decision is not None and has_runtime_authority
-            else artifact_risk_summary(artifact)
+            else artifact_risk.summary
             if structured_signals
-            else summarize_signals(())
+            else NO_RISK_SIGNAL_SUMMARY
         )
         result = projection.artifact_result(
             store,

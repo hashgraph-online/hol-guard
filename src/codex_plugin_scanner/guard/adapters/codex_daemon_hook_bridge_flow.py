@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import json
 import secrets
+import sys
 import time
 import urllib.error
 from collections.abc import Callable, Mapping, Sequence
@@ -439,6 +440,9 @@ def _fallback_response(
     data: str,
     deadline: float,
 ) -> dict[str, object] | None:
+    if getattr(sys, "frozen", False):
+        # A frozen Guard runs no cold evaluator: without a daemon answer the hook fails closed.
+        return None
     if trusted_launch is not None:
         fallback_stdout = trusted_launch.run_fallback(
             fallback_command,

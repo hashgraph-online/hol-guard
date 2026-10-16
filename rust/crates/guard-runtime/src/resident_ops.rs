@@ -347,6 +347,15 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
             }
+            ResidentOperationV1::LocalCliHook(request) => {
+                crate::local_cli_hook_op::evaluate_local_cli_hook_request(&request)
+            }
+            ResidentOperationV1::ArtifactRisk(request) => {
+                crate::artifact_risk_op::evaluate_artifact_risk_request(&request)
+            }
+            ResidentOperationV1::LocalToolEligibility(request) => {
+                crate::local_tool_eligibility_op::evaluate_local_tool_eligibility_request(&request)
+            }
             ResidentOperationV1::ShellHelpers(request) => {
                 crate::shell_helpers_op::evaluate(&request)
             }
@@ -427,6 +436,9 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::PackagePolicyResolve(request) => {
                 crate::package_policy_resolve_op::evaluate_package_policy_resolve(&request)
+            }
+            ResidentOperationV1::PackageProtectFinalize(request) => {
+                crate::package_protect_finalize_op::evaluate_package_protect_finalize(&request)
             }
             ResidentOperationV1::PackagePosture(request) => {
                 crate::package_posture_op::evaluate_package_posture(&request)
@@ -563,6 +575,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageApprovalHash(request) => Some(&request.guard_home),
         ResidentOperationV1::PackagePolicyResolve(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageProtectFinalize(request) => Some(&request.guard_home),
         ResidentOperationV1::PackagePosture(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAuditProjection(request) => Some(&request.guard_home),
         ResidentOperationV1::WorkspaceInventory(request) => Some(&request.guard_home),
@@ -580,6 +593,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::RuntimeDetectorRun(request) => Some(&request.guard_home),
         ResidentOperationV1::RunnerAuthority(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalCliHook(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.guard_home),
@@ -590,6 +604,10 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::CodexBindingCapture(request) => Some(&request.guard_home),
         ResidentOperationV1::ProtectRequest(request) => Some(&request.guard_home),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.guard_home),
+        ResidentOperationV1::PolicyIntegrityRows(request) => request
+            .generation
+            .as_ref()
+            .map(|generation| generation.guard_home.as_str()),
         _ => None,
     }
 }
@@ -613,11 +631,16 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         },
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalCliHook(request) => Some(&request.store_path),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.store_path),
         ResidentOperationV1::ProtectRequest(request) => request.store_path.as_deref(),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.store_path),
+        ResidentOperationV1::PolicyIntegrityRows(request) => request
+            .generation
+            .as_ref()
+            .map(|generation| generation.store_path.as_str()),
         _ => None,
     }
 }

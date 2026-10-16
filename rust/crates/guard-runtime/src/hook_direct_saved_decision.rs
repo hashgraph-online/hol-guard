@@ -200,7 +200,7 @@ fn saved_response(
     let Some(has_local_policy) = store.readable(&integrity_state)? else {
         return Err(HookDirectDefer::SavedDecision);
     };
-    let identity = portable::identity(store, context.workspace)?;
+    let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
     let request = PolicyDecisionLookupRequestV1 {
@@ -237,10 +237,17 @@ fn saved_response(
         crate::policy_decision_lookup_op::evaluate_non_consuming(&request, store.connection)
             .map_err(|_| HookDirectDefer::SavedDecision)
     };
-    let local = lookup(context.workspace)?;
-    let lookup = match identity {
-        None => local,
-        Some(identity) => portable::compose(local, lookup(&identity)?)?,
+    // A workspace that already names its identity reads that lookup alone, so
+    // the local lookup is never run for it: it would answer nothing, and a row
+    // it matched with invalid integrity would defer the hook over an audit
+    // write this read-only connection cannot take.
+    let lookup = match composition {
+        portable::Composition::Local => lookup(context.workspace)?,
+        portable::Composition::Named(identity) => portable::restrictive_only(lookup(&identity)?),
+        portable::Composition::Both(identity) => {
+            let local = lookup(context.workspace)?;
+            portable::compose(local, lookup(&identity)?)?
+        }
     };
     match saved_verdict(result, &lookup, store.artifact_id, token) {
         Some((verdict, status)) => render(context.harness, &verdict, status)
@@ -397,7 +404,7 @@ impl StoreShape<'_> {
     /// identities come from a synced payload the resident does not validate,
     /// and the published state still stored. `None` otherwise.
     /// Portable decisions are read through the workspace's identity
-    /// (`portable::identity`).
+    /// (`portable::composition`).
     fn readable(&self, integrity_state: &Value) -> Result<Option<bool>, HookDirectDefer> {
         if self.any(
             "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
@@ -440,7 +447,7 @@ impl StoreShape<'_> {
 mod query;
 
 #[path = "hook_direct_saved_consume.rs"]
-mod consume;
+pub(crate) mod consume;
 
 #[path = "hook_direct_saved_portable.rs"]
 mod portable;

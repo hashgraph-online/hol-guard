@@ -87,10 +87,37 @@ fn mapped_effects_match_posix_decisions() {
         ),
         ("Remove-Item -Recurse -Force src", "rm -rf src"),
         ("[IO.File]::Delete('a.txt')", "rm a.txt"),
+        ("Get-ChildItem src", "ls src"),
+        ("Get-Location", "pwd"),
+        ("Test-Path node_modules", "test -e node_modules"),
+        ("Write-Output done", "echo done"),
+        (
+            "Select-String -Path README.md -Pattern TODO",
+            "grep -i -e TODO README.md",
+        ),
+        (
+            "Get-Content package.json | ConvertFrom-Json",
+            "cat package.json | head",
+        ),
+        ("New-Item -ItemType Directory build", "mkdir -p build"),
+        ("Get-ChildItem src | Select-Object Name", "ls src | head"),
     ] {
         assert_eq!(action(powershell), action(posix), "{powershell}");
     }
     assert_ne!(action("[IO.File]::ReadAllText('.env')").0, "allow");
+    // A formatting cmdlet opens no file, so the pipeline adds no read floor.
+    assert_eq!(
+        action("Get-ChildItem src | Select-Object Name").0,
+        action("Get-ChildItem src").0
+    );
+    for command in [
+        "Get-Content 'Env:GITHUB_TOKEN'",
+        "Get-ChildItem 'Env:'",
+        "gci env:",
+        "Select-String -Path .env -Pattern KEY",
+    ] {
+        assert_ne!(action(command).0, "allow", "{command}");
+    }
 }
 
 #[test]

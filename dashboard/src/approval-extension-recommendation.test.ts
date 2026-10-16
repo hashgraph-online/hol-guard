@@ -262,7 +262,8 @@ async function run(): Promise<void> {
     "recommendation card state resets when the reviewed request changes",
   );
   assert(
-    cardSource.includes("onDialogActiveChange={setExtensionDialogActive}") && cardSource.includes("extensionDialogActive ||"),
+    cardSource.includes("onDialogActiveChange={setExtensionDialogActive}") &&
+      readFileSync(new URL("./use-review-decision-resolve.ts", import.meta.url), "utf8").includes("extensionDialogActive ||"),
     "decision shortcuts pause while the always-allow dialog is open",
   );
   const recommendationCardSource = readFileSync(new URL("./approval-extension-recommendation-card.tsx", import.meta.url), "utf8");

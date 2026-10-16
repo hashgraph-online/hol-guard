@@ -1,6 +1,7 @@
 //! Native launch plan for `workspace-contained-v1`.
 use super::workspace_linked::admissible_checkout;
 use super::*;
+use crate::pretool::generic::chain_literals::inert::temp_cd;
 use crate::pretool::generic::{chain_literals, contained_publish, workspace_redirects};
 use crate::pretool::workspace_git_config::{linked_git_dirs, workspace_write_denials};
 use crate::pretool::workspace_git_environment::GitVariables;
@@ -42,15 +43,22 @@ pub(crate) fn workspace_admissible(cwd: &Path, home: Option<&Path>) -> Option<Pa
 
 /// The sandbox shape for the exact `text` about to run, or `None` when the
 /// workspace sandbox cannot bound it. Literal-path redirects are classified
-/// without them, and chained `$NAME` uses as the literal assigned earlier in
-/// the chain; the raw text still runs, so such a shape must run it whole.
+/// without them, chained `$NAME` uses as the literal assigned earlier in the
+/// chain, and a `cd "$(mktemp -d)"` as the temporary stand-in; the raw text
+/// still runs, so such a shape must run it whole, and the real `mktemp`
+/// creates its directory under the sandbox's private `TMPDIR`.
 pub(crate) fn exact_shape(text: &str, workspace: &Path) -> Option<Shape> {
+    if let Some(projected) = temp_cd::project(text) {
+        return exact_shape(&projected, workspace).filter(runs_whole);
+    }
     match chain_literals::substitute(text) {
-        Some(substituted) => literal_shape(&substituted, workspace).filter(|shape| {
-            shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none()
-        }),
+        Some(substituted) => literal_shape(&substituted, workspace).filter(runs_whole),
         None => literal_shape(text, workspace),
     }
+}
+
+fn runs_whole(shape: &Shape) -> bool {
+    shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none()
 }
 
 fn literal_shape(text: &str, workspace: &Path) -> Option<Shape> {
@@ -147,7 +155,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         "command": ["/bin/sh", "-c", text],
         "command_sha256": hex::encode(Sha256::digest(text.as_bytes())),
         "allowed_executables": [],
-        "read_only_roots": [],
+        "read_only_roots": shape.read_files,
         "exec_roots": exec_roots,
         "write_denials": write_denials,
         "linked_git": linked_git,
@@ -160,6 +168,13 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
             "workspace-credential-read", "git-execution-config-write", "privileged-operation"
         ],
     }))
+}
+
+/// The scripts outside `workspace` that `text` runs and the sandbox may read,
+/// or `None` when the workspace sandbox cannot bound the command. A sink
+/// compares a plan's read grants with these, so a plan can add no other file.
+pub fn workspace_script_reads(text: &str, workspace: &Path) -> Option<Vec<PathBuf>> {
+    exact_shape(text, workspace).map(|shape| shape.read_files)
 }
 
 pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {

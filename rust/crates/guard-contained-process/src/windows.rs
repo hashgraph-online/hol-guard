@@ -53,6 +53,8 @@ struct SecurityCapabilities {
 
 mod app_container;
 pub use app_container::AppContainer;
+mod desktop;
+mod publish;
 pub(crate) mod readonly;
 
 /// Builds and releases the activation context of a DLL's embedded manifest
@@ -226,10 +228,16 @@ fn capture_native(
         pipes.child_stdout.as_raw_handle() as HANDLE,
         pipes.child_stderr.as_raw_handle() as HANDLE,
     ];
+    let mut granted = container
+        .filter(|container| !container.registry_read.is_null())
+        .map(|container| winapi::um::winnt::SID_AND_ATTRIBUTES {
+            Sid: container.registry_read,
+            Attributes: winapi::um::winnt::SE_GROUP_ENABLED,
+        });
     let mut capabilities = SecurityCapabilities {
         app_container_sid: container.map_or(null_mut(), |container| container.sid),
-        capabilities: null_mut(),
-        capability_count: 0,
+        capabilities: granted.as_mut().map_or(null_mut(), |granted| granted),
+        capability_count: u32::from(granted.is_some()),
         reserved: 0,
     };
     let mut lpac = ALL_APPLICATION_PACKAGES_OPT_OUT;
@@ -255,6 +263,10 @@ fn capture_native(
         ));
     }
     let mut env = environment_block(&command.environment)?;
+    // Held until the child exits; see `desktop` for why a container needs it.
+    let mut desktop = container
+        .map(|container| desktop::PrivateDesktop::create(container.sid))
+        .transpose()?;
     let mut startup: STARTUPINFOEXW = unsafe { zeroed() };
     startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -262,6 +274,9 @@ fn capture_native(
     startup.StartupInfo.hStdOutput = handles[1];
     startup.StartupInfo.hStdError = handles[2];
     startup.lpAttributeList = attributes.storage.as_mut_ptr().cast();
+    if let Some(desktop) = desktop.as_mut() {
+        startup.StartupInfo.lpDesktop = desktop.path.as_mut_ptr();
+    }
     let mut process: PROCESS_INFORMATION = unsafe { zeroed() };
     if Instant::now() >= deadline || cancel.load(std::sync::atomic::Ordering::Acquire) {
         return Err(io::Error::new(

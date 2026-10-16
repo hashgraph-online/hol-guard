@@ -16,6 +16,12 @@ from tests.pi_extension_response_runtime_support import (
 )
 from tests.pi_extension_response_source_support import _generated_source
 
+UNAVAILABLE = {
+    "decision": "deny",
+    "reason": "HOL Guard could not reach its local review service before the deadline. Retry the action.",
+    "reason_code": "daemon_unavailable",
+}
+
 
 def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
     allow = render_pre_tool(
@@ -65,23 +71,17 @@ def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(t
         "recoveryKind": "transport-failure",
     }
 
-    assert result["retry_still_malformed"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
+    # A daemon that still answers with an unusable shape after recovery denies
+    # the hook. No Python CLI reviews it instead.
+    assert result["retry_still_malformed"] == UNAVAILABLE
     assert result["retry_still_malformed_daemon_calls"] == 2
     assert result["retry_still_malformed_recovery_calls"] == 1
-    assert result["retry_still_malformed_cli_calls"] == 1
+    assert result["retry_still_malformed_cli_calls"] == 0
 
-    assert result["retry_malformed_reason"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
+    assert result["retry_malformed_reason"] == UNAVAILABLE
     assert result["retry_malformed_reason_daemon_calls"] == 2
     assert result["retry_malformed_reason_recovery_calls"] == 1
-    assert result["retry_malformed_reason_cli_calls"] == 1
+    assert result["retry_malformed_reason_cli_calls"] == 0
 
     assert result["retry_valid"] == {"decision": "allow"}
     assert result["retry_valid_daemon_calls"] == 2
@@ -94,40 +94,37 @@ def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(t
     assert result["posttool_daemon_allow_daemon_calls"] == 1
     assert result["posttool_daemon_allow_recovery_calls"] == 0
     assert result["posttool_daemon_allow_cli_calls"] == 0
-    assert result["stale_daemon_cli_success"] == {"decision": "allow"}
-    assert result["stale_daemon_cli_daemon_calls"] == 1
-    assert result["stale_daemon_cli_recovery_calls"] == 0
+    assert result["stale_daemon_success"] == {"decision": "allow"}
+    assert result["stale_daemon_daemon_calls"] == 1
+    assert result["stale_daemon_recovery_calls"] == 0
     assert result["stale_daemon_cli_calls"] == 0
 
-    assert result["cli_missing_decision"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
+    assert result["unreachable_pre"] == UNAVAILABLE
+    assert result["unreachable_prompt"] == UNAVAILABLE
+    assert result["unreachable_post"] == UNAVAILABLE
+    assert result["unreachable_recovery_calls"] == 3
+    assert result["unreachable_cli_calls"] == 0
+
+
+def test_generated_omp_reads_native_bridge_replies_as_daemon_responses(tmp_path: Path) -> None:
+    result = _run_generated_fixture(_generated_source(tmp_path))
+
+    assert result["native_allow"] == {"decision": "allow"}
+    assert result["native_deny"] == {"decision": "deny", "reason": "block"}
+    assert result["native_refused"] == {
+        "response": None,
+        "recoveryKind": "authenticated-control-plane-failure",
     }
-    assert result["cli_empty_prompt"] == {
+    assert result["native_malformed"] == {
         "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
+        "reason": "HOL Guard received an invalid response from the authenticated local daemon.",
+        "reason_code": "daemon_invalid_response",
     }
-    assert result["cli_empty_post"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
-    assert result["cli_malformed_reason"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
-    assert result["cli_null_reason"] == {"decision": "deny", "reason": None}
-    assert result["cli_omitted_reason"] == {"decision": "deny"}
-    assert result["cli_lifecycle_allow"] == {"decision": "allow", "policy_action": "allow"}
-    assert result["cli_allow"] == {"decision": "allow"}
-    assert result["cli_deny"] == {"decision": "deny", "reason": "fixture block"}
-    assert result["cli_block_prompt"] == {"decision": "deny", "reason": "fixture block"}
-    assert result["cli_block_post"] == {"decision": "deny", "reason": "fixture block"}
-    assert result["cli_nonzero_allow"] == {"decision": "deny", "reason": "cli failed"}
-    assert result["cli_signal_allow"] == {"decision": "deny", "reason": "Blocked by HOL Guard."}
+    for case in ("native_no_reply", "native_failed", "native_missing_body"):
+        assert result[case] == {"response": None, "recoveryKind": "transport-failure"}, case
+    # Every native reply, including no reply, stands in for the daemon request.
+    assert result["native_fetch_calls"] == 0
+    assert result["native_query_has_workspace"] is True
 
 
 def test_generated_omp_tool_result_preserves_daemon_allow_without_hash(tmp_path: Path) -> None:

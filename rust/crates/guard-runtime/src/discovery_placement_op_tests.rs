@@ -1,5 +1,5 @@
 //! Shared semantic vectors for the native discovery validator. These mirror
-//! the TypeScript vectors in hol-points-portal `__tests__/guard-extension-discovery.test.ts`
+//! the TypeScript vectors in cloud-portal `__tests__/guard-extension-discovery.test.ts`
 //! (T06) so cross-language agreement is a reviewed contract.
 
 use super::*;
@@ -102,6 +102,96 @@ fn accepts_a_ready_disabled_snapshot_without_placements() {
     snapshot["placements"] = json!([]);
     let frame = run(request(snapshot, NOW_MS));
     assert_eq!(outcome(&frame), ("ok", None));
+}
+
+#[test]
+fn offer_slot_counts_are_optional_but_must_agree_with_availability() {
+    // The sponsored offer is the one carrying counts; the other two stay as
+    // the base snapshot has them, so the three-distinct-products rule holds.
+    let sponsored = |availability: &str, extra: Value| {
+        let mut offer = json!({
+            "product": "sponsored",
+            "availability": availability,
+            "indicativeAmountCents": 20000,
+            "currency": "usd",
+            "checkedAt": GENERATED,
+            "quoteRequired": true
+        });
+        if let Some(fields) = extra.as_object() {
+            for (key, value) in fields {
+                offer[key.as_str()] = value.clone();
+            }
+        }
+        let mut snapshot = base_snapshot();
+        snapshot["offers"][2] = offer;
+        snapshot
+    };
+    let counted = |open: i64, total: i64, availability: &str| {
+        sponsored(
+            availability,
+            json!({"openSlots": open, "totalSlots": total}),
+        )
+    };
+
+    // Counts are optional: the base snapshot carries none and still projects.
+    assert_eq!(
+        outcome(&run(request(base_snapshot(), NOW_MS))),
+        ("ok", None)
+    );
+
+    let frame = run(request(counted(3, 4, "open"), NOW_MS));
+    assert_eq!(outcome(&frame), ("ok", None));
+    let offer = projection_body(&frame)["snapshot"]["offers"][2].clone();
+    assert_eq!(offer.get("openSlots"), Some(&json!(3)));
+    assert_eq!(offer.get("totalSlots"), Some(&json!(4)));
+    assert_eq!(
+        outcome(&run(request(counted(0, 4, "sold_out"), NOW_MS))),
+        ("ok", None)
+    );
+
+    // Sold out means nothing left, and open means at least one.
+    for snapshot in [counted(0, 4, "open"), counted(1, 4, "sold_out")] {
+        assert_eq!(
+            outcome(&run(request(snapshot, NOW_MS))),
+            ("error", Some("discovery_snapshot_invalid"))
+        );
+    }
+    // More open than exist, a pool of none, and a negative count are nonsense.
+    for snapshot in [
+        counted(5, 4, "open"),
+        counted(0, 0, "sold_out"),
+        counted(-1, 4, "open"),
+    ] {
+        assert_eq!(
+            outcome(&run(request(snapshot, NOW_MS))),
+            ("error", Some("discovery_snapshot_invalid"))
+        );
+    }
+
+    // Half a pair is malformed, not a partial answer.
+    assert_eq!(
+        outcome(&run(request(
+            sponsored("open", json!({"openSlots": 3})),
+            NOW_MS
+        ))),
+        ("error", Some("discovery_snapshot_invalid"))
+    );
+
+    // An unknown offer knows nothing, inventory included.
+    let unknown = sponsored(
+        "unknown",
+        json!({
+            "indicativeAmountCents": Value::Null,
+            "currency": Value::Null,
+            "checkedAt": Value::Null,
+            "openSlots": 3,
+            "totalSlots": 4
+        }),
+    );
+    assert_eq!(
+        outcome(&run(request(unknown, NOW_MS))),
+        ("error", Some("discovery_snapshot_invalid"))
+    );
 }
 
 #[test]

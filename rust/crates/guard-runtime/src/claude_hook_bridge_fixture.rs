@@ -199,6 +199,8 @@ pub(crate) enum Exchange {
     RefuseChallenge(u16, &'static str),
     /// Prove identity, then answer the hook with this status and body.
     Hook(u16, String),
+    /// Prove identity to a client that sends no hook after it.
+    ProveIdentity,
     /// Answer one request without an identity challenge, as the daemon's
     /// approval endpoints do.
     Plain(u16, String),
@@ -234,6 +236,16 @@ pub(crate) fn spawn_daemon(
             match exchange {
                 Exchange::RefuseChallenge(status, body) => {
                     write_response(&mut writer, status, body, true);
+                }
+                Exchange::ProveIdentity => {
+                    let request: Value = serde_json::from_slice(&challenge.body).unwrap();
+                    let answer = challenge_answer(
+                        &state,
+                        request["nonce"].as_str().unwrap(),
+                        request["hook_event"].as_str().unwrap(),
+                    );
+                    let answer = serde_json::to_string(&Value::Object(answer)).unwrap();
+                    write_response(&mut writer, 200, &answer, true);
                 }
                 Exchange::Hook(status, body) => {
                     let request: Value = serde_json::from_slice(&challenge.body).unwrap();

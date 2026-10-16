@@ -1,4 +1,6 @@
-//! Windows backend for the read-only Python evaluation profile.
+//! Windows backend for the read-only Python evaluation profile, and the
+//! `contained-readonly-windows` entry the Vite build profile shares
+//! (`windows_node_build`).
 //!
 //! The resident plans `python <script>` / `python -c` launches for an
 //! interpreter installed under a trusted install root, and the
@@ -25,6 +27,9 @@ const MAX_TIMEOUT_SECONDS: u64 = 86_400;
 const MAX_ENTRIES: usize = 20_000;
 const MAX_BYTES: usize = 256 * 1024 * 1024;
 const OUTPUT_CAP: usize = 1024 * 1024;
+/// A build's installed dependencies; a mid-sized Vite app is well below.
+const MAX_DEPENDENCY_ENTRIES: usize = 200_000;
+const MAX_DEPENDENCY_BYTES: usize = 2 * 1024 * 1024 * 1024;
 /// Never needed by an installed interpreter and often large; `.git` may also
 /// hold remote credentials in its config.
 const WITHHELD_DIRECTORIES: [&str; 4] = [".git", ".venv", "node_modules", "__pycache__"];
@@ -62,7 +67,7 @@ fn error(reason_code: &str, message: &str) -> RestrictedPytestError {
 }
 
 /// `canonicalize` returns verbatim paths; callers and Python use drive paths.
-fn canonical(path: &Path) -> Option<PathBuf> {
+pub(crate) fn canonical(path: &Path) -> Option<PathBuf> {
     let resolved = path.canonicalize().ok()?;
     let text = resolved.to_str()?;
     Some(match text.strip_prefix(r"\\?\") {
@@ -127,14 +132,14 @@ fn locate(name: &str, search_path: &str) -> Option<PathBuf> {
     })
 }
 
-fn first_on_path(names: &[String], search_path: &str) -> Option<PathBuf> {
+pub(crate) fn first_on_path(names: &[String], search_path: &str) -> Option<PathBuf> {
     std::env::split_paths(search_path)
         .filter(|directory| directory.is_absolute())
         .flat_map(|directory| names.iter().map(move |name| directory.join(name)))
         .find(|path| path.is_file())
 }
 
-fn workspace_and_cwd(
+pub(crate) fn workspace_and_cwd(
     workspace: &Path,
     cwd: &Path,
 ) -> Result<(PathBuf, PathBuf), RestrictedPytestError> {
@@ -237,6 +242,13 @@ struct Launch {
     timeout: Duration,
     executable: PathBuf,
     arguments: Vec<OsString>,
+    build: Option<NodeBuild>,
+}
+
+/// The staged dependencies and published outputs of a node build launch.
+struct NodeBuild {
+    dependencies: Vec<(PathBuf, PathBuf)>,
+    outputs: Vec<PathBuf>,
 }
 
 fn parse(arguments: &[String]) -> Result<Launch, RestrictedPytestError> {
@@ -246,40 +258,103 @@ fn parse(arguments: &[String]) -> Result<Launch, RestrictedPytestError> {
         .position(|argument| argument == "--")
         .map(|index| (&arguments[1..index], &arguments[index + 1..]))
         .ok_or_else(invalid)?;
-    let value = |name: &str| match options {
-        [a, b, c, d, e, f] if a == "--workspace" && c == "--cwd" && e == "--timeout-seconds" => {
-            Some(match name {
-                "workspace" => b,
-                "cwd" => d,
-                _ => f,
-            })
+    let (mut profile, mut workspace, mut cwd, mut timeout) = (None, None, None, None);
+    let mut outputs = Vec::new();
+    for pair in options.chunks(2) {
+        let [name, value] = pair else {
+            return Err(invalid());
+        };
+        let slot = match name.as_str() {
+            "--profile" => &mut profile,
+            "--workspace" => &mut workspace,
+            "--cwd" => &mut cwd,
+            "--timeout-seconds" => &mut timeout,
+            "--output" => {
+                outputs.push(PathBuf::from(value));
+                continue;
+            }
+            _ => return Err(invalid()),
+        };
+        if slot.replace(value.as_str()).is_some() {
+            return Err(invalid());
         }
-        _ => None,
+    }
+    let build = match profile {
+        None => false,
+        Some(profile) if profile == crate::windows_node_build::PROFILE => true,
+        Some(_) => return Err(invalid()),
     };
-    let timeout = value("timeout")
+    if build == outputs.is_empty() {
+        return Err(invalid());
+    }
+    let timeout = timeout
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|seconds| (1..=MAX_TIMEOUT_SECONDS).contains(seconds))
         .ok_or_else(invalid)?;
     let (workspace, cwd) = workspace_and_cwd(
-        Path::new(value("workspace").ok_or_else(invalid)?),
-        Path::new(value("cwd").ok_or_else(invalid)?),
+        Path::new(workspace.ok_or_else(invalid)?),
+        Path::new(cwd.ok_or_else(invalid)?),
     )?;
     let (executable, rest) = command.split_first().ok_or_else(invalid)?;
-    if !python_name(executable) {
+    if !build {
+        if !python_name(executable) {
+            return Err(invalid());
+        }
+        return Ok(Launch {
+            workspace,
+            cwd,
+            timeout: Duration::from_secs(timeout),
+            executable: trusted_executable(Path::new(executable))?,
+            arguments: rest.iter().map(OsString::from).collect(),
+            build: None,
+        });
+    }
+    let executable = crate::windows_node_build::node_executable(Path::new(executable))?;
+    let runtime = rest
+        .iter()
+        .take_while(|argument| crate::windows_node_build::runtime_option(argument))
+        .count();
+    if runtime > 1 {
         return Err(invalid());
     }
+    let (entry, tail) = rest[runtime..].split_first().ok_or_else(invalid)?;
+    let dependencies = crate::windows_node_build::dependencies(&workspace, &cwd)?;
+    let relative_cwd = cwd.strip_prefix(&workspace).map_err(|_| invalid())?;
+    let entry =
+        crate::windows_node_build::staged_entry(Path::new(entry), &dependencies, relative_cwd)
+            .ok_or_else(invalid)?;
+    let outputs = outputs
+        .iter()
+        .map(|output| crate::windows_node_build::output_location(output, &workspace))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(invalid)?;
+    // Node's JavaScript realpath lstats the drive root before walking a path,
+    // which an LPAC token cannot do. The staged copy holds no links, so its
+    // module loaders resolve the same files without that realpath.
+    let mut arguments: Vec<OsString> = ["--preserve-symlinks", "--preserve-symlinks-main"]
+        .into_iter()
+        .chain(rest[..runtime].iter().map(String::as_str))
+        .map(OsString::from)
+        .collect();
+    arguments.push(entry.into_os_string());
+    arguments.extend(tail.iter().map(OsString::from));
     Ok(Launch {
         workspace,
         cwd,
         timeout: Duration::from_secs(timeout),
-        executable: trusted_executable(Path::new(executable))?,
-        arguments: rest.iter().map(OsString::from).collect(),
+        executable,
+        arguments,
+        build: Some(NodeBuild {
+            dependencies,
+            outputs,
+        }),
     })
 }
 
-fn environment(executable: &Path) -> Vec<(OsString, OsString)> {
+fn environment(executable: &Path, build: bool) -> Vec<(OsString, OsString)> {
     let mut environment: Vec<(OsString, OsString)> = INHERITED_ENVIRONMENT
         .iter()
+        .filter(|name| !build || !name.starts_with("PYTHON"))
         .filter_map(|name| std::env::var_os(name).map(|value| (OsString::from(name), value)))
         .collect();
     let mut path = vec![executable.parent().unwrap_or(executable).to_path_buf()];
@@ -291,8 +366,10 @@ fn environment(executable: &Path) -> Vec<(OsString, OsString)> {
     if let Ok(path) = std::env::join_paths(path) {
         environment.push(("PATH".into(), path));
     }
-    environment.push(("PYTHONNOUSERSITE".into(), "1".into()));
-    environment.push(("PYTHONDONTWRITEBYTECODE".into(), "1".into()));
+    if !build {
+        environment.push(("PYTHONNOUSERSITE".into(), "1".into()));
+        environment.push(("PYTHONDONTWRITEBYTECODE".into(), "1".into()));
+    }
     environment
 }
 
@@ -311,6 +388,22 @@ fn withheld(patterns: &[Regex]) -> impl Fn(&Path) -> bool + '_ {
     }
 }
 
+/// Dependencies keep their own bulky directories; only credential material
+/// and Git metadata stay out.
+fn dependency_withheld(patterns: &[Regex]) -> impl Fn(&Path) -> bool + '_ {
+    move |relative: &Path| {
+        let text = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        relative
+            .components()
+            .any(|component| component.as_os_str().eq_ignore_ascii_case(".git"))
+            || patterns.iter().any(|pattern| pattern.is_match(&text))
+    }
+}
+
 fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
     let launch = parse(arguments)?;
     let patterns: Vec<Regex> = guard_command::credential_patterns::patterns()
@@ -319,8 +412,29 @@ fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
         .collect::<Result<_, _>>()
         .map_err(|_| error(UNAVAILABLE, "Credential patterns are unavailable."))?;
     let withhold = withheld(&patterns);
-    let environment = environment(&launch.executable);
+    let withhold_dependency = dependency_withheld(&patterns);
+    let environment = environment(&launch.executable, launch.build.is_some());
     let cancel = AtomicBool::new(false);
+    if let Some(build) = &launch.build {
+        if build.outputs.iter().any(|output| withhold(output)) {
+            return Err(error(
+                INVALID,
+                "Build output must not be a withheld directory.",
+            ));
+        }
+    }
+    let build = launch
+        .build
+        .as_ref()
+        .map(|build| guard_contained_process::BuildRun {
+            dependencies: &build.dependencies,
+            withhold_dependency: &withhold_dependency,
+            max_dependency_entries: MAX_DEPENDENCY_ENTRIES,
+            max_dependency_bytes: MAX_DEPENDENCY_BYTES,
+            outputs: &build.outputs,
+            max_output_entries: MAX_ENTRIES,
+            max_output_bytes: MAX_BYTES,
+        });
     let output = guard_contained_process::run_readonly_snapshot(
         guard_contained_process::ReadonlySnapshotRun {
             workspace: &launch.workspace,
@@ -339,6 +453,7 @@ fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
                 committed_memory_bytes: Some(4 * 1024 * 1024 * 1024),
                 active_processes: Some(32),
             },
+            build,
         },
     )
     .map_err(|failure| {

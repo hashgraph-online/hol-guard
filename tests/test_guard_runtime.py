@@ -192,7 +192,7 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context)
+    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
     CodexHarnessAdapter._write_authenticated_hook_config(
         context,
         config_path=config_path,
@@ -9065,7 +9065,7 @@ def test_guard_hook_claude_docker_saved_allow_does_not_lower_terminal_block(
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
 
-    def saved_allow_lookup(_store, current, _legacy, _alias):
+    def saved_allow_lookup(_store, current, _legacy, _alias, reuse=None):
         decision = {
             "action": "allow",
             "scope": "workspace",
@@ -9078,7 +9078,7 @@ def test_guard_hook_claude_docker_saved_allow_does_not_lower_terminal_block(
             "trust_status": {"trusted": True},
             "authority_revision": 1,
         }
-        return lookup, decision
+        return lookup, decision, _saved_reuse_query(reuse, decision)
 
     monkeypatch.setattr(
         GuardStore,
@@ -15475,6 +15475,26 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
     assert third_output["policy_action"] == "require-reapproval"
 
 
+def _saved_reuse_query(reuse: dict[str, object] | None, decision: dict[str, object]) -> dict[str, object] | None:
+    """A runtime lookup's ``saved_reuse`` carrying only the query, which the hook composes."""
+    if reuse is None:
+        return None
+    return {
+        "query": {
+            "current_action": reuse["current_action"],
+            "stored_present": True,
+            "stored_action": decision["action"],
+            "stored_artifact_hash": decision["artifact_hash"],
+            "integrity_failure": False,
+            "stored_validation_reason": None,
+            "cursor_native_present": False,
+            "cursor_validation_reason": None,
+            "diagnostic_reason": None,
+            "diagnostic_stored_hash": None,
+        }
+    }
+
+
 def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -15485,7 +15505,8 @@ def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, c
         current: dict[str, object],
         legacy: dict[str, object],
         _alias: dict[str, object] | None,
-    ) -> tuple[dict[str, object], dict[str, object]]:
+        reuse: dict[str, object] | None = None,
+    ) -> tuple[dict[str, object], dict[str, object], dict[str, object] | None]:
         # The resident keeps the strictly more severe legacy-hash block over
         # the exact v1 allow; the hook must probe both hashes in one call.
         assert str(current["artifact_hash"]).startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
@@ -15496,7 +15517,8 @@ def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, c
             "scope": "artifact",
             "source": "local",
         }
-        return {"decision": decision, "ignored_local_integrity": None, "trust_status": {}}, decision
+        lookup = {"decision": decision, "ignored_local_integrity": None, "trust_status": {}}
+        return lookup, decision, _saved_reuse_query(reuse, decision)
 
     monkeypatch.setattr(
         GuardStore,
@@ -24013,7 +24035,7 @@ def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tm
 
 def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_search(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-removal"
     source_file = workspace_dir / "src" / "guard-auth.ts"
     live_prefix = "guard" + "_live" + "_"
     _write_text(
@@ -24056,7 +24078,7 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
 
 def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-removal"
     outside_dir = tmp_path / "CascadeProjects" / "outside"
     _write_text(workspace_dir / "src" / "inside.ts", "export const token_label = 'field name only';\n")
     _write_text(outside_dir / "src" / "outside.ts", "export const token_label = 'field name only';\n")
@@ -24075,7 +24097,7 @@ def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Pa
 
 def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
+    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
     _write_text(
         workspace_dir / "app" / "agent-token-detail.tsx",
         "export type AgentTokenDetail = { tokenId: string };\n",
@@ -24084,8 +24106,8 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
 
     command = (
         'rg -n "onRotated=|onRotated:|onRotated\\)|AgentTokenDetail" '
-        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
-        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
+        "~/CascadeProjects/hashgraph-online/cloud-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
+        "~/CascadeProjects/hashgraph-online/cloud-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
     )
 
     assert guard_commands_module._codex_command_is_read_only_source_inspection(

@@ -288,3 +288,65 @@ def test_live_cursor_hook_script_path_accepts_regular_managed_script(tmp_path: P
     assert _live_cursor_hook_script_path(python_command) == script
     assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(frozen_command)) is True
     assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(python_command)) is True
+
+
+def _durable_runtime(tmp_path: Path) -> Path:
+    return tmp_path / "guard-home" / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
+
+
+def test_frozen_cursor_hook_runs_behind_the_durable_native_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.adapters import cursor_hook_config
+
+    runtime = _durable_runtime(tmp_path)
+    requested: list[Path | None] = []
+
+    def durable(guard_home: Path | None = None) -> Path:
+        requested.append(guard_home)
+        return runtime
+
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    _disable_isolated_python(monkeypatch)
+    monkeypatch.setattr(cursor_hook_config, "native_cursor_hook_bridge", durable)
+    monkeypatch.setattr(cursor_hook_config, "_frozen_cursor_hook_launcher", lambda: "/app/hol-guard")
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    command = _managed_hook_command(
+        python_executable=None,
+        script_path=script,
+        event_name="preToolUse",
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert requested == [tmp_path / "guard-home"]
+    tokens = cursor_hook_command_tokens(command)
+    assert tokens[:4] == [str(runtime), "cursor-hook-bridge", "/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND]
+    assert _live_cursor_hook_script_path(command) == script.resolve()
+    assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(command)) is True
+    assert live_cursor_hooks_use_frozen_control_plane(_blocking_cursor_hooks(command)) is True
+
+
+def test_rebind_moves_direct_cursor_clients_behind_the_native_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import cursor_hook_rebind
+
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    runtime = _durable_runtime(tmp_path)
+    direct = shlex.join(["/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)])
+    bridged = shlex.join(
+        [str(runtime), "cursor-hook-bridge", "/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)]
+    )
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(cursor_hook_rebind, "native_cursor_hook_bridge", lambda home=None: runtime)
+
+    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(direct), guard_home) is True
+    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(bridged), guard_home) is False
+
+    monkeypatch.setattr(cursor_hook_rebind, "native_cursor_hook_bridge", lambda home=None: None)
+    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(direct), guard_home) is False

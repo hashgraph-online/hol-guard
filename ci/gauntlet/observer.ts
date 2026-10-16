@@ -2,6 +2,7 @@
 import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 
 const logPath = process.env.GUARD_GAUNTLET_OBSERVER_LOG;
 const guardPort = process.env.GUARD_GAUNTLET_DAEMON_PORT;
@@ -77,6 +78,26 @@ function renderedFields(body: unknown): string[] {
   return fields.sort();
 }
 
+type Probe = { operation_id: string; request_id: string };
+
+// The hook payload with this observation's probe added, for whichever lane
+// carries it. The probe only asks Guard to echo the native receipt it already
+// produced; the reviewed hook is unchanged.
+//
+// The probe carries a request identity only the daemon assigns, so a resident
+// defers every probed payload (`HookDirectDefer::TransitionProbe`) and the
+// answer comes from the daemon behind the same bridge. That is what makes the
+// receipt correlatable, and it is why `resident_direct_answers` reads zero on
+// this lane: the bridge transport is covered, the resident's in-process answer
+// is not. Covering that one needs a probe the resident can echo.
+function probedPayload(payload: string): { text: string; request: JsonRecord; probe: Probe } {
+  const request = JSON.parse(payload) as JsonRecord;
+  if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("invalid hook request");
+  const probe = transitionProbe();
+  request.guard_transition_probe = { schema: "hol-guard.transition-hook-probe.v1", ...probe };
+  return { text: JSON.stringify(request), request, probe };
+}
+
 function record(value: Record<string, unknown>): void {
   if (!logPath) throw new Error("Gauntlet observer log is not configured");
   appendFileSync(logPath, JSON.stringify(value) + "\n", { mode: 0o600 });
@@ -94,21 +115,51 @@ function isGuard(input: RequestInfo | URL): boolean {
   } catch { return false; }
 }
 
+// One observed hook exchange, on either lane.
+function recordExchange(exchange: {
+  event: unknown;
+  request: JsonRecord;
+  probe?: Probe;
+  body: JsonRecord;
+  status: number;
+  elapsedMs: number;
+  transport?: string;
+}): void {
+  const { request, probe, body } = exchange;
+  const nativeObservation = publicNativeObservation(body);
+  const input = JSON.stringify(request.tool_input ?? null);
+  record({
+    ...(exchange.transport ? { transport: exchange.transport } : {}),
+    event: exchange.event,
+    tool: request.tool_name,
+    tool_call_id: request.tool_call_id,
+    input_json: input,
+    input_sha256: createHash("sha256").update(input).digest("hex"),
+    http_status: exchange.status,
+    decision: body.decision,
+    policy_action: body.policy_action,
+    reason_code: body.reason_code,
+    rendered_fields: renderedFields(body),
+    model_output_action: body.model_output_action,
+    reviewed_output_sha256: body.reviewed_output_sha256,
+    response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
+    elapsed_ms: exchange.elapsedMs,
+    ...(probe ? { probe_operation_id: probe.operation_id, probe_request_id: probe.request_id } : {}),
+    ...(nativeObservation ? { native_observation: nativeObservation } : {}),
+  });
+}
+
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   if (!isGuard(input)) return actualFetch(input, init);
   let forwardedInit = init;
   let request: JsonRecord = {};
-  let probe: { operation_id: string; request_id: string } | undefined;
+  let probe: Probe | undefined;
   try {
     const rawBody = init?.body;
-    request = JSON.parse(typeof rawBody === "string" ? rawBody : "") as JsonRecord;
-    if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("invalid hook request");
-    probe = transitionProbe();
-    request.guard_transition_probe = {
-      schema: "hol-guard.transition-hook-probe.v1",
-      ...probe,
-    };
-    forwardedInit = { ...init, body: JSON.stringify(request) };
+    const probed = probedPayload(typeof rawBody === "string" ? rawBody : "");
+    request = probed.request;
+    probe = probed.probe;
+    forwardedInit = { ...init, body: probed.text };
   } catch {
     record({ observer_error: true, observer_error_code: "probe_injection_failed" });
   }
@@ -125,35 +176,115 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   }
   try {
     const body = await response.clone().json();
-    const nativeObservation = publicNativeObservation(body);
-    record({
-      event,
-      tool: request.tool_name,
-      tool_call_id: request.tool_call_id,
-      input_json: JSON.stringify(request.tool_input ?? null),
-      input_sha256: createHash("sha256").update(JSON.stringify(request.tool_input ?? null)).digest("hex"),
-      http_status: response.status,
-      decision: body.decision,
-      policy_action: body.policy_action,
-      reason_code: body.reason_code,
-      rendered_fields: renderedFields(body),
-      model_output_action: body.model_output_action,
-      reviewed_output_sha256: body.reviewed_output_sha256,
-      response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
-      elapsed_ms: elapsed(),
-      ...(probe ? { probe_operation_id: probe.operation_id, probe_request_id: probe.request_id } : {}),
-      ...(nativeObservation ? { native_observation: nativeObservation } : {}),
-    });
+    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed() });
   } catch {
     record({ observer_error: true, event, elapsed_ms: elapsed() });
   }
   return response;
 }) as typeof fetch;
 
+// An installed extension answers each hook through the native runtime's
+// `pi-hook-bridge` instead of the loopback `fetch` above: it spawns the runtime
+// with the daemon payload on the child's stdin and reads one `{status, body}`
+// JSON line from its stdout. Observe that lane at the same two points, so the
+// Gauntlet exercises the transport users actually run.
+const childProcess = createRequire(import.meta.url)("node:child_process");
+
+type BridgeChild = {
+  stdin?: { end(chunk?: unknown, ...rest: unknown[]): unknown } | null;
+  stdout?: { on(event: string, handler: (chunk: unknown) => void): unknown } | null;
+  once(event: string, handler: (code: unknown) => void): unknown;
+};
+
+function observeBridge(child: BridgeChild): void {
+  const started = performance.now();
+  const elapsed = () => Number((performance.now() - started).toFixed(3));
+  let request: JsonRecord = {};
+  let probe: Probe | undefined;
+  const stdin = child.stdin;
+  if (stdin) {
+    const actualEnd = stdin.end.bind(stdin);
+    stdin.end = (chunk?: unknown, ...rest: unknown[]): unknown => {
+      if (typeof chunk !== "string") return actualEnd(chunk, ...rest);
+      try {
+        const probed = probedPayload(chunk.trim());
+        request = probed.request;
+        probe = probed.probe;
+        return actualEnd(`${probed.text}\n`, ...rest);
+      } catch {
+        record({ observer_error: true, observer_error_code: "probe_injection_failed" });
+        return actualEnd(chunk, ...rest);
+      }
+    };
+  }
+  let stdout = "";
+  child.stdout?.on("data", chunk => {
+    if (stdout.length <= 8_388_608) stdout += String(chunk);
+  });
+  const dropBridge = (code: unknown) => {
+    // The extension discards this child and retries. public_observations
+    // drops bridge_no_reply before the row can become a Guard observation.
+    record({
+      observer_error: true,
+      transport: "pi-hook-bridge",
+      observer_error_code: "bridge_no_reply",
+      exit_code: code,
+      elapsed_ms: elapsed(),
+    });
+  };
+  child.once("close", (code: unknown) => {
+    // Take a reply only when the extension would: the child exited 0 and the
+    // envelope status is an HTTP code. A timeout kill or any other status is
+    // discarded there, and recording it as a call would double-count the retry.
+    try {
+      if (code !== 0) {
+        dropBridge(code);
+        return;
+      }
+      const envelope = JSON.parse(stdout.trim());
+      const status = envelope?.status;
+      if (!Number.isInteger(status) || status < 100 || status > 599 || typeof envelope.body !== "string") {
+        dropBridge(code);
+        return;
+      }
+      const body = JSON.parse(envelope.body);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        dropBridge(code);
+        return;
+      }
+      recordExchange({
+        event: request.hook_event_name,
+        request,
+        probe,
+        body,
+        status,
+        elapsedMs: elapsed(),
+        transport: "pi-hook-bridge",
+      });
+    } catch {
+      dropBridge(code);
+    }
+  });
+}
+
+// Hook the instance method every `spawn` export calls, not the export itself:
+// Bun binds a module's `import { spawn }` once, when node:child_process is
+// first imported anywhere, so a module that imported it before this observer
+// loaded never sees a replaced export. `options.args` is the full argv,
+// starting with the program, and the child's pipes exist once it returns.
+const childPrototype = childProcess.ChildProcess.prototype;
+const actualChildSpawn = childPrototype.spawn;
+childPrototype.spawn = function (this: BridgeChild, options: { args?: unknown }): unknown {
+  const result = actualChildSpawn.call(this, options);
+  if (Array.isArray(options?.args) && options.args[1] === "pi-hook-bridge") observeBridge(this);
+  return result;
+};
+
 // Each argument is single-quoted with embedded apostrophes written as '\'' (canonical shell argv).
 const QUOTED = String.raw`'(?:[^']|'\\'')+'`;
+// On Windows the sink is Guard's isolated Python running a fixed bootstrap: `python.exe -I -c <bootstrap> guard`.
 const CONTAINED_WRAPPER = new RegExp(
-  `^${QUOTED} 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
+  `^${QUOTED}(?: '-I' '-c' ${QUOTED} 'guard')? 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
     `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}'(?: '--home' ${QUOTED})?$`,
 );
 
@@ -170,7 +301,9 @@ function containedRequest(event: JsonRecord): JsonRecord | undefined {
   try {
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const info = fstatSync(descriptor);
-    if (!info.isFile() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600 || info.size > 1_048_576) {
+    // Windows reports no owner and fixed mode bits; the request directory's ACL is what keeps it private there.
+    const foreign = process.platform !== "win32" && (info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600);
+    if (!info.isFile() || foreign || info.size > 1_048_576) {
       return undefined;
     }
     const request = readFileSync(descriptor);

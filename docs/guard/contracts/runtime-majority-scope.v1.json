@@ -516,10 +516,13 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-          "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
           "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads when it builds runtime artifacts. github_actions_read_workflow imports github_command_capabilities, which returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts reaches these at module load when it builds runtime artifacts; the resident now recognises non-executing GitHub Actions reads. github_command_capabilities returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/node_semver.py",
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports node_semver_spec_matches at module load to check that an installed Node package version satisfies its declared range when it builds runtime artifacts. The local tool eligibility decision that used to reach it eagerly now runs in the resident, so it is reached through that lazily loaded artifact module and stays counted."
       },
       {
         "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -571,7 +574,6 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_compound_decision.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_observe_queue.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
@@ -610,7 +612,9 @@
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
           "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py"
+          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
+          "src/codex_plugin_scanner/guard/adapters/codex_contained_tests_windows.py",
+          "src/codex_plugin_scanner/guard/windows_powershell_quote.py"
         ],
         "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, capability_report, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope."
       },
@@ -643,6 +647,7 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/runtime/contained_command_prefix.py",
           "src/codex_plugin_scanner/guard/runtime/contained_output_filters.py",
           "src/codex_plugin_scanner/guard/runtime/contained_run_directory.py",
           "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
@@ -665,7 +670,7 @@
           "src/codex_plugin_scanner/guard/runtime/source_paths.py",
           "src/codex_plugin_scanner/guard/runtime/workspace_snapshot_inputs.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper/run_directory, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper/run_directory/command_prefix, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [
@@ -764,9 +769,6 @@
           "src/codex_plugin_scanner/guard/inventory_contract_models.py",
           "src/codex_plugin_scanner/guard/inventory_contract_redaction.py",
           "src/codex_plugin_scanner/guard/path_security.py",
-          "src/codex_plugin_scanner/guard/portable_skill_directory_discovery.py",
-          "src/codex_plugin_scanner/guard/portable_skill_directory_identity.py",
-          "src/codex_plugin_scanner/guard/portable_skill_directory_support.py",
           "src/codex_plugin_scanner/guard/skill_directory_discovery.py",
           "src/codex_plugin_scanner/guard/skill_directory_identity.py",
           "src/codex_plugin_scanner/guard/skill_directory_identity_contract.py",
@@ -791,7 +793,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
         ],
-        "reason": "Reviewed: fail-closed bridge to the native GitHub CLI classifier. github_actions_read_workflow.py and github_shell_capabilities.py classify gh commands through it while a hook evaluates a shell request, so it is hook-path runtime and stays counted. When the resident cannot answer it returns the review floor instead of re-deriving the capability in Python."
+        "reason": "Reviewed: fail-closed bridge to the native GitHub CLI classifier. github_shell_capabilities.py classifies gh commands through it while a hook evaluates a shell request, so it is hook-path runtime and stays counted. When the resident cannot answer it returns the review floor instead of re-deriving the capability in Python."
       },
       {
         "path": [
@@ -817,6 +819,10 @@
           "src/codex_plugin_scanner/guard/codex_install_transaction.py"
         ],
         "reason": "Reviewed: Codex hook event names, manifest, integrity, compatibility and install transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/protection_coverage.py",
+        "reason": "Reviewed and retained in runtime scope: cli/render.py imports it at module load so the status and doctor panels report whether the configured protection posture is actually in effect. It reads the harness rows the adapters already produced and decides what the panel says; no admission, authority or enforcement decision reads it."
       }
     ],
     "tests": {

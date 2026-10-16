@@ -97,6 +97,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 npm_config_inert: context.npm_config_inert,
                 shell_home_matches: context.shell_home_matches,
                 ripgrep_config_absent: context.ripgrep_config_absent,
+                psql_environment: context.psql_environment,
                 cwd: Some(&cwd),
             },
         );
@@ -115,6 +116,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     npm_config_inert: context.npm_config_inert,
                     shell_home_matches: context.shell_home_matches,
                     ripgrep_config_absent: context.ripgrep_config_absent,
+                    psql_environment: context.psql_environment,
                     cwd: Some(&cwd),
                 },
             )
@@ -140,6 +142,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "ps"
                 | "lsof"
                 | "pg_isready"
+                | "psql"
                 | "ls"
                 | "cat"
                 | "base64"

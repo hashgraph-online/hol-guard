@@ -62,14 +62,32 @@ pub(crate) fn add_approval_request(
     source: &str,
     args: &Args,
 ) -> StoreResult<Value> {
-    let request = ApprovalRequest::decode(args.raw("request"))?;
-    let now = args.str("now")?;
     // `queue_blocked_approvals` records the creation events; other writers
     // leave `prompt_shown` out.
     let prompt_shown = match args.raw("prompt_shown") {
         None | Some(Value::Null) => None,
         Some(value) => Some(value.as_bool().ok_or(StoreError::Invalid(INVALID_ARGS))?),
     };
+    add_request(
+        connection,
+        source,
+        args.raw("request"),
+        args.str("now")?,
+        prompt_shown,
+    )
+    .map(Value::String)
+}
+
+/// The queue write of one `GuardApprovalRequest.to_dict()`: its persisted
+/// request id.
+pub(crate) fn add_request(
+    connection: &Connection,
+    source: &str,
+    request: Option<&Value>,
+    now: &str,
+    prompt_shown: Option<bool>,
+) -> StoreResult<String> {
+    let request = ApprovalRequest::decode(request)?;
     let derived = derive(&request).map_err(|error| match error {
         StoreError::Invalid(IDENTITY_INVALID) => StoreError::Value(IDENTITY_UNAVAILABLE.to_owned()),
         other => other,
@@ -85,10 +103,19 @@ pub(crate) fn add_approval_request(
     if backfill {
         guard_store_approval_backfill::mark_complete(connection);
     }
-    Ok(Value::String(request_id))
+    Ok(request_id)
 }
 
 /// The write and outbox bind under the caller's OAuth source.
+/// `_normalize_source_name` for a source the caller already validated: the
+/// `oauth_source` a request from it carries.
+pub(crate) fn oauth_source(source: &str) -> String {
+    match py_strip(source).to_lowercase() {
+        normalized if normalized.is_empty() => "default".to_owned(),
+        normalized => normalized,
+    }
+}
+
 fn persist(
     connection: &Connection,
     source: &str,
@@ -96,10 +123,7 @@ fn persist(
     derived: &Derived,
     now: &str,
 ) -> StoreResult<String> {
-    let oauth_source = match py_strip(source).to_lowercase() {
-        normalized if normalized.is_empty() => "default".to_owned(),
-        normalized => normalized,
-    };
+    let oauth_source = oauth_source(source);
     let request_id = write(connection, request, derived, &oauth_source, now)?;
     bind_events_for_request(connection, &request_id, &oauth_source)?;
     Ok(request_id)

@@ -30,6 +30,8 @@ fn kicked(answer: Kick) -> (ResidentRelayAuthority, std::rc::Rc<std::cell::Cell<
         kick: None,
         warming: false,
         report: None,
+        inline_available: false,
+        inline_answer: None,
     }
     .with_kick(Box::new(FakeKick {
         answer,
@@ -144,6 +146,8 @@ fn the_probe_names_why_it_could_not_ask() {
         kick: None,
         warming: false,
         report: None,
+        inline_available: false,
+        inline_answer: None,
     };
     let deadline = Instant::now() + Duration::from_millis(200);
     assert_eq!(

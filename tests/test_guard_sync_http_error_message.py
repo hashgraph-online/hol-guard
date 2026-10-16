@@ -1,5 +1,7 @@
 import io
 import json
+import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -24,6 +26,26 @@ def _http_error(body: str, *, code: int = 500, reason: str = "Error") -> urllib.
         hdrs={},
         fp=io.BytesIO(body.encode("utf-8")),
     )
+
+
+def _record_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Record the retry waits this thread makes.
+
+    `runner.time` is the shared `time` module, so a thread another test left
+    running sleeps through the same patch. Its sleeps stay real and unrecorded.
+    """
+    slept: list[float] = []
+    real_sleep = time.sleep
+    caller = threading.get_ident()
+
+    def sleep(seconds: float) -> None:
+        if threading.get_ident() == caller:
+            slept.append(seconds)
+        else:
+            real_sleep(seconds)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time.sleep", sleep)
+    return slept
 
 
 class _JsonResponse:
@@ -109,7 +131,6 @@ def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     attempts = 0
-    slept: list[int] = []
     cloudflare_body = json.dumps(
         {
             "status": 502,
@@ -133,7 +154,7 @@ def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
         return _JsonResponse({"syncedAt": "2026-06-30T21:02:46Z"})
 
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time.sleep", slept.append)
+    slept = _record_sleeps(monkeypatch)
 
     payload = _urlopen_json_with_timeout_retry(
         request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),
@@ -150,7 +171,6 @@ def test_urlopen_retries_cloudflare_524_with_retry_after_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     attempts = 0
-    slept: list[int] = []
 
     def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _EmptyResponse:
         nonlocal attempts
@@ -166,7 +186,7 @@ def test_urlopen_retries_cloudflare_524_with_retry_after_header(
         return _EmptyResponse()
 
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time.sleep", slept.append)
+    slept = _record_sleeps(monkeypatch)
 
     _urlopen_with_timeout_retry(
         request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),

@@ -28,6 +28,10 @@ const APPROVAL_CANNOT_UNBLOCK: &str =
 const INBOX_APPROVAL_OFFER: &str = " Approve it in the HOL Guard inbox (choose Always for a \
      repeated read-only command), or split it into simpler commands.";
 
+/// `_BUILD_REVIEW_PREFIX`: a package review of a build or test says why in
+/// its own text, and the install hint does not apply to it.
+const BUILD_REVIEW_PREFIX: &str = "HOL Guard requires review before this build or test command";
+
 /// `_REASON_CODE_HINTS`: plain-language next steps keyed by the native
 /// decision's reason code; unknown codes have none.
 fn reason_code_hint(reason_code: &str) -> &'static str {
@@ -82,7 +86,11 @@ pub(crate) fn safe_alternative_reason_with_retry(
     if reason_code.is_none() && approval_queued.is_none() {
         return py_strip(&format!("{reason} {SAFE_ALTERNATIVE_GUIDANCE}")).to_owned();
     }
-    let hint = reason_code_hint(reason_code.unwrap_or_default());
+    let hint = if reason.starts_with(BUILD_REVIEW_PREFIX) {
+        ""
+    } else {
+        reason_code_hint(reason_code.unwrap_or_default())
+    };
     let wait = if approval_queued != Some(true) {
         NOT_QUEUED
     } else if retry_reuses_approval {
@@ -130,5 +138,20 @@ mod tests {
             ));
             assert_eq!(text.contains("Approve it in the HOL Guard inbox"), offered);
         }
+    }
+
+    #[test]
+    fn a_build_review_leaves_out_the_install_hint() {
+        let build = "HOL Guard requires review before this build or test command can execute, \
+             because it can download dependencies and run their build scripts.";
+        let text = safe_alternative_reason(build, Some("native_package_review"), Some(true));
+        assert!(text.starts_with(build));
+        assert!(!text.contains("--ignore-scripts"), "{text}");
+        let install = safe_alternative_reason(
+            "HOL Guard requires review before this package or script command can execute.",
+            Some("native_package_review"),
+            Some(true),
+        );
+        assert!(install.contains("--ignore-scripts"), "{install}");
     }
 }

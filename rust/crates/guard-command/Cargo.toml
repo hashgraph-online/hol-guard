@@ -13,6 +13,7 @@ autotests = false
 base64.workspace = true
 caseless.workspace = true
 mailparse.workspace = true
+guard-scanner = { path = "../guard-scanner" }
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
@@ -88,6 +89,14 @@ path = "tests/pretool_worktree_cd_windows.rs"
 [[test]]
 name = "shim_admin_vectors"
 path = "tests/shim_admin_vectors.rs"
+
+[[test]]
+name = "mcp_stdio_probe_windows"
+path = "tests/mcp_stdio_probe_windows.rs"
+
+[[test]]
+name = "launch_identity_windows"
+path = "tests/launch_identity_windows.rs"
 
 [[test]]
 name = "pretool_rg_hidden_whitelist"

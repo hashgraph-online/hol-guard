@@ -2,11 +2,13 @@
 //!
 //! Oh My Pi's `edit` tool takes one `input` string: an optional
 //! `*** Begin Patch` line, then one `[PATH#TAG]` header per file followed by
-//! `PUT`/`CUT` operations and `+` body rows, then `*** End Patch`. The body
-//! rows are file content, not commands, so the edit gets the same bounded
-//! proof as a Codex `apply_patch`: every header must name a file that the
-//! native file write proof accepts and that is not agent instruction or VCS
-//! metadata.
+//! `PUT`/`CUT` operations and `+` body rows, then `*** End Patch`. Models
+//! often add unified-diff `-old` rows under a `PUT`; Oh My Pi drops them or
+//! keeps them as body text, and never reads them as a header or operation.
+//! The body rows are file content, not commands, so the edit gets the same
+//! bounded proof as a Codex `apply_patch`: every header must name a file that
+//! the native file write proof accepts and that is not agent instruction or
+//! VCS metadata.
 //!
 //! Oh My Pi's own parser forgives a lot: it unquotes paths, strips
 //! `Update File:`-style noise and leading `***`, and recovers lowercase tags.
@@ -48,6 +50,7 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
     }
     let mut targets: Vec<(String, bool)> = Vec::new();
     let mut in_file = false;
+    let mut in_put = false;
     let mut ended = false;
     for line in lines {
         let line = line.strip_suffix('\r').unwrap_or(line);
@@ -74,10 +77,15 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
                 targets.push((path.to_owned(), tagged));
             }
             in_file = true;
+            in_put = false;
             continue;
         }
         let operation = line.starts_with("PUT ") || line.starts_with("CUT ");
-        if !in_file || !(operation || line.starts_with('+')) {
+        if operation {
+            in_put = line.starts_with("PUT ");
+        }
+        let body = line.starts_with('+') || (in_put && line.starts_with('-'));
+        if !in_file || !(operation || body) {
             return None;
         }
     }

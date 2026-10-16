@@ -132,6 +132,7 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiService
 from .extension_discovery_read import (
     DISCOVERY_EVENTS_PATH,
+    DISCOVERY_OPTED_OUT,
     DISCOVERY_RENDERS_PATH,
     DISCOVERY_UNAVAILABLE,
     DiscoveryReadError,
@@ -1301,6 +1302,16 @@ class _GuardDaemonHandler(
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
+            # A device whose user or administrator turned sponsored discovery
+            # off answers that before anything that can fail. The rollout gate,
+            # the native capability and the upstream read all have failure
+            # modes, and a failure must never read as "no preference stated" on
+            # a device that already stated one.
+            if parsed.path == _LOCAL_DISCOVERY_PLACEMENTS and not sponsored_discovery_allowed(
+                self.server.store  # type: ignore[attr-defined]
+            ):
+                self._write_json({"error": DISCOVERY_OPTED_OUT}, status=403)
+                return
             if not discovery_rollout_enabled():
                 self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
                 return
@@ -1929,6 +1940,7 @@ class _GuardDaemonHandler(
                     guard_home=guard_home,
                     workspace=workspace,
                     deadline=hook_deadline.expires_at,
+                    release_capacity=admission.permit.release,
                 )
         finally:
             with daemon_server.hook_capacity_lock:
@@ -2070,6 +2082,7 @@ class _GuardDaemonHandler(
         guard_home: str | None,
         workspace: str | None,
         deadline: float | None = None,
+        release_capacity: Callable[[], None] | None = None,
     ) -> None:
         from contextlib import nullcontext
 
@@ -2085,26 +2098,28 @@ class _GuardDaemonHandler(
                 workspace=workspace,
                 deadline=deadline,
             )
-            if result is not None:
-                if deadline is not None and time.monotonic() >= deadline:
-                    result = self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
-                        reason_code="daemon_hook_deadline_exhausted",
-                    )
-                self._write_json(result)
-                return
-            self._write_json(
-                self._runtime_hook_fail_safe_response(
+            if result is None:
+                result = self._runtime_hook_fail_safe_response(
                     payload,
                     params,
                     default_harness=default_harness,
                     reason="HOL Guard could not complete the native hook decision safely.",
                     reason_code="native_hook_worker_unavailable",
                 )
-            )
+            elif deadline is not None and time.monotonic() >= deadline:
+                result = self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
+                    reason_code="daemon_hook_deadline_exhausted",
+                )
+        # The decision is final. Free its review slot before the answer is
+        # sent: a client holding its answer must never see the slot still
+        # busy, and a slow reader must not occupy review capacity.
+        if release_capacity is not None:
+            release_capacity()
+        self._write_json(result)
 
     def _handle_runtime_hook_fast(
         self,
@@ -3748,12 +3763,31 @@ class GuardDaemonServer:
             if self._headless_cloud_sync_backoff_seconds > 0
             else interval_seconds
         )
+        reported_failure: str | None = None
         while not self._shutdown_started.is_set():
-            summary = _run_headless_cloud_sync_with_optional_publish(
-                store=self._server.store,
-                managed_controls_publish=_managed_controls_publish_for(self._server),
-            )
-            status = str(summary.get("status") or "")
+            try:
+                summary = _run_headless_cloud_sync_with_optional_publish(
+                    store=self._server.store,
+                    managed_controls_publish=_managed_controls_publish_for(self._server),
+                )
+            except Exception as error:
+                # Cloud sync carries receipts and bookkeeping, never admission
+                # authority, so a store that cannot record the attempt must not
+                # end the loop. An unconnected install reaches this through the
+                # not-logged-in path, where recording the outcome needs the same
+                # native store; letting that escape left the daemon printing a
+                # traceback and never syncing again, not even after a sign-in.
+                reason = f"{type(error).__name__}: {error}"
+                if reason != reported_failure:
+                    reported_failure = reason
+                    if isinstance(error, NativeGuardStoreUnavailable):
+                        _LOGGER.warning("Headless cloud sync could not complete: %s", reason)
+                    else:
+                        _LOGGER.exception("Headless cloud sync could not complete: %s", reason)
+                status = ""
+            else:
+                reported_failure = None
+                status = str(summary.get("status") or "")
             wait_seconds = interval_seconds if status == "synced" else backoff_seconds
             if self._shutdown_started.wait(wait_seconds):
                 return
@@ -3768,10 +3802,18 @@ class GuardDaemonServer:
             from ..native_approval_scope import ApprovalScopeUnavailableError
 
             try:
-                pending_review_requests = self._server.store.list_approval_requests(
-                    status="pending",
-                    limit=1,
-                )
+                try:
+                    pending_review_requests = self._server.store.list_approval_requests(
+                        status="pending",
+                        limit=1,
+                    )
+                except ApprovalScopeUnavailableError as error:
+                    if not isinstance(error.__cause__, NativeGuardStoreUnavailable):
+                        raise
+                    # The native resident cannot read the queue, so whether a review
+                    # is pending is unknown. Pending rows stay durable in guard.db;
+                    # do not let this pin the daemon alive.
+                    pending_review_requests = []
                 cloud_profile = self._server.store.get_cloud_sync_profile()
                 workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
                 try:

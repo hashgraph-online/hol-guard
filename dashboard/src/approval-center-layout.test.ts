@@ -22,7 +22,13 @@ import {
   watchObservedPolicyAction,
   watchProtectedOutcome,
 } from "./approval-center-utils";
-import type { GuardAction, GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
+import type {
+  GuardAction,
+  GuardActionEnvelope,
+  GuardApprovalGatePublicConfig,
+  GuardApprovalRequest,
+  GuardCodexResumeResult,
+} from "./guard-types";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import { ReviewDecisionCard } from "./review-decision-card";
@@ -431,6 +437,53 @@ assert(
     && !watchOnlyDecisionMarkup.includes("Why paused")
     && watchOnlyDecisionMarkup.includes("What Protected mode would do"),
   "Watch-only decision card renders its observation state without crashing",
+);
+const approvalGateNudge = "Set an approval password or MFA so only you can approve blocked actions.";
+const approvalGateBase = {
+  configured: false,
+  cooldown_seconds: 0,
+  cooldown_active: false,
+  cooldown_expires_at: null,
+  locked_until: null,
+  fail_closed: false,
+  strict_all_decisions: false,
+};
+const decisionMarkupWithGate = (approvalGate: GuardApprovalGatePublicConfig | null): string => {
+  // The settings link keeps the signed-link session, which reads browser location.
+  const emptyStorage = { getItem: () => null, setItem: () => undefined };
+  const globalWithWindow = globalThis as unknown as { window?: object };
+  globalWithWindow.window = {
+    location: { origin: "http://127.0.0.1:4781", pathname: "/requests/req-1", search: "", hash: "#guard-token=test-token" },
+    localStorage: emptyStorage,
+    sessionStorage: emptyStorage,
+  };
+  try {
+    return renderToStaticMarkup(
+      createElement(ReviewDecisionCard, {
+        detail: { item: explicitWatchOnlyRequest, diff: null, receipt: null, policy: [] },
+        onResolve: () => undefined,
+        onGoHome: () => undefined,
+        approvalGate,
+      }),
+    );
+  } finally {
+    delete globalWithWindow.window;
+  }
+};
+assert(
+  !watchOnlyDecisionMarkup.includes(approvalGateNudge),
+  "Approval page waits for the gate state before nudging",
+);
+const unprotectedDecisionMarkup = decisionMarkupWithGate({ ...approvalGateBase, enabled: false });
+assert(
+  unprotectedDecisionMarkup.includes(approvalGateNudge)
+    && unprotectedDecisionMarkup.includes("/settings?section=approval#guard-token=test-token")
+    && unprotectedDecisionMarkup.includes("Keep allowing"),
+  "Approval page nudges toward a password or MFA without hiding the decision",
+);
+assert(
+  !decisionMarkupWithGate({ ...approvalGateBase, enabled: true, configured: true }).includes(approvalGateNudge),
+  "Approval page stays quiet once the approval gate is on",
 );
 assert(
   buildWhatWouldHappen(explicitWatchOnlyRequest)?.includes("Watch allowed this action to continue") === true,

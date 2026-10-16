@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
+from codex_plugin_scanner.guard.approval_scope_support import RETRY_CANNOT_REUSE_APPROVAL, request_scope_contract
 
-RESTRICTION = "retry_cannot_reuse_approval"
+# The Python constant must name the restriction the resident actually emits.
+RESTRICTION = RETRY_CANNOT_REUSE_APPROVAL
 BOUND_HASH = "native-review-v4:" + "a" * 64 + ":deny:review:review:native_sensitive_access_review"
 
 

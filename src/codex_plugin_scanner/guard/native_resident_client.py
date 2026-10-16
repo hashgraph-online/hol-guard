@@ -554,7 +554,10 @@ def retire_native_resident_for_update(
     resolved_guard_home = guard_home.expanduser().resolve()
     state_dir = resolved_guard_home / "native-runtime"
     try:
-        close_native_resident_clients(resolved_guard_home)
+        # A persistent client that could not be contained is still a live
+        # native process. Stopping the shared resident does not make that true.
+        if close_native_resident_clients(resolved_guard_home) is False:
+            return False
         _ = _state_files(state_dir, strict=True)
         return stop_native_resident(
             executable=executable,

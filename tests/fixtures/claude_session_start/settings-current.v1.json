@@ -27,7 +27,7 @@
   "seed_hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+        "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -105,7 +105,7 @@
     "hooks": {
       "PreToolUse": [
         {
-          "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+          "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
           "hooks": [
             {
               "type": "command",
@@ -183,7 +183,7 @@
               "statusMessage": "HOL Guard is reviewing this approval prompt"
             }
           ],
-          "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+          "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         }
       ],
       "PostToolUse": [
@@ -200,7 +200,7 @@
               "timeout": 30
             }
           ],
-          "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+          "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
         }
       ],
       "Notification": [

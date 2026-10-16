@@ -101,7 +101,7 @@ if TYPE_CHECKING:
 
 
 from ..harness_posture import harness_is_recording_only
-from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
+from ..local_cli_hook import local_cli_grant_action
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_hook_approval_context import generic_hook_approval_context_inputs, native_hook_approval_context_token
 from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_reuse
@@ -202,14 +202,6 @@ def _generic_hook_content_key(key: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", key).replace("-", "_").lower()
 
 
-def _generic_hook_memory_command(payload: Mapping[str, object]) -> str:
-    command = command_text_from_tool_payload(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-    )
-    return _coalesce_string(command, payload.get("command"), payload.get("tool_name"))
-
-
 def _generic_hook_approval_context_inputs(
     *,
     action_envelope: GuardActionEnvelope | None,
@@ -225,6 +217,7 @@ def _generic_hook_approval_context_inputs(
     publisher: str | None,
     runtime_workspace: Path | None,
     token: Mapping[str, object],
+    tool_command: str | None,
 ) -> dict[str, object]:
     """Inputs that bind a generic fallback approval to its exact recomputed context.
 
@@ -242,10 +235,7 @@ def _generic_hook_approval_context_inputs(
         runtime_workspace=runtime_workspace,
         payload=payload,
         payload_digest=_generic_hook_payload_digest(payload),
-        tool_command=command_text_from_tool_payload(
-            payload.get("tool_name"),
-            payload.get("tool_input", payload.get("arguments")),
-        ),
+        tool_command=tool_command,
         config=config,
         policy_config=_runtime_hook_effective_policy_config(config),
         evaluator_policy_version=_GENERIC_HOOK_EVALUATOR_POLICY_VERSION,
@@ -277,6 +267,7 @@ def _generic_hook_saved_decision(
     publisher: str | None,
     runtime_workspace: Path | None,
     store: GuardStore,
+    tool_command: str | None,
 ) -> tuple[str, dict[str, object] | None, dict[str, object] | None, ApprovalReuseDecision, bool]:
     """Build the approval context token, peek saved evidence and compose its reuse verdict in one resident call.
 
@@ -289,7 +280,7 @@ def _generic_hook_saved_decision(
     workspace = str(runtime_workspace) if runtime_workspace is not None else None
     from ..store import runtime_tool_action_exact_match_context, runtime_tool_action_policy_artifact_id
 
-    memory_command = _generic_hook_memory_command(payload)
+    memory_command = _coalesce_string(tool_command, payload.get("command"), payload.get("tool_name"))
     runtime_exact_match_context = runtime_tool_action_exact_match_context(
         config_path=workspace,
         source_scope=_coalesce_string(payload.get("source_scope"), "project"),
@@ -673,15 +664,18 @@ def run_native_generic_payload(
     tool_grant_applied = local_tool_grant is not None and local_tool_eligibility is not None
     current_policy_action = composition["action_with_tool_grant" if tool_grant_applied else "action_without_tool_grant"]
     if has_command_text:
-        observe_unlisted_cli(store=store, command=command_str, cwd=cwd, home_dir=home_dir)
-        if grant_lookups_allowed:
-            current_policy_action = apply_local_cli_grant(
-                store=store,
-                command=command_str,
-                cwd=cwd,
-                home_dir=home_dir,
-                current_action=current_policy_action,
-            )
+        current_policy_action = local_cli_grant_action(
+            store=store,
+            command=command_str,
+            cwd=cwd,
+            home_dir=home_dir,
+            current_action=current_policy_action,
+            grant_allowed=grant_lookups_allowed,
+        )
+    tool_command = command_text_from_tool_payload(
+        payload_map.get("tool_name"),
+        payload_map.get("tool_input", payload_map.get("arguments")),
+    )
     approval_context_inputs = _generic_hook_approval_context_inputs(
         action_envelope=action_envelope,
         artifact_id=artifact_id,
@@ -696,6 +690,7 @@ def run_native_generic_payload(
         publisher=publisher,
         runtime_workspace=runtime_workspace,
         token=composition["token"],
+        tool_command=tool_command,
     )
     (
         runtime_artifact_hash,
@@ -714,6 +709,7 @@ def run_native_generic_payload(
         publisher=publisher,
         runtime_workspace=runtime_workspace,
         store=store,
+        tool_command=tool_command,
     )
     if approval_reuse.should_claim and stored_policy_decision is not None and _claim_saved_approval:
         if not store.claim_approval_reuse_decision(stored_policy_decision):

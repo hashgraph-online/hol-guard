@@ -9,9 +9,9 @@ from .evidence import public_events, read_events
 
 
 def complete_host_events(
-    raw_log: Path, host_log: Path, replacements: dict[str, str]
+    raw_log: Path, host_log: Path, replacements: dict[str, str], completed: bool = False
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    parent = public_events(read_events(raw_log), replacements)
+    parent = public_events(read_events(raw_log), replacements, completed)
     observed = public_events(read_events(host_log), replacements)
 
     # Parent stdout and SDK telemetry are independent views of the same calls.

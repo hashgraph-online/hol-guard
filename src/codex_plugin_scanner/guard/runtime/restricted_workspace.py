@@ -22,6 +22,7 @@ from .restricted_pytest_model import (
     RestrictedPytestError,
 )
 from .restricted_pytest_sandbox import _restricted_environment, _run_backend_process
+from .restricted_workspace_grants import read_grants_valid
 
 WORKSPACE_REASON = "native_workspace_containment_required"
 WORKSPACE_PROFILE = "workspace-contained-v1"
@@ -131,7 +132,7 @@ def _validated_plan(plan: object, command: str, workspace: Path, *, publish: boo
         )
         or Path(str(plan["workspace"])) != workspace.resolve(strict=True)
         or plan["allowed_executables"] != []
-        or plan["read_only_roots"] != []
+        or not read_grants_valid(plan["read_only_roots"], command)
         or not (plan["linked_git"] is None or _linked_git(plan["linked_git"]))
     ):
         raise _reject("The workspace sandbox plan does not match the authorized command.")
@@ -268,6 +269,7 @@ def run_workspace_contained(
         raise _reject("Invalid workspace sandbox plan.")
     sandbox_argv = [str(item) for item in sandbox_command]
     exec_roots = _plan_paths(plan["exec_roots"])
+    read_files = _plan_paths(plan["read_only_roots"])
     write_denials = _plan_paths(plan["write_denials"])
     with tempfile.TemporaryDirectory(prefix="hol-guard-workspace-") as temporary_directory:
         private_root = Path(temporary_directory).resolve()
@@ -300,6 +302,7 @@ def run_workspace_contained(
                     workspace=workspace,
                     private_root=private_root,
                     exec_roots=exec_roots,
+                    read_files=read_files,
                     write_denials=write_denials,
                     command=argv_to_run,
                     env=launch_env,
@@ -314,7 +317,7 @@ def run_workspace_contained(
                     "cwd": cwd,
                     "private_root": private_root,
                     "allowed_executables": [],
-                    "read_only_roots": [],
+                    "read_only_roots": read_files,
                     "output_roots": [],
                     "exec_roots": exec_roots,
                     "write_denials": write_denials,
@@ -439,6 +442,7 @@ def _run_overlay(
     workspace: Path,
     private_root: Path,
     exec_roots: list[Path],
+    read_files: list[Path],
     write_denials: list[Path],
     command: list[str],
     env: Mapping[str, str],
@@ -469,6 +473,7 @@ def _run_overlay(
                 "upper": upper,
                 "work": work,
                 "exec_roots": exec_roots,
+                "read_files": read_files,
                 "command": command,
                 **({**linked, "shared_work": overlay_root / "shared" / "work"} if linked else {}),
             },

@@ -295,3 +295,65 @@ fn private_scratch_lives_exactly_as_long_as_its_owner() {
     drop(root);
     assert!(!path.exists());
 }
+
+#[test]
+fn private_home_holds_only_a_plain_safety_guide() {
+    let seeded = |prepare: &dyn Fn(&Path)| {
+        let (_home_root, home) = fresh_workspace();
+        let (_private_root, private) = fresh_workspace();
+        prepare(&home);
+        super::runner::seed_safety_guide(&home, &private);
+        std::fs::read(private.join(".hol-support/SAFETY.md")).ok()
+    };
+    let guide = |home: &Path| {
+        std::fs::create_dir(home.join(".hol-support")).unwrap();
+        std::fs::write(home.join(".hol-support/SAFETY.md"), b"guide").unwrap();
+    };
+    assert_eq!(seeded(&guide).as_deref(), Some(&b"guide"[..]));
+    let copied = {
+        let (_home_root, home) = fresh_workspace();
+        let (_private_root, private) = fresh_workspace();
+        guide(&home);
+        super::runner::seed_safety_guide(&home, &private);
+        std::fs::metadata(private.join(".hol-support/SAFETY.md"))
+            .unwrap()
+            .permissions()
+            .mode()
+    };
+    assert_eq!(copied & 0o777, 0o600);
+    // Nothing to copy, or a guide swapped for a link to another file.
+    let refused: [&dyn Fn(&Path); 5] = [
+        &|_| {},
+        &|home| {
+            std::fs::create_dir(home.join(".hol-support")).unwrap();
+            std::fs::write(home.join("id_rsa"), b"key").unwrap();
+            std::os::unix::fs::symlink(home.join("id_rsa"), home.join(".hol-support/SAFETY.md"))
+                .unwrap();
+        },
+        &|home| {
+            std::fs::create_dir(home.join(".hol-support")).unwrap();
+            std::fs::write(home.join("id_rsa"), b"key").unwrap();
+            std::fs::hard_link(home.join("id_rsa"), home.join(".hol-support/SAFETY.md")).unwrap();
+        },
+        &|home| {
+            std::fs::create_dir(home.join(".ssh")).unwrap();
+            std::fs::write(home.join(".ssh/SAFETY.md"), b"key").unwrap();
+            std::os::unix::fs::symlink(home.join(".ssh"), home.join(".hol-support")).unwrap();
+        },
+        &|home| {
+            std::fs::create_dir_all(home.join(".hol-support/SAFETY.md")).unwrap();
+        },
+    ];
+    for prepare in refused {
+        assert_eq!(seeded(prepare), None);
+    }
+    let oversized = |home: &Path| {
+        std::fs::create_dir(home.join(".hol-support")).unwrap();
+        std::fs::write(
+            home.join(".hol-support/SAFETY.md"),
+            vec![b'x'; 64 * 1024 + 1],
+        )
+        .unwrap();
+    };
+    assert_eq!(seeded(&oversized), None);
+}

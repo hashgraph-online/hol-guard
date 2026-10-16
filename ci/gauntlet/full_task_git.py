@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -49,6 +50,20 @@ def heads(repo: Path) -> list[str]:
 
 def blob(repo: Path, ref: str, name: str) -> str:
     return "\n".join(git_lines(repo, "show", f"{ref}:{name}"))
+
+
+def blob_sha256(repo: Path, ref: str, name: str) -> str:
+    """SHA-256 of a committed file's bytes; empty when Git cannot read it."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "blob", f"{ref}:{name}"],
+            capture_output=True,
+            timeout=30,
+            env=_git_env(repo),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return hashlib.sha256(result.stdout).hexdigest() if result.returncode == 0 else ""
 
 
 def app_source(repo: Path) -> str:

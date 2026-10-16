@@ -335,7 +335,8 @@ def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path
         "jobs"
     ]
     planner = next(
-        step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/plan-pytest"
+        step for step in jobs["native-command-evaluators"]["steps"]
+        if step.get("uses") == "./.github/actions/plan-pytest"
     )
     # shard-count is a `${{ env.NAME }}` expression referencing the workflow-level
     # env block; resolve it to the literal before int() so the placeholder is not
@@ -345,8 +346,8 @@ def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path
     env_match = re.fullmatch(r"\$\{\{\s*env\.([A-Z0-9_]+)\s*\}\}", raw_shard)
     count = int(workflow_env[env_match.group(1)]) if env_match else int(raw_shard)
     raw_indices = jobs["coverage"]["strategy"]["matrix"]["shard-index"]
-    assert raw_indices == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
-    assert jobs["coverage-plan"]["outputs"]["shard-count"] == "${{ steps.shard-indices.outputs.count }}"
+    assert raw_indices == "${{ fromJSON(needs.native-command-evaluators.outputs.shard-indices) }}"
+    assert jobs["native-command-evaluators"]["outputs"]["shard-count"] == "${{ steps.shard-indices.outputs.count }}"
     assert planner["with"]["shard-count"] == "${{ env.CI_PYTEST_COVERAGE_SHARDS }}"
     indices = list(range(count))
     command = next(
