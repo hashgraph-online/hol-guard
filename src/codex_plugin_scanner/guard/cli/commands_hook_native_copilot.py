@@ -424,9 +424,9 @@ def _queue_copilot_approval(
                     "updated_at": now,
                 },
             )
-        except (RuntimeError, OSError):
+        except (RuntimeError, OSError) as queue_error:
             # A local queue past a native or store deadline (TimeoutError) keeps the deny.
-            queued = []
+            queued = approvals_queued_before(queue_error)
         _bind_hook_blocked_operation_queue(
             harness=args.harness,
             approval_center_url=approval_center_url,

@@ -11,6 +11,10 @@
 use crate::parser_segments::{shell_tokens, split_execution_segments};
 use crate::{assignment_name, executable_basename, CanonicalCommandV1};
 
+#[path = "pipe_stdin_programs.rs"]
+mod stdin_programs;
+use stdin_programs::runs_stdin_program;
+
 pub(super) const REMOTE_CODE: (&str, &str) = (
     "native_remote_code_execution",
     "HOL Guard blocked a command that pipes downloaded content into a shell or interpreter, which runs remote code without review. Download it to a file, inspect it, and ask the user before running it.",
@@ -113,71 +117,14 @@ fn program(words: &[String]) -> Option<&str> {
     })
 }
 
+/// A download client. Its output flags are not trusted to keep the body off
+/// the pipe: `-o` can name a link to standard output, and `-w`, `-D -` and
+/// config files print to it as well.
 fn fetches(words: &[String]) -> bool {
     matches!(
         program(words),
         Some("curl" | "wget" | "fetch" | "http" | "https" | "xh" | "xhs" | "curlie")
     )
-}
-
-/// A shell or interpreter that takes its program from standard input.
-fn runs_stdin_program(words: &[String]) -> bool {
-    let Some(name) = program(words) else {
-        return false;
-    };
-    let arguments = &words[1..];
-    if matches!(
-        name,
-        "sh" | "bash" | "zsh" | "dash" | "ksh" | "ash" | "mksh" | "fish"
-    ) {
-        return shell_reads_stdin(arguments);
-    }
-    let interpreter = name.starts_with("python")
-        || name.starts_with("perl")
-        || name.starts_with("ruby")
-        || matches!(name, "node" | "nodejs" | "bun" | "deno" | "php");
-    // No program text and no script file: only `-` or single-dash flags that
-    // do not name the program (`-c`, `-e`, `-m`, `-p`, `-r` and the like).
-    interpreter
-        && arguments.iter().all(|argument| {
-            argument == "-"
-                || (argument.starts_with('-')
-                    && !argument.starts_with("--")
-                    && !argument[1..]
-                        .chars()
-                        .any(|flag| matches!(flag, 'c' | 'e' | 'E' | 'm' | 'p' | 'r' | 'x')))
-        })
-}
-
-fn shell_reads_stdin(arguments: &[String]) -> bool {
-    let mut index = 0;
-    while let Some(argument) = arguments.get(index) {
-        if argument == "-s" || argument == "-" {
-            return true;
-        }
-        if matches!(argument.as_str(), "-o" | "+o") {
-            index += 2;
-            continue;
-        }
-        if argument.starts_with("--") {
-            if argument == "--" {
-                // An operand after `--` is a script file.
-                return arguments.get(index + 1).is_none();
-            }
-        } else if argument.starts_with(['-', '+']) {
-            if argument.contains('c') {
-                return false;
-            }
-            if argument.starts_with('-') && argument.contains('s') {
-                return true;
-            }
-        } else {
-            // A script file operand: stdin is that script's input.
-            return false;
-        }
-        index += 1;
-    }
-    true
 }
 
 /// A step that writes environment variables to its output.

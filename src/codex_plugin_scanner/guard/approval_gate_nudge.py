@@ -33,6 +33,15 @@ def _reject_json_constant(constant: str) -> object:
     raise ValueError(f"non-finite JSON constant: {constant}")
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    # ``json.loads`` keeps the last duplicate and drops the rest unseen, so a
+    # value the resident would refuse could hide behind a later key.
+    state = dict(pairs)
+    if len(state) != len(pairs):
+        raise ValueError("duplicate JSON object key")
+    return state
+
+
 def _native_accepts(value: object, depth: int = 0) -> bool:
     """Mirror what the resident's JSON parser rejects but ``json.loads`` allows.
 
@@ -54,14 +63,19 @@ def _posture_from_state_file(state_path: Path) -> dict[str, object]:
     """Read the gate's own on/off fields from its state file, as the resident does.
 
     The gate is on when ``enabled`` or ``fail_closed`` is true. An unreadable or
-    malformed file, including JSON the resident's stricter parser refuses, makes
-    the resident fail closed; this view reports it as unknown rather than guessing.
+    malformed file, including JSON the resident's stricter parser refuses and
+    objects with a repeated key, makes the resident fail closed; this view
+    reports it as unknown rather than guessing.
     """
 
     if not state_path.is_file():
         return _not_set()
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"), parse_constant=_reject_json_constant)
+        state = json.loads(
+            state_path.read_text(encoding="utf-8"),
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_keys,
+        )
     except (OSError, UnicodeDecodeError, ValueError, RecursionError):
         return {"status": "unknown"}
     if not isinstance(state, dict) or not _native_accepts(state):

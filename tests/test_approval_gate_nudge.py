@@ -197,6 +197,8 @@ def _nested_state(depth: int) -> str:
         '{"enabled": false, "cooldown_seconds": Infinity}',
         '{"enabled": false, "cooldown_seconds": -Infinity}',
         '{"enabled": false, "label": "\\ud800"}',
+        '{"enabled": false, "label": "\\ud800", "label": "ok"}',
+        '{"enabled": true, "enabled": false}',
         _nested_state(128),
         _nested_state(100_000),
     ],

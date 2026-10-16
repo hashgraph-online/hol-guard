@@ -310,37 +310,52 @@ def queue_blocked_approvals(
     }
     payloads: list[dict[str, object]] = []
     # One store write per item keeps the former order: each request is
-    # written, announced and read back before the next one is written.
+    # written, read back and announced before the next one is written.
     # The resident derives the request's surfaces, incident copy and
     # continuation snapshot; Python keeps the notices.
-    for item in reviewable:
-        artifact = artifacts.get(str(item["artifact_id"]))
-        queued, error = store.queue_blocked_approvals(
-            {
-                "harness": detection.harness,
-                "items": [item],
-                "artifacts": {} if artifact is None else {artifact.artifact_id: _queue_artifact(artifact)},
-                "approval_center_url": approval_center_url,
-                "now": timestamp,
-                "prompt_shown": prompt_shown,
-                "redaction_level": redaction_level,
-                "guard_version": _current_guard_version(),
-                "cwd": cwd,
-                "continuation": continuation,
-            }
-        )
-        for entry in queued:
-            request_id = str(entry["request_id"])
-            if notify:
-                notice = cast(dict[str, str], entry["notice"])
-                _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
-            request_payload = store.get_approval_request(request_id)
-            if request_payload is None:
-                raise RuntimeError(f"Persisted approval request not found: {request_id}")
-            payloads.append(request_payload)
-        if error is not None:
-            raise error
+    try:
+        for item in reviewable:
+            artifact = artifacts.get(str(item["artifact_id"]))
+            queued, error = store.queue_blocked_approvals(
+                {
+                    "harness": detection.harness,
+                    "items": [item],
+                    "artifacts": {} if artifact is None else {artifact.artifact_id: _queue_artifact(artifact)},
+                    "approval_center_url": approval_center_url,
+                    "now": timestamp,
+                    "prompt_shown": prompt_shown,
+                    "redaction_level": redaction_level,
+                    "guard_version": _current_guard_version(),
+                    "cwd": cwd,
+                    "continuation": continuation,
+                }
+            )
+            for entry in queued:
+                request_id = str(entry["request_id"])
+                # Read back before announcing, so a failed notice still leaves
+                # the persisted request in the partial result.
+                request_payload = store.get_approval_request(request_id)
+                if request_payload is None:
+                    raise RuntimeError(f"Persisted approval request not found: {request_id}")
+                payloads.append(request_payload)
+                if notify:
+                    notice = cast(dict[str, str], entry["notice"])
+                    _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
+            if error is not None:
+                raise error
+    except Exception as failure:
+        # Requests written before the failure stay queued, so a caller that
+        # keeps the deny can still point the user at them.
+        failure.queued_approvals = payloads  # pyright: ignore[reportAttributeAccessIssue]
+        raise
     return payloads
+
+
+def approvals_queued_before(error: BaseException) -> list[dict[str, object]]:
+    """Requests a failed ``queue_blocked_approvals`` call had already persisted."""
+
+    queued = getattr(error, "queued_approvals", None)
+    return list(queued) if isinstance(queued, list) else []
 
 
 def _needs_review(item: Mapping[str, object]) -> bool:

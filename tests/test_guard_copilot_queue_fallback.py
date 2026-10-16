@@ -14,11 +14,9 @@ def _raise_daemon_unavailable(_guard_home: object) -> object:
     raise RuntimeError("guard surface daemon client unavailable")
 
 
-@pytest.mark.parametrize(
-    "store_error",
-    [TimeoutError("Guard storage operation deadline expired."), OSError("disk"), RuntimeError("native")],
-)
-def test_local_queue_store_failure_still_denies(monkeypatch: pytest.MonkeyPatch, store_error: Exception) -> None:
+def _run_with_failing_queue(
+    monkeypatch: pytest.MonkeyPatch, store_error: Exception
+) -> tuple[list[list[dict[str, object]]], list[dict[str, Any]]]:
     emitted: list[dict[str, Any]] = []
     bound: list[list[dict[str, object]]] = []
 
@@ -68,9 +66,28 @@ def test_local_queue_store_failure_still_denies(monkeypatch: pytest.MonkeyPatch,
         store=SimpleNamespace(),
         action_envelope=None,
     )
+    return bound, emitted
+
+
+@pytest.mark.parametrize(
+    "store_error",
+    [TimeoutError("Guard storage operation deadline expired."), OSError("disk"), RuntimeError("native")],
+)
+def test_local_queue_store_failure_still_denies(monkeypatch: pytest.MonkeyPatch, store_error: Exception) -> None:
+    bound, emitted = _run_with_failing_queue(monkeypatch, store_error)
 
     assert bound == [[]]
     assert len(emitted) == 1
     assert emitted[0]["behavior"] == "deny"
     assert emitted[0]["interrupt"] is True
     assert emitted[0]["message"] == "Guard paused this action for review."
+
+
+def test_requests_queued_before_a_store_failure_stay_in_the_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    store_error = OSError("disk")
+    store_error.queued_approvals = [{"request_id": "req-1"}]  # type: ignore[attr-defined]
+
+    bound, emitted = _run_with_failing_queue(monkeypatch, store_error)
+
+    assert bound == [[{"request_id": "req-1"}]]
+    assert emitted[0]["behavior"] == "deny"
