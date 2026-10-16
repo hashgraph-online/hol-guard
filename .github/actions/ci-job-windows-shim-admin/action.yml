@@ -2,7 +2,7 @@ name: CI Windows shim admin
 description: Replay the Windows package-shim admin vectors and run the native shim op on a real Windows host.
 inputs:
   shim-gate:
-    description: Exact required Windows shim test family (vectors or native-op).
+    description: Exact required Windows test family (vectors, native-op or mcp).
     required: true
 runs:
   using: composite
@@ -23,15 +23,15 @@ runs:
         SHIM_GATE: ${{ inputs.shim-gate }}
       run: |
         $ErrorActionPreference = 'Stop'
-        if ($env:SHIM_GATE -notin @('vectors', 'native-op')) {
+        if ($env:SHIM_GATE -notin @('vectors', 'native-op', 'mcp')) {
           throw "Unknown Windows shim contract gate: $env:SHIM_GATE"
         }
     - uses: ./.github/actions/setup-rust
       with:
         # Distinct cache writers preserve complete dependencies for each
-        # matrix child. Seed existing trustworthy Windows caches on first run.
+        # matrix child. The job's test debug profile also keys these caches;
+        # full-debug native-wheel artifacts cannot seed this profile.
         cache-key: windows-shim-${{ inputs.shim-gate }}
-        cache-fallback-key: native-wheel
     - name: Replay the recorded Windows shim vectors
       if: inputs.shim-gate == 'vectors'
       shell: pwsh
@@ -60,21 +60,21 @@ runs:
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime windows_expanded_home
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test process_liveness
     - name: Contain MCP server process trees in a JobObject on Windows
-      if: inputs.shim-gate == 'native-op'
+      if: inputs.shim-gate == 'mcp'
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test child_tree
     - name: Probe an MCP server catalog natively on Windows
-      if: inputs.shim-gate == 'native-op'
+      if: inputs.shim-gate == 'mcp'
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test mcp_stdio_probe_windows
     - name: Verify MCP launch executables natively on Windows
-      if: inputs.shim-gate == 'native-op'
+      if: inputs.shim-gate == 'mcp'
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'

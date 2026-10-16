@@ -101,7 +101,7 @@ if TYPE_CHECKING:
 
 
 from ..harness_posture import harness_is_recording_only
-from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
+from ..local_cli_hook import local_cli_grant_action
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_hook_approval_context import generic_hook_approval_context_inputs, native_hook_approval_context_token
 from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_reuse
@@ -673,15 +673,14 @@ def run_native_generic_payload(
     tool_grant_applied = local_tool_grant is not None and local_tool_eligibility is not None
     current_policy_action = composition["action_with_tool_grant" if tool_grant_applied else "action_without_tool_grant"]
     if has_command_text:
-        observe_unlisted_cli(store=store, command=command_str, cwd=cwd, home_dir=home_dir)
-        if grant_lookups_allowed:
-            current_policy_action = apply_local_cli_grant(
-                store=store,
-                command=command_str,
-                cwd=cwd,
-                home_dir=home_dir,
-                current_action=current_policy_action,
-            )
+        current_policy_action = local_cli_grant_action(
+            store=store,
+            command=command_str,
+            cwd=cwd,
+            home_dir=home_dir,
+            current_action=current_policy_action,
+            grant_allowed=grant_lookups_allowed,
+        )
     approval_context_inputs = _generic_hook_approval_context_inputs(
         action_envelope=action_envelope,
         artifact_id=artifact_id,

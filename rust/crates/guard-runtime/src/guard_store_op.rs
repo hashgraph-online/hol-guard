@@ -382,6 +382,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "record_local_cli_observation"
+        | "replace_local_cli_commands"
         | "forget_local_cli_observation"
         | "local_cli_replay_allowed"
         | "prune_inactive_local_cli_observations"
@@ -508,6 +509,7 @@ fn dispatch(
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
         "record_local_cli_observation" => local_cli::record_observation(connection, args),
+        "replace_local_cli_commands" => local_cli::replace_commands(connection, args),
         "forget_local_cli_observation" => local_cli::forget_observation(connection, args),
         "local_cli_replay_allowed" => local_cli::replay_allowed_op(connection, args),
         "prune_inactive_local_cli_observations" => local_cli::prune_inactive(connection, args),

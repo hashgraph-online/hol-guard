@@ -301,6 +301,7 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/guard_home_state.py",
     "src/codex_plugin_scanner/guard/store_base.py",
     "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
+    "src/codex_plugin_scanner/guard/store_storage_gate.py",
 )
 _PRESENTATION_PATHS: Final = frozenset(
     {

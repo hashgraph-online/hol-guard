@@ -347,6 +347,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
             }
+            ResidentOperationV1::LocalCliHook(request) => {
+                crate::local_cli_hook_op::evaluate_local_cli_hook_request(&request)
+            }
             ResidentOperationV1::ShellHelpers(request) => {
                 crate::shell_helpers_op::evaluate(&request)
             }
@@ -584,6 +587,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::RuntimeDetectorRun(request) => Some(&request.guard_home),
         ResidentOperationV1::RunnerAuthority(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalCliHook(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.guard_home),
@@ -621,6 +625,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         },
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalCliHook(request) => Some(&request.store_path),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.store_path),
