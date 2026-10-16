@@ -647,6 +647,7 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/runtime/contained_authority.py",
           "src/codex_plugin_scanner/guard/runtime/contained_command_prefix.py",
           "src/codex_plugin_scanner/guard/runtime/contained_output_filters.py",
           "src/codex_plugin_scanner/guard/runtime/contained_run_directory.py",
@@ -670,7 +671,7 @@
           "src/codex_plugin_scanner/guard/runtime/source_paths.py",
           "src/codex_plugin_scanner/guard/runtime/workspace_snapshot_inputs.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper/run_directory/command_prefix, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper/run_directory/command_prefix/authority, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [
