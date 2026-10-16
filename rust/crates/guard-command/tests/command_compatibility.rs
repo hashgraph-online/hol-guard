@@ -208,6 +208,45 @@ fn assignment_prefixes_are_attributed_as_uncertainty_not_evaluation_failure() {
     assert!(compatibility_observations(&model("PATH=/tmp git status"), None).is_err());
 }
 
+/// `OUT=build/report.json && ...` runs no program in its first list item, so
+/// it is attributed like the rest of the chain instead of failing evaluation.
+#[test]
+fn a_list_item_that_only_sets_an_ordinary_variable_runs_no_program() {
+    for command in [
+        "OUT=build/report.json && ls",
+        "TODO_FILE=\"/tmp/t.json\"; ./todo.py list",
+        "A=1 B=2; ls",
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert!(observed.permission_matches.is_empty(), "{command}");
+    }
+    // A later program inherits the value when the session already exported
+    // the name, so it is steered as a prefix would steer it.
+    let push = compatibility_observations(&model("OUT=x; git push origin main"), None).unwrap();
+    assert!(!push.rule_matches.is_empty());
+    assert!(push.rule_matches.iter().all(|item| item.uncertainty));
+    let inert = compatibility_observations(&model("CI=1; git push origin main"), None).unwrap();
+    assert!(!inert.rule_matches.is_empty());
+    assert!(inert.rule_matches.iter().all(|item| !item.uncertainty));
+    for command in [
+        "GIT_DIR=/tmp/x; git push origin main",
+        "GH_HOST=example.com; gh pr view 12",
+        "KUBECONFIG=/tmp/k; kubectl get pods",
+        "LD_PRELOAD=./x.so; ls",
+        "HOME=/tmp; ls",
+        "IFS=,; ls",
+        "PATH=/tmp; ls",
+        "X=$GIT_DIR; ls",
+        "X=${GIT_DIR:=/tmp/x}; git status",
+    ] {
+        assert!(
+            compatibility_observations(&model(command), None).is_err(),
+            "{command}"
+        );
+    }
+}
+
 #[test]
 fn github_api_query_suffix_preserves_merge_authorization() {
     let observed = compatibility_observations(

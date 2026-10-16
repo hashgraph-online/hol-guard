@@ -348,7 +348,7 @@ fn assignment(word: &[char]) -> Option<(String, Option<String>)> {
     Some((name, literal.then_some(value)))
 }
 
-fn ordinary_name(name: &str) -> bool {
+pub(crate) fn ordinary_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     name != "_"
         && name.len() <= 64
