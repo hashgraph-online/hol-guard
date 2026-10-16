@@ -4353,7 +4353,9 @@ args = ["workspace-skill.js", "--changed"]
                 }
             },
         }
-        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(config_payload, context)
+        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(
+            config_payload, context, config_path=home_dir / ".codex" / "config.toml"
+        )
         hooks = config_payload["hooks"]
         assert isinstance(hooks, dict)
         pre_tool_groups = hooks["PreToolUse"]
