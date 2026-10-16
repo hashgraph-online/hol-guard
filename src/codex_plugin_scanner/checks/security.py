@@ -141,12 +141,29 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
 # does: "sandbox `danger-full-access`". Only a bare value alone in an inline code
 # span, outside fenced and indented code and not after an assignment or a flag,
 # counts as such a mention. Files that instruct an agent never qualify.
-MARKDOWN_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+# Any indentation opens a fence: a fence nested in a list item sits deeper than
+# three spaces, and an indented fence outside a list is code either way.
+MARKDOWN_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 MARKDOWN_BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?: {0,3}>[ \t]?)+")
 MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
 # How much of a line before an inline code span is read for an assignment or a
 # flag. A bounded window keeps long lines with many spans linear.
 APPROVAL_CONTEXT_WINDOW = 256
+# Prose that tells the reader to turn the value on, checked on the sentence
+# before an inline code span, unless the sentence also warns against it.
+APPROVAL_INSTRUCTION_RE = re.compile(
+    r"\b(?:select(?:ing|ed)?|set(?:ting)?|use|using|enable|enabling|switch(?:ing)? to|choose|choosing"
+    r"|pick(?:ing)?|configure|configuring|pass(?:ing)?|turn(?:ing)? on|run(?:ning)? with|start(?:ing)? with"
+    r"|launch(?:ing)? with|opt(?:ing)? (?:in|for)|change (?:it )?to|allow(?:ing)?)\b",
+    re.I,
+)
+APPROVAL_WARNING_RE = re.compile(
+    r"\b(?:never|not|don'?t|avoid|instead|rather than|without|unsafe|insecure|dangerous|risky|risks?"
+    r"|warn(?:s|ed|ing)?|report(?:s|ed|ing)?|flag(?:s|ged|ging)?|detect(?:s|ed|ing|ion)?|forbid(?:s|den)?"
+    r"|prohibit(?:s|ed)?|disallow(?:s|ed)?|reject(?:s|ed)?|block(?:s|ed)?)\b",
+    re.I,
+)
+APPROVAL_SENTENCE_END_RE = re.compile(r"[.!?;]")
 APPROVAL_ASSIGNMENT_TAIL_RE = re.compile(r"(?:[=:]|(?:^|\s)--?[A-Za-z][\w-]*)\s*$")
 AGENT_INSTRUCTION_FILENAMES = {"agent.md", "agents.md", "claude.md", "gemini.md", "skill.md"}
 AGENT_INSTRUCTION_STEMS = {"context", "system-prompt", "system_prompt"}
@@ -961,7 +978,9 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
     """Whether line[start:end] is a bare value quoted alone in an inline code span of prose.
 
     An assignment or a flag right before the span, in prose or at the end of an
-    earlier code span, makes it a setting rather than a mention.
+    earlier code span, makes it a setting rather than a mention. So does a
+    sentence that tells the reader to select or enable the value, unless the
+    same sentence warns against it.
     """
     if any(separator in line[start:end] for separator in "=:"):
         return False
@@ -980,7 +999,13 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
     while cut > 0 and line[cut - 1] in " \t":
         cut -= 1
     before = line[max(0, cut - APPROVAL_CONTEXT_WINDOW) : cut]
-    return not APPROVAL_ASSIGNMENT_TAIL_RE.search(before)
+    if APPROVAL_ASSIGNMENT_TAIL_RE.search(before):
+        return False
+    sentence_start = max(before.rfind(mark) for mark in ".!?;") + 1
+    prefix = before[sentence_start:]
+    suffix = APPROVAL_SENTENCE_END_RE.split(line[end + 1 : end + 1 + APPROVAL_CONTEXT_WINDOW], maxsplit=1)[0]
+    instructs = APPROVAL_INSTRUCTION_RE.search(prefix) and not APPROVAL_WARNING_RE.search(f"{prefix} {suffix}")
+    return not instructs
 
 
 def _markdown_code_lines(lines: list[str]) -> list[bool]:
@@ -1043,14 +1068,43 @@ def _has_risky_approval_default(relative_path: Path, content: str, *, declared: 
     return False
 
 
-def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+def _instruction_file_keys(
+    plugin_dir: Path, resolved_plugin_dir: Path, instruction_files: tuple[Path, ...]
+) -> frozenset[str]:
+    """The relative paths of ``instruction_files`` under the plugin directory, as the scan reports them."""
+    keys: set[str] = set()
+    for path in instruction_files:
+        relative = path
+        if path.is_absolute():
+            for root in (resolved_plugin_dir, plugin_dir):
+                try:
+                    relative = path.relative_to(root)
+                    break
+                except ValueError:
+                    continue
+            else:
+                continue
+        normalized = os.path.normpath(relative.as_posix())
+        if normalized.startswith("..") or os.path.isabs(normalized):
+            continue
+        keys.add(Path(normalized).as_posix())
+    return frozenset(keys)
+
+
+def check_no_approval_bypass_defaults(
+    plugin_dir: Path, files: tuple[Path, ...] | None = None, *, instruction_files: tuple[Path, ...] = ()
+) -> CheckResult:
     """Report files that default to bypassed approvals or an unrestricted sandbox.
 
-    ``files`` names the package content an ecosystem declared, such as a
-    manifest's system prompt or commands; those are read as instructions.
+    ``files`` limits the scan to the package content an ecosystem declared,
+    such as a manifest's system prompt or commands, read as instructions.
+    ``instruction_files`` names files an agent loads as instructions, such as
+    a manifest's context file: the whole directory is still scanned, and those
+    files get no documentation exception.
     """
     findings: list[str] = []
     resolved_plugin_dir = plugin_dir.resolve()
+    strict_paths = _instruction_file_keys(plugin_dir, resolved_plugin_dir, instruction_files)
     try:
         for file_path in _scan_all_files(resolved_plugin_dir, files):
             relative_path = file_path.relative_to(resolved_plugin_dir)
@@ -1069,7 +1123,8 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     max_points=3,
                     path=relative_path.as_posix(),
                 )
-            if _has_risky_approval_default(relative_path, content, declared=files is not None):
+            declared = files is not None or relative_path.as_posix() in strict_paths
+            if _has_risky_approval_default(relative_path, content, declared=declared):
                 findings.append(relative_path.as_posix())
     except ScanInputUnreadableError as exc:
         return unreadable_scan_input_failure(
@@ -1112,12 +1167,13 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
     )
 
 
-def run_security_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
+def run_security_checks(plugin_dir: Path, *, instruction_files: tuple[Path, ...] = ()) -> tuple[CheckResult, ...]:
+    """Run the security checks; ``instruction_files`` are read as agent instructions by the approval check."""
     return (
         check_security_md(plugin_dir),
         check_license(plugin_dir),
         check_no_hardcoded_secrets(plugin_dir),
         check_no_dangerous_mcp(plugin_dir),
         check_mcp_transport_security(plugin_dir),
-        check_no_approval_bypass_defaults(plugin_dir),
+        check_no_approval_bypass_defaults(plugin_dir, instruction_files=instruction_files),
     )
