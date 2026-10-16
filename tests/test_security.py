@@ -574,6 +574,7 @@ class TestNoApprovalBypassDefaults:
             ("docs/setup.md", "Using `danger-full-access` is risky; keep the default sandbox.\n"),
             ("README.md", "Avoid using `danger-full-access`.\n"),
             ("README.md", "Do not enable `danger-full-access`.\n"),
+            ("README.md", "Use the default sandbox and never enable `danger-full-access`.\n"),
         ],
     )
     def test_documentation_that_names_the_value_passes(self, tmp_path: Path, path: str, content: str):
@@ -604,6 +605,7 @@ class TestNoApprovalBypassDefaults:
             ("README.md", "Use `danger-full-access` to run without approval prompts.\n"),
             ("README.md", "Enable `danger-full-access` instead of `workspace-write`.\n"),
             ("README.md", "To avoid approval prompts, use `danger-full-access`.\n"),
+            ("README.md", "Do not use the default sandbox, select `danger-full-access`.\n"),
             ("README.md", "For setup, disable the Codex sandbox by selecting `danger-full-access`.\n"),
             ("docs/setup.md", "Set `sandbox_mode` to `danger-full-access` to disable the sandbox.\n"),
             ("docs/setup.md", "Use `danger-full-access` for this project.\n"),

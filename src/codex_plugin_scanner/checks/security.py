@@ -152,10 +152,11 @@ MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
 # flag. A bounded window keeps long lines with many spans linear.
 APPROVAL_CONTEXT_WINDOW = 256
 # Prose that tells the reader to turn the value on, checked on the sentence
-# before an inline code span. A negation governs that verb only when it sits
-# immediately before it ("never enable", "do not use", "avoid using"). A risk
-# word anywhere in the sentence also keeps the mention. Words such as
-# "without", "instead", or "avoid" in front of a different phrase do not.
+# before an inline code span. The last such verb before the span governs it.
+# A negation governs that verb only when it sits immediately before it ("never
+# enable", "do not use", "avoid using"). A risk word anywhere in the sentence
+# also keeps the mention. Words such as "without", "instead", or "avoid" in
+# front of a different phrase do not.
 APPROVAL_INSTRUCTION_RE = re.compile(
     r"\b(?:select(?:ing|ed)?|set(?:ting)?|use|using|enable|enabling|switch(?:ing)? to|choose|choosing"
     r"|pick(?:ing)?|configure|configuring|pass(?:ing)?|turn(?:ing)? on|run(?:ning)? with|start(?:ing)? with"
@@ -1005,10 +1006,10 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
     sentence_start = max(before.rfind(mark) for mark in ".!?;") + 1
     prefix = before[sentence_start:]
     suffix = APPROVAL_SENTENCE_END_RE.split(line[end + 1 : end + 1 + APPROVAL_CONTEXT_WINDOW], maxsplit=1)[0]
-    verb = APPROVAL_INSTRUCTION_RE.search(prefix)
-    if verb is None:
+    verbs = list(APPROVAL_INSTRUCTION_RE.finditer(prefix))
+    if not verbs:
         return True
-    negated = APPROVAL_NEGATION_RE.search(prefix[: verb.start()]) is not None
+    negated = APPROVAL_NEGATION_RE.search(prefix[: verbs[-1].start()]) is not None
     risky = APPROVAL_RISK_RE.search(f"{prefix} {suffix}") is not None
     return negated or risky
 
