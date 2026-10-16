@@ -7,6 +7,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -82,21 +83,42 @@ class SonarClient:
     def read(self, endpoint: str, **parameters: object) -> dict:
         if endpoint not in ENDPOINTS:
             raise ValueError("Unsupported Sonar endpoint")
-        remaining = self.deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("Sonar evidence polling timed out")
         request = Request(
             ORIGIN + endpoint + "?" + urlencode(parameters),
             headers={"Accept": "application/json", "Authorization": f"Bearer {self.token}"},
         )
-        with self.opener.open(request, timeout=min(20, remaining)) as response:
-            raw = response.read(MAX_BYTES + 1)
+        raw = self._read_bytes(request)
         if len(raw) > MAX_BYTES:
             raise ValueError("Sonar response exceeds the byte limit")
         payload = json.loads(raw)
         if not isinstance(payload, dict):
             raise ValueError("Sonar response is not an object")
         return payload
+
+    def _read_bytes(self, request: Request) -> bytes:
+        # Only retry read-only transport failures, never an HTTP or TLS verdict.
+        for attempt in range(3):
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Sonar evidence polling timed out")
+            try:
+                with self.opener.open(request, timeout=min(20, remaining)) as response:
+                    raw = response.read(MAX_BYTES + 1)
+            except (URLError, ConnectionError, TimeoutError) as error:
+                cause = error.reason if isinstance(error, URLError) else error
+                if isinstance(error, HTTPError) or not isinstance(cause, (ConnectionError, TimeoutError)):
+                    raise
+                if attempt == 2:
+                    raise
+                remaining = self.deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Sonar evidence polling timed out") from error
+                time.sleep(min((0.25, 0.75)[attempt], remaining))
+                continue
+            if time.monotonic() >= self.deadline:
+                raise TimeoutError("Sonar evidence polling timed out")
+            return raw
+        raise AssertionError("Sonar transport attempt limit was not enforced")
 
     def analysis(self, task_id: str, context: dict) -> str:
         identifier(task_id)
