@@ -1045,9 +1045,15 @@ def _markdown_code_lines(lines: list[str]) -> list[bool]:
     code_lines: list[bool] = []
     fence: str | None = None
     fence_column = 0
+    fence_quoted = False
     can_start_indented_code = True
     for raw_line in lines:
-        line = MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
+        # Inside an unquoted fence, `> ``` ` is text. Stripping the quote
+        # marker would close the fence and hide the next line from the check.
+        if fence is not None and not fence_quoted:
+            line = raw_line
+        else:
+            line = MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
         marker = _markdown_fence_marker(line)
         if fence is not None:
             is_code = True
@@ -1061,8 +1067,10 @@ def _markdown_code_lines(lines: list[str]) -> list[bool]:
                     and not remainder.strip()
                 ):
                     fence = None
+                    fence_quoted = False
         elif marker is not None:
             fence, fence_column = marker
+            fence_quoted = MARKDOWN_BLOCKQUOTE_PREFIX_RE.match(raw_line) is not None
             is_code = True
         else:
             is_code = line.startswith(("    ", "\t")) and can_start_indented_code

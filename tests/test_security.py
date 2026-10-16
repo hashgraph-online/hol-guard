@@ -602,6 +602,7 @@ class TestNoApprovalBypassDefaults:
             ("docs/setup.md", "- ```\n  sandbox `danger-full-access`\n  ```\n"),
             ("docs/setup.md", "- outer\n  - inner\n    ```bash\n    sandbox `danger-full-access`\n    ```\n"),
             ("docs/setup.md", "```\n    ```\nsandbox `danger-full-access`\n```\n"),
+            ("docs/setup.md", "```\n> ```\nsandbox `danger-full-access`\n"),
             ("README.md", "Use `danger-full-access` to run without approval prompts.\n"),
             ("README.md", "Enable `danger-full-access` instead of `workspace-write`.\n"),
             ("README.md", "To avoid approval prompts, use `danger-full-access`.\n"),
